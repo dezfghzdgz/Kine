@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { useWatchProgress } from '@/lib/useWatchProgress';
 import { useSearchParams } from 'next/navigation';
@@ -11,7 +11,7 @@ import { buildVideoBlocks } from '@/lib/videoBlocks';
 
 type Tab = 'rated' | 'history';
 
-export default function ActivityPage() {
+function ActivityPageInner() {
   const { t } = useLanguage();
   const searchParams = useSearchParams();
   const query = searchParams.get('q')?.toLowerCase() ?? '';
@@ -139,5 +139,13 @@ export default function ActivityPage() {
         ))
       )}
     </div>
+  );
+}
+
+export default function ActivityPage() {
+  return (
+    <Suspense fallback={null}>
+      <ActivityPageInner />
+    </Suspense>
   );
 }

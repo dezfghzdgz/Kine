@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useLanguage } from '@/lib/i18n';
 
-export default function LikedPage() {
+function LikedPageInner() {
   const { t } = useLanguage();
   const searchParams = useSearchParams();
   const query = searchParams.get('q')?.toLowerCase() ?? '';
@@ -106,5 +106,13 @@ export default function LikedPage() {
         ))}
       </div>
     </div>
+  );
+}
+
+export default function LikedPage() {
+  return (
+    <Suspense fallback={null}>
+      <LikedPageInner />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { useWatchProgress } from '@/lib/useWatchProgress';
 import { useSearchParams } from 'next/navigation';
@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabaseClient';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import { buildVideoBlocks } from '@/lib/videoBlocks';
 
-export default function SubscriptionsPage() {
+function SubscriptionsPageInner() {
   const { t } = useLanguage();
   const searchParams = useSearchParams();
   const query = searchParams.get('q')?.toLowerCase() ?? '';
@@ -128,5 +128,13 @@ export default function SubscriptionsPage() {
         ))
       )}
     </div>
+  );
+}
+
+export default function SubscriptionsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SubscriptionsPageInner />
+    </Suspense>
   );
 }

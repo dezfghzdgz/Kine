@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
@@ -9,7 +9,7 @@ import CommentSection from '@/components/CommentSection';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import { useLanguage } from '@/lib/i18n';
 
-export default function SparksPage() {
+function SparksPageInner() {
   const { t } = useLanguage();
   const searchParams = useSearchParams();
   const startId = searchParams.get('start');
@@ -204,5 +204,13 @@ export default function SparksPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SparksPage() {
+  return (
+    <Suspense fallback={null}>
+      <SparksPageInner />
+    </Suspense>
   );
 }

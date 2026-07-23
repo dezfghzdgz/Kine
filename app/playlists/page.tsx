@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -9,7 +9,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 
 const COLOR_PRESETS = ['#3a5a8a', '#8a3a3a', '#3a8a5a', '#8a7a3a', '#6a3a8a', '#3a3a40'];
 
-export default function PlaylistsPage() {
+function PlaylistsPageInner() {
   const { t } = useLanguage();
   const searchParams = useSearchParams();
   const query = searchParams.get('q')?.toLowerCase() ?? '';
@@ -265,5 +265,13 @@ export default function PlaylistsPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function PlaylistsPage() {
+  return (
+    <Suspense fallback={null}>
+      <PlaylistsPageInner />
+    </Suspense>
   );
 }
