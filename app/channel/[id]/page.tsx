@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -15,7 +15,7 @@ import { computeTrustRatingClient, getTotalReactionCount, RATING_UNLOCK_THRESHOL
 
 type Tab = 'home' | 'videos' | 'sparks' | 'posts' | 'playlists';
 
-export default function ChannelPage() {
+function ChannelPageInner() {
   const { t } = useLanguage();
   const params = useParams();
   const channelId = params.id as string;
@@ -350,5 +350,13 @@ export default function ChannelPage() {
         )
       )}
     </div>
+  );
+}
+
+export default function ChannelPage() {
+  return (
+    <Suspense fallback={null}>
+      <ChannelPageInner />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
@@ -9,7 +9,7 @@ import Image from 'next/image';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { buildVideoBlocks } from '@/lib/videoBlocks';
 
-export default function YourVideosPage() {
+function YourVideosPageInner() {
   const { t } = useLanguage();
   const searchParams = useSearchParams();
   const query = searchParams.get('q')?.toLowerCase() ?? '';
@@ -143,5 +143,13 @@ export default function YourVideosPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function YourVideosPage() {
+  return (
+    <Suspense fallback={null}>
+      <YourVideosPageInner />
+    </Suspense>
   );
 }

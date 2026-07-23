@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Script from 'next/script';
 import { buildVideoBlocks, isSpark } from '@/lib/videoBlocks';
@@ -28,7 +28,7 @@ function formatChapterTime(seconds: number) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function WatchPage() {
+function WatchPageInner() {
   const { t } = useLanguage();
   const params = useParams();
   const router = useRouter();
@@ -571,5 +571,13 @@ export default function WatchPage() {
         />
       </div>
     </div>
+  );
+}
+
+export default function WatchPage() {
+  return (
+    <Suspense fallback={null}>
+      <WatchPageInner />
+    </Suspense>
   );
 }

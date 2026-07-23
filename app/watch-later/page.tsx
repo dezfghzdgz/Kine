@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 
-export default function WatchLaterPage() {
+function WatchLaterPageInner() {
   const { t } = useLanguage();
   const searchParams = useSearchParams();
   const query = searchParams.get('q')?.toLowerCase() ?? '';
@@ -99,5 +99,13 @@ export default function WatchLaterPage() {
         ))}
       </div>
     </div>
+  );
+}
+
+export default function WatchLaterPage() {
+  return (
+    <Suspense fallback={null}>
+      <WatchLaterPageInner />
+    </Suspense>
   );
 }
