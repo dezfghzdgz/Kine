@@ -69,7 +69,6 @@ const dictionary = {
     filtering: 'filtruji…',
     loading: 'Načítám…',
     nothingHereYet: 'Tady zatím nic není.',
-    
     shareVideo: 'Sdílet video',
     shareMoment: 'Sdílet tento okamžik',
     subscribing: 'Odebíráno',
