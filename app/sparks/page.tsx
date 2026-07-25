@@ -69,6 +69,7 @@ function SparksPageInner() {
       .eq('status', 'ready')
       .eq('visibility', 'public')
       .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso},is_premiere.eq.true`)
+      .order('created_at', { ascending: false })
       .limit(80);
 
     const sparks = (data ?? []).filter((v: any) => v.height && v.width && v.height > v.width && (v.duration_seconds ?? 0) <= 120);

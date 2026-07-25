@@ -116,8 +116,8 @@ export default function EditVideoPage() {
   if (notAllowed) {
     return (
       <div className="auth-gate">
-        <p>Tohle video buď neexistuje, nebo ho nemůžeš upravovat.</p>
-        <Link href="/your-videos">Zpátky na Vaše videa →</Link>
+        <p>{t('videoNotFoundOrCannotEditNote')}</p>
+        <Link href="/your-videos">{t('backToYourVideosLink')}</Link>
       </div>
     );
   }
@@ -128,30 +128,30 @@ export default function EditVideoPage() {
       <h1>{t('editVideoTitle')}</h1>
 
       <div className="panel">
-        <p className="panel-heading">Náhledový obrázek</p>
+        <p className="panel-heading">{t('thumbnailImageLabel')}</p>
         {thumbnailUrl && (
-          <img src={thumbnailUrl} alt="náhled" style={{ width: '100%', borderRadius: 8, marginBottom: 10 }} />
+          <img src={thumbnailUrl} alt={t('thumbnailImageLabel')} style={{ width: '100%', borderRadius: 8, marginBottom: 10 }} />
         )}
         <input type="file" accept="image/*" onChange={(e) => setNewThumbnailFile(e.target.files?.[0] ?? null)} />
       </div>
 
       <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div>
-          <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>Název videa</label>
+          <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('videoTitle')}</label>
           <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} required />
         </div>
         <div>
-          <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>Popis</label>
+          <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('description2')}</label>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} />
         </div>
       </div>
 
       <div className="panel">
-        <p className="panel-heading">Kdo může video vidět</p>
+        <p className="panel-heading">{t('whoCanSeeVideo')}</p>
         {([
-          ['public', 'Veřejné - uvidí ho všichni'],
-          ['subscribers', 'Jen pro odběratele'],
-          ['private', 'Soukromé - jen já'],
+          ['public', t('visibilityPublic')],
+          ['subscribers', t('visibilitySubscribers')],
+          ['private', t('visibilityPrivate')],
         ] as [typeof visibility, string][]).map(([value, label]) => (
           <label key={value} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8 }}>
             <input type="radio" name="visibility" style={{ width: 'auto' }} checked={visibility === value} onChange={() => setVisibility(value)} />
@@ -161,10 +161,10 @@ export default function EditVideoPage() {
       </div>
 
       <div className="panel">
-        <p className="panel-heading">Upoutávka kanálu</p>
+        <p className="panel-heading">{t('channelTrailerLabel')}</p>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
           <input type="checkbox" style={{ width: 'auto' }} checked={isTrailer} onChange={(e) => setIsTrailer(e.target.checked)} />
-          Ukázat tohle video nahoře na mém kanálu novým návštěvníkům
+          {t('showAsTrailerLabel')}
         </label>
       </div>
 

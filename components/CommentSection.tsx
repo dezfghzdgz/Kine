@@ -37,10 +37,6 @@ type VideoInfo = {
 
 const TABS = ['Popis', 'Flow', 'Technical'] as const;
 
-const LANGUAGE_LABELS: Record<string, string> = {
-  cs: 'Čeština', sk: 'Slovenština', en: 'Angličtina', de: 'Němčina', other: 'Jiný',
-};
-
 function formatDuration(seconds: number | null) {
   if (!seconds) return '—';
   const m = Math.floor(seconds / 60);
@@ -90,6 +86,11 @@ export default function CommentSection({
 }) {
   const router = useRouter();
   const { t } = useLanguage();
+  const LANGUAGE_LABELS: Record<string, string> = {
+    cs: t('langOptCzech'), sk: t('langOptSlovak'), en: t('langOptEnglish'), de: t('langOptGerman'),
+    es: t('langOptSpanish'), pl: t('langOptPolish'), fr: t('langOptFrench'), uk: t('langOptUkrainian'),
+    other: t('langOptOther'),
+  };
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [newCommentImage, setNewCommentImage] = useState<File | string | null>(null);
@@ -260,7 +261,7 @@ export default function CommentSection({
           {description ? (
             <ExpandableText text={description} />
           ) : (
-            <p style={{ color: 'var(--text-faint)', fontSize: 13 }}>Tvůrce nepřidal žádný popis.</p>
+            <p style={{ color: 'var(--text-faint)', fontSize: 13 }}>{t('noDescriptionProvidedNote')}</p>
           )}
           {video?.hashtags && video.hashtags.length > 0 && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
@@ -290,7 +291,7 @@ export default function CommentSection({
             </div>
             {newCommentImage && (
               <p style={{ fontSize: 11.5, color: 'var(--text-faint)', margin: 0 }}>
-                Attached: {typeof newCommentImage === 'string' ? 'GIF' : newCommentImage.name} <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setNewCommentImage(null)}>remove</span>
+                {t('attachedLabel')} {typeof newCommentImage === 'string' ? 'GIF' : newCommentImage.name} <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setNewCommentImage(null)}>{t('removeLabel')}</span>
               </p>
             )}
             <button type="submit" disabled={posting} style={{ alignSelf: 'flex-start' }}>{t('postComment')}</button>
@@ -302,8 +303,8 @@ export default function CommentSection({
                 <div className="comment-avatar" />
                 <div style={{ flex: 1 }}>
                   <p className="comment-author">
-                    {c.profiles?.username ?? 'uživatel'}
-                    {c.pinned && <span style={{ color: 'var(--text-faint)', fontWeight: 400 }}> · 📌 Připnuto</span>}
+                    {c.profiles?.username ?? t('unknownUserFallback')}
+                    {c.pinned && <span style={{ color: 'var(--text-faint)', fontWeight: 400 }}> · 📌 {t('pinnedLabel')}</span>}
                   </p>
                   <p className="comment-text">{renderCommentContent(c.content, onSeek)}</p>
                   {c.image_url && (
@@ -327,7 +328,7 @@ export default function CommentSection({
                     </span>
                     {ownerId && ownerId === userId && (
                       <span style={{ cursor: 'pointer' }} onClick={() => pinComment(c.id, c.pinned)}>
-                        {c.pinned ? 'Odepnout' : 'Připnout'}
+                        {c.pinned ? t('unpinButton') : t('pinButton')}
                       </span>
                     )}
                     {(userId === c.user_id || userId === ownerId) && (
@@ -343,7 +344,7 @@ export default function CommentSection({
                 <div key={r.id} className="comment-row" style={{ marginLeft: 40, marginBottom: 6 }}>
                   <div className="comment-avatar" style={{ width: 24, height: 24 }} />
                   <div style={{ flex: 1 }}>
-                    <p className="comment-author">{r.profiles?.username ?? 'uživatel'}</p>
+                    <p className="comment-author">{r.profiles?.username ?? t('unknownUserFallback')}</p>
                     <p className="comment-text">{renderCommentContent(r.content, onSeek)}</p>
                     <div className="comment-actions">
                       <span
@@ -370,7 +371,7 @@ export default function CommentSection({
                 >
                   <input
                     type="text"
-                    placeholder="Napiš odpověď…"
+                    placeholder={t('replyPlaceholder')}
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
                     style={{ flex: 1 }}
@@ -391,12 +392,12 @@ export default function CommentSection({
       {activeTab === 'Technical' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {[
-            ['Délka videa', formatDuration(video?.duration_seconds ?? null)],
-            ['Kategorie', video?.category ?? '—'],
-            ['Jazyk', video?.language ? (LANGUAGE_LABELS[video.language] ?? video.language) : '—'],
-            ['Nahráno', video ? new Date(video.created_at).toLocaleDateString('cs-CZ') : '—'],
-            ['Vhodné pro děti', video?.made_for_kids ? 'Ano' : 'Ne'],
-            ['Viditelnost', video?.visibility === 'public' ? 'Veřejné' : video?.visibility === 'private' ? 'Soukromé' : 'Pro odběratele'],
+            [t('videoDurationLabel'), formatDuration(video?.duration_seconds ?? null)],
+            [t('categoryLabel'), video?.category ?? '—'],
+            [t('videoLanguageFieldLabel'), video?.language ? (LANGUAGE_LABELS[video.language] ?? video.language) : '—'],
+            [t('uploadedLabel'), video ? new Date(video.created_at).toLocaleDateString('cs-CZ') : '—'],
+            [t('madeForKidsFieldLabel'), video?.made_for_kids ? t('yesLabel') : t('noLabel')],
+            [t('visibilityLabel'), video?.visibility === 'public' ? t('shortVisibilityPublic') : video?.visibility === 'private' ? t('shortVisibilityPrivate') : t('shortVisibilitySubscribers')],
           ].map(([label, value]) => (
             <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
               <span style={{ color: 'var(--text-faint)' }}>{label}</span>

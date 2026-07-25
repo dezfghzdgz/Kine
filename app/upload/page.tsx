@@ -222,7 +222,7 @@ export default function UploadPage() {
         <div className="panel">
           <p className="panel-heading">
             {t('videoFile')}
-            <FieldHint text="Vyber video ze svého počítače. Podporované formáty: MP4, MOV a další běžné formáty. Appka ho po odeslání nahraje na Cloudflare." />
+            <FieldHint text={t('selectVideoFileHint')} />
           </p>
           <input
             type="file"
@@ -252,7 +252,7 @@ export default function UploadPage() {
         <div className="panel">
           <p className="panel-heading">
             {t('customThumbnail')}
-            <FieldHint text="Nepovinné. Pokud nevybereš vlastní obrázek, appka použije automaticky vygenerovaný snímek z videa." />
+            <FieldHint text={t('optionalThumbnailHint')} />
           </p>
           <input
             type="file"
@@ -268,9 +268,7 @@ export default function UploadPage() {
                 const diff = Math.abs(imageRatio - videoRatio) / videoRatio;
 
                 if (diff > 0.15) {
-                  const ok = confirm(
-                    'Tenhle obrázek má jiný poměr stran než video - bude oříznutý shora/zdola a bude vypadat trochu jinak, než jak ho vidíš teď. Opravdu ho chceš použít?'
-                  );
+                  const ok = confirm(t('aspectRatioMismatchWarning'));
                   if (!ok) {
                     e.target.value = '';
                     setThumbnailFile(null);
@@ -289,8 +287,8 @@ export default function UploadPage() {
 
           <div>
             <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>
-              Název videa
-              <FieldHint text="Krátký, výstižný název - je to první věc, kterou diváci uvidí v seznamu videí." />
+              {t('videoTitle')}
+              <FieldHint text={t('titleFieldHint')} />
             </label>
             <input type="text" placeholder={t('videoTitle')} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={150} required />
           </div>
@@ -298,7 +296,7 @@ export default function UploadPage() {
           <div>
             <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>
               {t('description2')}
-              <FieldHint text="Nepovinné. Zobrazí se v záložce 'Popis' pod videem. Můžeš sem napsat i časy jako 1:23 - v komentářích se z nich automaticky stanou klikací odkazy, tady zatím ne." />
+              <FieldHint text={t('descriptionFieldHint')} />
             </label>
             <textarea placeholder={t('optionalDescription')} value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
             <input
@@ -315,7 +313,7 @@ export default function UploadPage() {
           <div className="panel" style={{ position: 'relative' }}>
             <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>
               {t('playlists')}
-              <FieldHint text="Video se rovnou zařadí do vybraných playlistů, jakmile ho nahraješ." />
+              <FieldHint text={t('playlistsFieldHint')} />
             </label>
             <button
               type="button"
@@ -325,7 +323,7 @@ export default function UploadPage() {
               <span>
                 {selectedPlaylists.length === 0
                   ? t('addToPlaylistPlaceholder')
-                  : `Vybráno: ${selectedPlaylists.length}`}
+                  : `${t('selectedCountLabel')} ${selectedPlaylists.length}`}
               </span>
               <span>{playlistMenuOpen ? '▲' : '▼'}</span>
             </button>
@@ -352,7 +350,7 @@ export default function UploadPage() {
         <div className="panel">
           <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>
             {t('chapters')}
-            <FieldHint text="Nepovinné. Rozděl video na části s vlastními názvy (např. 0:00 Úvod, 2:30 Hlavní část). Zobrazí se jako klikací značky přímo na časové ose přehrávače." />
+            <FieldHint text={t('chaptersFieldHint')} />
           </label>
           {chapters.map((ch, i) => (
             <div key={i} style={{ display: 'flex', gap: 6, marginTop: 6 }}>
@@ -401,7 +399,7 @@ export default function UploadPage() {
         <div className="panel">
           <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>
             {t('captions')}
-            <FieldHint text="Nepovinné. Napiš text a čas, kdy se má na videu zobrazit. Přidávej postupně po jednotlivých řádcích." />
+            <FieldHint text={t('overlaysFieldHint')} />
           </label>
           {captions.map((cap, i) => (
             <div key={i} style={{ display: 'flex', gap: 6, marginTop: 6 }}>
@@ -503,7 +501,7 @@ export default function UploadPage() {
       <div className="panel">
         <p className="panel-heading">
           {t('whoCanSeeVideo')}
-          <FieldHint text="Veřejné vidí kdokoliv. 'Jen pro odběratele' zatím funguje jako soukromé, dokud nedokončíme ověřování odběrů. Soukromé vidíš jen ty." />
+          <FieldHint text={t('visibilityExplanationHint')} />
         </p>
         {([
           ['public', t('visibilityPublic')],
@@ -520,7 +518,7 @@ export default function UploadPage() {
       <div className="panel">
         <p className="panel-heading">
           {t('publishingSectionLabel')}
-          <FieldHint text="Premiéra je hned viditelná s odpočtem do vydání. Naplánováno je úplně skryté, dokud nenastane vybraný čas." />
+          <FieldHint text={t('premiereVsScheduledHint')} />
         </p>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8 }}>
           <input type="radio" name="schedule" style={{ width: 'auto' }} checked={scheduleMode === 'now'} onChange={() => setScheduleMode('now')} />
@@ -547,7 +545,7 @@ export default function UploadPage() {
 
       <div style={{ display: 'flex', gap: 8 }}>
         <button type="button" onClick={() => setStep(1)} style={{ background: 'var(--panel-raised)', color: 'var(--text)' }}>
-          ← Zpět
+          {t('backButton')}
         </button>
         <button type="submit" disabled={status !== 'idle'} style={{ flex: 1 }}>
           {status === 'idle' ? t('uploadButton') : t('processing')}

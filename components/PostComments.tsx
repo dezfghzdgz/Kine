@@ -92,7 +92,7 @@ export default function PostComments({ postId, onCommentAdded }: { postId: strin
         </div>
         {imageFile && (
           <p style={{ fontSize: 11.5, color: 'var(--text-faint)', margin: 0 }}>
-            Attached: {typeof imageFile === 'string' ? 'GIF' : imageFile.name} <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setImageFile(null)}>remove</span>
+            {t('attachedLabel')} {typeof imageFile === 'string' ? 'GIF' : imageFile.name} <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setImageFile(null)}>{t('removeLabel')}</span>
           </p>
         )}
         <button type="submit" disabled={posting} style={{ alignSelf: 'flex-start' }}>{t('postComment')}</button>
@@ -102,7 +102,7 @@ export default function PostComments({ postId, onCommentAdded }: { postId: strin
         <div key={c.id} className="comment-row" style={{ marginBottom: 12 }}>
           <div className="comment-avatar" />
           <div style={{ flex: 1 }}>
-            <p className="comment-author">{c.profiles?.username ?? 'uživatel'}</p>
+            <p className="comment-author">{c.profiles?.username ?? t('unknownUserFallback')}</p>
             {c.content && <p className="comment-text">{renderWithMentions(c.content)}</p>}
             {c.image_url && (
               <img src={c.image_url} alt="" style={{ maxWidth: 200, borderRadius: 8, marginTop: 4 }} />

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { SpeakerIcon } from './ReactionIcons';
+import { useLanguage } from '@/lib/i18n';
 
 type Chapter = { time: number; title: string };
 
@@ -31,6 +32,8 @@ export default function ChapterTimeline({
   const [speed, setSpeed] = useState(1);
   const [hoverTitle, setHoverTitle] = useState<string | null>(null);
   const [hoverX, setHoverX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const { t } = useLanguage();
 
   const trackRef = useRef<HTMLDivElement>(null);
   const volumeTrackRef = useRef<HTMLDivElement>(null);
@@ -78,6 +81,7 @@ export default function ChapterTimeline({
         player.play();
       }
       draggingRef.current = null;
+      setIsDragging(false);
     }
 
     window.addEventListener('mousemove', handleMove);
@@ -177,6 +181,12 @@ export default function ChapterTimeline({
 
   return (
     <>
+      {isDragging && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, cursor: 'ew-resize' }}
+        />
+      )}
+
       {/* Neviditelná vrstva přes celé video - zachytává pohyb myši (kvůli
           automatickému schování ovládání) a klik (přehrát/pauza). */}
       <div
@@ -211,9 +221,10 @@ export default function ChapterTimeline({
 
         <div
           ref={trackRef}
-          onMouseDown={(e) => { draggingRef.current = 'seek'; handleTrackClick(e); }}
+          onMouseDown={(e) => { draggingRef.current = 'seek'; setIsDragging(true); handleTrackClick(e); }}
           onTouchStart={(e) => {
             draggingRef.current = 'seek';
+            setIsDragging(true);
             if (!trackRef.current || !player) return;
             const rect = trackRef.current.getBoundingClientRect();
             const ratio = (e.touches[0].clientX - rect.left) / rect.width;
@@ -281,12 +292,14 @@ export default function ChapterTimeline({
               onMouseDown={(e) => {
                 e.stopPropagation();
                 draggingRef.current = 'volume';
+                setIsDragging(true);
                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                 const ratio = (e.clientX - rect.left) / rect.width;
                 handleVolumeSet(Math.max(0, Math.min(ratio, 1)));
               }}
               onTouchStart={(e) => {
                 draggingRef.current = 'volume';
+                setIsDragging(true);
                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                 const ratio = (e.touches[0].clientX - rect.left) / rect.width;
                 handleVolumeSet(Math.max(0, Math.min(ratio, 1)));
@@ -314,7 +327,7 @@ export default function ChapterTimeline({
                   border: '1px solid rgba(255,255,255,0.15)',
                 }}
               >
-                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', margin: '0 0 6px' }}>Rychlost přehrávání</p>
+                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', margin: '0 0 6px' }}>{t('playbackSpeedLabel')}</p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {[0.25, 0.5, 1, 1.5, 2, 3, 5].map((rate) => (
                     <button
