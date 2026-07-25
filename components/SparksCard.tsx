@@ -49,6 +49,8 @@ export default function SparksCard({
     setPaused(false);
     setMuted(!soundEnabledRef.current);
 
+    const activatedAt = Date.now();
+
     const interval = setInterval(() => {
       if (iframeRef.current && (window as any).Stream && !playerRef.current) {
         const player = (window as any).Stream(iframeRef.current);
@@ -59,15 +61,26 @@ export default function SparksCard({
         player.muted = !soundEnabledRef.current;
         player.volume = 1;
         player.play?.();
-        if (soundEnabledRef.current) {
-          setTimeout(() => { player.muted = false; }, 60);
-        }
+
+        // Pokud prohlížeč přehrávání se zvukem odmítne, appka to po chvíli
+        // pozná (video zůstane "paused") a radši ho pustí potichu, než aby
+        // se vůbec nespustilo.
+        setTimeout(() => {
+          if (playerRef.current === player && player.paused) {
+            player.muted = true;
+            player.play?.();
+          }
+        }, 400);
 
         // Appka teď poslouchá skutečné události z přehrávače (ne jen svůj
         // vlastní odhad stavu) - jinak se při přetočení smyčky videa (loop)
         // může stát, že video běží dál, ale UI/zvuk zůstanou "zaseknuté"
-        // ve starém stavu.
-        player.addEventListener?.('pause', () => setPaused(true));
+        // ve starém stavu. Pauzu těsně po startu (první necelou vteřinu)
+        // appka ignoruje - přehrávač ji občas nahlásí sám při rozjezdu,
+        // i když video ve skutečnosti běží, a jinak by zůstalo "zaseknuté".
+        player.addEventListener?.('pause', () => {
+          if (Date.now() - activatedAt > 700) setPaused(true);
+        });
         player.addEventListener?.('play', () => setPaused(false));
         player.addEventListener?.('volumechange', () => setMuted(!!player.muted));
 
@@ -172,7 +185,7 @@ export default function SparksCard({
     if (!playerRef.current) return;
     const next = !muted;
     playerRef.current.muted = next;
-    if (!next) soundEnabledRef.current = true;
+    soundEnabledRef.current = !next;
   }
 
   const creatorName = video.profiles?.display_name ?? video.profiles?.username ?? 'neznámý tvůrce';

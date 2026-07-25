@@ -26,7 +26,10 @@ function SparksPageInner() {
   // zapnul - autoplay se zvukem prohlížeče často blokují, takže nové video
   // vždycky nejdřív nastartuje potichu a zvuk se dorovná hned potom, pokud
   // si ho uživatel předtím zapnul (stejné chování jako TikTok/Reels).
-  const soundEnabledRef = useRef(false);
+  // Appka zkouší jet rovnou se zvukem (kliknutí do appky, které vás sem
+  // přivedlo, obvykle stačí, aby to prohlížeč dovolil). Na false se přepne,
+  // jen pokud si uživatel zvuk sám vypne.
+  const soundEnabledRef = useRef(true);
 
   useEffect(() => {
     function updateArrowsPosition() {
