@@ -183,7 +183,7 @@ export default function ChapterTimeline({
     <>
       {isDragging && (
         <div
-          style={{ position: 'fixed', inset: 0, zIndex: 9999, cursor: 'ew-resize' }}
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, cursor: 'grabbing' }}
         />
       )}
 
