@@ -71,7 +71,7 @@ function SubscriptionsPageInner() {
   if (!userId) {
     return (
       <div className="auth-gate">
-        <p>Pro odebírání kanálů se musíš nejdřív přihlásit.</p>
+        <p>{t('loginToViewSubscriptionsNote')}</p>
         <Link href="/login">{t('loginLink')}</Link>
       </div>
     );
@@ -80,7 +80,7 @@ function SubscriptionsPageInner() {
   if (channels.length === 0) {
     return (
       <div className="auth-gate">
-        <p>Odběry</p>
+        <p>{t('subscriptions')}</p>
         <p style={{ fontSize: 13 }}>{t('noSubscriptionsYet')}</p>
       </div>
     );
@@ -117,7 +117,7 @@ function SubscriptionsPageInner() {
         ))}
       </div>
 
-      <p className="panel-heading">Nejnovější od tvůrců, které odebíráš</p>
+      <p className="panel-heading">{t('subscriptionsFeedHeading')}</p>
       {feedItems.length === 0 ? (
         <p style={{ color: 'var(--text-faint)' }}>{t('noVideosToShowSubs')}</p>
       ) : (

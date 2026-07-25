@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { useLanguage } from '@/lib/i18n';
 
 const PRESET_COLORS = ['#00c9a7', '#4f8ef7', '#f7484f', '#f7b84f', '#a34ff7', '#f74fd6', '#4ff77c', '#ffffff'];
 const STORAGE_KEY = 'kine-brand-color';
@@ -15,6 +16,7 @@ export function applySavedBrandColor() {
 }
 
 export default function BrandLogo({ className, onNavigate }: { className?: string; onNavigate?: () => void }) {
+  const { t } = useLanguage();
   const [pickerOpen, setPickerOpen] = useState(false);
   const clickCountRef = useRef(0);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -63,7 +65,7 @@ export default function BrandLogo({ className, onNavigate }: { className?: strin
             padding: 12, width: 190, boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
           }}
         >
-          <p style={{ fontSize: 11, color: 'var(--text-faint)', margin: '0 0 8px' }}>Barva appky Kine</p>
+          <p style={{ fontSize: 11, color: 'var(--text-faint)', margin: '0 0 8px' }}>{t('brandColorPickerTitle')}</p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {PRESET_COLORS.map((c) => (
               <button
@@ -100,7 +102,7 @@ export default function BrandLogo({ className, onNavigate }: { className?: strin
               cursor: 'pointer', padding: 0, marginTop: 10, textDecoration: 'underline',
             }}
           >
-            Zavřít
+            {t('closeButton')}
           </button>
         </div>
       )}

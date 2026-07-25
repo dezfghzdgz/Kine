@@ -18,6 +18,10 @@ const LANGUAGE_OPTIONS = [
   { code: 'sk', key: 'langOptSlovak' },
   { code: 'en', key: 'langOptEnglish' },
   { code: 'de', key: 'langOptGerman' },
+  { code: 'es', key: 'langOptSpanish' },
+  { code: 'pl', key: 'langOptPolish' },
+  { code: 'fr', key: 'langOptFrench' },
+  { code: 'uk', key: 'langOptUkrainian' },
   { code: 'other', key: 'langOptOther' },
 ] as const;
 
@@ -204,7 +208,7 @@ export default function UploadPage() {
   if (!isLoggedIn) {
     return (
       <div className="auth-gate">
-        <p>Pro nahrání videa se musíš nejdřív přihlásit.</p>
+        <p>{t('loginToUploadNote')}</p>
         <Link href="/login">{t('loginLink')}</Link>
       </div>
     );
@@ -299,7 +303,7 @@ export default function UploadPage() {
             <textarea placeholder={t('optionalDescription')} value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
             <input
               type="text"
-              placeholder="#hry #vtipné #vlog"
+              placeholder={t('hashtagsPlaceholderExample')}
               value={hashtagsInput}
               onChange={(e) => setHashtagsInput(e.target.value)}
               style={{ marginTop: 10 }}
@@ -494,7 +498,7 @@ export default function UploadPage() {
 
   return (
     <form className="form-container" style={{ maxWidth: 480 }} onSubmit={handleFinalSubmit}>
-      <h1>Viditelnost a plánování</h1>
+      <h1>{t('visibilityAndSchedulingHeading')}</h1>
 
       <div className="panel">
         <p className="panel-heading">
@@ -538,8 +542,8 @@ export default function UploadPage() {
 
       {error && <p className="error-text">{error}</p>}
       {status === 'uploading' && <p>{t('uploading')} {progress}%</p>}
-      {status === 'saving' && <p>Ukládám video…</p>}
-      {status === 'processing' && <p>Cloudflare zpracovává video, chvilku strpení…</p>}
+      {status === 'saving' && <p>{t('savingVideoLabel')}</p>}
+      {status === 'processing' && <p>{t('processingVideoNote')}</p>}
 
       <div style={{ display: 'flex', gap: 8 }}>
         <button type="button" onClick={() => setStep(1)} style={{ background: 'var(--panel-raised)', color: 'var(--text)' }}>

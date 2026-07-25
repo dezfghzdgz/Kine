@@ -53,10 +53,9 @@ export default function SparksCard({
       if (iframeRef.current && (window as any).Stream && !playerRef.current) {
         const player = (window as any).Stream(iframeRef.current);
         playerRef.current = player;
-        // Prohlížeče často blokují automatické přehrávání se zvukem -
-        // video proto vždy nejdřív nastartuje potichu (to je vždy povolené)
-        // a zvuk hned poté dorovná podle toho, jestli si ho uživatel
-        // v tomhle sezení už někdy zapnul.
+        // Adresa videa už žádný stav nevynucuje - appka řídí zvuk, smyčku
+        // i přehrávání výhradně tady, ať se to s ničím nepere.
+        player.loop = true;
         player.muted = !soundEnabledRef.current;
         player.volume = 1;
         player.play?.();
@@ -162,7 +161,7 @@ export default function SparksCard({
 
   function togglePlayPause() {
     if (!playerRef.current) return;
-    if (playerRef.current.paused) {
+    if (paused) {
       playerRef.current.play();
     } else {
       playerRef.current.pause();
@@ -171,7 +170,7 @@ export default function SparksCard({
 
   function toggleMute() {
     if (!playerRef.current) return;
-    const next = !playerRef.current.muted;
+    const next = !muted;
     playerRef.current.muted = next;
     if (!next) soundEnabledRef.current = true;
   }
@@ -185,7 +184,7 @@ export default function SparksCard({
         {active ? (
           <iframe
             ref={iframeRef}
-            src={`https://iframe.videodelivery.net/${video.cloudflare_video_id}?autoplay=true&muted=false&loop=true&controls=false`}
+            src={`https://iframe.videodelivery.net/${video.cloudflare_video_id}?controls=false`}
             style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
             allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
           />

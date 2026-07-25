@@ -122,7 +122,7 @@ function PlaylistsPageInner() {
   if (!userId) {
     return (
       <div className="auth-gate">
-        <p>Pro vytváření playlistů se musíš nejdřív přihlásit.</p>
+        <p>{t('loginToCreatePlaylistsNote')}</p>
         <Link href="/login">{t('loginLink')}</Link>
       </div>
     );
@@ -139,12 +139,12 @@ function PlaylistsPageInner() {
       <form onSubmit={createPlaylist} style={{ display: 'flex', gap: 8, marginBottom: 28, maxWidth: 420 }}>
         <input
           type="text"
-          placeholder="Název nového playlistu…"
+          placeholder={t('newPlaylistNamePlaceholder')}
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
           style={{ flex: 1 }}
         />
-        <button type="submit" disabled={creating}>Vytvořit</button>
+        <button type="submit" disabled={creating}>{t('create')}</button>
       </form>
 
       {filtered.length === 0 ? (
@@ -169,7 +169,7 @@ function PlaylistsPageInner() {
                     color: '#fff', fontSize: 13, fontWeight: 600, textShadow: '0 1px 3px rgba(0,0,0,0.6)',
                     position: p.thumbnail_url ? 'absolute' : 'static', bottom: p.thumbnail_url ? 8 : undefined, left: p.thumbnail_url ? 8 : undefined,
                   }}>
-                    {p.is_system ? '🕒 ' : ''}{p.playlist_videos?.length ?? 0} videí
+                    {p.is_system ? '🕒 ' : ''}{p.playlist_videos?.length ?? 0} {t('playlistVideoCountSuffix')}
                   </span>
                 </div>
                 {renamingId === p.id ? null : (
@@ -207,18 +207,18 @@ function PlaylistsPageInner() {
                     onClick={() => { setRenamingId(p.id); setRenameValue(p.title); setMenuOpenId(null); }}
                     disabled={p.is_system}
                   >
-                    Přejmenovat
+                    {t('renameButton')}
                   </button>
 
                   {!p.is_system && (
                     <button className="profile-dropdown-item" onClick={() => toggleVisibility(p.id, p.visibility ?? 'private')}>
-                      <span>Viditelnost</span>
-                      <span className="profile-dropdown-value">{p.visibility === 'public' ? 'Veřejný' : 'Soukromý'}</span>
+                      <span>{t('visibilityLabel')}</span>
+                      <span className="profile-dropdown-value">{p.visibility === 'public' ? t('playlistVisibilityPublic') : t('playlistVisibilityPrivate')}</span>
                     </button>
                   )}
 
                   <div style={{ padding: '8px 8px 4px' }}>
-                    <p style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 6 }}>Barva náhledu</p>
+                    <p style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 6 }}>{t('thumbnailColorLabel')}</p>
                     <div style={{ display: 'flex', gap: 6 }}>
                       {COLOR_PRESETS.map((c) => (
                         <button
@@ -233,7 +233,7 @@ function PlaylistsPageInner() {
                     </div>
                     <label htmlFor={`playlist-thumb-${p.id}`} style={{ cursor: 'pointer' }}>
                       <span style={{ fontSize: 11, color: 'var(--text)', textDecoration: 'underline', marginTop: 8, display: 'inline-block' }}>
-                        Nebo nahrát vlastní obrázek
+                        {t('orUploadCustomImageLabel')}
                       </span>
                       <input
                         id={`playlist-thumb-${p.id}`}

@@ -197,7 +197,7 @@ export default function SettingsPage() {
   if (!userId) {
     return (
       <div className="auth-gate">
-        <p>Pro úpravu nastavení se musíš nejdřív přihlásit.</p>
+        <p>{t('loginToEditSettingsNote')}</p>
         <Link href="/login">{t('loginLink')}</Link>
       </div>
     );
@@ -210,7 +210,7 @@ export default function SettingsPage() {
 
       <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
         <div className="panel">
-          <p className="panel-heading">Banner kanálu</p>
+          <p className="panel-heading">{t('channelBannerLabel')}</p>
           <div
             style={{
               width: '100%', height: 140, borderRadius: 8, marginBottom: 14, overflow: 'hidden',
@@ -240,7 +240,7 @@ export default function SettingsPage() {
         </div>
 
         <div className="panel">
-          <p className="panel-heading">Profilová fotka</p>
+          <p className="panel-heading">{t('profilePhotoLabel')}</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
             <div className="creator-avatar" style={{ width: 72, height: 72, overflow: 'hidden' }}>
               {avatarUrl ? (
@@ -267,33 +267,33 @@ export default function SettingsPage() {
         </div>
 
         <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <p className="panel-heading" style={{ marginBottom: -4 }}>Údaje o profilu</p>
+          <p className="panel-heading" style={{ marginBottom: -4 }}>{t('profileDataHeading')}</p>
           <div>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)', display: 'block', marginBottom: 6 }}>Zobrazované jméno</label>
+            <label style={{ fontSize: 12, color: 'var(--text-faint)', display: 'block', marginBottom: 6 }}>{t('displayNameLabel')}</label>
             <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
           </div>
           <div>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)', display: 'block', marginBottom: 6 }}>Uživatelské jméno</label>
+            <label style={{ fontSize: 12, color: 'var(--text-faint)', display: 'block', marginBottom: 6 }}>{t('usernameLabel')}</label>
             <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} />
           </div>
           <div>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)', display: 'block', marginBottom: 6 }}>Popis kanálu</label>
+            <label style={{ fontSize: 12, color: 'var(--text-faint)', display: 'block', marginBottom: 6 }}>{t('channelDescriptionLabel')}</label>
             <textarea
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               rows={2}
-              placeholder="Něco o tobě a tvém kanálu…"
+              placeholder={t('aboutYouPlaceholder')}
               style={{ resize: 'vertical', minHeight: 60, maxHeight: 160, width: '100%' }}
             />
           </div>
           <div>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)', display: 'block', marginBottom: 6 }}>Odkazy (sociální sítě, web…)</label>
+            <label style={{ fontSize: 12, color: 'var(--text-faint)', display: 'block', marginBottom: 6 }}>{t('socialLinksLabel')}</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {socialLinks.map((link, i) => (
                 <div key={i} style={{ display: 'flex', gap: 8 }}>
                   <input
                     type="text"
-                    placeholder="Název (např. Instagram)"
+                    placeholder={t('linkNamePlaceholder')}
                     value={link.label}
                     onChange={(e) => {
                       const next = [...socialLinks];
@@ -320,7 +320,7 @@ export default function SettingsPage() {
         </div>
 
         <div className="panel">
-          <p className="panel-heading">Styl hodnocení videí</p>
+          <p className="panel-heading">{t('ratingStyleHeading')}</p>
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               type="button"
@@ -348,7 +348,7 @@ export default function SettingsPage() {
         </div>
 
         <div className="panel">
-          <p className="panel-heading">Domovská stránka</p>
+          <p className="panel-heading">{t('homepageHeading')}</p>
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               type="button"
@@ -358,7 +358,7 @@ export default function SettingsPage() {
                 color: contentPreference === 'long' ? 'var(--bg)' : 'var(--text)',
               }}
             >
-              🎬 Delší videa
+              {t('longVideosOption')}
             </button>
             <button
               type="button"
@@ -368,7 +368,7 @@ export default function SettingsPage() {
                 color: contentPreference === 'short' ? 'var(--bg)' : 'var(--text)',
               }}
             >
-              ⚡ Sparks
+              {t('sparksOption')}
             </button>
           </div>
         </div>
@@ -379,13 +379,12 @@ export default function SettingsPage() {
       </form>
 
       <div className="panel" style={{ marginTop: 32 }}>
-        <p className="panel-heading">Tvoje data</p>
+        <p className="panel-heading">{t('yourDataHeading')}</p>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 12 }}>
-          Podle GDPR máš právo si stáhnout všechna data, která o tobě appka má,
-          i právo appku požádat o jejich úplné smazání.
+          {t('gdprNote')}
         </p>
         <button type="button" onClick={handleExportData} disabled={exporting} style={{ marginBottom: 10 }}>
-          {exporting ? 'Připravuji…' : 'Stáhnout moje data'}
+          {exporting ? t('preparingLabel') : t('downloadMyDataButton')}
         </button>
         <div>
           <button
@@ -393,7 +392,7 @@ export default function SettingsPage() {
             onClick={() => setConfirmDeleteAccount(true)}
             style={{ background: 'var(--panel-raised)', color: '#ff6b6b', border: '1px solid var(--border)' }}
           >
-            Trvale smazat účet
+            {t('permanentlyDeleteAccountButton')}
           </button>
         </div>
       </div>

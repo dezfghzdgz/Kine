@@ -62,7 +62,7 @@ function WatchLaterPageInner() {
   if (!userId) {
     return (
       <div className="auth-gate">
-        <p>Pro zobrazení seznamu se musíš nejdřív přihlásit.</p>
+        <p>{t('loginToViewListNote')}</p>
         <Link href="/login">{t('loginLink')}</Link>
       </div>
     );
@@ -73,8 +73,8 @@ function WatchLaterPageInner() {
   if (videos.length === 0) {
     return (
       <div className="auth-gate">
-        <p>Sledovat později</p>
-        <p style={{ fontSize: 13 }}>Videa, která přidáš tlačítkem "Sledovat později", se objeví tady.</p>
+        <p>{t('watchLaterEmptyTitle')}</p>
+        <p style={{ fontSize: 13 }}>{t('watchLaterEmptyNote')}</p>
       </div>
     );
   }

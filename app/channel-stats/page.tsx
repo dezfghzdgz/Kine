@@ -189,7 +189,7 @@ export default function ChannelStatsPage() {
   if (!userId) {
     return (
       <div className="auth-gate">
-        <p>Pro zobrazení statistik se musíš nejdřív přihlásit.</p>
+        <p>{t('loginToViewStatsNote')}</p>
         <Link href="/login">{t('loginLink')}</Link>
       </div>
     );
@@ -205,10 +205,10 @@ export default function ChannelStatsPage() {
 
   const chartTitles: Record<ChartKey, string> = {
     subscribers: t('subscribersOverTime'),
-    views: 'Zhlédnutí v čase',
+    views: t('viewsOverTimeChartTitle'),
     videos: t('videosOverTime'),
-    likes: 'Lajky v čase',
-    dislikes: 'Dislajky v čase',
+    likes: t('likesOverTime'),
+    dislikes: t('dislikesOverTime'),
   };
 
   return (
@@ -309,7 +309,7 @@ export default function ChannelStatsPage() {
             {trustRating !== null && (
               <p style={{ fontSize: 24, fontWeight: 700, margin: '0 0 4px' }}>{trustRating}%</p>
             )}
-            <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>Klikni pro graf v čase 📈</p>
+            <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>{t('clickForChartOverTime')}</p>
           </>
         ) : (
           <p style={{ fontSize: 13, color: 'var(--text-faint)', margin: 0 }}>

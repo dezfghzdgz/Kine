@@ -53,7 +53,7 @@ function DownloadedPageInner() {
   if (!userId) {
     return (
       <div className="auth-gate">
-        <p>Pro zobrazení stažených videí se musíš nejdřív přihlásit.</p>
+        <p>{t('loginToViewDownloadedNote')}</p>
         <Link href="/login">{t('loginLink')}</Link>
       </div>
     );
@@ -64,9 +64,9 @@ function DownloadedPageInner() {
   if (videos.length === 0) {
     return (
       <div className="auth-gate">
-        <p>Stažené</p>
+        <p>{t('downloadedEmptyTitle')}</p>
         <p style={{ fontSize: 13 }}>
-          Videa, která si stáhneš tlačítkem "Stáhnout" u videa, se objeví tady.
+          {t('downloadedEmptyNote')}
         </p>
       </div>
     );
