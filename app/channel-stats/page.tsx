@@ -356,38 +356,38 @@ export default function ChannelStatsPage() {
       <div className="panel">
         <div className="tab-row" style={{ marginBottom: 12 }}>
           <button className={`tab-btn ${earningsView === 'chart' ? 'active' : ''}`} onClick={() => setEarningsView('chart')}>
-            Výdělky za celou dobu
+            {t('earningsAllTimeTab')}
           </button>
           <button className={`tab-btn ${earningsView === 'payout' ? 'active' : ''}`} onClick={() => setEarningsView('payout')}>
-            Další výplata
+            {t('nextPayoutTab')}
           </button>
         </div>
 
         {earningsView === 'chart' ? (
           <p style={{ color: 'var(--text-faint)', fontSize: 12, textAlign: 'center', padding: '30px 0' }}>
-            Zatím 0 Kč - sledování výdělků teprve propojíme s platebním systémem.
+            {t('earningsPlaceholderNote')}
           </p>
         ) : (
           <p style={{ color: 'var(--text-faint)', fontSize: 12, textAlign: 'center', padding: '30px 0' }}>
-            Vyplácení zatím není aktivní. Jakmile spustíme platby tvůrcům, uvidíš tu datum a částku další výplaty.
+            {t('payoutNotActiveNote')}
           </p>
         )}
       </div>
 
       <div className="panel">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-          <p className="panel-heading" style={{ margin: 0 }}>Vaše videa</p>
+          <p className="panel-heading" style={{ margin: 0 }}>{t('yourVideosHeading')}</p>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
               type="text"
-              placeholder="Hledat ve videích…"
+              placeholder={t('searchVideosPlaceholder')}
               value={videoSearch}
               onChange={(e) => setVideoSearch(e.target.value)}
               style={{ fontSize: 13 }}
             />
             <select value={videoSort} onChange={(e) => setVideoSort(e.target.value as 'newest' | 'views')} style={{ fontSize: 13 }}>
-              <option value="newest">Nejnovější</option>
-              <option value="views">Nejsledovanější</option>
+              <option value="newest">{t('sortNewest')}</option>
+              <option value="views">{t('sortMostViewed')}</option>
             </select>
           </div>
         </div>
@@ -402,7 +402,7 @@ export default function ChannelStatsPage() {
             );
 
           if (filtered.length === 0) {
-            return <p style={{ fontSize: 13, color: 'var(--text-faint)' }}>Žádná videa neodpovídají hledání.</p>;
+            return <p style={{ fontSize: 13, color: 'var(--text-faint)' }}>{t('noVideosMatchSearch')}</p>;
           }
 
           return (

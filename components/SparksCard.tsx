@@ -10,12 +10,13 @@ import { shouldNotifyLikeMilestone } from '@/lib/likeMilestones';
 import { useLanguage } from '@/lib/i18n';
 
 export default function SparksCard({
-  video, active, commentsOpen, onToggleComments,
+  video, active, commentsOpen, onToggleComments, soundEnabledRef,
 }: {
   video: any;
   active: boolean;
   commentsOpen: boolean;
   onToggleComments: () => void;
+  soundEnabledRef: { current: boolean };
 }) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -46,15 +47,22 @@ export default function SparksCard({
     }
 
     setPaused(false);
-    setMuted(false);
+    setMuted(!soundEnabledRef.current);
 
     const interval = setInterval(() => {
       if (iframeRef.current && (window as any).Stream && !playerRef.current) {
         const player = (window as any).Stream(iframeRef.current);
         playerRef.current = player;
-        player.muted = false;
+        // Prohlížeče často blokují automatické přehrávání se zvukem -
+        // video proto vždy nejdřív nastartuje potichu (to je vždy povolené)
+        // a zvuk hned poté dorovná podle toho, jestli si ho uživatel
+        // v tomhle sezení už někdy zapnul.
+        player.muted = !soundEnabledRef.current;
         player.volume = 1;
         player.play?.();
+        if (soundEnabledRef.current) {
+          setTimeout(() => { player.muted = false; }, 60);
+        }
 
         // Appka teď poslouchá skutečné události z přehrávače (ne jen svůj
         // vlastní odhad stavu) - jinak se při přetočení smyčky videa (loop)
@@ -163,7 +171,9 @@ export default function SparksCard({
 
   function toggleMute() {
     if (!playerRef.current) return;
-    playerRef.current.muted = !playerRef.current.muted;
+    const next = !playerRef.current.muted;
+    playerRef.current.muted = next;
+    if (!next) soundEnabledRef.current = true;
   }
 
   const creatorName = video.profiles?.display_name ?? video.profiles?.username ?? 'neznámý tvůrce';

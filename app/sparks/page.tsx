@@ -22,6 +22,11 @@ function SparksPageInner() {
   const panelRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [arrowsLeft, setArrowsLeft] = useState<number | null>(null);
+  // Appka si pamatuje, jestli si uživatel v tomhle sezení zvuk už jednou
+  // zapnul - autoplay se zvukem prohlížeče často blokují, takže nové video
+  // vždycky nejdřív nastartuje potichu a zvuk se dorovná hned potom, pokud
+  // si ho uživatel předtím zapnul (stejné chování jako TikTok/Reels).
+  const soundEnabledRef = useRef(false);
 
   useEffect(() => {
     function updateArrowsPosition() {
@@ -161,6 +166,7 @@ function SparksPageInner() {
               active={i === activeIndex}
               commentsOpen={commentsOpen}
               onToggleComments={() => setCommentsOpen((v) => !v)}
+              soundEnabledRef={soundEnabledRef}
             />
           </div>
         ))}

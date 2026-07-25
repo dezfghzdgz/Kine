@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
-export default function MyChannelRedirect() {
+function MyChannelRedirectInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     (async () => {
@@ -32,9 +33,21 @@ export default function MyChannelRedirect() {
         });
       }
 
-      router.replace(`/channel/${authData.user.id}`);
+      // Parametry z adresy (např. ?tab=posts&compose=text z mobilního menu
+      // "+") se musí přenést i na skutečnou adresu kanálu, jinak appka
+      // zapomene, že měla rovnou otevřít formulář na psaní.
+      const query = searchParams.toString();
+      router.replace(`/channel/${authData.user.id}${query ? `?${query}` : ''}`);
     })();
-  }, [router]);
+  }, [router, searchParams]);
 
   return <p style={{ color: 'var(--text-faint)' }}>Přesměrovávám na tvůj kanál…</p>;
+}
+
+export default function MyChannelRedirect() {
+  return (
+    <Suspense fallback={null}>
+      <MyChannelRedirectInner />
+    </Suspense>
+  );
 }

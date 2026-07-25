@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 import { useMobileNav } from '@/lib/mobileNavContext';
+import BrandLogo from './BrandLogo';
 import ProfileMenu from './ProfileMenu';
 import NotificationBell from './NotificationBell';
 
@@ -82,7 +83,7 @@ export default function Sidebar() {
     <>
     <aside className="sidebar">
       <div className="sidebar-logo-row">
-        <Link href="/" className="sidebar-logo">Kine</Link>
+        <BrandLogo className="sidebar-logo" />
         <span style={{ fontSize: 10, color: 'var(--text-faint)', marginLeft: 6, fontWeight: 600 }}>BETA0.088</span>
       </div>
       <nav className="sidebar-nav" style={{ flex: 1 }}>

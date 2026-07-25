@@ -193,13 +193,14 @@ function ChannelPageInner() {
             )}
             {(trustRating === null || trustRating < 90) && isNewCreator && (
               <span
-                title="Tenhle tvůrce je tu nový (prvních 30 dní)"
+                title={t('newcomerBadgeTooltip')}
                 style={{
                   marginLeft: 6, fontSize: 11, background: 'var(--panel-raised)', color: 'var(--text-faint)',
                   border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', verticalAlign: 'middle',
+                  whiteSpace: 'nowrap', display: 'inline-block',
                 }}
               >
-                🆕 Nováček
+                🆕 {t('newcomerBadgeLabel')}
               </span>
             )}
           </p>
