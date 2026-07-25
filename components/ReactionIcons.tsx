@@ -29,6 +29,7 @@ export function ShareIcon({ size = 20 }: { size?: number }) {
     </svg>
   );
 }
+export function ThumbsUpIcon({ filled, size = 20 }: { filled?: boolean; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8">
       <path d="M7 11v9H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3z" strokeLinejoin="round" />
