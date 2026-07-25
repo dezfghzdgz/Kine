@@ -12,12 +12,6 @@ import FieldHint from '@/components/FieldHint';
 
 type ChartKey = 'subscribers' | 'views' | 'videos' | 'likes' | 'dislikes';
 
-const TIER_LABELS: Record<string, string> = {
-  basic: 'Základní',
-  silver: 'Stříbrná',
-  blue: 'Modrá',
-};
-
 const TIER_MULTIPLIER: Record<string, number> = {
   none: 1,
   basic: 1.3,
@@ -27,6 +21,11 @@ const TIER_MULTIPLIER: Record<string, number> = {
 
 export default function ChannelStatsPage() {
   const { t } = useLanguage();
+  const TIER_LABELS: Record<string, string> = {
+    basic: t('tierBasic'),
+    silver: t('tierSilver'),
+    blue: t('tierBlue'),
+  };
   const [checking, setChecking] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [stats, setStats] = useState({
@@ -302,7 +301,7 @@ export default function ChannelStatsPage() {
       >
         <p className="panel-heading">
           Rating
-          <FieldHint text="Skládá se ze dvou věcí: jak dlouho appku používáš (starší účet = trochu vyšší základ) a průměrné hodnocení tvých videí. Časem přibudou i další faktory, třeba nahlášení obsahu." />
+          <FieldHint text={t('ratingExplanationHint')} />
         </p>
         {reactionCount >= RATING_UNLOCK_THRESHOLD ? (
           <>
@@ -313,7 +312,7 @@ export default function ChannelStatsPage() {
           </>
         ) : (
           <p style={{ fontSize: 13, color: 'var(--text-faint)', margin: 0 }}>
-            Rating se odemkne po {RATING_UNLOCK_THRESHOLD} reakcích na tvých videích ({reactionCount}/{RATING_UNLOCK_THRESHOLD})
+            {t('ratingUnlocksAfterPrefix')} {RATING_UNLOCK_THRESHOLD} {t('ratingUnlocksAfterSuffix')} ({reactionCount}/{RATING_UNLOCK_THRESHOLD})
           </p>
         )}
       </div>

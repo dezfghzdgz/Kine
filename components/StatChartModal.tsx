@@ -2,14 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { useLanguage, type Lang } from '@/lib/i18n';
 
 type Range = 'all' | 'year' | 'month' | 'week';
 
-const RANGE_LABELS: Record<Range, string> = {
-  all: 'Od začátku',
-  year: 'Poslední rok',
-  month: 'Poslední měsíc',
-  week: 'Poslední týden',
+const DATE_LOCALES: Record<Lang, string> = {
+  cs: 'cs-CZ', en: 'en-US', de: 'de-DE', sk: 'sk-SK',
+  es: 'es-ES', pl: 'pl-PL', fr: 'fr-FR', uk: 'uk-UA',
 };
 
 function rangeStartDate(range: Range, earliest: Date): Date {
@@ -20,7 +19,7 @@ function rangeStartDate(range: Range, earliest: Date): Date {
   return earliest;
 }
 
-function buildSeries(timestamps: Date[], range: Range) {
+function buildSeries(timestamps: Date[], range: Range, locale: string, todayLabel: string) {
   if (timestamps.length === 0) return [];
   const sorted = [...timestamps].sort((a, b) => a.getTime() - b.getTime());
   const earliest = sorted[0];
@@ -34,14 +33,14 @@ function buildSeries(timestamps: Date[], range: Range) {
   while (cursor <= now) {
     const cumulativeCount = sorted.filter((t) => t <= cursor).length;
     points.push({
-      date: cursor.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'short' }),
+      date: cursor.toLocaleDateString(locale, { day: 'numeric', month: 'short' }),
       count: cumulativeCount,
     });
     cursor = new Date(cursor.getTime() + bucketDays * 24 * 60 * 60 * 1000);
   }
 
   const finalCount = sorted.filter((t) => t <= now).length;
-  points.push({ date: 'dnes', count: finalCount });
+  points.push({ date: todayLabel, count: finalCount });
 
   return points;
 }
@@ -55,8 +54,18 @@ export default function StatChartModal({
   timestamps: Date[];
   onClose: () => void;
 }) {
+  const { t, lang } = useLanguage();
   const [range, setRange] = useState<Range>('all');
-  const data = useMemo(() => buildSeries(timestamps, range), [timestamps, range]);
+  const rangeLabels: Record<Range, string> = {
+    all: t('rangeAll'),
+    year: t('rangeYear'),
+    month: t('rangeMonth'),
+    week: t('rangeWeek'),
+  };
+  const data = useMemo(
+    () => buildSeries(timestamps, range, DATE_LOCALES[lang], t('todayLabel')),
+    [timestamps, range, lang]
+  );
 
   return (
     <div
@@ -77,13 +86,13 @@ export default function StatChartModal({
         </div>
 
         <div className="tab-row">
-          {(Object.keys(RANGE_LABELS) as Range[]).map((r) => (
+          {(Object.keys(rangeLabels) as Range[]).map((r) => (
             <button
               key={r}
               className={`tab-btn ${range === r ? 'active' : ''}`}
               onClick={() => setRange(r)}
             >
-              {RANGE_LABELS[r]}
+              {rangeLabels[r]}
             </button>
           ))}
         </div>
@@ -91,7 +100,7 @@ export default function StatChartModal({
         <div style={{ width: '100%', height: 260, marginTop: 16 }}>
           {timestamps.length === 0 ? (
             <p style={{ color: 'var(--text-faint)', textAlign: 'center', paddingTop: 80 }}>
-              Zatím žádná data k zobrazení.
+              {t('noChartDataYet')}
             </p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">

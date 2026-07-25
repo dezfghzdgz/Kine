@@ -2,14 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { useLanguage, type Lang } from '@/lib/i18n';
 
 type Range = 'all' | 'year' | 'month' | 'week';
 
-const RANGE_LABELS: Record<Range, string> = {
-  all: 'Od začátku',
-  year: 'Poslední rok',
-  month: 'Poslední měsíc',
-  week: 'Poslední týden',
+const DATE_LOCALES: Record<Lang, string> = {
+  cs: 'cs-CZ', en: 'en-US', de: 'de-DE', sk: 'sk-SK',
+  es: 'es-ES', pl: 'pl-PL', fr: 'fr-FR', uk: 'uk-UA',
 };
 
 function rangeStartDate(range: Range, earliest: Date): Date {
@@ -27,7 +26,14 @@ export default function RatingChartModal({
   history: { date: string; score: number }[];
   onClose: () => void;
 }) {
+  const { t, lang } = useLanguage();
   const [range, setRange] = useState<Range>('all');
+  const rangeLabels: Record<Range, string> = {
+    all: t('rangeAll'),
+    year: t('rangeYear'),
+    month: t('rangeMonth'),
+    week: t('rangeWeek'),
+  };
 
   const data = useMemo(() => {
     if (history.length === 0) return [];
@@ -38,10 +44,10 @@ export default function RatingChartModal({
     return sorted
       .filter((h) => new Date(h.date) >= start)
       .map((h) => ({
-        date: new Date(h.date).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'short' }),
+        date: new Date(h.date).toLocaleDateString(DATE_LOCALES[lang], { day: 'numeric', month: 'short' }),
         score: h.score,
       }));
-  }, [history, range]);
+  }, [history, range, lang]);
 
   return (
     <div
@@ -62,13 +68,13 @@ export default function RatingChartModal({
         </div>
 
         <div className="tab-row">
-          {(Object.keys(RANGE_LABELS) as Range[]).map((r) => (
+          {(Object.keys(rangeLabels) as Range[]).map((r) => (
             <button
               key={r}
               className={`tab-btn ${range === r ? 'active' : ''}`}
               onClick={() => setRange(r)}
             >
-              {RANGE_LABELS[r]}
+              {rangeLabels[r]}
             </button>
           ))}
         </div>
@@ -76,7 +82,7 @@ export default function RatingChartModal({
         <div style={{ width: '100%', height: 260, marginTop: 16 }}>
           {data.length < 2 ? (
             <p style={{ color: 'var(--text-faint)', textAlign: 'center', paddingTop: 80 }}>
-              Zatím málo dat na graf - vrať se za pár dní.
+              {t('notEnoughRatingDataNote')}
             </p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
