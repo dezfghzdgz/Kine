@@ -27,9 +27,11 @@ function SparksPageInner() {
     function updateArrowsPosition() {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
-      // Video má max-width 460px a je uprostřed - šipky dáme kousek za jeho pravý okraj
-      const videoRight = Math.min(rect.width, 460) / 2;
-      const videoBasedLeft = rect.left + rect.width / 2 + videoRight + 40;
+      // Skutečná šířka videa se počítá stejně jako v CSS (.spark-slide):
+      // min(100% šířky kontejneru, 100vh * 9/16) - NE pevných 460px.
+      const videoWidth = Math.min(rect.width, window.innerHeight * (9 / 16));
+      const videoRight = videoWidth / 2;
+      const videoBasedLeft = rect.left + rect.width / 2 + videoRight + 16;
 
       if (commentsOpen && panelRef.current) {
         const panelRect = panelRef.current.getBoundingClientRect();

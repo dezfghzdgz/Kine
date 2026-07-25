@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Script from 'next/script';
 import { supabase } from '@/lib/supabaseClient';
-import { ThumbsUpIcon, ThumbsDownIcon } from './ReactionIcons';
+import { ThumbsUpIcon, ThumbsDownIcon, SpeakerIcon, CommentIcon, ShareIcon } from './ReactionIcons';
 import { shouldNotifyLikeMilestone } from '@/lib/likeMilestones';
 import { useLanguage } from '@/lib/i18n';
 
@@ -192,10 +192,11 @@ export default function SparksCard({
             onClick={(e) => { e.stopPropagation(); toggleMute(); }}
             style={{
               position: 'absolute', top: 14, right: 14, background: 'rgba(0,0,0,0.5)', border: 'none',
-              color: '#fff', width: 32, height: 32, borderRadius: '50%', fontSize: 14, cursor: 'pointer',
+              color: '#fff', width: 32, height: 32, borderRadius: '50%', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
             }}
           >
-            {muted ? '🔇' : '🔊'}
+            <SpeakerIcon muted={muted} size={16} />
           </button>
         )}
       </div>
@@ -241,12 +242,16 @@ export default function SparksCard({
         )}
 
         <div className="spark-action-item" onClick={onToggleComments}>
-          <span style={{ fontSize: 24, color: commentsOpen ? '#fff' : 'rgba(255,255,255,0.85)' }}>💬</span>
+          <span style={{ color: commentsOpen ? '#fff' : 'rgba(255,255,255,0.85)' }}>
+            <CommentIcon size={24} />
+          </span>
           <span className="spark-action-label">{commentCount}</span>
         </div>
 
         <div className="spark-action-item" onClick={handleShare}>
-          <span style={{ fontSize: 24 }}>🔗</span>
+          <span style={{ color: 'rgba(255,255,255,0.85)' }}>
+            <ShareIcon size={24} />
+          </span>
           <span className="spark-action-label">{t('share')}</span>
         </div>
 

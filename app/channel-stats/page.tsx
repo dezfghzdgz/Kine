@@ -319,37 +319,36 @@ export default function ChannelStatsPage() {
       </div>
 
       <div className="panel" style={{ marginBottom: 20 }}>
-        <p className="panel-heading">Ověření tvůrce</p>
+        <p className="panel-heading">{t('verificationTierTitle')}</p>
         {verificationTier !== 'none' ? (
           <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>
-            Jsi ověřený tvůrce - úroveň: <strong>{TIER_LABELS[verificationTier]}</strong>.
-            Násobič výdělků: <strong>{TIER_MULTIPLIER[verificationTier]}×</strong>
+            {t('verifiedCreatorIntro')} <strong>{TIER_LABELS[verificationTier]}</strong>.
+            {' '}{t('earningsMultiplierLabel')} <strong>{TIER_MULTIPLIER[verificationTier]}×</strong>
           </p>
         ) : stats.subscriberCount >= 5000 ? (
           requestStatus === 'pending' ? (
             <p style={{ fontSize: 13, color: 'var(--text-faint)' }}>
-              Tvoje žádost o ověření čeká na posouzení.
+              {t('verificationPendingNotice')}
             </p>
           ) : (
             <>
               <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 10 }}>
-                Splňuješ podmínku 5 000+ odběratelů - můžeš požádat o ověření.
-                Ověření tvůrci mají vyšší násobič výdělků.
+                {t('meetsVerificationCondition')}
               </p>
               <button onClick={requestVerification} disabled={requesting}>
-                {requesting ? 'Odesílám…' : 'Požádat o ověření'}
+                {requesting ? t('sendingLabel') : t('requestVerificationButton')}
               </button>
               {requestStatus === 'rejected' && (
                 <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 8 }}>
-                  Předchozí žádost byla zamítnuta, ale můžeš to zkusit znovu.
+                  {t('previousRequestRejectedNotice')}
                 </p>
               )}
             </>
           )
         ) : (
           <p style={{ fontSize: 13, color: 'var(--text-faint)' }}>
-            Ověření mohou žádat tvůrci s 5 000+ odběrateli (aktuálně máš {stats.subscriberCount}).
-            Bez ověření máš násobič výdělků {TIER_MULTIPLIER.none}×, pořád ale vyděláváš.
+            {t('verificationEligibilityNote')} ({t('currentlyHaveLabel')} {stats.subscriberCount}).
+            {' '}{t('noVerificationMultiplierNote')} {TIER_MULTIPLIER.none}×, {t('stillEarningNote')}
           </p>
         )}
       </div>
