@@ -14,7 +14,7 @@ export function applySavedBrandColor() {
   if (saved) document.documentElement.style.setProperty('--brand', saved);
 }
 
-export default function BrandLogo({ className }: { className?: string }) {
+export default function BrandLogo({ className, onNavigate }: { className?: string; onNavigate?: () => void }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const clickCountRef = useRef(0);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -41,6 +41,8 @@ export default function BrandLogo({ className }: { className?: string }) {
     if (clickCountRef.current >= 5) {
       clickCountRef.current = 0;
       setPickerOpen(true);
+    } else {
+      onNavigate?.();
     }
   }
 

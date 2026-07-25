@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useMobileNav } from '@/lib/mobileNavContext';
-import BrandLogo from './BrandLogo';
 
 const SCOPED_PATHS = ['/activity', '/downloaded', '/your-videos', '/playlists', '/subscriptions', '/watch-later'];
 
@@ -85,7 +84,6 @@ export default function TopBar() {
             >
               ⋮
             </button>
-            <BrandLogo className="top-bar-logo" />
             <button onClick={openSearch} className="top-bar-search-icon-btn" aria-label="Search">
               <SearchIcon />
             </button>

@@ -203,6 +203,11 @@ export default function Sidebar() {
     {mobileNavOpen && (
       <div className="mobile-drawer-backdrop" onClick={closeMobileNav}>
         <div className="mobile-drawer mobile-drawer-side" onClick={(e) => e.stopPropagation()}>
+          <div className="sidebar-logo-row">
+            <BrandLogo className="sidebar-logo" onNavigate={closeMobileNav} />
+          </div>
+          <div className="sidebar-divider" />
+
           {baseLinks(t).map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href} className="sidebar-link" onClick={closeMobileNav}>
               <Icon />
