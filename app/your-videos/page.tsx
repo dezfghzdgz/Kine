@@ -110,7 +110,7 @@ function YourVideosPageInner() {
                 </div>
                 <p className="video-card-title">{video.title}</p>
                 <p className="video-card-meta">
-                  {video.status === 'ready' ? `${video.views} {t('views')}` : 'Zpracovává se…'}
+                  {video.status === 'ready' ? `${video.views} ${t('views')}` : 'Zpracovává se…'}
                 </p>
               </Link>
               <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>

@@ -395,6 +395,15 @@ function WatchPageInner() {
             allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen;"
             allowFullScreen
           />
+          {!playerReady && video.thumbnail_url && (
+            <div
+              style={{
+                position: 'absolute', inset: 0, zIndex: 5,
+                backgroundImage: `url(${video.thumbnail_url})`,
+                backgroundSize: 'cover', backgroundPosition: 'center',
+              }}
+            />
+          )}
           {video.is_ai_generated && showAiBadge && (
             <div
               style={{
@@ -443,15 +452,6 @@ function WatchPageInner() {
         </div>
 
         <h1 className="video-title">{video.title}</h1>
-        {video.hashtags && video.hashtags.length > 0 && (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4, marginBottom: 4 }}>
-            {video.hashtags.map((h: string) => (
-              <Link key={h} href={`/hashtag/${h}`} style={{ color: 'var(--text)', fontSize: 13, fontWeight: 500 }}>
-                #{h}
-              </Link>
-            ))}
-          </div>
-        )}
         <div className="video-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <Link href={`/channel/${video.profiles?.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="profile-avatar-small" style={{ width: 28, height: 28 }}>
@@ -567,6 +567,7 @@ function WatchPageInner() {
             created_at: video.created_at,
             made_for_kids: video.made_for_kids,
             visibility: video.visibility,
+            hashtags: video.hashtags,
           }}
         />
       </div>

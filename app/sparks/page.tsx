@@ -29,7 +29,7 @@ function SparksPageInner() {
       const rect = containerRef.current.getBoundingClientRect();
       // Video má max-width 460px a je uprostřed - šipky dáme kousek za jeho pravý okraj
       const videoRight = Math.min(rect.width, 460) / 2;
-      const videoBasedLeft = rect.left + rect.width / 2 + videoRight + 16;
+      const videoBasedLeft = rect.left + rect.width / 2 + videoRight + 40;
 
       if (commentsOpen && panelRef.current) {
         const panelRect = panelRef.current.getBoundingClientRect();

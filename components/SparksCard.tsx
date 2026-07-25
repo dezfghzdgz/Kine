@@ -50,10 +50,20 @@ export default function SparksCard({
 
     const interval = setInterval(() => {
       if (iframeRef.current && (window as any).Stream && !playerRef.current) {
-        playerRef.current = (window as any).Stream(iframeRef.current);
-        playerRef.current.muted = false;
-        playerRef.current.volume = 1;
-        playerRef.current.play?.();
+        const player = (window as any).Stream(iframeRef.current);
+        playerRef.current = player;
+        player.muted = false;
+        player.volume = 1;
+        player.play?.();
+
+        // Appka teď poslouchá skutečné události z přehrávače (ne jen svůj
+        // vlastní odhad stavu) - jinak se při přetočení smyčky videa (loop)
+        // může stát, že video běží dál, ale UI/zvuk zůstanou "zaseknuté"
+        // ve starém stavu.
+        player.addEventListener?.('pause', () => setPaused(true));
+        player.addEventListener?.('play', () => setPaused(false));
+        player.addEventListener?.('volumechange', () => setMuted(!!player.muted));
+
         clearInterval(interval);
       }
     }, 150);
@@ -146,18 +156,14 @@ export default function SparksCard({
     if (!playerRef.current) return;
     if (playerRef.current.paused) {
       playerRef.current.play();
-      setPaused(false);
     } else {
       playerRef.current.pause();
-      setPaused(true);
     }
   }
 
   function toggleMute() {
     if (!playerRef.current) return;
-    const next = !playerRef.current.muted;
-    playerRef.current.muted = next;
-    setMuted(next);
+    playerRef.current.muted = !playerRef.current.muted;
   }
 
   const creatorName = video.profiles?.display_name ?? video.profiles?.username ?? 'neznámý tvůrce';

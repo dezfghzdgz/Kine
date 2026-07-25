@@ -102,17 +102,29 @@ export default function PostComposer({
       {type === 'poll' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
           {pollOptions.map((opt, i) => (
-            <input
-              key={i}
-              type="text"
-              placeholder={`${t('pollOptionPlaceholder')} ${i + 1}`}
-              value={opt}
-              onChange={(e) => {
-                const next = [...pollOptions];
-                next[i] = e.target.value;
-                setPollOptions(next);
-              }}
-            />
+            <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                type="text"
+                placeholder={`${t('pollOptionPlaceholder')} ${i + 1}`}
+                value={opt}
+                onChange={(e) => {
+                  const next = [...pollOptions];
+                  next[i] = e.target.value;
+                  setPollOptions(next);
+                }}
+                style={{ flex: 1 }}
+              />
+              {pollOptions.length > 2 && (
+                <button
+                  type="button"
+                  onClick={() => setPollOptions(pollOptions.filter((_, idx) => idx !== i))}
+                  style={{ background: 'var(--panel-raised)', color: 'var(--text)', fontSize: 12, padding: '6px 10px' }}
+                  aria-label={t('removePollOption')}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           ))}
           {pollOptions.length < 5 && (
             <button type="button" onClick={() => setPollOptions([...pollOptions, ''])} style={{ background: 'var(--panel-raised)', color: 'var(--text)', fontSize: 12 }}>

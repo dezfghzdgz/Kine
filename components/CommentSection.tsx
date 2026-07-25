@@ -32,6 +32,7 @@ type VideoInfo = {
   created_at: string;
   made_for_kids: boolean;
   visibility: string;
+  hashtags?: string[] | null;
 };
 
 const TABS = ['Popis', 'Flow', 'Technical'] as const;
@@ -255,11 +256,22 @@ export default function CommentSection({
       </div>
 
       {activeTab === 'Popis' && (
-        description ? (
-          <ExpandableText text={description} />
-        ) : (
-          <p style={{ color: 'var(--text-faint)', fontSize: 13 }}>Tvůrce nepřidal žádný popis.</p>
-        )
+        <>
+          {description ? (
+            <ExpandableText text={description} />
+          ) : (
+            <p style={{ color: 'var(--text-faint)', fontSize: 13 }}>Tvůrce nepřidal žádný popis.</p>
+          )}
+          {video?.hashtags && video.hashtags.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+              {video.hashtags.map((h: string) => (
+                <Link key={h} href={`/hashtag/${h}`} style={{ color: 'var(--text)', fontSize: 13, fontWeight: 500 }}>
+                  #{h}
+                </Link>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {activeTab === 'Flow' && (
