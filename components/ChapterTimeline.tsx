@@ -288,7 +288,7 @@ export default function ChapterTimeline({
             <div
               ref={volumeTrackRef}
               className="volume-slider-track"
-              style={{ width: volumeHover ? 70 : 0, opacity: volumeHover ? 1 : 0 }}
+              style={{ width: (volumeHover || isDragging) ? 70 : 0, opacity: (volumeHover || isDragging) ? 1 : 0 }}
               onMouseDown={(e) => {
                 e.stopPropagation();
                 draggingRef.current = 'volume';
