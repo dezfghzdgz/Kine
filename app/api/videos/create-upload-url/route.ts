@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        maxDurationSeconds: 3600,
+        maxDurationSeconds: 21600,
         requireSignedURLs: false,
       }),
     }
