@@ -431,20 +431,20 @@ function WatchPageInner() {
           )}
           {showUpNext && otherVideos[0] && (
             <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,10,11,0.92)', zIndex: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-              <div style={{ textAlign: 'center', maxWidth: 460 }}>
+              <div style={{ textAlign: 'center', maxWidth: 640, width: '100%' }}>
                 <p style={{ color: 'var(--text-faint)', fontSize: 12, marginBottom: 14 }}>
                   Další video za {upNextCountdown}s - vyber si, nebo počkej
                 </p>
-                <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 20, justifyContent: 'center', flexWrap: 'wrap' }}>
                   {otherVideos.slice(0, 2).map((v: any) => (
                     <div
                       key={v.id}
                       onClick={() => router.push(`/watch/${v.id}`)}
-                      style={{ cursor: 'pointer', width: 180 }}
+                      style={{ cursor: 'pointer', width: 'clamp(160px, 30vw, 260px)' }}
                     >
-                      <div style={{ borderRadius: 8, overflow: 'hidden', marginBottom: 8 }}>
+                      <div style={{ borderRadius: 8, overflow: 'hidden', marginBottom: 8, aspectRatio: '16 / 9', position: 'relative' }}>
                         {v.thumbnail_url && (
-                          <Image src={v.thumbnail_url} alt={v.title} width={180} height={101} />
+                          <Image src={v.thumbnail_url} alt={v.title} fill style={{ objectFit: 'cover' }} />
                         )}
                       </div>
                       <p style={{ color: '#fff', fontSize: 13, fontWeight: 600, margin: 0 }}>{v.title}</p>
