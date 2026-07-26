@@ -33,23 +33,6 @@ export default function LoginPage() {
       return;
     }
 
-    // Pokud má uživatel zapnuté dvoufázové ověření přes email, appka teď
-    // pošle kód na jeho email a pošle ho zadat, než ho pustí dál.
-    if (data.user) {
-      const { data: profileCheck } = await supabase
-        .from('profiles')
-        .select('two_factor_email_enabled')
-        .eq('id', data.user.id)
-        .maybeSingle();
-
-      if (profileCheck?.two_factor_email_enabled) {
-        await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
-        sessionStorage.setItem('kine-pending-2fa-email', email);
-        router.push('/login/verify-2fa');
-        return;
-      }
-    }
-
     let redirectTo: string | null = null;
 
     if (data.user) {

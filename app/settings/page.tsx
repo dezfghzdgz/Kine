@@ -28,9 +28,6 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-  const [twoFactorBusy, setTwoFactorBusy] = useState(false);
-  const [confirmDisable2FA, setConfirmDisable2FA] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
   useEffect(() => {
@@ -47,7 +44,7 @@ export default function SettingsPage() {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('username, display_name, avatar_url, rating_mode, banner_url, bio, social_links, content_preference, two_factor_email_enabled')
+      .select('username, display_name, avatar_url, rating_mode, banner_url, bio, social_links, content_preference')
       .eq('id', authData.user.id)
       .single();
 
@@ -59,7 +56,6 @@ export default function SettingsPage() {
       setContentPreference((profile.content_preference as 'short' | 'long') ?? 'long');
       setBannerUrl(profile.banner_url ?? null);
       setBio(profile.bio ?? '');
-      setTwoFactorEnabled(!!profile.two_factor_email_enabled);
       const existingLinks = (profile.social_links as { label: string; url: string }[]) ?? [];
       setSocialLinks([0, 1, 2].map((i) => existingLinks[i] ?? { label: '', url: '' }));
     }
@@ -138,37 +134,6 @@ export default function SettingsPage() {
     setBannerUrl(newBannerUrl);
     setUploadingBanner(false);
     setToast({ message: 'Banner kanálu byl aktualizován', type: 'success' });
-  }
-
-  async function enableTwoFactor() {
-    if (!userId) return;
-    setTwoFactorBusy(true);
-    const { error: updateError } = await supabase.from('profiles').update({ two_factor_email_enabled: true }).eq('id', userId);
-    setTwoFactorBusy(false);
-
-    if (updateError) {
-      setToast({ message: t('twoFactorGenericError'), type: 'error' });
-      return;
-    }
-
-    setTwoFactorEnabled(true);
-    setToast({ message: t('twoFactorEnabledToast'), type: 'success' });
-  }
-
-  async function disableTwoFactor() {
-    if (!userId) return;
-    setTwoFactorBusy(true);
-    const { error: updateError } = await supabase.from('profiles').update({ two_factor_email_enabled: false }).eq('id', userId);
-    setTwoFactorBusy(false);
-    setConfirmDisable2FA(false);
-
-    if (updateError) {
-      setToast({ message: t('twoFactorGenericError'), type: 'error' });
-      return;
-    }
-
-    setTwoFactorEnabled(false);
-    setToast({ message: t('twoFactorDisabledToast'), type: 'success' });
   }
 
   async function handleExportData() {
@@ -415,23 +380,9 @@ export default function SettingsPage() {
 
       <div className="panel" style={{ marginTop: 32 }}>
         <p className="panel-heading">{t('twoFactorAuthHeading')}</p>
-        <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 12 }}>
-          {twoFactorEnabled ? t('twoFactorEnabledEmailNote') : t('twoFactorDisabledEmailNote')}
+        <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>
+          {t('twoFactorComingSoonNote')}
         </p>
-        {twoFactorEnabled ? (
-          <button
-            type="button"
-            onClick={() => setConfirmDisable2FA(true)}
-            disabled={twoFactorBusy}
-            style={{ background: 'var(--panel-raised)', color: '#ff6b6b', border: '1px solid var(--border)' }}
-          >
-            {t('disableTwoFactorButton')}
-          </button>
-        ) : (
-          <button type="button" onClick={enableTwoFactor} disabled={twoFactorBusy}>
-            {twoFactorBusy ? t('preparingLabel') : t('enableTwoFactorButton')}
-          </button>
-        )}
       </div>
 
       <div className="panel" style={{ marginTop: 32 }}>
@@ -458,14 +409,6 @@ export default function SettingsPage() {
           message={t('confirmDeleteAccount')}
           onConfirm={handleDeleteAccount}
           onCancel={() => setConfirmDeleteAccount(false)}
-        />
-      )}
-
-      {confirmDisable2FA && (
-        <ConfirmDialog
-          message={t('confirmDisableTwoFactor')}
-          onConfirm={disableTwoFactor}
-          onCancel={() => setConfirmDisable2FA(false)}
         />
       )}
     </div>
