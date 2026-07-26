@@ -1053,7 +1053,7 @@ html[data-theme="gray"] {
 
 @media (max-width: 640px) {
   .spark-feed, .spark-feed-item {
-    height: 100vh;
+    height: calc(100vh - 60px - env(safe-area-inset-bottom, 0px));
   }
 }
 
