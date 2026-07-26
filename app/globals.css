@@ -827,7 +827,6 @@ html[data-theme="gray"] {
   position: sticky;
   top: 0;
   z-index: 250;
-  background: var(--bg);
   isolation: isolate;
 }
 

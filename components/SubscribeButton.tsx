@@ -64,7 +64,6 @@ export default function SubscribeButton({ channelId }: { channelId: string }) {
         background: subscribed ? 'var(--panel-raised)' : 'var(--text)',
         color: subscribed ? 'var(--text)' : '#0a0a0b',
         border: subscribed ? '1px solid var(--border)' : 'none',
-        marginTop: 10,
       }}
     >
       {subscribed ? `${t('subscribing')} (${count})` : `${t('subscribe')} (${count})`}

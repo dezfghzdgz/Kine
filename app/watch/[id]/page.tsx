@@ -45,6 +45,7 @@ function WatchPageInner() {
   const [inWatchLater, setInWatchLater] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
+  const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const [showAiBadge, setShowAiBadge] = useState(true);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -416,9 +417,16 @@ function WatchPageInner() {
             </div>
           )}
           {playerReady && (
-            <ChapterTimeline chapters={chapters} duration={video.duration_seconds ?? 0} player={playerRef.current} />
+            <ChapterTimeline
+              chapters={chapters}
+              duration={video.duration_seconds ?? 0}
+              player={playerRef.current}
+              hasCaptions={captions.length > 0}
+              captionsEnabled={captionsEnabled}
+              onToggleCaptions={() => setCaptionsEnabled((v) => !v)}
+            />
           )}
-          {playerReady && captions.length > 0 && (
+          {playerReady && captions.length > 0 && captionsEnabled && (
             <CaptionsOverlay captions={captions} player={playerRef.current} />
           )}
           {showUpNext && otherVideos[0] && (

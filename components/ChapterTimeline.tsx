@@ -16,13 +16,37 @@ export default function ChapterTimeline({
   chapters,
   duration,
   player,
+  hasCaptions,
+  captionsEnabled,
+  onToggleCaptions,
 }: {
   chapters: Chapter[];
   duration: number;
   player: any;
+  hasCaptions?: boolean;
+  captionsEnabled?: boolean;
+  onToggleCaptions?: () => void;
 }) {
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(true);
+  const [settingsView, setSettingsView] = useState<'main' | 'speed' | 'sleep'>('main');
+  const [sleepMinutes, setSleepMinutes] = useState<number | null>(null);
+  const sleepTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleSleepTimer(minutes: number | null) {
+    if (sleepTimeoutRef.current) clearTimeout(sleepTimeoutRef.current);
+    setSleepMinutes(minutes);
+    if (minutes) {
+      sleepTimeoutRef.current = setTimeout(() => {
+        player?.pause?.();
+        setSleepMinutes(null);
+      }, minutes * 60 * 1000);
+    }
+  }
+
+  useEffect(() => {
+    return () => { if (sleepTimeoutRef.current) clearTimeout(sleepTimeoutRef.current); };
+  }, []);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -312,7 +336,7 @@ export default function ChapterTimeline({
 
           <div style={{ justifySelf: 'end', display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
             <button
-              onClick={(e) => { e.stopPropagation(); setSettingsOpen((v) => !v); }}
+              onClick={(e) => { e.stopPropagation(); setSettingsOpen((v) => { if (v) setSettingsView('main'); return !v; }); }}
               style={{ background: 'none', border: 'none', color: '#fff', padding: 0, cursor: 'pointer', fontSize: 16 }}
             >
               ⋮
@@ -322,27 +346,99 @@ export default function ChapterTimeline({
               <div
                 onClick={(e) => e.stopPropagation()}
                 style={{
-                  position: 'absolute', bottom: 'calc(100% + 10px)', right: 0, width: 170,
+                  position: 'absolute', bottom: 'calc(100% + 10px)', right: 0, width: 200,
                   background: 'rgba(20,20,22,0.95)', borderRadius: 8, padding: 10,
                   border: '1px solid rgba(255,255,255,0.15)',
                 }}
               >
-                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', margin: '0 0 6px' }}>{t('playbackSpeedLabel')}</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {[0.25, 0.5, 1, 1.5, 2, 3, 5].map((rate) => (
+                {settingsView === 'main' && (
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    {hasCaptions && (
+                      <button
+                        onClick={onToggleCaptions}
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
+                          color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
+                        }}
+                      >
+                        <span>{t('captionsMenuLabel')}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>{captionsEnabled ? t('onLabel') : t('offLabel')}</span>
+                      </button>
+                    )}
                     <button
-                      key={rate}
-                      onClick={() => handleSpeedChange(rate)}
+                      onClick={() => setSettingsView('sleep')}
                       style={{
-                        background: speed === rate ? '#fff' : 'rgba(255,255,255,0.12)',
-                        color: speed === rate ? '#0a0a0b' : '#fff',
-                        border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer',
+                        display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
+                        color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
                       }}
                     >
-                      {rate}x
+                      <span>{t('sleepTimerMenuLabel')}</span>
+                      <span style={{ color: 'rgba(255,255,255,0.6)' }}>{sleepMinutes ? `${sleepMinutes} ${t('minutesShortLabel')}` : t('offLabel')}</span>
                     </button>
-                  ))}
-                </div>
+                    <button
+                      onClick={() => setSettingsView('speed')}
+                      style={{
+                        display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
+                        color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
+                      }}
+                    >
+                      <span>{t('playbackSpeedLabel')}</span>
+                      <span style={{ color: 'rgba(255,255,255,0.6)' }}>{speed}x</span>
+                    </button>
+                  </div>
+                )}
+
+                {settingsView === 'speed' && (
+                  <div>
+                    <button
+                      onClick={() => setSettingsView('main')}
+                      style={{ background: 'none', border: 'none', color: '#fff', padding: '4px 4px 8px', cursor: 'pointer', fontSize: 12, textAlign: 'left', width: '100%' }}
+                    >
+                      {t('backButton')}
+                    </button>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {[0.25, 0.5, 1, 1.5, 2, 3, 5].map((rate) => (
+                        <button
+                          key={rate}
+                          onClick={() => handleSpeedChange(rate)}
+                          style={{
+                            background: speed === rate ? '#fff' : 'rgba(255,255,255,0.12)',
+                            color: speed === rate ? '#0a0a0b' : '#fff',
+                            border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer',
+                          }}
+                        >
+                          {rate}x
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {settingsView === 'sleep' && (
+                  <div>
+                    <button
+                      onClick={() => setSettingsView('main')}
+                      style={{ background: 'none', border: 'none', color: '#fff', padding: '4px 4px 8px', cursor: 'pointer', fontSize: 12, textAlign: 'left', width: '100%' }}
+                    >
+                      {t('backButton')}
+                    </button>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {[null, 15, 30, 60].map((m) => (
+                        <button
+                          key={m ?? 'off'}
+                          onClick={() => handleSleepTimer(m)}
+                          style={{
+                            background: sleepMinutes === m ? '#fff' : 'rgba(255,255,255,0.12)',
+                            color: sleepMinutes === m ? '#0a0a0b' : '#fff',
+                            border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer',
+                          }}
+                        >
+                          {m ? `${m} ${t('minutesShortLabel')}` : t('offLabel')}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
