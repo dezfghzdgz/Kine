@@ -10,64 +10,56 @@ export default function Verify2FAPage() {
   const router = useRouter();
   const { t } = useLanguage();
   const [code, setCode] = useState('');
-  const [factorId, setFactorId] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [ready, setReady] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
   useEffect(() => {
-    (async () => {
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData.user) {
-        router.replace('/login');
-        return;
-      }
-
-      const { data: factorsData } = await supabase.auth.mfa.listFactors();
-      const totpFactor = factorsData?.totp.find((f) => f.status === 'verified');
-
-      if (!totpFactor) {
-        // Nemá zapnuté 2FA - sem se vůbec neměl/a dostat, pošleme ho na hlavní stránku.
-        router.replace('/');
-        return;
-      }
-
-      setFactorId(totpFactor.id);
-      setReady(true);
-    })();
+    const pendingEmail = sessionStorage.getItem('kine-pending-2fa-email');
+    if (!pendingEmail) {
+      router.replace('/login');
+      return;
+    }
+    setEmail(pendingEmail);
+    setReady(true);
   }, [router]);
 
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault();
-    if (!factorId) return;
+    if (!email) return;
     setError(null);
     setLoading(true);
 
-    const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({ factorId });
-    if (challengeError || !challengeData) {
-      setError(t('twoFactorGenericError'));
-      setLoading(false);
-      return;
-    }
-
-    const { error: verifyError } = await supabase.auth.mfa.verify({
-      factorId,
-      challengeId: challengeData.id,
-      code,
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email,
+      token: code,
+      type: 'email',
     });
+
+    setLoading(false);
 
     if (verifyError) {
       setError(t('invalidTwoFactorCode'));
-      setLoading(false);
       return;
     }
 
+    sessionStorage.removeItem('kine-pending-2fa-email');
     setToast({ message: t('loginSuccess'), type: 'success' });
     setTimeout(() => {
       router.push('/');
       router.refresh();
     }, 700);
+  }
+
+  async function handleResend() {
+    if (!email) return;
+    setResending(true);
+    await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+    setResending(false);
+    setToast({ message: t('twoFactorCodeResentToast'), type: 'success' });
   }
 
   if (!ready) return <p style={{ color: 'var(--text-faint)' }}>{t('loading')}</p>;
@@ -77,7 +69,9 @@ export default function Verify2FAPage() {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <form className="form-container" onSubmit={handleVerify}>
         <h1>{t('twoFactorCodeTitle')}</h1>
-        <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 4 }}>{t('enterCodeFromAppNote')}</p>
+        <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 4 }}>
+          {t('enterEmailCodeNote')} {email}
+        </p>
         <input
           type="text"
           inputMode="numeric"
@@ -91,6 +85,14 @@ export default function Verify2FAPage() {
         {error && <p className="error-text">{error}</p>}
         <button type="submit" disabled={loading || code.length !== 6}>
           {loading ? t('verifyingLabel') : t('verifyCodeButton')}
+        </button>
+        <button
+          type="button"
+          onClick={handleResend}
+          disabled={resending}
+          style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 13, textDecoration: 'underline', padding: 0 }}
+        >
+          {resending ? t('preparingLabel') : t('resendCodeButton')}
         </button>
       </form>
     </>
