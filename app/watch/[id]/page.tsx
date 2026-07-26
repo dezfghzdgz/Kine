@@ -472,7 +472,7 @@ function WatchPageInner() {
           <span>{video.views} {t('views')}</span>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 14 }}>
           <VideoReactions videoId={video.id} ownerId={video.profiles?.id} />
           {video.profiles?.id && <SubscribeButton channelId={video.profiles.id} />}
           <div style={{ position: 'relative' }}>

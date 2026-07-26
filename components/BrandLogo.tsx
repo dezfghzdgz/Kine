@@ -43,6 +43,15 @@ export default function BrandLogo({ className, onNavigate }: { className?: strin
   useEffect(() => {
     applySavedBrandColor();
     applySavedBrandColorFromAccount();
+
+    // Appka barvu z účtu dorovná znovu i hned po přihlášení (ne až po
+    // obnovení stránky) - poslouchá si na to změny přihlašovacího stavu.
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') {
+        applySavedBrandColorFromAccount();
+      }
+    });
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
