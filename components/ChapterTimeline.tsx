@@ -53,6 +53,23 @@ export default function ChapterTimeline({
   const [controlsVisible, setControlsVisible] = useState(true);
   const [volumeHover, setVolumeHover] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    function handleOutside(e: MouseEvent | TouchEvent) {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setSettingsOpen(false);
+        setSettingsView('main');
+      }
+    }
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, [settingsOpen]);
   const [speed, setSpeed] = useState(1);
   const [hoverTitle, setHoverTitle] = useState<string | null>(null);
   const [hoverX, setHoverX] = useState(0);
@@ -334,7 +351,7 @@ export default function ChapterTimeline({
             </div>
           </div>
 
-          <div style={{ justifySelf: 'end', display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
+          <div ref={settingsRef} style={{ justifySelf: 'end', display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
             <button
               onClick={(e) => { e.stopPropagation(); setSettingsOpen((v) => { if (v) setSettingsView('main'); return !v; }); }}
               style={{ background: 'none', border: 'none', color: '#fff', padding: 0, cursor: 'pointer', fontSize: 16 }}

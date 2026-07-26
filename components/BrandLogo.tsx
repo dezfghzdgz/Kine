@@ -3,16 +3,34 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '@/lib/i18n';
+import { supabase } from '@/lib/supabaseClient';
 
 const PRESET_COLORS = ['#00c9a7', '#4f8ef7', '#f7484f', '#f7b84f', '#a34ff7', '#f74fd6', '#4ff77c', '#ffffff'];
 const STORAGE_KEY = 'kine-brand-color';
 
-// Appka si barvu pamatuje v tomhle prohlížeči (localStorage) - platí tedy
-// napříč všemi zařízeními/kartami, kde se appka otevře ve stejném prohlížeči.
+// Appka barvu nejdřív zkusí zobrazit rovnou z prohlížeče (rychlé, funguje
+// i odhlášeně), a pokud je uživatel přihlášený, hned poté ji dorovná podle
+// toho, co má uloženo na účtu - tím se barva přenese i na jiná zařízení.
 export function applySavedBrandColor() {
   if (typeof window === 'undefined') return;
   const saved = localStorage.getItem(STORAGE_KEY);
   if (saved) document.documentElement.style.setProperty('--brand', saved);
+}
+
+async function applySavedBrandColorFromAccount() {
+  const { data: authData } = await supabase.auth.getUser();
+  if (!authData.user) return;
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('brand_color')
+    .eq('id', authData.user.id)
+    .maybeSingle();
+
+  if (profile?.brand_color) {
+    document.documentElement.style.setProperty('--brand', profile.brand_color);
+    localStorage.setItem(STORAGE_KEY, profile.brand_color);
+  }
 }
 
 export default function BrandLogo({ className, onNavigate }: { className?: string; onNavigate?: () => void }) {
@@ -24,6 +42,7 @@ export default function BrandLogo({ className, onNavigate }: { className?: strin
 
   useEffect(() => {
     applySavedBrandColor();
+    applySavedBrandColorFromAccount();
   }, []);
 
   useEffect(() => {
@@ -48,9 +67,14 @@ export default function BrandLogo({ className, onNavigate }: { className?: strin
     }
   }
 
-  function applyColor(color: string) {
+  async function applyColor(color: string) {
     document.documentElement.style.setProperty('--brand', color);
     localStorage.setItem(STORAGE_KEY, color);
+
+    const { data: authData } = await supabase.auth.getUser();
+    if (authData.user) {
+      await supabase.from('profiles').update({ brand_color: color }).eq('id', authData.user.id);
+    }
   }
 
   return (
