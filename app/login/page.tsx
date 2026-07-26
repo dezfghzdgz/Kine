@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabaseClient';
 import Toast, { ToastType } from '@/components/Toast';
 import { useLanguage } from '@/lib/i18n';
 
+const LOCK_DURATION_MINUTES = 15;
+
 export default function LoginPage() {
   const router = useRouter();
   const { t } = useLanguage();
@@ -21,17 +23,51 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
 
+    // Nejdřív zkontrolujeme, jestli tenhle účet není dočasně uzamčený kvůli
+    // předchozím opakovaným špatným pokusům.
+    const lockCheckRes = await fetch('/api/auth/login-attempt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, action: 'check' }),
+    });
+    const lockCheck = await lockCheckRes.json();
+
+    if (lockCheck.locked) {
+      const minutesLeft = Math.max(1, Math.ceil((new Date(lockCheck.lockedUntil).getTime() - Date.now()) / 60000));
+      setError(`${t('accountLockedNote')} ${minutesLeft} ${t('minutesShortLabel')}.`);
+      setLoading(false);
+      return;
+    }
+
     const { data, error: loginError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (loginError) {
-      setError(t('wrongEmailOrPassword'));
+      const failRes = await fetch('/api/auth/login-attempt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, action: 'record-failure' }),
+      });
+      const failData = await failRes.json();
+
+      if (failData.locked) {
+        setError(`${t('accountLockedNote')} ${LOCK_DURATION_MINUTES} ${t('minutesShortLabel')}.`);
+      } else {
+        setError(t('wrongEmailOrPassword'));
+      }
       setToast({ message: t('loginFailed'), type: 'error' });
       setLoading(false);
       return;
     }
+
+    // Přihlášení se povedlo - vynulujeme počítadlo špatných pokusů.
+    fetch('/api/auth/login-attempt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, action: 'reset' }),
+    });
 
     let redirectTo: string | null = null;
 
