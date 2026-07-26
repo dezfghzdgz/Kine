@@ -18,98 +18,109 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
+  // Volá appce vlastní API pro hlídání pokusů o přihlášení. Pokud tohle
+  // API z jakéhokoliv důvodu selže (ještě neproběhla SQL migrace, výpadek
+  // sítě...), appka to jen potichu přeskočí a pokračuje dál - přihlášení
+  // samotné na tom nesmí nikdy zůstat "viset".
+  async function callLockoutApi(action: 'check' | 'record-failure' | 'reset') {
+    try {
+      const res = await fetch('/api/auth/login-attempt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, action }),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  }
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
-    // Nejdřív zkontrolujeme, jestli tenhle účet není dočasně uzamčený kvůli
-    // předchozím opakovaným špatným pokusům.
-    const lockCheckRes = await fetch('/api/auth/login-attempt', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, action: 'check' }),
-    });
-    const lockCheck = await lockCheckRes.json();
+    try {
+      // Nejdřív zkontrolujeme, jestli tenhle účet není dočasně uzamčený kvůli
+      // předchozím opakovaným špatným pokusům.
+      const lockCheck = await callLockoutApi('check');
 
-    if (lockCheck.locked) {
-      const minutesLeft = Math.max(1, Math.ceil((new Date(lockCheck.lockedUntil).getTime() - Date.now()) / 60000));
-      setError(`${t('accountLockedNote')} ${minutesLeft} ${t('minutesShortLabel')}.`);
-      setLoading(false);
-      return;
-    }
+      if (lockCheck?.locked) {
+        const minutesLeft = Math.max(1, Math.ceil((new Date(lockCheck.lockedUntil).getTime() - Date.now()) / 60000));
+        setError(`${t('accountLockedNote')} ${minutesLeft} ${t('minutesShortLabel')}.`);
+        setLoading(false);
+        return;
+      }
 
-    const { data, error: loginError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (loginError) {
-      const failRes = await fetch('/api/auth/login-attempt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, action: 'record-failure' }),
+      const { data, error: loginError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
-      const failData = await failRes.json();
 
-      if (failData.locked) {
-        setError(`${t('accountLockedNote')} ${LOCK_DURATION_MINUTES} ${t('minutesShortLabel')}.`);
-      } else {
-        setError(t('wrongEmailOrPassword'));
+      if (loginError) {
+        const failData = await callLockoutApi('record-failure');
+
+        if (failData?.locked) {
+          setError(`${t('accountLockedNote')} ${LOCK_DURATION_MINUTES} ${t('minutesShortLabel')}.`);
+        } else {
+          setError(t('wrongEmailOrPassword'));
+        }
+        setToast({ message: t('loginFailed'), type: 'error' });
+        setLoading(false);
+        return;
       }
-      setToast({ message: t('loginFailed'), type: 'error' });
+
+        // Přihlášení se povedlo - vynulujeme počítadlo špatných pokusů.
+      callLockoutApi('reset');
+
+      let redirectTo: string | null = null;
+
+      if (data.user) {
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('id, rating_mode, agreed_to_rules, content_preference')
+          .eq('id', data.user.id)
+          .maybeSingle();
+
+        if (!existingProfile) {
+          const fallbackUsername = data.user.email?.split('@')[0] ?? `user_${data.user.id.slice(0, 6)}`;
+          await supabase.from('profiles').insert({
+            id: data.user.id,
+            username: fallbackUsername,
+            display_name: fallbackUsername,
+          });
+          await supabase.from('playlists').insert({
+            owner_id: data.user.id,
+            title: 'Sledovat později',
+            color: '#3a5a8a',
+            is_system: true,
+          });
+          redirectTo = '/agree-to-rules';
+        } else if (!existingProfile.agreed_to_rules) {
+          redirectTo = '/agree-to-rules';
+        } else if (!existingProfile.rating_mode) {
+          redirectTo = '/choose-rating-mode';
+        } else if (!existingProfile.content_preference) {
+          redirectTo = '/choose-content-preference';
+        }
+      }
+
+      setToast({ message: t('loginSuccess'), type: 'success' });
+      setTimeout(() => {
+        if (redirectTo) {
+          router.push(redirectTo);
+        } else {
+          router.push('/');
+          router.refresh();
+        }
+      }, 900);
+    } catch {
+      // Cokoliv neočekávaného (výpadek sítě, appka mimo provoz...) appku
+      // už nikdy nenechá "viset" na tlačítku - vždy se aspoň ukáže chyba.
+      setError(t('twoFactorGenericError'));
       setLoading(false);
-      return;
     }
-
-    // Přihlášení se povedlo - vynulujeme počítadlo špatných pokusů.
-    fetch('/api/auth/login-attempt', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, action: 'reset' }),
-    });
-
-    let redirectTo: string | null = null;
-
-    if (data.user) {
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('id, rating_mode, agreed_to_rules, content_preference')
-        .eq('id', data.user.id)
-        .maybeSingle();
-
-      if (!existingProfile) {
-        const fallbackUsername = data.user.email?.split('@')[0] ?? `user_${data.user.id.slice(0, 6)}`;
-        await supabase.from('profiles').insert({
-          id: data.user.id,
-          username: fallbackUsername,
-          display_name: fallbackUsername,
-        });
-        await supabase.from('playlists').insert({
-          owner_id: data.user.id,
-          title: 'Sledovat později',
-          color: '#3a5a8a',
-          is_system: true,
-        });
-        redirectTo = '/agree-to-rules';
-      } else if (!existingProfile.agreed_to_rules) {
-        redirectTo = '/agree-to-rules';
-      } else if (!existingProfile.rating_mode) {
-        redirectTo = '/choose-rating-mode';
-      } else if (!existingProfile.content_preference) {
-        redirectTo = '/choose-content-preference';
-      }
-    }
-
-    setToast({ message: t('loginSuccess'), type: 'success' });
-    setTimeout(() => {
-      if (redirectTo) {
-        router.push(redirectTo);
-      } else {
-        router.push('/');
-        router.refresh();
-      }
-    }, 900);
   }
 
   return (
