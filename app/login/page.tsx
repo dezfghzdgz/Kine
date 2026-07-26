@@ -33,6 +33,14 @@ export default function LoginPage() {
       return;
     }
 
+    // Pokud má uživatel zapnuté dvoufázové ověření, appka ho teď musí
+    // poslat ještě přes ověřovací kód z appky, než ho pustí dál.
+    const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aalData && aalData.nextLevel === 'aal2' && aalData.currentLevel !== aalData.nextLevel) {
+      router.push('/login/verify-2fa');
+      return;
+    }
+
     let redirectTo: string | null = null;
 
     if (data.user) {

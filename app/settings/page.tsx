@@ -28,6 +28,16 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [twoFactorFactorId, setTwoFactorFactorId] = useState<string | null>(null);
+  const [enrolling, setEnrolling] = useState(false);
+  const [enrollQrCode, setEnrollQrCode] = useState<string | null>(null);
+  const [enrollSecret, setEnrollSecret] = useState<string | null>(null);
+  const [pendingFactorId, setPendingFactorId] = useState<string | null>(null);
+  const [verifyCode, setVerifyCode] = useState('');
+  const [twoFactorBusy, setTwoFactorBusy] = useState(false);
+  const [twoFactorError, setTwoFactorError] = useState<string | null>(null);
+  const [confirmDisable2FA, setConfirmDisable2FA] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
   useEffect(() => {
@@ -41,6 +51,13 @@ export default function SettingsPage() {
       return;
     }
     setUserId(authData.user.id);
+
+    const { data: factorsData } = await supabase.auth.mfa.listFactors();
+    const totpFactor = factorsData?.totp.find((f) => f.status === 'verified');
+    if (totpFactor) {
+      setTwoFactorEnabled(true);
+      setTwoFactorFactorId(totpFactor.id);
+    }
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -134,6 +151,75 @@ export default function SettingsPage() {
     setBannerUrl(newBannerUrl);
     setUploadingBanner(false);
     setToast({ message: 'Banner kanálu byl aktualizován', type: 'success' });
+  }
+
+  async function startEnrollTwoFactor() {
+    setTwoFactorError(null);
+    setTwoFactorBusy(true);
+    const { data, error: enrollError } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
+    setTwoFactorBusy(false);
+
+    if (enrollError || !data) {
+      setTwoFactorError(t('twoFactorGenericError'));
+      return;
+    }
+
+    setPendingFactorId(data.id);
+    setEnrollQrCode(data.totp.qr_code);
+    setEnrollSecret(data.totp.secret);
+    setEnrolling(true);
+  }
+
+  async function confirmEnrollTwoFactor(e: React.FormEvent) {
+    e.preventDefault();
+    if (!pendingFactorId) return;
+    setTwoFactorError(null);
+    setTwoFactorBusy(true);
+
+    const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({ factorId: pendingFactorId });
+    if (challengeError || !challengeData) {
+      setTwoFactorError(t('twoFactorGenericError'));
+      setTwoFactorBusy(false);
+      return;
+    }
+
+    const { error: verifyError } = await supabase.auth.mfa.verify({
+      factorId: pendingFactorId,
+      challengeId: challengeData.id,
+      code: verifyCode,
+    });
+
+    setTwoFactorBusy(false);
+
+    if (verifyError) {
+      setTwoFactorError(t('invalidTwoFactorCode'));
+      return;
+    }
+
+    setTwoFactorEnabled(true);
+    setTwoFactorFactorId(pendingFactorId);
+    setEnrolling(false);
+    setEnrollQrCode(null);
+    setEnrollSecret(null);
+    setVerifyCode('');
+    setToast({ message: t('twoFactorEnabledToast'), type: 'success' });
+  }
+
+  async function disableTwoFactor() {
+    if (!twoFactorFactorId) return;
+    setTwoFactorBusy(true);
+    const { error: unenrollError } = await supabase.auth.mfa.unenroll({ factorId: twoFactorFactorId });
+    setTwoFactorBusy(false);
+    setConfirmDisable2FA(false);
+
+    if (unenrollError) {
+      setToast({ message: t('twoFactorGenericError'), type: 'error' });
+      return;
+    }
+
+    setTwoFactorEnabled(false);
+    setTwoFactorFactorId(null);
+    setToast({ message: t('twoFactorDisabledToast'), type: 'success' });
   }
 
   async function handleExportData() {
@@ -379,6 +465,68 @@ export default function SettingsPage() {
       </form>
 
       <div className="panel" style={{ marginTop: 32 }}>
+        <p className="panel-heading">{t('twoFactorAuthHeading')}</p>
+
+        {!enrolling && (
+          <>
+            <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 12 }}>
+              {twoFactorEnabled ? t('twoFactorEnabledNote') : t('twoFactorDisabledNote')}
+            </p>
+            {twoFactorEnabled ? (
+              <button
+                type="button"
+                onClick={() => setConfirmDisable2FA(true)}
+                style={{ background: 'var(--panel-raised)', color: '#ff6b6b', border: '1px solid var(--border)' }}
+              >
+                {t('disableTwoFactorButton')}
+              </button>
+            ) : (
+              <button type="button" onClick={startEnrollTwoFactor} disabled={twoFactorBusy}>
+                {twoFactorBusy ? t('preparingLabel') : t('enableTwoFactorButton')}
+              </button>
+            )}
+            {twoFactorError && <p className="error-text">{twoFactorError}</p>}
+          </>
+        )}
+
+        {enrolling && (
+          <form onSubmit={confirmEnrollTwoFactor} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>{t('scanQrCodeNote')}</p>
+            {enrollQrCode && (
+              <img src={enrollQrCode} alt="QR" style={{ width: 180, height: 180, borderRadius: 8, background: '#fff', padding: 8 }} />
+            )}
+            {enrollSecret && (
+              <p style={{ fontSize: 11, color: 'var(--text-faint)', wordBreak: 'break-all' }}>
+                {t('manualSecretLabel')}: {enrollSecret}
+              </p>
+            )}
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="123456"
+              value={verifyCode}
+              onChange={(e) => setVerifyCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+              maxLength={6}
+              required
+            />
+            {twoFactorError && <p className="error-text">{twoFactorError}</p>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="submit" disabled={twoFactorBusy || verifyCode.length !== 6}>
+                {twoFactorBusy ? t('verifyingLabel') : t('verifyCodeButton')}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEnrolling(false); setEnrollQrCode(null); setEnrollSecret(null); setVerifyCode(''); setTwoFactorError(null); }}
+                style={{ background: 'var(--panel-raised)', color: 'var(--text)' }}
+              >
+                {t('cancel')}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+
+      <div className="panel" style={{ marginTop: 32 }}>
         <p className="panel-heading">{t('yourDataHeading')}</p>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 12 }}>
           {t('gdprNote')}
@@ -402,6 +550,14 @@ export default function SettingsPage() {
           message={t('confirmDeleteAccount')}
           onConfirm={handleDeleteAccount}
           onCancel={() => setConfirmDeleteAccount(false)}
+        />
+      )}
+
+      {confirmDisable2FA && (
+        <ConfirmDialog
+          message={t('confirmDisableTwoFactor')}
+          onConfirm={disableTwoFactor}
+          onCancel={() => setConfirmDisable2FA(false)}
         />
       )}
     </div>
