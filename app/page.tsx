@@ -20,6 +20,39 @@ function formatDuration(seconds: number | null) {
 
 type Block = { type: 'long' | 'sparks'; items: any[] };
 
+const RECOMMENDATION_POOL_SIZE = 300;
+
+// Appka tady videím počítá "skóre", podle kterého se pak řadí - není to
+// čistě podle data nahrání jako předtím. Zohledňuje: čerstvost videa,
+// jestli je to od odebíraného kanálu, jestli sedí kategorie/hashtagy k
+// tomu, co uživatel v poslední době sledoval, popularitu (zhlédnutí) a
+// kousek náhody (ať feed není pořád úplně stejný). Videa, která už
+// uživatel viděl, appka výrazně stáhne níž, ale úplně je neschovává.
+function scoreVideo(
+  video: any,
+  ctx: {
+    subscribedIds: Set<string>;
+    watchedIds: Set<string>;
+    topCategories: Set<string>;
+    topHashtags: Set<string>;
+  }
+) {
+  const ageDays = (Date.now() - new Date(video.created_at).getTime()) / (1000 * 60 * 60 * 24);
+  const recencyScore = Math.exp(-ageDays / 10) * 40;
+  const popularityScore = Math.log10((video.views ?? 0) + 1) * 8;
+
+  const subscriptionBonus = video.owner_id && ctx.subscribedIds.has(video.owner_id) ? 35 : 0;
+  const categoryBonus = video.category && ctx.topCategories.has(video.category) ? 20 : 0;
+
+  const hashtagMatches = (video.hashtags ?? []).filter((h: string) => ctx.topHashtags.has(h)).length;
+  const hashtagBonus = Math.min(hashtagMatches * 6, 18);
+
+  const watchedPenalty = ctx.watchedIds.has(video.id) ? -50 : 0;
+  const jitter = Math.random() * 10;
+
+  return recencyScore + popularityScore + subscriptionBonus + categoryBonus + hashtagBonus + watchedPenalty + jitter;
+}
+
 function buildBlocks(longVideos: any[], sparksVideos: any[], preference: 'short' | 'long'): Block[] {
   const pattern: ('long' | 'sparks')[] =
     preference === 'short' ? ['sparks', 'sparks', 'long'] : ['long', 'long', 'sparks'];
@@ -57,19 +90,20 @@ export default function HomePage() {
   const [blocks, setBlocks] = useState<Block[] | null>(null);
   const [empty, setEmpty] = useState(false);
   const [allVideosLoaded, setAllVideosLoaded] = useState<any[]>([]);
+  const [scoredPool, setScoredPool] = useState<any[]>([]);
   const [progressMap, setProgressMap] = useState<Record<string, number>>({});
   const [preference, setPreference] = useState<'short' | 'long'>('long');
-  const [page, setPage] = useState(0);
+  const [revealCount, setRevealCount] = useState(PAGE_SIZE);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    load(0, true);
+    loadInitial();
   }, []);
 
   // Automatické donačítání - jakmile je "cílová značka" dole vidět na
-  // obrazovce, appka potichu natáhne další dávku videí.
+  // obrazovce, appka potichu odhalí další dávku už spočítaných videí.
   useEffect(() => {
     if (!sentinelRef.current) return;
     const observer = new IntersectionObserver(
@@ -82,83 +116,111 @@ export default function HomePage() {
     );
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-  }, [hasMore, loadingMore, page]);
+  }, [hasMore, loadingMore, revealCount]);
 
-  async function load(pageToLoad: number, isFirstLoad: boolean) {
+  async function loadInitial() {
     const nowIso = new Date().toISOString();
-    const from = pageToLoad * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
 
-    const { data: newVideos } = await supabase
+    const { data: authData } = await supabase.auth.getUser();
+
+    // Appka si napřed zjistí, co uživatel odebírá, co už sledoval, a jaké
+    // kategorie/hashtagy ho v poslední době zajímaly - podle toho pak
+    // videím spočítá skóre.
+    const subscribedIds = new Set<string>();
+    const watchedIds = new Set<string>();
+    const topCategories = new Set<string>();
+    const topHashtags = new Set<string>();
+    let currentPreference: 'short' | 'long' = preference;
+
+    if (authData.user) {
+      const [{ data: profile }, { data: subs }, { data: watched }, { data: recentHistory }] = await Promise.all([
+        supabase.from('profiles').select('content_preference').eq('id', authData.user.id).single(),
+        supabase.from('subscriptions').select('channel_id').eq('subscriber_id', authData.user.id),
+        supabase.from('watch_history').select('video_id').eq('user_id', authData.user.id),
+        supabase
+          .from('watch_history')
+          .select('video_id, watched_at, videos(category, hashtags)')
+          .eq('user_id', authData.user.id)
+          .order('watched_at', { ascending: false })
+          .limit(30),
+      ]);
+
+      currentPreference = (profile?.content_preference as 'short' | 'long') ?? 'long';
+      setPreference(currentPreference);
+
+      (subs ?? []).forEach((s: any) => subscribedIds.add(s.channel_id));
+      (watched ?? []).forEach((w: any) => watchedIds.add(w.video_id));
+
+      const categoryCounts: Record<string, number> = {};
+      const hashtagCounts: Record<string, number> = {};
+      (recentHistory ?? []).forEach((h: any) => {
+        const cat = h.videos?.category;
+        if (cat) categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
+        (h.videos?.hashtags ?? []).forEach((tag: string) => {
+          hashtagCounts[tag] = (hashtagCounts[tag] ?? 0) + 1;
+        });
+      });
+      Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).forEach(([c]) => topCategories.add(c));
+      Object.entries(hashtagCounts).sort((a, b) => b[1] - a[1]).slice(0, 8).forEach(([h]) => topHashtags.add(h));
+    }
+
+    const { data: candidates } = await supabase
       .from('videos')
-      .select('id, title, thumbnail_url, views, duration_seconds, width, height, created_at, profiles!videos_owner_id_fkey(username)')
+      .select('id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, hashtags, owner_id, profiles!videos_owner_id_fkey(username)')
       .eq('status', 'ready')
       .eq('visibility', 'public')
       .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso},is_premiere.eq.true`)
       .order('created_at', { ascending: false })
-      .range(from, to);
+      .limit(RECOMMENDATION_POOL_SIZE);
 
-    const batch = newVideos ?? [];
-    setHasMore(batch.length === PAGE_SIZE);
+    const pool = candidates ?? [];
 
-    if (isFirstLoad && batch.length === 0) {
+    if (pool.length === 0) {
       setEmpty(true);
       return;
     }
 
-    // Rozkoukanost videí (pro tu červenou čárku na náhledu, jako appka appku appku YouTube) -
-    // ukládá se appka appku appku appku appka appku appku appku databázi appku appku,
-    // takže appku appku appku appku funguje appku appku appku appku zařízení appku.
-    const { data: authData } = await supabase.auth.getUser();
-    if (authData.user && batch.length > 0) {
+    const ctx = { subscribedIds, watchedIds, topCategories, topHashtags };
+    const sorted = [...pool].sort((a, b) => scoreVideo(b, ctx) - scoreVideo(a, ctx));
+
+    setScoredPool(sorted);
+    reveal(sorted, PAGE_SIZE, currentPreference);
+
+    if (authData.user) {
       const { data: history } = await supabase
         .from('watch_history')
         .select('video_id, progress_seconds')
         .eq('user_id', authData.user.id)
-        .in('video_id', batch.map((v: any) => v.id));
+        .in('video_id', sorted.slice(0, PAGE_SIZE).map((v: any) => v.id));
 
       if (history) {
-        setProgressMap((prev) => {
-          const next = { ...prev };
-          for (const h of history) {
-            const vid = batch.find((v: any) => v.id === h.video_id);
-            if (vid?.duration_seconds) {
-              next[h.video_id] = Math.min(100, Math.round((h.progress_seconds / vid.duration_seconds) * 100));
-            }
+        const next: Record<string, number> = {};
+        for (const h of history) {
+          const vid = sorted.find((v: any) => v.id === h.video_id);
+          if (vid?.duration_seconds) {
+            next[h.video_id] = Math.min(100, Math.round((h.progress_seconds / vid.duration_seconds) * 100));
           }
-          return next;
-        });
+        }
+        setProgressMap(next);
       }
     }
+  }
 
-    let currentPreference = preference;
-    if (isFirstLoad) {
-      const { data: authData } = await supabase.auth.getUser();
-      if (authData.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('content_preference')
-          .eq('id', authData.user.id)
-          .single();
-        currentPreference = (profile?.content_preference as 'short' | 'long') ?? 'long';
-        setPreference(currentPreference);
-      }
-    }
+  function reveal(pool: any[], count: number, currentPreference: 'short' | 'long') {
+    const combined = pool.slice(0, count);
+    setAllVideosLoaded(combined);
+    setHasMore(count < pool.length);
 
-    setAllVideosLoaded((prev) => {
-      const combined = isFirstLoad ? batch : [...prev, ...batch];
-      const sparksVideos = combined.filter((v: any) => v.height && v.width && v.height > v.width && (v.duration_seconds ?? 0) <= 120);
-      const longVideos = combined.filter((v: any) => !(v.height && v.width && v.height > v.width && (v.duration_seconds ?? 0) <= 120));
-      setBlocks(buildBlocks(longVideos, sparksVideos, currentPreference));
-      return combined;
-    });
+    const sparksVideos = combined.filter((v: any) => v.height && v.width && v.height > v.width && (v.duration_seconds ?? 0) <= 120);
+    const longVideos = combined.filter((v: any) => !(v.height && v.width && v.height > v.width && (v.duration_seconds ?? 0) <= 120));
+    setBlocks(buildBlocks(longVideos, sparksVideos, currentPreference));
   }
 
   async function loadMore() {
     setLoadingMore(true);
-    const nextPage = page + 1;
-    await load(nextPage, false);
-    setPage(nextPage);
+    const nextCount = revealCount + PAGE_SIZE;
+    reveal(scoredPool, nextCount, preference);
+    setRevealCount(nextCount);
     setLoadingMore(false);
   }
 
@@ -178,7 +240,7 @@ export default function HomePage() {
   return (
     <div>
       <OnboardingChecklist />
-      <p className="section-title">{t('latest')}</p>
+      <p className="section-title">{t('recommendedForYouHeading')}</p>
 
       {blocks.map((block, i) => (
         <div key={i} className={block.type === 'sparks' ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 24 }}>
