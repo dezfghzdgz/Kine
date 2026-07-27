@@ -36,13 +36,15 @@ function SubscriptionsPageInner() {
 
     const { data: subs } = await supabase
       .from('subscriptions')
-      .select('channel_id, profiles!subscriptions_channel_id_fkey(id, username, display_name, avatar_url, verification_tier)')
+      .select('channel_id, profiles!subscriptions_channel_id_fkey(id, username, display_name, avatar_url, verification_tier, is_shadow_banned)')
       .eq('subscriber_id', authData.user.id);
 
     const channelList = (subs ?? []).map((s: any) => s.profiles).filter(Boolean);
     setChannels(channelList);
 
-    const channelIds = channelList.map((c: any) => c.id);
+    // Shadow-bannovaný tvůrce zůstává v seznamu odběrů (výše), ale jeho
+    // videa/posty se v samotném feedu nezobrazí.
+    const channelIds = channelList.filter((c: any) => !c.is_shadow_banned).map((c: any) => c.id);
     if (channelIds.length > 0) {
       const { data: videoData } = await supabase
         .from('videos')

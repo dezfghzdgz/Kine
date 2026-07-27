@@ -54,7 +54,7 @@ function ChannelPageInner() {
 
     const { data: profileData } = await supabase
       .from('profiles')
-      .select('id, username, display_name, avatar_url, banner_url, bio, social_links, verification_tier, created_at, trailer_video_id, is_banned, trailer:videos!profiles_trailer_video_id_fkey(id, title, cloudflare_video_id, thumbnail_url)')
+      .select('id, username, display_name, avatar_url, banner_url, bio, social_links, verification_tier, created_at, trailer_video_id, is_banned, is_shadow_banned, payouts_suspended, trailer:videos!profiles_trailer_video_id_fkey(id, title, cloudflare_video_id, thumbnail_url)')
       .eq('id', channelId)
       .single();
     setProfile(profileData);
@@ -147,6 +147,22 @@ function ChannelPageInner() {
     setConfirmBlockOpen(false);
     if (!error) {
       setProfile((prev: any) => ({ ...prev, is_banned: nextBanned }));
+    }
+  }
+
+  async function toggleShadowBan() {
+    const next = !profile.is_shadow_banned;
+    const { error } = await supabase.from('profiles').update({ is_shadow_banned: next }).eq('id', channelId);
+    if (!error) {
+      setProfile((prev: any) => ({ ...prev, is_shadow_banned: next }));
+    }
+  }
+
+  async function togglePayoutsSuspended() {
+    const next = !profile.payouts_suspended;
+    const { error } = await supabase.from('profiles').update({ payouts_suspended: next }).eq('id', channelId);
+    if (!error) {
+      setProfile((prev: any) => ({ ...prev, payouts_suspended: next }));
     }
   }
   const longVideos = videos.filter((v) => !(v.height && v.width && v.height > v.width && (v.duration_seconds ?? 0) <= 120));
@@ -256,6 +272,30 @@ function ChannelPageInner() {
               }}
             >
               {profile.is_banned ? t('unblockUserButton') : t('blockUserButton')}
+            </button>
+          )}
+          {isModerator && !isOwner && (
+            <button
+              onClick={toggleShadowBan}
+              style={{
+                background: profile.is_shadow_banned ? 'var(--panel-raised)' : 'transparent',
+                color: 'var(--text-faint)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {profile.is_shadow_banned ? t('shadowBanActiveButton') : t('shadowBanButton')}
+            </button>
+          )}
+          {isModerator && !isOwner && (
+            <button
+              onClick={togglePayoutsSuspended}
+              style={{
+                background: profile.payouts_suspended ? 'var(--panel-raised)' : 'transparent',
+                color: 'var(--text-faint)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {profile.payouts_suspended ? t('payoutsSuspendedActiveButton') : t('suspendPayoutsButton')}
             </button>
           )}
         </div>

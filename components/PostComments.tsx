@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import AttachmentPicker from './AttachmentPicker';
+import EmojiPicker from './EmojiPicker';
 import { useLanguage } from '@/lib/i18n';
 
 function renderWithMentions(content: string) {
@@ -88,6 +89,7 @@ export default function PostComments({ postId, onCommentAdded }: { postId: strin
             onChange={(e) => setText(e.target.value)}
             style={{ flex: 1, border: 'none', background: 'none' }}
           />
+          <EmojiPicker onSelect={(emoji) => setText((v) => v + emoji)} />
           <AttachmentPicker onSelect={setImageFile} />
         </div>
         {imageFile && (

@@ -3,6 +3,8 @@
 -- proto je tu i pojistka (trigger) níž.
 alter table profiles add column if not exists role text not null default 'user' check (role in ('user', 'moderator', 'admin'));
 alter table profiles add column if not exists is_banned boolean not null default false;
+alter table profiles add column if not exists is_shadow_banned boolean not null default false;
+alter table profiles add column if not exists payouts_suspended boolean not null default false;
 
 -- Pojistka: pokud by se o změnu role/zablokování pokusil běžný přihlášený
 -- uživatel přes appku (ne přímo v Supabase SQL editoru), appka tu změnu
@@ -21,9 +23,16 @@ begin
       new.role := old.role;
     end if;
 
-    -- Zablokování/odblokování účtu smí přes appku měnit moderátor i admin.
+    -- Zablokování/odblokování účtu, shadow ban a pozastavení výdělků smí
+    -- přes appku měnit moderátor i admin.
     if new.is_banned is distinct from old.is_banned and coalesce(requester_role, 'user') not in ('moderator', 'admin') then
       new.is_banned := old.is_banned;
+    end if;
+    if new.is_shadow_banned is distinct from old.is_shadow_banned and coalesce(requester_role, 'user') not in ('moderator', 'admin') then
+      new.is_shadow_banned := old.is_shadow_banned;
+    end if;
+    if new.payouts_suspended is distinct from old.payouts_suspended and coalesce(requester_role, 'user') not in ('moderator', 'admin') then
+      new.payouts_suspended := old.payouts_suspended;
     end if;
 
     -- Když si moderátor/admin upravuje CIZÍ profil, appka mu dovolí změnit

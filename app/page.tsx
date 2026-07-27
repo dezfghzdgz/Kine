@@ -173,7 +173,10 @@ export default function HomePage() {
       .order('created_at', { ascending: false })
       .limit(RECOMMENDATION_POOL_SIZE);
 
-    const pool = candidates ?? [];
+    const { data: shadowBanned } = await supabase.from('profiles').select('id').eq('is_shadow_banned', true);
+    const shadowBannedIds = new Set((shadowBanned ?? []).map((p: any) => p.id));
+
+    const pool = (candidates ?? []).filter((v: any) => !shadowBannedIds.has(v.owner_id));
 
     if (pool.length === 0) {
       setEmpty(true);

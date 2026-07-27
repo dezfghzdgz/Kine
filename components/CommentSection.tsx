@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 import ExpandableText from './ExpandableText';
 import ConfirmDialog from './ConfirmDialog';
 import AttachmentPicker from './AttachmentPicker';
+import EmojiPicker from './EmojiPicker';
 import ReportModal from './ReportModal';
 import { useLanguage } from '@/lib/i18n';
 
@@ -287,6 +288,7 @@ export default function CommentSection({
                 onChange={(e) => setNewComment(e.target.value)}
                 style={{ flex: 1, border: 'none', background: 'none' }}
               />
+              <EmojiPicker onSelect={(emoji) => setNewComment((v) => v + emoji)} />
               <AttachmentPicker onSelect={setNewCommentImage} />
             </div>
             {newCommentImage && (
@@ -377,6 +379,7 @@ export default function CommentSection({
                     style={{ flex: 1 }}
                     autoFocus
                   />
+                  <EmojiPicker onSelect={(emoji) => setReplyText((v) => v + emoji)} />
                   <button type="submit" disabled={posting}>{t('postComment')}</button>
                 </form>
               )}

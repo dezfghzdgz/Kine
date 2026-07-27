@@ -48,6 +48,7 @@ export default function ChannelStatsPage() {
   const [ratingChartOpen, setRatingChartOpen] = useState(false);
   const [earningsView, setEarningsView] = useState<'chart' | 'payout'>('chart');
   const [verificationTier, setVerificationTier] = useState<string>('none');
+  const [payoutsSuspended, setPayoutsSuspended] = useState(false);
   const [requestStatus, setRequestStatus] = useState<string | null>(null);
   const [requesting, setRequesting] = useState(false);
   const [ratingsByVideo, setRatingsByVideo] = useState<Record<string, number[]>>({});
@@ -125,8 +126,9 @@ export default function ChannelStatsPage() {
 
     const { data: subs } = await supabase.from('subscriptions').select('created_at').eq('channel_id', authData.user.id);
 
-    const { data: profile } = await supabase.from('profiles').select('verification_tier, created_at').eq('id', authData.user.id).single();
+    const { data: profile } = await supabase.from('profiles').select('verification_tier, created_at, payouts_suspended').eq('id', authData.user.id).single();
     setVerificationTier(profile?.verification_tier ?? 'none');
+    setPayoutsSuspended(!!profile?.payouts_suspended);
 
     if (profile?.created_at) {
       const score = await computeTrustRatingClient(authData.user.id, profile.created_at);
@@ -353,6 +355,11 @@ export default function ChannelStatsPage() {
       </div>
 
       <div className="panel">
+        {payoutsSuspended && (
+          <p style={{ color: '#ff6b6b', fontSize: 12.5, marginBottom: 10 }}>
+            ⚠️ {t('payoutsSuspendedNote')}
+          </p>
+        )}
         <div className="tab-row" style={{ marginBottom: 12 }}>
           <button className={`tab-btn ${earningsView === 'chart' ? 'active' : ''}`} onClick={() => setEarningsView('chart')}>
             {t('earningsAllTimeTab')}
