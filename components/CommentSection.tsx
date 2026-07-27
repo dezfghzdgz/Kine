@@ -286,7 +286,7 @@ export default function CommentSection({
                 maxLength={2000}
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
-                style={{ flex: 1, border: 'none', background: 'none' }}
+                style={{ flex: 1, minWidth: 0, border: 'none', background: 'none' }}
               />
               <EmojiPicker onSelect={(emoji) => setNewComment((v) => v + emoji)} />
               <AttachmentPicker onSelect={setNewCommentImage} />
@@ -376,7 +376,7 @@ export default function CommentSection({
                     placeholder={t('replyPlaceholder')}
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
-                    style={{ flex: 1 }}
+                    style={{ flex: 1, minWidth: 0 }}
                     autoFocus
                   />
                   <EmojiPicker onSelect={(emoji) => setReplyText((v) => v + emoji)} />

@@ -87,7 +87,7 @@ export default function PostComments({ postId, onCommentAdded }: { postId: strin
             placeholder={t('writeComment')}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            style={{ flex: 1, border: 'none', background: 'none' }}
+            style={{ flex: 1, minWidth: 0, border: 'none', background: 'none' }}
           />
           <EmojiPicker onSelect={(emoji) => setText((v) => v + emoji)} />
           <AttachmentPicker onSelect={setImageFile} />

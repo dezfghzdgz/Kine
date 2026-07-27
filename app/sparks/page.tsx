@@ -188,6 +188,17 @@ function SparksPageInner() {
 
       {videos[activeIndex] && (
         <div ref={panelRef} className={`spark-side-panel ${commentsOpen ? '' : 'spark-side-panel-hidden'}`}>
+          <button
+            onClick={() => setCommentsOpen(false)}
+            style={{
+              position: 'absolute', top: 12, right: 12, background: 'var(--panel-raised)', border: 'none',
+              color: 'var(--text)', width: 30, height: 30, borderRadius: '50%', fontSize: 16, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5,
+            }}
+            aria-label="Zavřít komentáře"
+          >
+            ✕
+          </button>
           <div className="panel" style={{ marginBottom: 16 }}>
             <p className="panel-heading">Creator Profile</p>
             <div className="creator-row">
