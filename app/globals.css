@@ -1145,6 +1145,22 @@ html[data-theme="gray"] {
     max-height: 60vh;
   }
 
+  .mobile-drawer-profile {
+    position: relative;
+  }
+
+  .mobile-drawer-profile .profile-dropdown {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    top: auto;
+    width: auto;
+    max-height: 70vh;
+    overflow-y: auto;
+    z-index: 320;
+  }
+
   .spark-nav-arrows {
     display: none;
   }
@@ -1240,6 +1256,7 @@ html[data-theme="gray"] {
     display: flex;
     flex-direction: column;
     animation: mobile-drawer-slide-in 0.2s ease;
+    z-index: 310;
   }
 
   .mobile-drawer-side .sidebar-link {

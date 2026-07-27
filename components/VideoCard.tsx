@@ -108,12 +108,12 @@ export default function VideoCard({
             <button
               onClick={toggleMute}
               style={{
-                position: 'absolute', top: 6, right: 6, zIndex: 2, background: 'rgba(0,0,0,0.6)', border: 'none',
-                color: '#fff', width: 26, height: 26, borderRadius: '50%', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                position: 'absolute', top: 6, right: 6, zIndex: 2, background: 'rgba(0,0,0,0.75)',
+                border: '1px solid rgba(255,255,255,0.3)', color: '#fff', width: 28, height: 28,
+                borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >
-              <SpeakerIcon muted={muted} size={14} />
+              <SpeakerIcon muted={muted} size={15} />
             </button>
           </>
         )}

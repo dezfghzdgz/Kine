@@ -244,7 +244,9 @@ export default function Sidebar() {
             <div style={{ marginTop: 'auto' }}>
               {user && <NotificationBell />}
               {user ? (
-                <ProfileMenu username={user.username} avatarUrl={user.avatar_url} />
+                <div className="mobile-drawer-profile">
+                  <ProfileMenu username={user.username} avatarUrl={user.avatar_url} />
+                </div>
               ) : (
                 <Link href="/login" className="sidebar-link" onClick={closeMobileNav}>
                   <ProfileIcon />
