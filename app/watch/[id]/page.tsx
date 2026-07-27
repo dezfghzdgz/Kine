@@ -300,7 +300,8 @@ function WatchPageInner() {
     const { data: collabData } = await supabase
       .from('video_collaborators')
       .select('profiles(id, username, avatar_url)')
-      .eq('video_id', videoId);
+      .eq('video_id', videoId)
+      .eq('status', 'accepted');
     setCollaborators((collabData ?? []).map((c: any) => c.profiles).filter(Boolean));
 
     // Ochrana proti umělému nahánění zhlédnutí:

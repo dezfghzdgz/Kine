@@ -71,7 +71,7 @@ export default function PostCard({ post, userId }: { post: any; userId: string |
   const totalVotes = options.reduce((s, o) => s + (o.votes ?? 0), 0);
 
   return (
-    <div className="panel" style={{ marginBottom: 16 }}>
+    <div className="panel" style={{ marginBottom: 16, maxWidth: 460 }}>
       {post.content && <p style={{ fontSize: 14, marginTop: 0, whiteSpace: 'pre-wrap' }}>{post.content}</p>}
 
       {post.type === 'photo' && post.image_url && (

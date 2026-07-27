@@ -11,6 +11,7 @@ type Notification = {
   link: string | null;
   read: boolean;
   created_at: string;
+  type: 'default' | 'collab_invite';
 };
 
 export default function NotificationBell({ mobileTrigger = false }: { mobileTrigger?: boolean }) {
@@ -42,7 +43,7 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
 
     const { data } = await supabase
       .from('notifications')
-      .select('id, message, link, read, created_at')
+      .select('id, message, link, read, created_at, type')
       .eq('user_id', authData.user.id)
       .order('created_at', { ascending: false })
       .limit(30);
@@ -71,6 +72,20 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
     setNotifications([]);
   }
 
+  async function respondToCollabInvite(n: Notification, accept: boolean) {
+    const videoIdMatch = n.link?.match(/\/watch\/([a-f0-9-]+)/i);
+    const videoId = videoIdMatch?.[1];
+    if (videoId && userId) {
+      if (accept) {
+        await supabase.from('video_collaborators').update({ status: 'accepted' }).eq('video_id', videoId).eq('profile_id', userId);
+      } else {
+        await supabase.from('video_collaborators').delete().eq('video_id', videoId).eq('profile_id', userId);
+      }
+    }
+    await supabase.from('notifications').delete().eq('id', n.id);
+    setNotifications((prev) => prev.filter((x) => x.id !== n.id));
+  }
+
   if (!userId) return null;
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -95,24 +110,50 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
           ) : (
             <>
               {notifications.map((n) => (
-                <div key={n.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <button
-                    onClick={() => handleClick(n)}
-                    className="profile-dropdown-item"
-                    style={{ display: 'block', fontWeight: n.read ? 400 : 600, flex: 1 }}
+                n.type === 'collab_invite' ? (
+                  <div
+                    key={n.id}
+                    style={{
+                      padding: 10, borderRadius: 8, margin: '4px 6px',
+                      background: 'rgba(0, 201, 167, 0.12)', border: '1px solid var(--brand)',
+                    }}
                   >
-                    {n.message}
-                    <span style={{ display: 'block', fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
-                      {new Date(n.created_at).toLocaleString('cs-CZ')}
-                    </span>
-                  </button>
-                  <button
-                    onClick={(e) => deleteNotification(e, n.id)}
-                    style={{ background: 'none', color: 'var(--text-faint)', padding: 6, fontSize: 12 }}
-                  >
-                    ✕
-                  </button>
-                </div>
+                    <p style={{ fontSize: 13, margin: '0 0 8px', fontWeight: 600 }}>{n.message}</p>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        onClick={() => respondToCollabInvite(n, true)}
+                        style={{ flex: 1, fontSize: 12, padding: '6px 0' }}
+                      >
+                        {t('acceptInviteButton')}
+                      </button>
+                      <button
+                        onClick={() => respondToCollabInvite(n, false)}
+                        style={{ flex: 1, fontSize: 12, padding: '6px 0', background: 'var(--panel-raised)', color: 'var(--text)' }}
+                      >
+                        {t('declineInviteButton')}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div key={n.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <button
+                      onClick={() => handleClick(n)}
+                      className="profile-dropdown-item"
+                      style={{ display: 'block', fontWeight: n.read ? 400 : 600, flex: 1 }}
+                    >
+                      {n.message}
+                      <span style={{ display: 'block', fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
+                        {new Date(n.created_at).toLocaleString('cs-CZ')}
+                      </span>
+                    </button>
+                    <button
+                      onClick={(e) => deleteNotification(e, n.id)}
+                      style={{ background: 'none', color: 'var(--text-faint)', padding: 6, fontSize: 12 }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )
               ))}
               <button
                 onClick={clearAll}

@@ -84,7 +84,8 @@ function ChannelPageInner() {
       const { data: collabRows } = await supabase
         .from('video_collaborators')
         .select('videos(id, title, thumbnail_url, views, width, height, duration_seconds, created_at, status)')
-        .eq('profile_id', channelId);
+        .eq('profile_id', channelId)
+        .eq('status', 'accepted');
       const collabVideos = (collabRows ?? [])
         .map((r: any) => r.videos)
         .filter((v: any) => v && v.status === 'ready');

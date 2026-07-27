@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useLanguage } from '@/lib/i18n';
 
-const HOVER_DELAY_MS = 500;
+const HOVER_DELAY_MS = 700;
 const SOUND_PREF_KEY = 'kine-preview-sound-enabled';
 
 function getSoundPref() {
@@ -29,31 +29,11 @@ export default function VideoCard({
   const { t } = useLanguage();
   const [previewing, setPreviewing] = useState(false);
   const [muted, setMuted] = useState(true);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const playerRef = useRef<any>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setMuted(!getSoundPref());
   }, []);
-
-  useEffect(() => {
-    if (!previewing || !video.cloudflare_video_id) return;
-    const interval = setInterval(() => {
-      if (iframeRef.current && (window as any).Stream && !playerRef.current) {
-        const player = (window as any).Stream(iframeRef.current);
-        playerRef.current = player;
-        player.muted = getSoundPref() ? false : true;
-        player.loop = true;
-        player.play?.();
-        clearInterval(interval);
-      }
-    }, 100);
-    return () => {
-      clearInterval(interval);
-      playerRef.current = null;
-    };
-  }, [previewing, video.cloudflare_video_id]);
 
   function startHover() {
     if (!video.cloudflare_video_id) return;
@@ -71,7 +51,6 @@ export default function VideoCard({
     const next = !muted;
     setMuted(next);
     localStorage.setItem(SOUND_PREF_KEY, String(!next));
-    if (playerRef.current) playerRef.current.muted = next;
   }
 
   return (
@@ -90,8 +69,8 @@ export default function VideoCard({
         {previewing && (
           <>
             <iframe
-              ref={iframeRef}
-              src={`https://iframe.videodelivery.net/${video.cloudflare_video_id}?controls=false`}
+              key={muted ? 'muted' : 'unmuted'}
+              src={`https://iframe.videodelivery.net/${video.cloudflare_video_id}?controls=false&autoplay=true&muted=${muted}&loop=true&preload=true`}
               style={{ width: '100%', height: '100%', border: 'none', position: 'absolute', inset: 0, pointerEvents: 'none' }}
               allow="autoplay"
             />

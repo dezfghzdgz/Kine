@@ -148,7 +148,7 @@ function SubscriptionsPageInner() {
               const post = group.post;
               const author = post.profiles;
               return (
-                <div key={`post-${post.id}`} style={{ marginBottom: 20 }}>
+                <div key={`post-${post.id}`} style={{ marginBottom: 20, maxWidth: 460 }}>
                   {author && (
                     <Link href={`/channel/${author.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                       <span className="profile-avatar-small" style={{ width: 24, height: 24, overflow: 'hidden' }}>

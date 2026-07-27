@@ -24,16 +24,16 @@ export default function EditVideoPage() {
   const [isTrailer, setIsTrailer] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
-  const [collaborators, setCollaborators] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
+  const [collaborators, setCollaborators] = useState<{ id: string; username: string; avatar_url: string | null; status: string }[]>([]);
   const [collabSearch, setCollabSearch] = useState('');
   const [collabResults, setCollabResults] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
 
   async function loadCollaborators() {
     const { data } = await supabase
       .from('video_collaborators')
-      .select('profiles(id, username, avatar_url)')
+      .select('status, profiles(id, username, avatar_url)')
       .eq('video_id', videoId);
-    setCollaborators((data ?? []).map((c: any) => c.profiles).filter(Boolean));
+    setCollaborators((data ?? []).map((c: any) => c.profiles && { ...c.profiles, status: c.status }).filter(Boolean));
   }
 
   async function searchCollaborators(query: string) {
@@ -51,7 +51,13 @@ export default function EditVideoPage() {
   }
 
   async function addCollaborator(profileId: string) {
-    await supabase.from('video_collaborators').insert({ video_id: videoId, profile_id: profileId });
+    await supabase.from('video_collaborators').insert({ video_id: videoId, profile_id: profileId, status: 'pending' });
+    await supabase.from('notifications').insert({
+      user_id: profileId,
+      type: 'collab_invite',
+      message: t('collabInviteMessage').replace('{title}', title),
+      link: `/watch/${videoId}`,
+    });
     setCollabSearch('');
     setCollabResults([]);
     loadCollaborators();
@@ -219,7 +225,12 @@ export default function EditVideoPage() {
                 <span className="profile-avatar-small" style={{ width: 26, height: 26, overflow: 'hidden' }}>
                   {c.avatar_url ? <img src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
                 </span>
-                <span style={{ fontSize: 13, flex: 1 }}>{c.username}</span>
+                <span style={{ fontSize: 13, flex: 1 }}>
+                  {c.username}
+                  {c.status === 'pending' && (
+                    <span style={{ fontSize: 11, color: 'var(--text-faint)', marginLeft: 6 }}>({t('pendingInviteLabel')})</span>
+                  )}
+                </span>
                 <button
                   type="button"
                   onClick={() => removeCollaborator(c.id)}
