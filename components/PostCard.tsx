@@ -75,11 +75,11 @@ export default function PostCard({ post, userId }: { post: any; userId: string |
       {post.content && <p style={{ fontSize: 14, marginTop: 0, whiteSpace: 'pre-wrap' }}>{post.content}</p>}
 
       {post.type === 'photo' && post.image_url && (
-        <div style={{ marginTop: post.content ? 10 : 0, maxHeight: 480, overflow: 'hidden', borderRadius: 8, background: 'var(--panel-raised)' }}>
+        <div style={{ marginTop: post.content ? 10 : 0, maxHeight: 300, overflow: 'hidden', borderRadius: 8, background: 'var(--panel-raised)' }}>
           <img
             src={post.image_url}
             alt=""
-            style={{ width: '100%', maxHeight: 480, objectFit: 'contain', display: 'block', margin: '0 auto' }}
+            style={{ width: '100%', maxHeight: 300, objectFit: 'contain', display: 'block', margin: '0 auto' }}
           />
         </div>
       )}

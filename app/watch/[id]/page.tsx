@@ -498,7 +498,7 @@ function WatchPageInner() {
           )}
           {showUpNext && upNextQueue[0] && (
             <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,10,11,0.92)', zIndex: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-              <div style={{ textAlign: 'center', maxWidth: 640, width: '100%' }}>
+              <div style={{ textAlign: 'center', maxWidth: 720, width: '100%' }}>
                 <p style={{ color: 'var(--text-faint)', fontSize: 12, marginBottom: 14 }}>
                   Další video za {upNextCountdown}s - vyber si, nebo počkej
                 </p>
@@ -507,7 +507,7 @@ function WatchPageInner() {
                     <div
                       key={v.id}
                       onClick={() => router.push(nextHref(v.id))}
-                      style={{ cursor: 'pointer', width: 'clamp(160px, 30vw, 260px)' }}
+                      style={{ cursor: 'pointer', width: 'clamp(180px, 34vw, 300px)' }}
                     >
                       <div style={{ borderRadius: 8, overflow: 'hidden', marginBottom: 8, aspectRatio: '16 / 9', position: 'relative' }}>
                         {v.thumbnail_url && (

@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabaseClient';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import PostCard from '@/components/PostCard';
 import { buildVideoBlocks } from '@/lib/videoBlocks';
+import VideoCard from '@/components/VideoCard';
 
 function SubscriptionsPageInner() {
   const { t } = useLanguage();
@@ -48,7 +49,7 @@ function SubscriptionsPageInner() {
     if (channelIds.length > 0) {
       const { data: videoData } = await supabase
         .from('videos')
-        .select('id, title, thumbnail_url, views, width, height, duration_seconds, created_at, profiles!videos_owner_id_fkey(username)')
+        .select('id, title, thumbnail_url, views, width, height, duration_seconds, created_at, cloudflare_video_id, profiles!videos_owner_id_fkey(username)')
         .in('owner_id', channelIds)
         .eq('status', 'ready')
         .eq('visibility', 'public')
@@ -111,7 +112,13 @@ function SubscriptionsPageInner() {
             <span className="creator-avatar" style={{ width: 64, height: 64, overflow: 'hidden' }}>
               {c.avatar_url ? <img src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
             </span>
-            <span style={{ fontSize: 12, textAlign: 'center', color: 'var(--text-dim)', lineHeight: 1.3 }}>
+            <span
+              style={{
+                fontSize: 12, textAlign: 'center', color: 'var(--text-dim)', lineHeight: 1.3,
+                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                overflow: 'hidden', wordBreak: 'break-word', width: '100%',
+              }}
+            >
               {c.display_name ?? c.username}
               <VerifiedBadge tier={c.verification_tier} />
             </span>
@@ -163,22 +170,12 @@ function SubscriptionsPageInner() {
                 {buildVideoBlocks(group.videos!).map((block, bi) => (
                   <div key={bi} className={block.type === 'sparks' ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 20 }}>
                     {block.items.map((v: any) => (
-                      <Link
-                        href={block.type === 'sparks' ? `/sparks?start=${v.id}` : `/watch/${v.id}`}
+                      <VideoCard
                         key={v.id}
-                        className="video-card"
-                      >
-                        <div className={block.type === 'sparks' ? 'video-thumb video-thumb-vertical' : 'video-thumb'}>
-                          {v.thumbnail_url ? (
-                            <Image src={v.thumbnail_url} alt={v.title} width={320} height={180} />
-                          ) : null}
-                          <div className="play-badge">▶</div>
-                        </div>
-                        <p className="video-card-title">{v.title}</p>
-                        <p className="video-card-meta">
-                          {v.profiles?.username ?? 'neznámý tvůrce'} · {v.views} {t('views')}
-                        </p>
-                      </Link>
+                        video={v}
+                        href={block.type === 'sparks' ? `/sparks?start=${v.id}` : `/watch/${v.id}`}
+                        isSparks={block.type === 'sparks'}
+                      />
                     ))}
                   </div>
                 ))}
