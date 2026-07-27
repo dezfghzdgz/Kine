@@ -21,6 +21,8 @@ function ChannelPageInner() {
   const { t } = useLanguage();
   const params = useParams();
   const channelId = params.id as string;
+  const { isModerator } = useUserRole();
+  const [confirmBlockOpen, setConfirmBlockOpen] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [subscriberCount, setSubscriberCount] = useState(0);
   const [trustRating, setTrustRating] = useState<number | null>(null);
@@ -138,8 +140,6 @@ function ChannelPageInner() {
   if (!profile) return <p>Kanál nenalezen.</p>;
 
   const isOwner = userId === channelId;
-  const { isModerator } = useUserRole();
-  const [confirmBlockOpen, setConfirmBlockOpen] = useState(false);
 
   async function toggleBanUser() {
     const nextBanned = !profile.is_banned;
