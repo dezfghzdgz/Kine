@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import Script from 'next/script';
 import { useLanguage } from '@/lib/i18n';
+import { SpeakerIcon } from './ReactionIcons';
 
-const HOVER_DELAY_MS = 700;
+const HOVER_DELAY_MS = 150;
 const SOUND_PREF_KEY = 'kine-preview-sound-enabled';
 
 function getSoundPref() {
@@ -29,11 +31,37 @@ export default function VideoCard({
   const { t } = useLanguage();
   const [previewing, setPreviewing] = useState(false);
   const [muted, setMuted] = useState(true);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const playerRef = useRef<any>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setMuted(!getSoundPref());
   }, []);
+
+  // Jakmile se náhled začne přehrávat, appka se napojí na přehrávač
+  // (SDK se může chvíli načítat, proto to zkouší v krátké smyčce) a pustí
+  // video na smyčku, potichu nebo se zvukem podle uložené preference.
+  useEffect(() => {
+    if (!previewing || !video.cloudflare_video_id) return;
+    let cancelled = false;
+    const interval = setInterval(() => {
+      if (cancelled) return;
+      if (iframeRef.current && (window as any).Stream && !playerRef.current) {
+        const player = (window as any).Stream(iframeRef.current);
+        playerRef.current = player;
+        player.muted = getSoundPref() ? false : true;
+        player.loop = true;
+        player.play?.();
+        clearInterval(interval);
+      }
+    }, 50);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      playerRef.current = null;
+    };
+  }, [previewing, video.cloudflare_video_id]);
 
   function startHover() {
     if (!video.cloudflare_video_id) return;
@@ -48,7 +76,9 @@ export default function VideoCard({
   function toggleMute(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    if (!playerRef.current) return;
     const next = !muted;
+    playerRef.current.muted = next;
     setMuted(next);
     localStorage.setItem(SOUND_PREF_KEY, String(!next));
   }
@@ -62,6 +92,7 @@ export default function VideoCard({
       onTouchStart={startHover}
       onTouchEnd={stopHover}
     >
+      <Script src="https://embed.cloudflarestream.com/embed/sdk.latest.js" strategy="lazyOnload" />
       <div className={isSparks ? 'video-thumb video-thumb-vertical' : 'video-thumb'}>
         {video.thumbnail_url && !previewing && (
           <Image src={video.thumbnail_url} alt={video.title} width={320} height={180} />
@@ -69,8 +100,8 @@ export default function VideoCard({
         {previewing && (
           <>
             <iframe
-              key={muted ? 'muted' : 'unmuted'}
-              src={`https://iframe.videodelivery.net/${video.cloudflare_video_id}?controls=false&autoplay=true&muted=${muted}&loop=true&preload=true`}
+              ref={iframeRef}
+              src={`https://iframe.videodelivery.net/${video.cloudflare_video_id}?controls=false`}
               style={{ width: '100%', height: '100%', border: 'none', position: 'absolute', inset: 0, pointerEvents: 'none' }}
               allow="autoplay"
             />
@@ -78,11 +109,11 @@ export default function VideoCard({
               onClick={toggleMute}
               style={{
                 position: 'absolute', top: 6, right: 6, zIndex: 2, background: 'rgba(0,0,0,0.6)', border: 'none',
-                color: '#fff', width: 26, height: 26, borderRadius: '50%', cursor: 'pointer', fontSize: 12,
+                color: '#fff', width: 26, height: 26, borderRadius: '50%', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >
-              {muted ? '🔇' : '🔊'}
+              <SpeakerIcon muted={muted} size={14} />
             </button>
           </>
         )}
