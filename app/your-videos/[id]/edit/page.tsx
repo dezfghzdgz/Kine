@@ -243,32 +243,32 @@ export default function EditVideoPage() {
           </div>
         )}
 
-        <div style={{ position: 'relative' }}>
-          <input
-            type="text"
-            placeholder={t('searchUsernamePlaceholder')}
-            value={collabSearch}
-            onChange={(e) => searchCollaborators(e.target.value)}
-          />
-          {collabResults.length > 0 && (
-            <div className="profile-dropdown" style={{ top: 'calc(100% + 6px)', left: 0, right: 0, width: 'auto' }}>
-              {collabResults.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  className="profile-dropdown-item"
-                  onClick={() => addCollaborator(r.id)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-                >
-                  <span className="profile-avatar-small" style={{ width: 22, height: 22, overflow: 'hidden' }}>
-                    {r.avatar_url ? <img src={r.avatar_url} alt={r.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
-                  </span>
-                  {r.username}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <input
+          type="text"
+          placeholder={t('searchUsernamePlaceholder')}
+          value={collabSearch}
+          onChange={(e) => searchCollaborators(e.target.value)}
+        />
+        {collabResults.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+            {collabResults.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => addCollaborator(r.id)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, background: 'var(--panel-raised)',
+                  border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', textAlign: 'left',
+                }}
+              >
+                <span className="profile-avatar-small" style={{ width: 22, height: 22, overflow: 'hidden', flexShrink: 0 }}>
+                  {r.avatar_url ? <img src={r.avatar_url} alt={r.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                </span>
+                <span style={{ fontSize: 13 }}>{r.username}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 8 }}>

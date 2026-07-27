@@ -51,6 +51,33 @@ export default function UploadPage() {
   const [category, setCategory] = useState('');
   const [playlists, setPlaylists] = useState<{ id: string; title: string }[]>([]);
   const [selectedPlaylists, setSelectedPlaylists] = useState<string[]>([]);
+  const [selectedCollaborators, setSelectedCollaborators] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
+  const [collabSearch, setCollabSearch] = useState('');
+  const [collabResults, setCollabResults] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
+
+  async function searchCollaborators(query: string) {
+    setCollabSearch(query);
+    if (query.trim().length < 2) {
+      setCollabResults([]);
+      return;
+    }
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, username, avatar_url')
+      .ilike('username', `%${query.trim()}%`)
+      .limit(6);
+    setCollabResults((data ?? []).filter((p: any) => !selectedCollaborators.some((c) => c.id === p.id)));
+  }
+
+  function addCollaborator(profile: { id: string; username: string; avatar_url: string | null }) {
+    setSelectedCollaborators((prev) => [...prev, profile]);
+    setCollabSearch('');
+    setCollabResults([]);
+  }
+
+  function removeCollaborator(profileId: string) {
+    setSelectedCollaborators((prev) => prev.filter((c) => c.id !== profileId));
+  }
   const [playlistMenuOpen, setPlaylistMenuOpen] = useState(false);
   const [chapters, setChapters] = useState<{ time: string; title: string }[]>([{ time: '0:00', title: '' }]);
   const [captions, setCaptions] = useState<{ time: string; text: string }[]>([{ time: '0:00', text: '' }]);
@@ -176,6 +203,20 @@ export default function UploadPage() {
           selectedPlaylists.map((playlistId) =>
             supabase.from('playlist_videos').upsert({ playlist_id: playlistId, video_id: newVideoId })
           )
+        );
+      }
+
+      if (selectedCollaborators.length > 0) {
+        await Promise.all(
+          selectedCollaborators.map(async (c) => {
+            await supabase.from('video_collaborators').insert({ video_id: newVideoId, profile_id: c.id, status: 'pending' });
+            await supabase.from('notifications').insert({
+              user_id: c.id,
+              type: 'collab_invite',
+              message: t('collabInviteMessage').replace('{title}', title),
+              link: `/watch/${newVideoId}`,
+            });
+          })
         );
       }
 
@@ -346,6 +387,54 @@ export default function UploadPage() {
             )}
           </div>
         )}
+
+        <div className="panel">
+          <p className="panel-heading">{t('collaboratorsLabel')}</p>
+          <p style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 10 }}>{t('collaboratorsHint')}</p>
+
+          {selectedCollaborators.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+              {selectedCollaborators.map((c) => (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="profile-avatar-small" style={{ width: 26, height: 26, overflow: 'hidden' }}>
+                    {c.avatar_url ? <img src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                  </span>
+                  <span style={{ fontSize: 13, flex: 1 }}>{c.username}</span>
+                  <button type="button" onClick={() => removeCollaborator(c.id)} style={{ background: 'none', color: 'var(--text-faint)', padding: 4, fontSize: 12 }}>
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <input
+            type="text"
+            placeholder={t('searchUsernamePlaceholder')}
+            value={collabSearch}
+            onChange={(e) => searchCollaborators(e.target.value)}
+          />
+          {collabResults.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+              {collabResults.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => addCollaborator(r)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, background: 'var(--panel-raised)',
+                    border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', textAlign: 'left',
+                  }}
+                >
+                  <span className="profile-avatar-small" style={{ width: 22, height: 22, overflow: 'hidden', flexShrink: 0 }}>
+                    {r.avatar_url ? <img src={r.avatar_url} alt={r.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                  </span>
+                  <span style={{ fontSize: 13 }}>{r.username}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="panel">
           <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>
