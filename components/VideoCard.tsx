@@ -109,7 +109,7 @@ export default function VideoCard({
               onClick={toggleMute}
               style={{
                 position: 'absolute', top: 6, right: 6, zIndex: 2, background: 'rgba(0,0,0,0.75)',
-                border: '1px solid rgba(255,255,255,0.3)', color: '#fff', width: 28, height: 28,
+                border: '1px solid rgba(255,255,255,0.3)', color: '#fff', width: 28, height: 28, padding: 0,
                 borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >
