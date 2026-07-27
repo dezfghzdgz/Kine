@@ -41,6 +41,7 @@ function WatchPageInner() {
   const [showUpNext, setShowUpNext] = useState(false);
   const [upNextCountdown, setUpNextCountdown] = useState(8);
   const [trustRating, setTrustRating] = useState<number | null>(null);
+  const [collaborators, setCollaborators] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
@@ -295,6 +296,12 @@ function WatchPageInner() {
 
     setVideo(data);
     document.title = `${data.title} - Kine`;
+
+    const { data: collabData } = await supabase
+      .from('video_collaborators')
+      .select('profiles(id, username, avatar_url)')
+      .eq('video_id', videoId);
+    setCollaborators((collabData ?? []).map((c: any) => c.profiles).filter(Boolean));
 
     // Ochrana proti umělému nahánění zhlédnutí:
     // 1) počítáme až po pár vteřinách skutečného sledování, ne hned při otevření stránky
@@ -556,6 +563,22 @@ function WatchPageInner() {
             <VerifiedBadge tier={video.profiles?.verification_tier} />
                 {trustRating !== null && trustRating >= 90 && <span title={`Vysoký rating (${trustRating}%)`} style={{ marginLeft: 5, fontSize: 13 }}>⭐</span>}
           </Link>
+          {collaborators.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: -6 }}>
+              {collaborators.map((c, i) => (
+                <Link
+                  key={c.id}
+                  href={`/channel/${c.id}`}
+                  title={c.username}
+                  style={{ marginLeft: i === 0 ? 0 : -8, zIndex: collaborators.length - i }}
+                >
+                  <span className="profile-avatar-small" style={{ width: 28, height: 28, border: '2px solid var(--bg)', display: 'block' }}>
+                    {c.avatar_url ? <img src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
           <span>{video.views} {t('views')}</span>
         </div>
 

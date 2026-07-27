@@ -78,7 +78,21 @@ function ChannelPageInner() {
         .eq('owner_id', channelId)
         .eq('status', 'ready')
         .order('created_at', { ascending: false });
-      setVideos(videoData ?? []);
+
+      // Videa, kde je tenhle profil přidaný jako spolutvůrce - appka je
+      // ukáže i tady, ne jen na kanálu toho, kdo je reálně nahrál.
+      const { data: collabRows } = await supabase
+        .from('video_collaborators')
+        .select('videos(id, title, thumbnail_url, views, width, height, duration_seconds, created_at, status)')
+        .eq('profile_id', channelId);
+      const collabVideos = (collabRows ?? [])
+        .map((r: any) => r.videos)
+        .filter((v: any) => v && v.status === 'ready');
+
+      const mergedVideos = [...(videoData ?? []), ...collabVideos]
+        .filter((v, i, arr) => arr.findIndex((x) => x.id === v.id) === i)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setVideos(mergedVideos);
 
       const { data: postData } = await supabase
         .from('posts')
