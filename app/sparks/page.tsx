@@ -168,6 +168,7 @@ function SparksPageInner() {
             <SparksCard
               video={video}
               active={i === activeIndex}
+              preload={i === activeIndex + 1}
               commentsOpen={commentsOpen}
               onToggleComments={() => setCommentsOpen((v) => !v)}
               soundEnabledRef={soundEnabledRef}

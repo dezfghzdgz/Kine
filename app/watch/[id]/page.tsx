@@ -21,6 +21,8 @@ import Toast, { ToastType } from '@/components/Toast';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useLanguage } from '@/lib/i18n';
+import { useUserRole } from '@/lib/useUserRole';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 function formatChapterTime(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -49,6 +51,11 @@ function WatchPageInner() {
   const [showAiBadge, setShowAiBadge] = useState(true);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [confirmModDelete, setConfirmModDelete] = useState(false);
+  const { isModerator } = useUserRole();
+  const playlistId = searchParams.get('playlist');
+  const [playlistInfo, setPlaylistInfo] = useState<{ title: string } | null>(null);
+  const [playlistVideos, setPlaylistVideos] = useState<{ id: string; title: string; thumbnail_url: string | null }[]>([]);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<any>(null);
@@ -58,6 +65,37 @@ function WatchPageInner() {
     load();
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
   }, [videoId]);
+
+  useEffect(() => {
+    if (!playlistId) {
+      setPlaylistInfo(null);
+      setPlaylistVideos([]);
+      return;
+    }
+    (async () => {
+      const { data: pl } = await supabase.from('playlists').select('title').eq('id', playlistId).maybeSingle();
+      setPlaylistInfo(pl ? { title: pl.title } : null);
+
+      const { data: items } = await supabase
+        .from('playlist_videos')
+        .select('video_id, position')
+        .eq('playlist_id', playlistId)
+        .order('position', { ascending: true });
+
+      const videoIds = (items ?? []).map((i: any) => i.video_id);
+      if (videoIds.length === 0) return;
+
+      const { data: videoData } = await supabase
+        .from('videos')
+        .select('id, title, thumbnail_url')
+        .in('id', videoIds);
+
+      const ordered = videoIds
+        .map((id: string) => videoData?.find((v: any) => v.id === id))
+        .filter(Boolean) as { id: string; title: string; thumbnail_url: string | null }[];
+      setPlaylistVideos(ordered);
+    })();
+  }, [playlistId]);
 
   useEffect(() => {
     setShowAiBadge(true);
@@ -196,25 +234,36 @@ function WatchPageInner() {
     return () => clearInterval(interval);
   }, [video?.id]);
 
-  // Po dohrání videa nabídneme další doporučené, s automatickým odpočtem
+  const playlistIndex = playlistVideos.findIndex((v) => v.id === videoId);
+  const playlistNext = playlistIndex >= 0 ? playlistVideos[playlistIndex + 1] : null;
+  const upNextQueue = playlistNext
+    ? [playlistNext, ...otherVideos].slice(0, 2)
+    : otherVideos;
+
+  function nextHref(id: string) {
+    return playlistId ? `/watch/${id}?playlist=${playlistId}` : `/watch/${id}`;
+  }
+
+  // Po dohrání videa nabídneme další doporučené (nebo další video z
+  // playlistu, pokud appku sledujete v playlistu), s automatickým odpočtem
   useEffect(() => {
     if (!playerReady || !playerRef.current) return;
     const player = playerRef.current;
 
     function handleEnded() {
-      if (otherVideos.length > 0) {
+      if (upNextQueue.length > 0) {
         setShowUpNext(true);
         setUpNextCountdown(8);
       }
     }
     player.addEventListener?.('ended', handleEnded);
     return () => player.removeEventListener?.('ended', handleEnded);
-  }, [playerReady, otherVideos]);
+  }, [playerReady, upNextQueue]);
 
   useEffect(() => {
     if (!showUpNext) return;
     if (upNextCountdown <= 0) {
-      router.push(`/watch/${otherVideos[0].id}`);
+      router.push(nextHref(upNextQueue[0].id));
       return;
     }
     const timer = setTimeout(() => setUpNextCountdown((c) => c - 1), 1000);
@@ -327,6 +376,24 @@ function WatchPageInner() {
     return Math.round(Math.min(Math.max(60 + ageScore * 20 + likeRatio * 20, 50), 99));
   }
 
+  async function handleModDelete() {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const res = await fetch('/api/videos/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${sessionData.session?.access_token}`,
+      },
+      body: JSON.stringify({ videoId }),
+    });
+    setConfirmModDelete(false);
+    if (res.ok) {
+      router.push('/');
+    } else {
+      setToast({ message: t('twoFactorGenericError'), type: 'error' });
+    }
+  }
+
   async function shareVideo() {
     await navigator.clipboard.writeText(`${window.location.origin}/watch/${videoId}`);
     setToast({ message: 'Odkaz na video zkopírován', type: 'success' });
@@ -429,17 +496,17 @@ function WatchPageInner() {
           {playerReady && captions.length > 0 && captionsEnabled && (
             <CaptionsOverlay captions={captions} player={playerRef.current} />
           )}
-          {showUpNext && otherVideos[0] && (
+          {showUpNext && upNextQueue[0] && (
             <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,10,11,0.92)', zIndex: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ textAlign: 'center', maxWidth: 640, width: '100%' }}>
                 <p style={{ color: 'var(--text-faint)', fontSize: 12, marginBottom: 14 }}>
                   Další video za {upNextCountdown}s - vyber si, nebo počkej
                 </p>
                 <div style={{ display: 'flex', gap: 20, justifyContent: 'center', flexWrap: 'wrap' }}>
-                  {otherVideos.slice(0, 2).map((v: any) => (
+                  {upNextQueue.slice(0, 2).map((v: any) => (
                     <div
                       key={v.id}
-                      onClick={() => router.push(`/watch/${v.id}`)}
+                      onClick={() => router.push(nextHref(v.id))}
                       style={{ cursor: 'pointer', width: 'clamp(160px, 30vw, 260px)' }}
                     >
                       <div style={{ borderRadius: 8, overflow: 'hidden', marginBottom: 8, aspectRatio: '16 / 9', position: 'relative' }}>
@@ -459,6 +526,26 @@ function WatchPageInner() {
           )}
         </div>
 
+        {playlistInfo && (
+          <div className="panel" style={{ marginBottom: 12, padding: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+            <Link href={`/playlists/${playlistId}`} style={{ fontSize: 13, color: 'var(--text-dim)' }}>
+              📃 {t('watchingFromPlaylistLabel')} <strong style={{ color: 'var(--text)' }}>{playlistInfo.title}</strong>
+              {playlistIndex >= 0 && ` (${playlistIndex + 1}/${playlistVideos.length})`}
+            </Link>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {playlistIndex > 0 && (
+                <Link href={nextHref(playlistVideos[playlistIndex - 1].id)} style={{ fontSize: 12 }}>
+                  ← {t('playlistPrevButton')}
+                </Link>
+              )}
+              {playlistNext && (
+                <Link href={nextHref(playlistNext.id)} style={{ fontSize: 12 }}>
+                  {t('playlistNextButton')} →
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
         <h1 className="video-title">{video.title}</h1>
         <div className="video-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <Link href={`/channel/${video.profiles?.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -490,9 +577,25 @@ function WatchPageInner() {
             {inWatchLater ? `✓ ${t('watchLater')}` : `+ ${t('watchLater')}`}
           </button>
           <button className="reaction-btn" onClick={() => setReportOpen(true)}>🚩 {t('report')}</button>
+          {isModerator && (
+            <button
+              className="reaction-btn"
+              onClick={() => setConfirmModDelete(true)}
+              style={{ color: '#ff6b6b' }}
+            >
+              🗑 {t('modDeleteVideoButton')}
+            </button>
+          )}
         </div>
 
         {reportOpen && <ReportModal videoId={video.id} onClose={() => setReportOpen(false)} />}
+        {confirmModDelete && (
+          <ConfirmDialog
+            message={t('confirmDeleteVideo')}
+            onConfirm={handleModDelete}
+            onCancel={() => setConfirmModDelete(false)}
+          />
+        )}
 
         {video.has_paid_promotion && (
           <p style={{

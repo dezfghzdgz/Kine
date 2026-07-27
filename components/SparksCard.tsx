@@ -10,13 +10,14 @@ import { shouldNotifyLikeMilestone } from '@/lib/likeMilestones';
 import { useLanguage } from '@/lib/i18n';
 
 export default function SparksCard({
-  video, active, commentsOpen, onToggleComments, soundEnabledRef,
+  video, active, commentsOpen, onToggleComments, soundEnabledRef, preload,
 }: {
   video: any;
   active: boolean;
   commentsOpen: boolean;
   onToggleComments: () => void;
   soundEnabledRef: { current: boolean };
+  preload?: boolean;
 }) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -194,7 +195,7 @@ export default function SparksCard({
     <div className="spark-slide">
       <Script src="https://embed.cloudflarestream.com/embed/sdk.latest.js" strategy="lazyOnload" />
       <div className="spark-player-wrap" onClick={togglePlayPause} style={{ cursor: 'pointer', position: 'relative' }}>
-        {active ? (
+        {(active || preload) ? (
           <iframe
             ref={iframeRef}
             src={`https://iframe.videodelivery.net/${video.cloudflare_video_id}?controls=false`}

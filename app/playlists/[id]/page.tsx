@@ -1,12 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import Script from 'next/script';
 import { supabase } from '@/lib/supabaseClient';
-import ChapterTimeline from '@/components/ChapterTimeline';
 import { useLanguage } from '@/lib/i18n';
 
 export default function PlaylistDetailPage() {
@@ -18,18 +16,11 @@ export default function PlaylistDetailPage() {
   const [playlist, setPlaylist] = useState<any>(null);
   const [videos, setVideos] = useState<any[]>([]);
   const [recommended, setRecommended] = useState<any[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [playingRecommendedId, setPlayingRecommendedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [linkInput, setLinkInput] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [playerReady, setPlayerReady] = useState(false);
-
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const playerRef = useRef<any>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     load();
@@ -84,65 +75,8 @@ export default function PlaylistDetailPage() {
     setLoading(false);
   }
 
-  function handlePlayerSdkReady() {
-    if (iframeRef.current && (window as any).Stream) {
-      playerRef.current = (window as any).Stream(iframeRef.current);
-      playerRef.current.muted = false;
-      playerRef.current.volume = 1;
-      playerRef.current.play?.();
-      setPlayerReady(true);
-    }
-  }
-
-  useEffect(() => {
-    setPlayerReady(false);
-    playerRef.current = null;
-
-    const interval = setInterval(() => {
-      if (iframeRef.current && (window as any).Stream && !playerRef.current) {
-        handlePlayerSdkReady();
-        clearInterval(interval);
-      }
-    }, 150);
-
-    return () => clearInterval(interval);
-  }, [currentIndex, playingRecommendedId, videos.length]);
-
-  // Automatické přehrání dalšího videa po skončení toho aktuálního
-  useEffect(() => {
-    if (!playerReady || !playerRef.current) return;
-    const player = playerRef.current;
-
-    function handleEnded() {
-      playNext();
-    }
-    player.addEventListener?.('ended', handleEnded);
-    return () => player.removeEventListener?.('ended', handleEnded);
-  }, [playerReady, currentIndex, playingRecommendedId]);
-
-  function playNext() {
-    if (playingRecommendedId) {
-      // Právě jsme dohráli doporučené video - pokračujeme dalším doporučeným
-      const idx = recommended.findIndex((v) => v.id === playingRecommendedId);
-      if (idx >= 0 && idx + 1 < recommended.length) {
-        setPlayingRecommendedId(recommended[idx + 1].id);
-      }
-      return;
-    }
-    if (currentIndex + 1 < videos.length) {
-      setCurrentIndex(currentIndex + 1);
-    } else if (recommended.length > 0) {
-      setPlayingRecommendedId(recommended[0].id);
-    }
-  }
-
   function playVideoAt(index: number) {
-    setPlayingRecommendedId(null);
-    setCurrentIndex(index);
-  }
-
-  function playRecommended(id: string) {
-    setPlayingRecommendedId(id);
+    router.push(`/watch/${videos[index].id}?playlist=${playlistId}`);
   }
 
   async function handleAddByLink(e: React.FormEvent) {
@@ -189,43 +123,30 @@ export default function PlaylistDetailPage() {
   if (!playlist) return <p>Playlist nenalezen.</p>;
 
   const isOwner = userId === playlist.owner_id;
-  const nowPlaying = playingRecommendedId
-    ? recommended.find((v) => v.id === playingRecommendedId)
-    : videos[currentIndex];
+  const firstVideo = videos[0];
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24 }}>
-      <Script src="https://embed.cloudflarestream.com/embed/sdk.latest.js" onLoad={handlePlayerSdkReady} />
-
       <div>
         <p className="section-title">{playlist.title}</p>
 
-        {nowPlaying?.cloudflare_video_id ? (
-          <div ref={wrapRef} className="player-wrap" style={{ aspectRatio: '16/9', marginBottom: 12 }}>
-            <iframe
-              ref={iframeRef}
-              src={`https://iframe.videodelivery.net/${nowPlaying.cloudflare_video_id}?controls=false`}
-              style={{ width: '100%', height: '100%', border: 'none' }}
-              allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen;"
-              allowFullScreen
-            />
-            {playerReady && <ChapterTimeline chapters={[]} duration={nowPlaying?.duration_seconds ?? 0} player={playerRef.current} />}
-          </div>
+        {firstVideo ? (
+          <Link href={`/watch/${firstVideo.id}?playlist=${playlistId}`} className="player-wrap" style={{ aspectRatio: '16/9', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+            {firstVideo.thumbnail_url && (
+              <Image src={firstVideo.thumbnail_url} alt={firstVideo.title} fill style={{ objectFit: 'cover' }} />
+            )}
+            <div className="play-badge" style={{ position: 'relative', fontSize: 32 }}>▶</div>
+          </Link>
         ) : (
           <div className="player-wrap" style={{ aspectRatio: '16/9', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <p style={{ color: 'var(--text-faint)' }}>Tenhle playlist zatím neobsahuje žádná videa.</p>
           </div>
         )}
 
-        {nowPlaying && (
+        {firstVideo && (
           <>
-            <h1 className="video-title">{nowPlaying.title}</h1>
-            <p className="video-meta">{nowPlaying.profiles?.username ?? 'neznámý tvůrce'} · {nowPlaying.views} {t('views')}</p>
-            {playingRecommendedId && (
-              <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 6 }}>
-                Playlist skončil - přehráváme doporučená videa.
-              </p>
-            )}
+            <h1 className="video-title">{firstVideo.title}</h1>
+            <p className="video-meta">{firstVideo.profiles?.username ?? 'neznámý tvůrce'} · {firstVideo.views} {t('views')}</p>
           </>
         )}
 
@@ -256,10 +177,7 @@ export default function PlaylistDetailPage() {
               onDrop={() => handleDrop(i)}
               onClick={() => playVideoAt(i)}
               className="panel"
-              style={{
-                display: 'flex', gap: 10, alignItems: 'center', padding: 8, cursor: 'pointer',
-                border: !playingRecommendedId && i === currentIndex ? '1px solid var(--text)' : '1px solid var(--border)',
-              }}
+              style={{ display: 'flex', gap: 10, alignItems: 'center', padding: 8, cursor: 'pointer' }}
             >
               {isOwner && <span style={{ cursor: 'grab', color: 'var(--text-faint)', fontSize: 14 }}>⠿</span>}
               <span style={{ fontSize: 12, color: 'var(--text-faint)', width: 16, flexShrink: 0 }}>{i + 1}</span>
@@ -286,14 +204,11 @@ export default function PlaylistDetailPage() {
             <p className="panel-heading">{t('recommendedNext')}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {recommended.map((v) => (
-                <div
+                <Link
+                  href={`/watch/${v.id}`}
                   key={v.id}
-                  onClick={() => playRecommended(v.id)}
                   className="panel"
-                  style={{
-                    display: 'flex', gap: 10, alignItems: 'center', padding: 8, cursor: 'pointer',
-                    border: playingRecommendedId === v.id ? '1px solid var(--text)' : '1px solid var(--border)',
-                  }}
+                  style={{ display: 'flex', gap: 10, alignItems: 'center', padding: 8, cursor: 'pointer' }}
                 >
                   <div style={{ width: 64, height: 36, borderRadius: 6, overflow: 'hidden', flexShrink: 0, background: 'var(--panel-raised)' }}>
                     {v.thumbnail_url && <Image src={v.thumbnail_url} alt={v.title} width={64} height={36} style={{ objectFit: 'cover' }} />}
@@ -301,7 +216,7 @@ export default function PlaylistDetailPage() {
                   <p style={{ fontSize: 12.5, margin: 0, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {v.title}
                   </p>
-                </div>
+                </Link>
               ))}
             </div>
           </>
