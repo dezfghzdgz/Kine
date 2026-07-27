@@ -153,7 +153,7 @@ export default function UploadPage() {
           isAiGenerated,
           language,
           category,
-          visibility,
+          visibility: selectedCollaborators.length > 0 ? 'private' : visibility,
           isPremiere: scheduleMode === 'premiere',
           scheduledAt: finalScheduledAt,
           width: videoWidth,
@@ -207,6 +207,7 @@ export default function UploadPage() {
       }
 
       if (selectedCollaborators.length > 0) {
+        await supabase.from('videos').update({ pending_collab_visibility: visibility }).eq('id', newVideoId);
         await Promise.all(
           selectedCollaborators.map(async (c) => {
             await supabase.from('video_collaborators').insert({ video_id: newVideoId, profile_id: c.id, status: 'pending' });
@@ -429,7 +430,7 @@ export default function UploadPage() {
                   <span className="profile-avatar-small" style={{ width: 22, height: 22, overflow: 'hidden', flexShrink: 0 }}>
                     {r.avatar_url ? <img src={r.avatar_url} alt={r.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
                   </span>
-                  <span style={{ fontSize: 13 }}>{r.username}</span>
+                  <span style={{ fontSize: 13, color: 'var(--text)' }}>{r.username}</span>
                 </button>
               ))}
             </div>

@@ -51,6 +51,22 @@ export default function EditVideoPage() {
   }
 
   async function addCollaborator(profileId: string) {
+    const { data: currentVideo } = await supabase
+      .from('videos')
+      .select('visibility, pending_collab_visibility')
+      .eq('id', videoId)
+      .single();
+
+    // Video appka schová jako soukromé, dokud spolutvůrce nepotvrdí - jeho
+    // skutečně zvolenou viditelnost si appka pamatuje, aby ji šlo vrátit zpět.
+    if (currentVideo && currentVideo.visibility !== 'private' && !currentVideo.pending_collab_visibility) {
+      await supabase
+        .from('videos')
+        .update({ visibility: 'private', pending_collab_visibility: currentVideo.visibility })
+        .eq('id', videoId);
+      setVisibility('private');
+    }
+
     await supabase.from('video_collaborators').insert({ video_id: videoId, profile_id: profileId, status: 'pending' });
     await supabase.from('notifications').insert({
       user_id: profileId,
@@ -264,7 +280,7 @@ export default function EditVideoPage() {
                 <span className="profile-avatar-small" style={{ width: 22, height: 22, overflow: 'hidden', flexShrink: 0 }}>
                   {r.avatar_url ? <img src={r.avatar_url} alt={r.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
                 </span>
-                <span style={{ fontSize: 13 }}>{r.username}</span>
+                <span style={{ fontSize: 13, color: 'var(--text)' }}>{r.username}</span>
               </button>
             ))}
           </div>

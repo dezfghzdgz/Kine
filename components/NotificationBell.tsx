@@ -75,12 +75,16 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
   async function respondToCollabInvite(n: Notification, accept: boolean) {
     const videoIdMatch = n.link?.match(/\/watch\/([a-f0-9-]+)/i);
     const videoId = videoIdMatch?.[1];
-    if (videoId && userId) {
-      if (accept) {
-        await supabase.from('video_collaborators').update({ status: 'accepted' }).eq('video_id', videoId).eq('profile_id', userId);
-      } else {
-        await supabase.from('video_collaborators').delete().eq('video_id', videoId).eq('profile_id', userId);
-      }
+    if (videoId) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      await fetch('/api/videos/respond-collab', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessionData.session?.access_token}`,
+        },
+        body: JSON.stringify({ videoId, accept }),
+      });
     }
     await supabase.from('notifications').delete().eq('id', n.id);
     setNotifications((prev) => prev.filter((x) => x.id !== n.id));
