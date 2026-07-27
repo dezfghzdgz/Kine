@@ -32,7 +32,16 @@ export async function POST(req: NextRequest) {
   }
 
   if (video.owner_id !== userData.user.id) {
-    return NextResponse.json({ error: 'Tohle video ti nepatří.' }, { status: 403 });
+    const { data: requesterProfile } = await supabaseServer
+      .from('profiles')
+      .select('role')
+      .eq('id', userData.user.id)
+      .maybeSingle();
+
+    const isModerator = requesterProfile?.role === 'moderator' || requesterProfile?.role === 'admin';
+    if (!isModerator) {
+      return NextResponse.json({ error: 'Tohle video ti nepatří.' }, { status: 403 });
+    }
   }
 
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;

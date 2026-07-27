@@ -12,6 +12,8 @@ import PostCard from '@/components/PostCard';
 import { buildVideoBlocks } from '@/lib/videoBlocks';
 import { useLanguage } from '@/lib/i18n';
 import { computeTrustRatingClient, getTotalReactionCount, RATING_UNLOCK_THRESHOLD } from '@/lib/trustRatingClient';
+import { useUserRole } from '@/lib/useUserRole';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 type Tab = 'home' | 'videos' | 'sparks' | 'posts' | 'playlists';
 
@@ -50,7 +52,7 @@ function ChannelPageInner() {
 
     const { data: profileData } = await supabase
       .from('profiles')
-      .select('id, username, display_name, avatar_url, banner_url, bio, social_links, verification_tier, created_at, trailer_video_id, trailer:videos!profiles_trailer_video_id_fkey(id, title, cloudflare_video_id, thumbnail_url)')
+      .select('id, username, display_name, avatar_url, banner_url, bio, social_links, verification_tier, created_at, trailer_video_id, is_banned, trailer:videos!profiles_trailer_video_id_fkey(id, title, cloudflare_video_id, thumbnail_url)')
       .eq('id', channelId)
       .single();
     setProfile(profileData);
@@ -136,6 +138,17 @@ function ChannelPageInner() {
   if (!profile) return <p>Kanál nenalezen.</p>;
 
   const isOwner = userId === channelId;
+  const { isModerator } = useUserRole();
+  const [confirmBlockOpen, setConfirmBlockOpen] = useState(false);
+
+  async function toggleBanUser() {
+    const nextBanned = !profile.is_banned;
+    const { error } = await supabase.from('profiles').update({ is_banned: nextBanned }).eq('id', channelId);
+    setConfirmBlockOpen(false);
+    if (!error) {
+      setProfile((prev: any) => ({ ...prev, is_banned: nextBanned }));
+    }
+  }
   const longVideos = videos.filter((v) => !(v.height && v.width && v.height > v.width && (v.duration_seconds ?? 0) <= 120));
   const sparkVideos = videos.filter((v) => v.height && v.width && v.height > v.width && (v.duration_seconds ?? 0) <= 120);
 
@@ -231,10 +244,30 @@ function ChannelPageInner() {
           )}
         </div>
 
-        <div style={{ paddingBottom: 4 }}>
+        <div style={{ paddingBottom: 4, display: 'flex', gap: 8 }}>
           <SubscribeButton channelId={profile.id} />
+          {isModerator && !isOwner && (
+            <button
+              onClick={() => setConfirmBlockOpen(true)}
+              style={{
+                background: 'var(--panel-raised)',
+                color: profile.is_banned ? 'var(--text)' : '#ff6b6b',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {profile.is_banned ? t('unblockUserButton') : t('blockUserButton')}
+            </button>
+          )}
         </div>
       </div>
+
+      {confirmBlockOpen && (
+        <ConfirmDialog
+          message={t('confirmBlockUser')}
+          onConfirm={toggleBanUser}
+          onCancel={() => setConfirmBlockOpen(false)}
+        />
+      )}
 
       {!isOwner && profile.trailer && (
         <div style={{ marginBottom: 24 }}>
