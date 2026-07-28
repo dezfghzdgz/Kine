@@ -158,6 +158,42 @@ a {
 
 .video-card {
   display: block;
+  animation: content-fade-in 0.28s ease both;
+}
+
+@keyframes content-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.video-card-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 4px;
+  background: var(--panel-raised);
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  animation: skeleton-shimmer-move 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer-move {
+  100% { transform: translateX(100%); }
 }
 
 .video-thumb {
@@ -337,6 +373,7 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 22px 24px;
+  animation: content-fade-in 0.28s ease both;
 }
 
 /* Mezera mezi rámečky, co jsou POD sebou (ne vedle sebe) - dřív to bylo

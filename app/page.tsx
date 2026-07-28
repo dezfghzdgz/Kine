@@ -124,7 +124,22 @@ export default function HomePage() {
 
     const { data: authData } = await supabase.auth.getUser();
 
-    // Appka si napřed zjistí, co uživatel odebírá, co už sledoval, a jaké
+    // Appka natáhne pool videí a seznam shadow-bannovaných rovnou, ať to
+    // běží souběžně s dotazy na uživatelovy odběry/historii níž - dřív to
+    // appka dělala až po nich, což zbytečně natahovalo čekání o celé kolo
+    // navíc.
+    const candidatesPromise = supabase
+      .from('videos')
+      .select('id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, hashtags, owner_id, cloudflare_video_id, profiles!videos_owner_id_fkey(username)')
+      .eq('status', 'ready')
+      .eq('visibility', 'public')
+      .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso},is_premiere.eq.true`)
+      .order('created_at', { ascending: false })
+      .limit(RECOMMENDATION_POOL_SIZE);
+
+    const shadowBannedPromise = supabase.from('profiles').select('id').eq('is_shadow_banned', true);
+
+    // Appka si zjistí, co uživatel odebírá, co už sledoval, a jaké
     // kategorie/hashtagy ho v poslední době zajímaly - podle toho pak
     // videím spočítá skóre.
     const subscribedIds = new Set<string>();
@@ -165,16 +180,8 @@ export default function HomePage() {
       Object.entries(hashtagCounts).sort((a, b) => b[1] - a[1]).slice(0, 8).forEach(([h]) => topHashtags.add(h));
     }
 
-    const { data: candidates } = await supabase
-      .from('videos')
-      .select('id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, hashtags, owner_id, cloudflare_video_id, profiles!videos_owner_id_fkey(username)')
-      .eq('status', 'ready')
-      .eq('visibility', 'public')
-      .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso},is_premiere.eq.true`)
-      .order('created_at', { ascending: false })
-      .limit(RECOMMENDATION_POOL_SIZE);
+    const [{ data: candidates }, { data: shadowBanned }] = await Promise.all([candidatesPromise, shadowBannedPromise]);
 
-    const { data: shadowBanned } = await supabase.from('profiles').select('id').eq('is_shadow_banned', true);
     const shadowBannedIds = new Set((shadowBanned ?? []).map((p: any) => p.id));
 
     const pool = (candidates ?? []).filter((v: any) => !shadowBannedIds.has(v.owner_id));
@@ -238,7 +245,20 @@ export default function HomePage() {
   }
 
   if (!blocks) {
-    return <p style={{ color: 'var(--text-faint)' }}>{t('loading')}</p>;
+    return (
+      <div>
+        <p className="section-title">{t('recommendedForYouHeading')}</p>
+        <div className="video-grid">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="video-card-skeleton">
+              <div className="video-thumb skeleton-shimmer" />
+              <div className="skeleton-line skeleton-shimmer" style={{ width: '85%' }} />
+              <div className="skeleton-line skeleton-shimmer" style={{ width: '50%' }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
