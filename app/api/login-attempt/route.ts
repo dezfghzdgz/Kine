@@ -3,11 +3,31 @@ import { supabaseServer } from '@/lib/supabaseServer';
 
 const MAX_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
+const MAX_REQUESTS_PER_IP_PER_HOUR = 20;
 
 // Tenhle endpoint appka volá kolem přihlašování - drží si počet
 // neúspěšných pokusů podle emailu a po 5 chybách účet na 15 minut
 // dočasně uzamkne (bez ohledu na to, jestli má uživatel 2FA nebo ne).
+//
+// Appka tady navíc hlídá i to, kolikrát se sem ozvala STEJNÁ adresa (IP)
+// za hodinu - bez tohohle by šlo appku klidně zavolat přímo (bez appky
+// hesla) a někoho tak uzamknout jen podle jeho emailu.
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? req.headers.get('x-real-ip') ?? 'unknown';
+  const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+  const { count: ipRequestCount } = await supabaseServer
+    .from('login_attempt_ip_log')
+    .select('*', { count: 'exact', head: true })
+    .eq('ip_address', ip)
+    .gte('created_at', hourAgo);
+
+  if ((ipRequestCount ?? 0) >= MAX_REQUESTS_PER_IP_PER_HOUR) {
+    return NextResponse.json({ error: 'Příliš mnoho pokusů z tvojí adresy. Zkus to prosím později.' }, { status: 429 });
+  }
+
+  await supabaseServer.from('login_attempt_ip_log').insert({ ip_address: ip });
+
   const { email, action } = await req.json();
 
   if (!email || typeof email !== 'string') {
