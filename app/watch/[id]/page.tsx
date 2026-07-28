@@ -458,7 +458,7 @@ function WatchPageInner() {
       <Script src="https://embed.cloudflarestream.com/embed/sdk.latest.js" onLoad={handlePlayerSdkReady} />
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <WatchHistoryTracker videoId={video.id} />
-      <div>
+      <div className="watch-video-column">
         <div
           ref={wrapRef}
           className={`player-wrap ${video.height > video.width ? 'player-wrap-vertical' : ''}`}
@@ -638,37 +638,37 @@ function WatchPageInner() {
             🎬 Premiéra: video bude k přehrání {new Date(video.scheduled_at).toLocaleString('cs-CZ')}
           </p>
         )}
-
-        {otherVideos.length > 0 && (
-          <div style={{ marginTop: 32 }}>
-            <p className="section-title">Další videa</p>
-            {buildVideoBlocks(otherVideos).map((block, bi) => (
-              <div key={bi} className={block.type === 'sparks' ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 20 }}>
-                {block.items.map((v: any) => (
-                  <Link
-                    href={block.type === 'sparks' ? `/sparks?start=${v.id}` : `/watch/${v.id}`}
-                    key={v.id}
-                    className="video-card"
-                  >
-                    <div className={block.type === 'sparks' ? 'video-thumb video-thumb-vertical' : 'video-thumb'}>
-                      {v.thumbnail_url ? (
-                        <Image src={v.thumbnail_url} alt={v.title} width={320} height={180} />
-                      ) : null}
-                      <div className="play-badge">▶</div>
-                    </div>
-                    <p className="video-card-title">{v.title}</p>
-                    <p className="video-card-meta">
-                      {v.profiles?.username ?? 'neznámý tvůrce'} · {v.views} {t('views')}
-                    </p>
-                  </Link>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
-      <div>
+      {otherVideos.length > 0 && (
+        <div className="watch-recommendations">
+          <p className="section-title">Další videa</p>
+          {buildVideoBlocks(otherVideos).map((block, bi) => (
+            <div key={bi} className={block.type === 'sparks' ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 20 }}>
+              {block.items.map((v: any) => (
+                <Link
+                  href={block.type === 'sparks' ? `/sparks?start=${v.id}` : `/watch/${v.id}`}
+                  key={v.id}
+                  className="video-card"
+                >
+                  <div className={block.type === 'sparks' ? 'video-thumb video-thumb-vertical' : 'video-thumb'}>
+                    {v.thumbnail_url ? (
+                      <Image src={v.thumbnail_url} alt={v.title} width={320} height={180} />
+                    ) : null}
+                    <div className="play-badge">▶</div>
+                  </div>
+                  <p className="video-card-title">{v.title}</p>
+                  <p className="video-card-meta">
+                    {v.profiles?.username ?? 'neznámý tvůrce'} · {v.views} {t('views')}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="watch-comments-column">
         <p className="section-title">Interaction Panel</p>
 
         <div className="panel">
