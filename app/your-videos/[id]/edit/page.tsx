@@ -27,6 +27,7 @@ export default function EditVideoPage() {
   const [collaborators, setCollaborators] = useState<{ id: string; username: string; avatar_url: string | null; status: string }[]>([]);
   const [collabSearch, setCollabSearch] = useState('');
   const [collabResults, setCollabResults] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
+  const [collabError, setCollabError] = useState<string | null>(null);
 
   async function loadCollaborators() {
     const { data } = await supabase
@@ -51,6 +52,24 @@ export default function EditVideoPage() {
   }
 
   async function addCollaborator(profileId: string) {
+    setCollabError(null);
+    if (!videoOwnerId) return;
+
+    // Spolupráci jde nabídnout jen tomu, koho vzájemně odebíráte - ať appku
+    // někdo nemůže takhle spamovat cizí lidi.
+    const { data: mutualCheck } = await supabase
+      .from('subscriptions')
+      .select('subscriber_id, channel_id')
+      .or(`and(subscriber_id.eq.${videoOwnerId},channel_id.eq.${profileId}),and(subscriber_id.eq.${profileId},channel_id.eq.${videoOwnerId})`);
+
+    const iSubscribeToThem = (mutualCheck ?? []).some((s) => s.subscriber_id === videoOwnerId && s.channel_id === profileId);
+    const theySubscribeToMe = (mutualCheck ?? []).some((s) => s.subscriber_id === profileId && s.channel_id === videoOwnerId);
+
+    if (!iSubscribeToThem || !theySubscribeToMe) {
+      setCollabError(t('mutualSubscriptionRequiredNote'));
+      return;
+    }
+
     const { data: currentVideo } = await supabase
       .from('videos')
       .select('visibility, pending_collab_visibility')
@@ -285,6 +304,7 @@ export default function EditVideoPage() {
             ))}
           </div>
         )}
+        {collabError && <p className="error-text" style={{ marginTop: 8 }}>{collabError}</p>}
       </div>
 
       <div style={{ display: 'flex', gap: 8 }}>
