@@ -28,6 +28,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
+  const [confirmSignOutSettings, setConfirmSignOutSettings] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
   useEffect(() => {
@@ -155,6 +156,13 @@ export default function SettingsPage() {
     setExporting(false);
   }
 
+  async function handleSignOutFromSettings() {
+    await supabase.auth.signOut();
+    setConfirmSignOutSettings(false);
+    router.push('/');
+    router.refresh();
+  }
+
   async function handleDeleteAccount() {
     setConfirmDeleteAccount(false);
     const { data: sessionData } = await supabase.auth.getSession();
@@ -206,6 +214,17 @@ export default function SettingsPage() {
   return (
     <div style={{ maxWidth: 640 }}>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      <div className="panel" style={{ marginBottom: 32 }}>
+        <button
+          type="button"
+          onClick={() => setConfirmSignOutSettings(true)}
+          style={{ background: 'var(--panel-raised)', color: '#ff6b6b', border: '1px solid var(--border)' }}
+        >
+          {t('signOut')}
+        </button>
+      </div>
+
       <p className="section-title">{t('profileCustomizationTitle')}</p>
 
       <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
@@ -409,6 +428,14 @@ export default function SettingsPage() {
           message={t('confirmDeleteAccount')}
           onConfirm={handleDeleteAccount}
           onCancel={() => setConfirmDeleteAccount(false)}
+        />
+      )}
+
+      {confirmSignOutSettings && (
+        <ConfirmDialog
+          message={t('confirmSignOutNote')}
+          onConfirm={handleSignOutFromSettings}
+          onCancel={() => setConfirmSignOutSettings(false)}
         />
       )}
     </div>

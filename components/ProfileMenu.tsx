@@ -137,16 +137,6 @@ export default function ProfileMenu({
             )}
           </div>
 
-          <div className="profile-dropdown-divider" />
-
-          <button
-            className="profile-dropdown-item"
-            onClick={() => setConfirmSignOut(true)}
-            style={{ color: '#ff6b6b', marginTop: 4 }}
-          >
-            {t('signOut')}
-          </button>
-
           <div className="profile-dropdown-divider" style={{ marginTop: 10 }} />
 
           <div style={{ display: 'flex', gap: 10, padding: '8px 10px 4px', fontSize: 11, color: 'var(--text-faint)' }}>

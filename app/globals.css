@@ -963,12 +963,14 @@ html[data-theme="gray"] {
   flex: 1;
   min-width: 0;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
 .spark-feed {
   width: 100%;
   height: 100vh;
+  height: 100dvh;
   overflow-y: scroll;
   scroll-snap-type: y mandatory;
   scrollbar-width: none;
@@ -983,6 +985,7 @@ html[data-theme="gray"] {
   scroll-snap-align: start;
   scroll-snap-stop: always;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1084,6 +1087,7 @@ html[data-theme="gray"] {
 @media (max-width: 640px) {
   .spark-feed, .spark-feed-item {
     height: calc(100vh - 60px - env(safe-area-inset-bottom, 0px));
+    height: calc(100dvh - 60px - env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -1185,6 +1189,16 @@ html[data-theme="gray"] {
     width: auto;
     max-height: 70vh;
     overflow-y: auto;
+    z-index: 320;
+  }
+
+  .mobile-drawer-side .brand-color-picker {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    top: auto;
+    width: auto;
     z-index: 320;
   }
 

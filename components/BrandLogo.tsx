@@ -107,6 +107,7 @@ export default function BrandLogo({ className, onNavigate }: { className?: strin
 
       {pickerOpen && (
         <div
+          className="brand-color-picker"
           style={{
             position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 200,
             background: 'var(--panel-raised)', border: '1px solid var(--border)', borderRadius: 10,
