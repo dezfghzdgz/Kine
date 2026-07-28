@@ -149,7 +149,7 @@ export default function ChapterTimeline({
     setControlsVisible(true);
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     hideTimerRef.current = setTimeout(() => {
-      if (player && !player.paused) setControlsVisible(false);
+      if (player && !player.paused && !isFullscreen) setControlsVisible(false);
     }, 3000);
   }
 
@@ -235,7 +235,7 @@ export default function ChapterTimeline({
           automatickému schování ovládání) a klik (přehrát/pauza). */}
       <div
         onMouseMove={showControlsTemporarily}
-        onClick={togglePlay}
+        onClick={(e) => { showControlsTemporarily(); togglePlay(e); }}
         style={{ position: 'absolute', inset: 0, zIndex: 3, cursor: 'pointer' }}
       />
 
