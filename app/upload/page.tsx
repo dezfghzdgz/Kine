@@ -51,12 +51,15 @@ export default function UploadPage() {
   const [category, setCategory] = useState('');
   const [playlists, setPlaylists] = useState<{ id: string; title: string }[]>([]);
   const [selectedPlaylists, setSelectedPlaylists] = useState<string[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
   const [selectedCollaborators, setSelectedCollaborators] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
   const [collabSearch, setCollabSearch] = useState('');
   const [collabResults, setCollabResults] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
+  const [collabError, setCollabError] = useState<string | null>(null);
 
   async function searchCollaborators(query: string) {
     setCollabSearch(query);
+    setCollabError(null);
     if (query.trim().length < 2) {
       setCollabResults([]);
       return;
@@ -69,7 +72,25 @@ export default function UploadPage() {
     setCollabResults((data ?? []).filter((p: any) => !selectedCollaborators.some((c) => c.id === p.id)));
   }
 
-  function addCollaborator(profile: { id: string; username: string; avatar_url: string | null }) {
+  async function addCollaborator(profile: { id: string; username: string; avatar_url: string | null }) {
+    setCollabError(null);
+    if (!userId) return;
+
+    // Spolupráci jde nabídnout jen tomu, koho vzájemně odebíráte - ať appku
+    // někdo nemůže takhle spamovat cizí lidi.
+    const { data: mutualCheck } = await supabase
+      .from('subscriptions')
+      .select('subscriber_id, channel_id')
+      .or(`and(subscriber_id.eq.${userId},channel_id.eq.${profile.id}),and(subscriber_id.eq.${profile.id},channel_id.eq.${userId})`);
+
+    const iSubscribeToThem = (mutualCheck ?? []).some((s) => s.subscriber_id === userId && s.channel_id === profile.id);
+    const theySubscribeToMe = (mutualCheck ?? []).some((s) => s.subscriber_id === profile.id && s.channel_id === userId);
+
+    if (!iSubscribeToThem || !theySubscribeToMe) {
+      setCollabError(t('mutualSubscriptionRequiredNote'));
+      return;
+    }
+
     setSelectedCollaborators((prev) => [...prev, profile]);
     setCollabSearch('');
     setCollabResults([]);
@@ -94,6 +115,7 @@ export default function UploadPage() {
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
       setIsLoggedIn(!!data.user);
+      setUserId(data.user?.id ?? null);
       setCheckingAuth(false);
       if (data.user) {
         const { data: pl } = await supabase.from('playlists').select('id, title').eq('owner_id', data.user.id);
@@ -274,8 +296,13 @@ export default function UploadPage() {
               setFile(f);
               setPreviewUrl(f ? URL.createObjectURL(f) : null);
             }}
-            required
+            required={!file}
           />
+          {file && (
+            <p style={{ fontSize: 12, color: 'var(--brand)', marginTop: 6 }}>
+              ✓ {file.name}
+            </p>
+          )}
 
           {previewUrl && (
             <video
@@ -435,6 +462,7 @@ export default function UploadPage() {
               ))}
             </div>
           )}
+          {collabError && <p className="error-text" style={{ marginTop: 8 }}>{collabError}</p>}
         </div>
 
         <div className="panel">
