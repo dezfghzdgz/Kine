@@ -235,7 +235,7 @@ export default function ChapterTimeline({
           automatickému schování ovládání) a klik (přehrát/pauza). */}
       <div
         onMouseMove={showControlsTemporarily}
-        onClick={(e) => { showControlsTemporarily(); togglePlay(e); }}
+        onClick={() => { showControlsTemporarily(); togglePlay(); }}
         style={{ position: 'absolute', inset: 0, zIndex: 3, cursor: 'pointer' }}
       />
 
