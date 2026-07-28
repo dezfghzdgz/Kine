@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage, Lang } from '@/lib/i18n';
 import ThemeSlider from './ThemeSlider';
+import ConfirmDialog from './ConfirmDialog';
 
 const LANG_NAMES: Record<Lang, string> = {
   cs: 'Čeština',
@@ -28,6 +29,7 @@ export default function ProfileMenu({
   avatarUrl: string | null;
 }) {
   const [open, setOpen] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>('dark');
   const { lang, setLang, t } = useLanguage();
@@ -64,6 +66,7 @@ export default function ProfileMenu({
 
   async function handleSignOut() {
     await supabase.auth.signOut();
+    setConfirmSignOut(false);
     setOpen(false);
     router.push('/');
     router.refresh();
@@ -142,10 +145,17 @@ export default function ProfileMenu({
             <Link href="/rules">Rules</Link>
           </div>
 
-          <button className="profile-dropdown-item" onClick={handleSignOut}>
+          <button className="profile-dropdown-item" onClick={() => setConfirmSignOut(true)}>
             {t('signOut')}
           </button>
         </div>
+      )}
+      {confirmSignOut && (
+        <ConfirmDialog
+          message={t('confirmSignOutNote')}
+          onConfirm={handleSignOut}
+          onCancel={() => setConfirmSignOut(false)}
+        />
       )}
     </div>
   );

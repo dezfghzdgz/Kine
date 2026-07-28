@@ -1145,11 +1145,7 @@ html[data-theme="gray"] {
     max-height: 60vh;
   }
 
-  .mobile-drawer-profile {
-    position: relative;
-  }
-
-  .mobile-drawer-profile .profile-dropdown {
+  .mobile-drawer-side .profile-dropdown {
     position: fixed;
     left: 12px;
     right: 12px;

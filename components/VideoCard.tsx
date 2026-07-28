@@ -39,6 +39,14 @@ export default function VideoCard({
     setMuted(!getSoundPref());
   }, []);
 
+  // Appka teď hlasitost dorovná do přehrávače pokaždé, když se stav
+  // "muted" změní - i pokud se přehrávač zrovna teprve napojuje. Předtím
+  // appka kliknutí tiše ignorovala, pokud přehrávač ještě nebyl 100 %
+  // připravený, takže appka volbu vůbec neuložila.
+  useEffect(() => {
+    if (playerRef.current) playerRef.current.muted = muted;
+  }, [muted]);
+
   // Jakmile se náhled začne přehrávat, appka se napojí na přehrávač
   // (SDK se může chvíli načítat, proto to zkouší v krátké smyčce) a pustí
   // video na smyčku, potichu nebo se zvukem podle uložené preference.
@@ -76,9 +84,7 @@ export default function VideoCard({
   function toggleMute(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    if (!playerRef.current) return;
     const next = !muted;
-    playerRef.current.muted = next;
     setMuted(next);
     localStorage.setItem(SOUND_PREF_KEY, String(!next));
   }

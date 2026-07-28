@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { supabase } from '@/lib/supabaseClient';
@@ -35,9 +36,11 @@ async function applySavedBrandColorFromAccount() {
 
 export default function BrandLogo({ className, onNavigate }: { className?: string; onNavigate?: () => void }) {
   const { t } = useLanguage();
+  const router = useRouter();
   const [pickerOpen, setPickerOpen] = useState(false);
   const clickCountRef = useRef(0);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navigateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -64,16 +67,28 @@ export default function BrandLogo({ className, onNavigate }: { className?: strin
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  function registerClick() {
+  function registerClick(e: React.MouseEvent) {
+    e.preventDefault();
     clickCountRef.current += 1;
     if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
     clickTimerRef.current = setTimeout(() => { clickCountRef.current = 0; }, 1500);
+
     if (clickCountRef.current >= 5) {
       clickCountRef.current = 0;
+      if (navigateTimerRef.current) clearTimeout(navigateTimerRef.current);
       setPickerOpen(true);
-    } else {
-      onNavigate?.();
+      return;
     }
+
+    // Appka chvilku počká, než na jedno kliknutí opravdu naviguje pryč -
+    // pokud mezitím přijde další klik (směřující k 5), appka tohle
+    // odložené přesměrování zruší, ať appku appku appce nezavře uprostřed
+    // rychlého poklepávání.
+    if (navigateTimerRef.current) clearTimeout(navigateTimerRef.current);
+    navigateTimerRef.current = setTimeout(() => {
+      onNavigate?.();
+      router.push('/');
+    }, 280);
   }
 
   async function applyColor(color: string) {
