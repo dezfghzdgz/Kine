@@ -18,38 +18,61 @@ export async function POST(req: NextRequest) {
       .update({ status: 'accepted' })
       .eq('video_id', videoId)
       .eq('profile_id', userData.user.id);
-  } else {
-    await supabaseServer
+
+    // Pokud už na tohle video nečeká na potvrzení nikdo další, appka mu
+    // vrátí zpátky viditelnost, kterou si tvůrce původně zvolil - video
+    // nesmí zůstat navždy uvězněné jako "soukromé".
+    const { data: stillPending } = await supabaseServer
       .from('video_collaborators')
-      .delete()
+      .select('profile_id')
       .eq('video_id', videoId)
-      .eq('profile_id', userData.user.id);
-  }
+      .eq('status', 'pending');
 
-  // Pokud už na tohle video nečeká na potvrzení nikdo další (ať už proto,
-  // že všichni potvrdili, nebo proto, že tenhle poslední spolupráci
-  // odmítl), appka mu vrátí zpátky viditelnost, kterou si tvůrce původně
-  // zvolil - video nesmí zůstat navždy uvězněné jako "soukromé".
-  const { data: stillPending } = await supabaseServer
-    .from('video_collaborators')
-    .select('profile_id')
-    .eq('video_id', videoId)
-    .eq('status', 'pending');
-
-  if (!stillPending || stillPending.length === 0) {
-    const { data: videoRow } = await supabaseServer
-      .from('videos')
-      .select('pending_collab_visibility')
-      .eq('id', videoId)
-      .single();
-
-    if (videoRow?.pending_collab_visibility) {
-      await supabaseServer
+    if (!stillPending || stillPending.length === 0) {
+      const { data: videoRow } = await supabaseServer
         .from('videos')
-        .update({ visibility: videoRow.pending_collab_visibility, pending_collab_visibility: null })
-        .eq('id', videoId);
+        .select('pending_collab_visibility')
+        .eq('id', videoId)
+        .single();
+
+      if (videoRow?.pending_collab_visibility) {
+        await supabaseServer
+          .from('videos')
+          .update({ visibility: videoRow.pending_collab_visibility, pending_collab_visibility: null })
+          .eq('id', videoId);
+      }
     }
+
+    return NextResponse.json({ ok: true });
   }
 
-  return NextResponse.json({ ok: true });
+  // Odmítnutí spolupráce appka bere jako odmítnutí videa samotného -
+  // appka ho smaže úplně (Cloudflare i appky vlastní databáze), ať appce
+  // nezůstávají zbytečně ležet nepotvrzená videa.
+  const { data: video } = await supabaseServer
+    .from('videos')
+    .select('id, cloudflare_video_id')
+    .eq('id', videoId)
+    .single();
+
+  await supabaseServer
+    .from('video_collaborators')
+    .delete()
+    .eq('video_id', videoId)
+    .eq('profile_id', userData.user.id);
+
+  if (video) {
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+    const apiToken = process.env.CLOUDFLARE_STREAM_API_TOKEN;
+
+    if (video.cloudflare_video_id) {
+      await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/${video.cloudflare_video_id}`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${apiToken}` } }
+      );
+    }
+    await supabaseServer.from('videos').delete().eq('id', videoId);
+  }
+
+  return NextResponse.json({ ok: true, deleted: true });
 }

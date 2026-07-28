@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // Sdílený veřejný testovací klíč Giphy appka používala jako výchozí, ale
 // Giphy ho časem zablokovala (běžně se to takovým klíčům stává, jsou
@@ -25,6 +25,19 @@ export default function GifPickerModal({
   useEffect(() => {
     search('trending');
   }, []);
+
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      search(query.trim() || 'trending');
+    }, 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
   async function search(q: string) {
     setLoading(true);
@@ -66,11 +79,6 @@ export default function GifPickerModal({
     setLoading(false);
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    search(query.trim() || 'trending');
-  }
-
   return (
     <div
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
@@ -82,15 +90,22 @@ export default function GifPickerModal({
           <button onClick={onClose} style={{ background: 'none', color: 'var(--text-faint)', padding: 4 }}>✕</button>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ marginBottom: 12 }}>
+        <div style={{ marginBottom: 12 }}>
           <input
             type="text"
             placeholder="Search GIFs…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                search(query.trim() || 'trending');
+              }
+            }}
             autoFocus
           />
-        </form>
+        </div>
 
         <div style={{ maxHeight: 340, overflowY: 'auto' }}>
           {loading ? (
