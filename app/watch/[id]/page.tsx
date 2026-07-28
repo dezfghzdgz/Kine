@@ -297,12 +297,47 @@ function WatchPageInner() {
     setVideo(data);
     document.title = `${data.title} - Kine`;
 
-    const { data: collabData } = await supabase
-      .from('video_collaborators')
-      .select('profiles(id, username, avatar_url)')
-      .eq('video_id', videoId)
-      .eq('status', 'accepted');
+    // Appka teď tyhle tři nezávislé věci natahuje souběžně, ne jednu po druhé.
+    const [{ data: collabData }, { data: others }, watchLaterResult] = await Promise.all([
+      supabase
+        .from('video_collaborators')
+        .select('profiles(id, username, avatar_url)')
+        .eq('video_id', videoId)
+        .eq('status', 'accepted'),
+      supabase
+        .from('videos')
+        .select('id, title, thumbnail_url, views, width, height, duration_seconds, profiles!videos_owner_id_fkey(username)')
+        .eq('status', 'ready')
+        .eq('visibility', 'public')
+        .neq('id', videoId)
+        .order('created_at', { ascending: false })
+        .limit(48),
+      (async () => {
+        const { data: authData } = await supabase.auth.getUser();
+        if (!authData.user) return { inWatchLater: false };
+        const { data: systemPlaylist } = await supabase
+          .from('playlists')
+          .select('id')
+          .eq('owner_id', authData.user.id)
+          .eq('is_system', true)
+          .maybeSingle();
+        if (!systemPlaylist) return { inWatchLater: false };
+        const { data: wl } = await supabase
+          .from('playlist_videos')
+          .select('video_id')
+          .eq('playlist_id', systemPlaylist.id)
+          .eq('video_id', videoId)
+          .maybeSingle();
+        return { inWatchLater: !!wl };
+      })(),
+    ]);
+
     setCollaborators((collabData ?? []).map((c: any) => c.profiles).filter(Boolean));
+    setInWatchLater(watchLaterResult.inWatchLater);
+
+    const currentIsSpark = isSpark(data);
+    const matchingFormat = (others ?? []).filter((v: any) => isSpark(v) === currentIsSpark);
+    setOtherVideos(matchingFormat.slice(0, 24));
 
     // Ochrana proti umělému nahánění zhlédnutí:
     // 1) počítáme až po pár vteřinách skutečného sledování, ne hned při otevření stránky
@@ -329,39 +364,6 @@ function WatchPageInner() {
       });
     }
 
-    const { data: authData } = await supabase.auth.getUser();
-    if (authData.user) {
-      const { data: systemPlaylist } = await supabase
-        .from('playlists')
-        .select('id')
-        .eq('owner_id', authData.user.id)
-        .eq('is_system', true)
-        .maybeSingle();
-
-      if (systemPlaylist) {
-        const { data: wl } = await supabase
-          .from('playlist_videos')
-          .select('video_id')
-          .eq('playlist_id', systemPlaylist.id)
-          .eq('video_id', videoId)
-          .maybeSingle();
-        setInWatchLater(!!wl);
-      }
-    }
-
-    const { data: others } = await supabase
-      .from('videos')
-      .select('id, title, thumbnail_url, views, width, height, duration_seconds, profiles!videos_owner_id_fkey(username)')
-      .eq('status', 'ready')
-      .eq('visibility', 'public')
-      .neq('id', videoId)
-      .order('created_at', { ascending: false })
-      .limit(48);
-
-    const currentIsSpark = isSpark(data);
-    const matchingFormat = (others ?? []).filter((v: any) => isSpark(v) === currentIsSpark);
-
-    setOtherVideos(matchingFormat.slice(0, 24));
     setLoading(false);
   }
 

@@ -47,22 +47,23 @@ function SubscriptionsPageInner() {
     // videa/posty se v samotném feedu nezobrazí.
     const channelIds = channelList.filter((c: any) => !c.is_shadow_banned).map((c: any) => c.id);
     if (channelIds.length > 0) {
-      const { data: videoData } = await supabase
-        .from('videos')
-        .select('id, title, thumbnail_url, views, width, height, duration_seconds, created_at, cloudflare_video_id, profiles!videos_owner_id_fkey(username)')
-        .in('owner_id', channelIds)
-        .eq('status', 'ready')
-        .eq('visibility', 'public')
-        .order('created_at', { ascending: false })
-        .limit(48);
+      const [{ data: videoData }, { data: postData }] = await Promise.all([
+        supabase
+          .from('videos')
+          .select('id, title, thumbnail_url, views, width, height, duration_seconds, created_at, cloudflare_video_id, profiles!videos_owner_id_fkey(username)')
+          .in('owner_id', channelIds)
+          .eq('status', 'ready')
+          .eq('visibility', 'public')
+          .order('created_at', { ascending: false })
+          .limit(48),
+        supabase
+          .from('posts')
+          .select('*, profiles!posts_owner_id_fkey(id, username, display_name, avatar_url, verification_tier)')
+          .in('owner_id', channelIds)
+          .order('created_at', { ascending: false })
+          .limit(48),
+      ]);
       setVideos(videoData ?? []);
-
-      const { data: postData } = await supabase
-        .from('posts')
-        .select('*, profiles!posts_owner_id_fkey(id, username, display_name, avatar_url, verification_tier)')
-        .in('owner_id', channelIds)
-        .order('created_at', { ascending: false })
-        .limit(48);
       setPosts(postData ?? []);
     }
 

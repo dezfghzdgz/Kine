@@ -49,15 +49,22 @@ function ChannelPageInner() {
 
   async function load() {
     setLoading(true);
-    const { data: authData } = await supabase.auth.getUser();
-    setUserId(authData.user?.id ?? null);
+    const [{ data: authData }, { data: profileData }, { count }] = await Promise.all([
+      supabase.auth.getUser(),
+      supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url, banner_url, bio, social_links, verification_tier, created_at, trailer_video_id, is_banned, is_shadow_banned, payouts_suspended, trailer:videos!profiles_trailer_video_id_fkey(id, title, cloudflare_video_id, thumbnail_url)')
+        .eq('id', channelId)
+        .single(),
+      supabase
+        .from('subscriptions')
+        .select('*', { count: 'exact', head: true })
+        .eq('channel_id', channelId),
+    ]);
 
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('id, username, display_name, avatar_url, banner_url, bio, social_links, verification_tier, created_at, trailer_video_id, is_banned, is_shadow_banned, payouts_suspended, trailer:videos!profiles_trailer_video_id_fkey(id, title, cloudflare_video_id, thumbnail_url)')
-      .eq('id', channelId)
-      .single();
+    setUserId(authData.user?.id ?? null);
     setProfile(profileData);
+    setSubscriberCount(count ?? 0);
     if (profileData) {
       computeTrustRatingClient(profileData.id, profileData.created_at).then(async (score) => {
         const reactionCount = await getTotalReactionCount(profileData.id);
@@ -65,27 +72,42 @@ function ChannelPageInner() {
       });
     }
 
-    const { count } = await supabase
-      .from('subscriptions')
-      .select('*', { count: 'exact', head: true })
-      .eq('channel_id', channelId);
-    setSubscriberCount(count ?? 0);
-
     if (profileData) {
-      const { data: videoData } = await supabase
-        .from('videos')
-        .select('id, title, thumbnail_url, views, width, height, duration_seconds, created_at')
-        .eq('owner_id', channelId)
-        .eq('status', 'ready')
-        .order('created_at', { ascending: false });
+      const [{ data: videoData }, { data: collabRows }, { data: postData }, { data: playlistData }, { data: myPlaylists }] = await Promise.all([
+        supabase
+          .from('videos')
+          .select('id, title, thumbnail_url, views, width, height, duration_seconds, created_at, cloudflare_video_id')
+          .eq('owner_id', channelId)
+          .eq('status', 'ready')
+          .order('created_at', { ascending: false }),
+        // Videa, kde je tenhle profil přidaný jako spolutvůrce - appka je
+        // ukáže i tady, ne jen na kanálu toho, kdo je reálně nahrál.
+        supabase
+          .from('video_collaborators')
+          .select('videos(id, title, thumbnail_url, views, width, height, duration_seconds, created_at, status, cloudflare_video_id)')
+          .eq('profile_id', channelId)
+          .eq('status', 'accepted'),
+        supabase
+          .from('posts')
+          .select('*')
+          .eq('owner_id', channelId)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('playlists')
+          .select('id, title, color, thumbnail_url, playlist_videos(video_id)')
+          .eq('owner_id', channelId)
+          .eq('visibility', 'public')
+          .eq('is_system', false)
+          .order('created_at', { ascending: false }),
+        authData.user
+          ? supabase
+              .from('playlists')
+              .select('saved_from')
+              .eq('owner_id', authData.user.id)
+              .not('saved_from', 'is', null)
+          : Promise.resolve({ data: [] }),
+      ]);
 
-      // Videa, kde je tenhle profil přidaný jako spolutvůrce - appka je
-      // ukáže i tady, ne jen na kanálu toho, kdo je reálně nahrál.
-      const { data: collabRows } = await supabase
-        .from('video_collaborators')
-        .select('videos(id, title, thumbnail_url, views, width, height, duration_seconds, created_at, status)')
-        .eq('profile_id', channelId)
-        .eq('status', 'accepted');
       const collabVideos = (collabRows ?? [])
         .map((r: any) => r.videos)
         .filter((v: any) => v && v.status === 'ready');
@@ -94,13 +116,9 @@ function ChannelPageInner() {
         .filter((v, i, arr) => arr.findIndex((x) => x.id === v.id) === i)
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setVideos(mergedVideos);
-
-      const { data: postData } = await supabase
-        .from('posts')
-        .select('*')
-        .eq('owner_id', channelId)
-        .order('created_at', { ascending: false });
       setPosts(postData ?? []);
+      setChannelPlaylists(playlistData ?? []);
+      setSavedPlaylistIds(new Set((myPlaylists ?? []).map((p: any) => p.saved_from)));
 
       const allContentDates = [
         ...(videoData ?? []).map((v: any) => v.created_at),
@@ -110,24 +128,6 @@ function ChannelPageInner() {
         const earliest = new Date(Math.min(...allContentDates.map((d) => new Date(d).getTime())));
         const daysSinceFirst = (Date.now() - earliest.getTime()) / (1000 * 60 * 60 * 24);
         setIsNewCreator(daysSinceFirst <= 30);
-      }
-
-      const { data: playlistData } = await supabase
-        .from('playlists')
-        .select('id, title, color, thumbnail_url, playlist_videos(video_id)')
-        .eq('owner_id', channelId)
-        .eq('visibility', 'public')
-        .eq('is_system', false)
-        .order('created_at', { ascending: false });
-      setChannelPlaylists(playlistData ?? []);
-
-      if (authData.user) {
-        const { data: myPlaylists } = await supabase
-          .from('playlists')
-          .select('saved_from')
-          .eq('owner_id', authData.user.id)
-          .not('saved_from', 'is', null);
-        setSavedPlaylistIds(new Set((myPlaylists ?? []).map((p: any) => p.saved_from)));
       }
     }
     setLoading(false);
