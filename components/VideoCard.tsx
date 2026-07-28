@@ -21,12 +21,14 @@ export default function VideoCard({
   isSparks,
   progressPercent,
   formatDuration,
+  hideCreator,
 }: {
   video: any;
   href: string;
   isSparks?: boolean;
   progressPercent?: number;
   formatDuration?: (seconds: number) => string;
+  hideCreator?: boolean;
 }) {
   const { t } = useLanguage();
   const [previewing, setPreviewing] = useState(false);
@@ -36,8 +38,8 @@ export default function VideoCard({
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setMuted(!getSoundPref());
-  }, []);
+    if (previewing) setMuted(!getSoundPref());
+  }, [previewing]);
 
   // Appka teď hlasitost dorovná do přehrávače pokaždé, když se stav
   // "muted" změní - i pokud se přehrávač zrovna teprve napojuje. Předtím
@@ -135,7 +137,8 @@ export default function VideoCard({
       </div>
       <p className="video-card-title">{video.title}</p>
       <p className="video-card-meta">
-        {video.profiles?.username ?? 'neznámý tvůrce'} · {video.views} {t('views')}
+        {!hideCreator && <>{video.profiles?.username ?? 'neznámý tvůrce'} · </>}
+        {video.views} {t('views')}
       </p>
     </Link>
   );
