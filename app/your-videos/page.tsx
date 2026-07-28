@@ -100,7 +100,7 @@ function YourVideosPageInner() {
       {buildVideoBlocks(filtered).map((block, bi) => (
         <div key={bi} className={block.type === 'sparks' ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 20 }}>
           {block.items.map((video: any) => (
-            <div key={video.id}>
+            <div key={video.id} style={{ width: '100%' }}>
               <Link href={`/watch/${video.id}`} className="video-card">
                 <div className={block.type === 'sparks' ? 'video-thumb video-thumb-vertical' : 'video-thumb'}>
                   {video.thumbnail_url ? (
@@ -113,8 +113,8 @@ function YourVideosPageInner() {
                   {video.status === 'ready' ? `${video.views} ${t('views')}` : 'Zpracovává se…'}
                 </p>
               </Link>
-              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                <Link href={`/your-videos/${video.id}/edit`} style={{ flex: 1 }}>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, width: '100%' }}>
+                <Link href={`/your-videos/${video.id}/edit`} style={{ flex: '1 1 0', minWidth: 0 }}>
                   <button style={{ width: '100%', background: 'var(--panel-raised)', color: 'var(--text)', fontSize: 12 }}>
                     {t('edit')}
                   </button>
@@ -123,7 +123,7 @@ function YourVideosPageInner() {
                   onClick={() => setConfirmVideoId(video.id)}
                   disabled={deletingId === video.id}
                   style={{
-                    flex: 1, background: 'var(--panel-raised)',
+                    flex: '1 1 0', minWidth: 0, background: 'var(--panel-raised)',
                     color: '#ff6b6b', border: '1px solid var(--border)', fontSize: 12,
                   }}
                 >

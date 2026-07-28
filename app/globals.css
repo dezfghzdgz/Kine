@@ -309,6 +309,18 @@ button:disabled {
   position: relative;
 }
 
+.player-wrap-maximized {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 900 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  margin: 0 !important;
+  aspect-ratio: auto !important;
+}
+
 .video-title {
   font-size: 19px;
   font-weight: 600;
@@ -1207,6 +1219,7 @@ html[data-theme="gray"] {
   .content-area {
     padding-left: 16px;
     padding-right: 16px;
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
   }
 
   .video-grid {

@@ -200,11 +200,14 @@ export default function ChapterTimeline({
   function toggleFullscreen() {
     const target = wrapRef.current?.parentElement;
     if (!target) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    } else {
-      target.requestFullscreen?.();
-    }
+    // Appka na spoustě mobilů (hlavně iPhone) nemůže na celou obrazovku
+    // roztáhnout nic jiného než opravdový <video> tag - appka video pouští
+    // přes iframe, takže appce nativní systémová funkce na celou
+    // obrazovku prostě nefunguje. Obejde to appka jednoduše přes vlastní
+    // styl, co appku appce roztáhne přes celý displej sama.
+    const next = !isFullscreen;
+    setIsFullscreen(next);
+    target.classList.toggle('player-wrap-maximized', next);
   }
 
   function handleVolumeSet(ratio: number) {
