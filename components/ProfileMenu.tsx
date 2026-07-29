@@ -139,10 +139,11 @@ export default function ProfileMenu({
 
           <div className="profile-dropdown-divider" style={{ marginTop: 10 }} />
 
-          <div style={{ display: 'flex', gap: 10, padding: '8px 10px 4px', fontSize: 11, color: 'var(--text-faint)' }}>
+          <div style={{ display: 'flex', gap: 10, padding: '8px 10px 4px', fontSize: 11, color: 'var(--text-faint)', flexWrap: 'wrap' }}>
             <Link href="/terms">Terms</Link>
             <Link href="/privacy">Privacy</Link>
             <Link href="/rules">Rules</Link>
+            <a href="mailto:kinesupport@gmail.com">Support</a>
           </div>
         </div>
       )}

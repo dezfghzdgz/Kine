@@ -23,6 +23,7 @@ export default function SettingsPage() {
   ]);
   const [ratingMode, setRatingMode] = useState<'stars' | 'like_dislike'>('like_dislike');
   const [contentPreference, setContentPreference] = useState<'short' | 'long'>('long');
+  const [disableShorts, setDisableShorts] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -45,7 +46,7 @@ export default function SettingsPage() {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('username, display_name, avatar_url, rating_mode, banner_url, bio, social_links, content_preference')
+      .select('username, display_name, avatar_url, rating_mode, banner_url, bio, social_links, content_preference, disable_shorts')
       .eq('id', authData.user.id)
       .single();
 
@@ -55,6 +56,7 @@ export default function SettingsPage() {
       setAvatarUrl(profile.avatar_url ?? null);
       setRatingMode((profile.rating_mode as 'stars' | 'like_dislike') ?? 'like_dislike');
       setContentPreference((profile.content_preference as 'short' | 'long') ?? 'long');
+      setDisableShorts(!!profile.disable_shorts);
       setBannerUrl(profile.banner_url ?? null);
       setBio(profile.bio ?? '');
       const existingLinks = (profile.social_links as { label: string; url: string }[]) ?? [];
@@ -72,6 +74,12 @@ export default function SettingsPage() {
     } else {
       setToast({ message: 'Preference domovské stránky byla změněna', type: 'success' });
     }
+  }
+
+  async function changeDisableShorts(value: boolean) {
+    if (!userId) return;
+    setDisableShorts(value);
+    await supabase.from('profiles').update({ disable_shorts: value }).eq('id', userId);
   }
 
   async function changeRatingMode(mode: 'stars' | 'like_dislike') {
@@ -390,6 +398,17 @@ export default function SettingsPage() {
               {t('sparksOption')}
             </button>
           </div>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, fontSize: 13 }}>
+            <input
+              type="checkbox"
+              style={{ width: 'auto' }}
+              checked={disableShorts}
+              onChange={(e) => changeDisableShorts(e.target.checked)}
+            />
+            {t('disableShortsLabel')}
+          </label>
+          <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 4 }}>{t('disableShortsHint')}</p>
         </div>
 
         <button type="submit" disabled={saving} style={{ marginTop: 4 }}>

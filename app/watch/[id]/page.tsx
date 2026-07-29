@@ -713,6 +713,7 @@ function WatchPageInner() {
             made_for_kids: video.made_for_kids,
             visibility: video.visibility,
             hashtags: video.hashtags,
+            comments_disabled: video.comments_disabled,
           }}
         />
       </div>

@@ -8,6 +8,7 @@ import ExpandableText from './ExpandableText';
 import ConfirmDialog from './ConfirmDialog';
 import AttachmentPicker from './AttachmentPicker';
 import EmojiPicker from './EmojiPicker';
+import { useUserRole } from '@/lib/useUserRole';
 import ReportModal from './ReportModal';
 import { useLanguage } from '@/lib/i18n';
 
@@ -34,6 +35,7 @@ type VideoInfo = {
   made_for_kids: boolean;
   visibility: string;
   hashtags?: string[] | null;
+  comments_disabled?: boolean;
 };
 
 const TABS = ['Popis', 'Flow', 'Technical'] as const;
@@ -87,12 +89,14 @@ export default function CommentSection({
 }) {
   const router = useRouter();
   const { t } = useLanguage();
+  const { isModerator } = useUserRole();
   const LANGUAGE_LABELS: Record<string, string> = {
     cs: t('langOptCzech'), sk: t('langOptSlovak'), en: t('langOptEnglish'), de: t('langOptGerman'),
     es: t('langOptSpanish'), pl: t('langOptPolish'), fr: t('langOptFrench'), uk: t('langOptUkrainian'),
     other: t('langOptOther'),
   };
   const [comments, setComments] = useState<Comment[]>([]);
+  const [commentsDisabled, setCommentsDisabled] = useState(!!video?.comments_disabled);
   const [newComment, setNewComment] = useState('');
   const [newCommentImage, setNewCommentImage] = useState<File | string | null>(null);
   const [posting, setPosting] = useState(false);
@@ -208,6 +212,12 @@ export default function CommentSection({
     loadComments();
   }
 
+  async function toggleCommentsDisabled() {
+    const next = !commentsDisabled;
+    await supabase.from('videos').update({ comments_disabled: next }).eq('id', videoId);
+    setCommentsDisabled(next);
+  }
+
   async function deleteComment(commentId: string) {
     await supabase.from('comments').delete().eq('id', commentId);
     loadComments();
@@ -278,6 +288,22 @@ export default function CommentSection({
 
       {activeTab === 'Flow' && (
         <>
+          {isModerator && (
+            <button
+              type="button"
+              onClick={toggleCommentsDisabled}
+              style={{
+                background: 'var(--panel-raised)', color: commentsDisabled ? '#ff6b6b' : 'var(--text-dim)',
+                border: '1px solid var(--border)', fontSize: 12, marginBottom: 10,
+              }}
+            >
+              {commentsDisabled ? t('enableCommentsButton') : t('disableCommentsButton')}
+            </button>
+          )}
+
+          {commentsDisabled && !isModerator ? (
+            <p style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 18 }}>{t('commentsDisabledNote')}</p>
+          ) : (
           <form onSubmit={(e) => postComment(e)} style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'var(--panel-raised)', border: '1px solid var(--border)', borderRadius: 8 }}>
               <input
@@ -298,6 +324,7 @@ export default function CommentSection({
             )}
             <button type="submit" disabled={posting} style={{ alignSelf: 'flex-start' }}>{t('postComment')}</button>
           </form>
+          )}
 
           {flowComments.map((c) => (
             <div key={c.id} style={{ marginBottom: 18 }}>
@@ -333,7 +360,7 @@ export default function CommentSection({
                         {c.pinned ? t('unpinButton') : t('pinButton')}
                       </span>
                     )}
-                    {(userId === c.user_id || userId === ownerId) && (
+                    {(userId === c.user_id || userId === ownerId || isModerator) && (
                       <span style={{ cursor: 'pointer' }} onClick={() => setConfirmDeleteId(c.id)}>
                         {t('delete')}
                       </span>

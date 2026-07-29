@@ -68,10 +68,11 @@ export default function HomePage() {
     const topCategories = new Set<string>();
     const topHashtags = new Set<string>();
     let currentPreference: 'short' | 'long' = preference;
+    let disableShorts = false;
 
     if (authData.user) {
       const [{ data: profile }, { data: subs }, { data: watched }, { data: recentHistory }] = await Promise.all([
-        supabase.from('profiles').select('content_preference').eq('id', authData.user.id).single(),
+        supabase.from('profiles').select('content_preference, disable_shorts').eq('id', authData.user.id).single(),
         supabase.from('subscriptions').select('channel_id').eq('subscriber_id', authData.user.id),
         supabase.from('watch_history').select('video_id').eq('user_id', authData.user.id),
         supabase
@@ -83,6 +84,7 @@ export default function HomePage() {
       ]);
 
       currentPreference = (profile?.content_preference as 'short' | 'long') ?? 'long';
+      disableShorts = !!profile?.disable_shorts;
       setPreference(currentPreference);
 
       (subs ?? []).forEach((s: any) => subscribedIds.add(s.channel_id));
@@ -105,7 +107,11 @@ export default function HomePage() {
 
     const shadowBannedIds = new Set((shadowBanned ?? []).map((p: any) => p.id));
 
-    const pool = (candidates ?? []).filter((v: any) => !shadowBannedIds.has(v.owner_id));
+    let pool = (candidates ?? []).filter((v: any) => !shadowBannedIds.has(v.owner_id));
+
+    if (disableShorts) {
+      pool = pool.filter((v: any) => !(v.height && v.width && v.height > v.width && (v.duration_seconds ?? 0) <= 120));
+    }
 
     if (pool.length === 0) {
       setEmpty(true);
