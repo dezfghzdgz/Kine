@@ -449,7 +449,7 @@ function WatchPageInner() {
   if (notFound || !video) {
     return (
       <div className="auth-gate">
-        <p>Tohle video neexistuje, nebo na něj nemáš přístup.</p>
+        <p>{t('videoNotFoundOrNoAccessNote')}</p>
         {notFoundDetail && (
           <p style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8 }}>
             (Technický detail pro appka podporu: {notFoundDetail})
