@@ -44,6 +44,7 @@ function WatchPageInner() {
   const [collaborators, setCollaborators] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [notFoundDetail, setNotFoundDetail] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [inWatchLater, setInWatchLater] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -289,6 +290,8 @@ function WatchPageInner() {
       .single();
 
     if (error || !data) {
+      console.error('Kine: video se nepodařilo načíst', { videoId, error });
+      setNotFoundDetail(error?.message ?? 'žádná data');
       setNotFound(true);
       setLoading(false);
       return;
@@ -447,6 +450,11 @@ function WatchPageInner() {
     return (
       <div className="auth-gate">
         <p>Tohle video neexistuje, nebo na něj nemáš přístup.</p>
+        {notFoundDetail && (
+          <p style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8 }}>
+            (Technický detail pro appka podporu: {notFoundDetail})
+          </p>
+        )}
       </div>
     );
   }
