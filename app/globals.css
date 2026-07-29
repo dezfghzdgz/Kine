@@ -166,6 +166,20 @@ a {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes modal-backdrop-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-pop-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.page-transition-fade {
+  animation: content-fade-in 0.2s ease both;
+}
+
 .video-card-skeleton {
   display: flex;
   flex-direction: column;
@@ -203,6 +217,14 @@ a {
   overflow: hidden;
   background: linear-gradient(135deg, #1a1a1e, #08080a);
   border: 1px solid var(--border);
+}
+
+.video-thumb img {
+  transition: transform 0.25s ease;
+}
+
+.video-card:hover .video-thumb img {
+  transform: scale(1.04);
 }
 
 .video-thumb img {
@@ -280,6 +302,7 @@ input, textarea {
   padding: 11px 13px;
   border-radius: 8px;
   font-size: 14px;
+  transition: border-color 0.15s ease;
 }
 
 input:focus, textarea:focus {
@@ -296,6 +319,16 @@ button {
   font-weight: 600;
   cursor: pointer;
   font-size: 14px;
+  transition: transform 0.12s ease, opacity 0.15s ease, background-color 0.15s ease;
+}
+
+button:active {
+  transform: scale(0.96);
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 button:hover {
@@ -476,6 +509,7 @@ button:disabled {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
 }
 
 .reaction-btn.active {

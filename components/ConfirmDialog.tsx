@@ -14,10 +14,10 @@ export default function ConfirmDialog({
   const { t } = useLanguage();
   return (
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, animation: 'modal-backdrop-fade-in 0.15s ease' }}
       onClick={onCancel}
     >
-      <div className="panel" style={{ width: '100%', maxWidth: 360, background: 'var(--panel)' }} onClick={(e) => e.stopPropagation()}>
+      <div className="panel" style={{ width: '100%', maxWidth: 360, background: 'var(--panel)', animation: 'modal-pop-in 0.18s ease' }} onClick={(e) => e.stopPropagation()}>
         <p style={{ fontSize: 14, color: 'var(--text-dim)', marginTop: 0, marginBottom: 20 }}>{message}</p>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={onCancel} style={{ flex: 1, background: 'var(--panel-raised)', color: 'var(--text)' }}>
