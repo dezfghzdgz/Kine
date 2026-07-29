@@ -17,7 +17,6 @@ export async function POST(req: NextRequest) {
 
     const session = await stripeServer.checkout.sessions.create({
       mode: 'payment',
-      payment_method_types: ['card'],
       metadata: userId ? { userId } : undefined,
       line_items: [
         {
