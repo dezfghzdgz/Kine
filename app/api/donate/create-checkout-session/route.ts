@@ -15,13 +15,13 @@ export async function POST(req: NextRequest) {
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
-    const session = await stripeServer.checkout.sessions.create({
+    const sessionParams: any = {
       mode: 'payment',
       metadata: userId ? { userId } : undefined,
       // Nová funkce Stripe "Managed Payments" u jednorázového daru
       // vyžaduje daňový kód produktu, který se sem nehodí - pro tenhle
       // konkrétní požadavek ji proto vypínáme.
-      managed_payments: { enabled: false } as any,
+      managed_payments: { enabled: false },
       line_items: [
         {
           price_data: {
@@ -37,7 +37,9 @@ export async function POST(req: NextRequest) {
       ],
       success_url: `${siteUrl}/donate/thank-you`,
       cancel_url: `${siteUrl}/donate`,
-    });
+    };
+
+    const session = await stripeServer.checkout.sessions.create(sessionParams);
 
     return NextResponse.json({ url: session.url });
   } catch (err: any) {
