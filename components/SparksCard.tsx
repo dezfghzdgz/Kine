@@ -38,6 +38,29 @@ export default function SparksCard({
     load();
   }, [video.id]);
 
+  // Appka teď při aktivním videu ve Sparks (jakmile ho appka pustí) taky
+  // po pár vteřinách skutečného sledování počítá zhlédnutí - stejně jako
+  // appka watch stránka, s ochranným cooldownem proti opakovanému počítání.
+  useEffect(() => {
+    if (!active) return;
+    const lastViewKey = `kine-viewed-${video.id}`;
+    const lastViewedAt = Number(localStorage.getItem(lastViewKey) ?? 0);
+    const cooldownMs = 30 * 60 * 1000; // 30 minut
+
+    if (Date.now() - lastViewedAt <= cooldownMs) return;
+
+    const timer = setTimeout(() => {
+      fetch('/api/videos/increment-view', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId: video.id }),
+      });
+      localStorage.setItem(lastViewKey, String(Date.now()));
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [active, video.id]);
+
   // Spoléhat jen na "muted=false" v adrese videa nestačí - prohlížeče
   // často tiché přehrávání se zvukem stejně zablokují. Místo toho appka
   // aktivně "chytí" přehrávač a zvuk mu zapne sama, jakmile je video aktivní.

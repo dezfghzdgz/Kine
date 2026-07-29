@@ -9,6 +9,7 @@ import { useMobileNav } from '@/lib/mobileNavContext';
 import BrandLogo from './BrandLogo';
 import ProfileMenu from './ProfileMenu';
 import NotificationBell from './NotificationBell';
+import { useUserRole } from '@/lib/useUserRole';
 
 function baseLinks(t: (key: any) => string) {
   return [
@@ -36,6 +37,7 @@ function loggedInLinksGroup2(t: (key: any) => string) {
 export default function Sidebar() {
   const pathname = usePathname();
   const { t } = useLanguage();
+  const { isModerator } = useUserRole();
   const { open: mobileNavOpen, close: closeMobileNav } = useMobileNav();
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [user, setUser] = useState<{ id: string; username: string; avatar_url: string | null } | null>(null);
@@ -128,6 +130,11 @@ export default function Sidebar() {
           <CreateIcon />
           {t('create')}
         </Link>
+        {isModerator && (
+          <Link href="/moderation/reports" className={`sidebar-link ${pathname === '/moderation/reports' ? 'active' : ''}`}>
+            🚩 {t('reportsPageTitle')}
+          </Link>
+        )}
       </nav>
 
       {!loading && (
@@ -239,6 +246,11 @@ export default function Sidebar() {
             <CreateIcon />
             {t('create')}
           </Link>
+          {isModerator && (
+            <Link href="/moderation/reports" className="sidebar-link" onClick={closeMobileNav}>
+              🚩 {t('reportsPageTitle')}
+            </Link>
+          )}
 
           {!loading && (
             <div style={{ marginTop: 'auto' }}>

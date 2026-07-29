@@ -68,10 +68,25 @@ export default function ChannelStatsPage() {
     }
     setUserId(authData.user.id);
 
-    const { data: videos } = await supabase
-      .from('videos')
-      .select('id, title, thumbnail_url, views, created_at')
-      .eq('owner_id', authData.user.id);
+    const [{ data: ownVideos }, { data: collabRows }] = await Promise.all([
+      supabase
+        .from('videos')
+        .select('id, title, thumbnail_url, views, created_at')
+        .eq('owner_id', authData.user.id),
+      supabase
+        .from('video_collaborators')
+        .select('status, videos(id, title, thumbnail_url, views, created_at)')
+        .eq('profile_id', authData.user.id),
+    ]);
+
+    const collabVideos = (collabRows ?? [])
+      .filter((r: any) => r.status === 'accepted')
+      .map((r: any) => r.videos)
+      .filter(Boolean);
+
+    const videos = [...(ownVideos ?? []), ...collabVideos].filter(
+      (v, i, arr) => arr.findIndex((x: any) => x.id === v.id) === i
+    );
 
     const videoIds = (videos ?? []).map((v) => v.id);
     const totalViews = (videos ?? []).reduce((sum, v) => sum + (v.views ?? 0), 0);
