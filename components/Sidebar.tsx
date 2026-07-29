@@ -130,6 +130,9 @@ export default function Sidebar() {
           <CreateIcon />
           {t('create')}
         </Link>
+        <Link href="/donate" className={`sidebar-link ${pathname === '/donate' ? 'active' : ''}`}>
+          💛 {t('donateSidebarLabel')}
+        </Link>
         {isModerator && (
           <Link href="/moderation/reports" className={`sidebar-link ${pathname === '/moderation/reports' ? 'active' : ''}`}>
             🚩 {t('reportsPageTitle')}
@@ -245,6 +248,9 @@ export default function Sidebar() {
           <Link href="/upload" className="sidebar-link" onClick={closeMobileNav}>
             <CreateIcon />
             {t('create')}
+          </Link>
+          <Link href="/donate" className="sidebar-link" onClick={closeMobileNav}>
+            💛 {t('donateSidebarLabel')}
           </Link>
           {isModerator && (
             <Link href="/moderation/reports" className="sidebar-link" onClick={closeMobileNav}>
