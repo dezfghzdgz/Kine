@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { DownloadIcon } from './ReactionIcons';
 
 export default function DownloadButton({ videoId, cloudflareVideoId }: { videoId: string; cloudflareVideoId: string }) {
   const [loading, setLoading] = useState(false);
@@ -65,8 +66,8 @@ export default function DownloadButton({ videoId, cloudflareVideoId }: { videoId
 
   return (
     <div>
-      <button className="reaction-btn" onClick={handleDownload} disabled={loading}>
-        {loading ? 'Připravuji…' : '⬇ Stáhnout'}
+      <button className="reaction-btn" onClick={handleDownload} disabled={loading} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {loading ? 'Připravuji…' : <><DownloadIcon size={16} /> Stáhnout</>}
       </button>
       {error && <p className="error-text" style={{ marginTop: 4 }}>{error}</p>}
     </div>

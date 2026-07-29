@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
+import { PlaylistIcon } from './ReactionIcons';
 
 export default function AddToPlaylist({ videoId }: { videoId: string }) {
   const { t } = useLanguage();
@@ -47,7 +48,9 @@ export default function AddToPlaylist({ videoId }: { videoId: string }) {
 
   return (
     <div style={{ position: 'relative', display: 'inline-block' }} ref={menuRef}>
-      <button className="reaction-btn" onClick={loadPlaylists}>+ Playlist</button>
+      <button className="reaction-btn" onClick={loadPlaylists} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <PlaylistIcon size={16} /> Playlist
+      </button>
       {open && (
         <div className="profile-dropdown" style={{ bottom: 'auto', top: 'calc(100% + 8px)', left: 0 }}>
           {playlists.length === 0 ? (

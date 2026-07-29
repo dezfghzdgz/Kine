@@ -46,3 +46,49 @@ export function ThumbsDownIcon({ filled, size = 20 }: { filled?: boolean; size?:
     </svg>
   );
 }
+
+export function PlaylistIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M4 6h12M4 12h12M4 18h7" strokeLinecap="round" />
+      <path d="M18 10v10M14 15l4-4 4 4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function DownloadIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 3v13M7 11l5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 20h16" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function WatchLaterIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="13" r="8" />
+      <path d="M12 9v4l3 2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 2h6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function ReportIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M5 3v18" strokeLinecap="round" />
+      <path d="M5 4h11l-2.5 3.5L16 11H5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function TrashIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M4 7h16M9 7V4h6v3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6 7l1 13h10l1-13" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}

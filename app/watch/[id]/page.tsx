@@ -23,6 +23,7 @@ import Image from 'next/image';
 import { useLanguage } from '@/lib/i18n';
 import { useUserRole } from '@/lib/useUserRole';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { ShareIcon, WatchLaterIcon, ReportIcon, TrashIcon } from '@/components/ReactionIcons';
 
 function formatChapterTime(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -593,11 +594,13 @@ function WatchPageInner() {
           <span>{video.views} {t('views')}</span>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 14 }}>
+        <div className="video-actions-row" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 14 }}>
           <VideoReactions videoId={video.id} ownerId={video.profiles?.id} />
           {video.profiles?.id && <SubscribeButton channelId={video.profiles.id} />}
           <div style={{ position: 'relative' }}>
-            <button className="reaction-btn" onClick={() => setShareMenuOpen((v) => !v)}>🔗 {t('share')}</button>
+            <button className="reaction-btn" onClick={() => setShareMenuOpen((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <ShareIcon size={16} /> {t('share')}
+            </button>
             {shareMenuOpen && (
               <div className="profile-dropdown" style={{ bottom: 'auto', top: 'calc(100% + 8px)', left: 0, width: 200 }}>
                 <button className="profile-dropdown-item" onClick={shareVideo}>{t('shareVideo')}</button>
@@ -607,17 +610,19 @@ function WatchPageInner() {
           </div>
           <AddToPlaylist videoId={video.id} />
           <DownloadButton videoId={video.id} cloudflareVideoId={video.cloudflare_video_id} />
-          <button className={`reaction-btn ${inWatchLater ? 'active' : ''}`} onClick={toggleWatchLater}>
-            {inWatchLater ? `✓ ${t('watchLater')}` : `+ ${t('watchLater')}`}
+          <button className={`reaction-btn ${inWatchLater ? 'active' : ''}`} onClick={toggleWatchLater} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <WatchLaterIcon size={16} /> {inWatchLater ? `✓ ${t('watchLater')}` : t('watchLater')}
           </button>
-          <button className="reaction-btn" onClick={() => setReportOpen(true)}>🚩 {t('report')}</button>
+          <button className="reaction-btn" onClick={() => setReportOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <ReportIcon size={16} /> {t('report')}
+          </button>
           {isModerator && (
             <button
               className="reaction-btn"
               onClick={() => setConfirmModDelete(true)}
-              style={{ color: '#ff6b6b' }}
+              style={{ color: '#ff6b6b', display: 'flex', alignItems: 'center', gap: 6 }}
             >
-              🗑 {t('modDeleteVideoButton')}
+              <TrashIcon size={16} /> {t('modDeleteVideoButton')}
             </button>
           )}
         </div>
