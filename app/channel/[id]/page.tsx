@@ -81,12 +81,15 @@ function ChannelPageInner() {
           .eq('status', 'ready')
           .order('created_at', { ascending: false }),
         // Videa, kde je tenhle profil přidaný jako spolutvůrce - appka je
-        // ukáže i tady, ne jen na kanálu toho, kdo je reálně nahrál.
+        // ukáže i tady, ne jen na kanálu toho, kdo je reálně nahrál. appka
+        // schválně nefiltruje "accepted" přímo v appky dotazu, protože
+        // "status" má i samotné video (ready/processing) - appka by tak
+        // hrozilo nejednoznačné chování appky. Radši si to appka ověří
+        // sama, jednoznačně, hned pod tím v appce.
         supabase
           .from('video_collaborators')
-          .select('videos(id, title, thumbnail_url, views, width, height, duration_seconds, created_at, status, cloudflare_video_id)')
-          .eq('profile_id', channelId)
-          .eq('status', 'accepted'),
+          .select('status, videos(id, title, thumbnail_url, views, width, height, duration_seconds, created_at, status, cloudflare_video_id)')
+          .eq('profile_id', channelId),
         supabase
           .from('posts')
           .select('*')
@@ -109,6 +112,7 @@ function ChannelPageInner() {
       ]);
 
       const collabVideos = (collabRows ?? [])
+        .filter((r: any) => r.status === 'accepted')
         .map((r: any) => r.videos)
         .filter((v: any) => v && v.status === 'ready');
 
