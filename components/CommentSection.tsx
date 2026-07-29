@@ -22,7 +22,7 @@ type Comment = {
   user_id: string;
   pinned: boolean;
   image_url: string | null;
-  profiles: { username: string } | null;
+  profiles: { username: string; is_supporter?: boolean } | null;
   likeCount: number;
   dislikeCount: number;
   myReaction: 'like' | 'dislike' | null;
