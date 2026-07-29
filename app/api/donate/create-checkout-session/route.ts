@@ -18,6 +18,10 @@ export async function POST(req: NextRequest) {
     const session = await stripeServer.checkout.sessions.create({
       mode: 'payment',
       metadata: userId ? { userId } : undefined,
+      // Nová funkce Stripe "Managed Payments" u jednorázového daru
+      // vyžaduje daňový kód produktu, který se sem nehodí - pro tenhle
+      // konkrétní požadavek ji proto vypínáme.
+      managed_payments: { enabled: false } as any,
       line_items: [
         {
           price_data: {
