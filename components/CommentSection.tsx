@@ -9,6 +9,7 @@ import ConfirmDialog from './ConfirmDialog';
 import AttachmentPicker from './AttachmentPicker';
 import EmojiPicker from './EmojiPicker';
 import { useUserRole } from '@/lib/useUserRole';
+import SupporterBadge from './SupporterBadge';
 import ReportModal from './ReportModal';
 import { useLanguage } from '@/lib/i18n';
 
@@ -115,7 +116,7 @@ export default function CommentSection({
   async function loadComments() {
     const { data: rawComments } = await supabase
       .from('comments')
-      .select('id, content, created_at, parent_id, timestamp_seconds, user_id, pinned, image_url, profiles!comments_user_id_fkey(username)')
+      .select('id, content, created_at, parent_id, timestamp_seconds, user_id, pinned, image_url, profiles!comments_user_id_fkey(username, is_supporter)')
       .eq('video_id', videoId)
       .order('created_at', { ascending: false });
 
@@ -333,6 +334,7 @@ export default function CommentSection({
                 <div style={{ flex: 1 }}>
                   <p className="comment-author">
                     {c.profiles?.username ?? t('unknownUserFallback')}
+                    <SupporterBadge isSupporter={c.profiles?.is_supporter} />
                     {c.pinned && <span style={{ color: 'var(--text-faint)', fontWeight: 400 }}> · 📌 {t('pinnedLabel')}</span>}
                   </p>
                   <p className="comment-text">{renderCommentContent(c.content, onSeek)}</p>

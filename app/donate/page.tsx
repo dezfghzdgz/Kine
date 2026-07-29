@@ -1,21 +1,32 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 
-const PRESET_AMOUNTS = [50, 100, 250, 500];
+const PRESET_AMOUNTS = [2, 5, 10, 20];
 
 export default function DonatePage() {
   const { t } = useLanguage();
-  const [selected, setSelected] = useState<number | null>(100);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [selected, setSelected] = useState<number | null>(5);
   const [customAmount, setCustomAmount] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null);
+      setCheckingAuth(false);
+    });
+  }, []);
+
   async function handleDonate() {
     setError(null);
     const amount = selected ?? Number(customAmount);
-    if (!amount || amount < 20) {
+    if (!amount || amount < 1) {
       setError(t('donateMinAmountNote'));
       return;
     }
@@ -24,7 +35,7 @@ export default function DonatePage() {
     const res = await fetch('/api/donate/create-checkout-session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amountCzk: amount }),
+      body: JSON.stringify({ amountCzk: amount, userId }),
     });
     const data = await res.json();
     setLoading(false);
@@ -34,6 +45,17 @@ export default function DonatePage() {
     } else {
       setError(data.error ?? t('donateGenericError'));
     }
+  }
+
+  if (checkingAuth) return null;
+
+  if (!userId) {
+    return (
+      <div className="auth-gate">
+        <p>{t('donateLoginRequiredNote')}</p>
+        <Link href="/login"><button type="button">{t('login')}</button></Link>
+      </div>
+    );
   }
 
   return (
@@ -60,7 +82,7 @@ export default function DonatePage() {
                 border: '1px solid var(--border)',
               }}
             >
-              {amt} Kč
+              {amt} €
             </button>
           ))}
         </div>

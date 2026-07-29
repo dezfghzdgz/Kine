@@ -6,10 +6,10 @@ import { stripeServer } from '@/lib/stripeServer';
 // systému předplatných).
 export async function POST(req: NextRequest) {
   try {
-    const { amountCzk } = await req.json();
+    const { amountCzk, userId } = await req.json();
 
     const amount = Number(amountCzk);
-    if (!amount || amount < 20 || amount > 50000) {
+    if (!amount || amount < 1 || amount > 2000) {
       return NextResponse.json({ error: 'Neplatná částka.' }, { status: 400 });
     }
 
@@ -18,10 +18,11 @@ export async function POST(req: NextRequest) {
     const session = await stripeServer.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card'],
+      metadata: userId ? { userId } : undefined,
       line_items: [
         {
           price_data: {
-            currency: 'czk',
+            currency: 'eur',
             product_data: {
               name: 'Podpora appky Kine',
               description: 'Jednorázový dobrovolný příspěvek na vývoj appky Kine.',
