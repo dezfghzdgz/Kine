@@ -9,12 +9,14 @@ import { computeTrustRatingClient } from '@/lib/trustRatingClient';
 import { useLanguage } from '@/lib/i18n';
 import { useWatchProgress } from '@/lib/useWatchProgress';
 
-type Tab = 'popular' | 'shorts' | 'surprise';
+type Tab = 'popular' | 'trending' | 'newest' | 'shorts' | 'surprise';
 
 export default function ExplorePage() {
   const { t, lang } = useLanguage();
   const TAB_LABELS: Record<Tab, string> = {
     popular: lang === 'en' ? 'Popular' : 'Populární',
+    trending: lang === 'en' ? 'Trending' : 'Trendy',
+    newest: lang === 'en' ? 'Newest' : 'Nejnovější',
     shorts: 'Sparks',
     surprise: t('surprise'),
   };
@@ -35,7 +37,7 @@ export default function ExplorePage() {
 
     let query = supabase
       .from('videos')
-      .select('id, title, thumbnail_url, views, duration_seconds, width, height, profiles!videos_owner_id_fkey(id, username, created_at)')
+      .select('id, title, thumbnail_url, views, duration_seconds, width, height, created_at, profiles!videos_owner_id_fkey(id, username, created_at)')
       .eq('status', 'ready')
       .eq('visibility', 'public')
       .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso},is_premiere.eq.true`);
@@ -46,6 +48,15 @@ export default function ExplorePage() {
 
     if (tab === 'popular') {
       query = query.order('views', { ascending: false });
+    }
+
+    if (tab === 'newest') {
+      query = query.order('created_at', { ascending: false });
+    }
+
+    if (tab === 'trending') {
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      query = query.gte('created_at', weekAgo).order('views', { ascending: false });
     }
 
     const { data } = await query.limit(100);
