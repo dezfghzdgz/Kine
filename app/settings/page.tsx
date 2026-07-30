@@ -30,10 +30,20 @@ export default function SettingsPage() {
   const [exporting, setExporting] = useState(false);
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
   const [confirmSignOutSettings, setConfirmSignOutSettings] = useState(false);
+  const [stripeAccountId, setStripeAccountId] = useState<string | null>(null);
+  const [stripeOnboardingComplete, setStripeOnboardingComplete] = useState(false);
+  const [subscriptionPrice, setSubscriptionPrice] = useState('');
+  const [priceInput, setPriceInput] = useState('');
+  const [connectLoading, setConnectLoading] = useState(false);
+  const [priceLoading, setPriceLoading] = useState(false);
+  const [priceError, setPriceError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
   useEffect(() => {
     load();
+    if (typeof window !== 'undefined' && window.location.search.includes('stripe_return')) {
+      checkStripeStatus();
+    }
   }, []);
 
   async function load() {
@@ -46,7 +56,7 @@ export default function SettingsPage() {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('username, display_name, avatar_url, rating_mode, banner_url, bio, social_links, content_preference, disable_shorts')
+      .select('username, display_name, avatar_url, rating_mode, banner_url, bio, social_links, content_preference, disable_shorts, stripe_account_id, stripe_onboarding_complete, subscription_price_eur')
       .eq('id', authData.user.id)
       .single();
 
@@ -57,6 +67,9 @@ export default function SettingsPage() {
       setRatingMode((profile.rating_mode as 'stars' | 'like_dislike') ?? 'like_dislike');
       setContentPreference((profile.content_preference as 'short' | 'long') ?? 'long');
       setDisableShorts(!!profile.disable_shorts);
+      setStripeAccountId(profile.stripe_account_id ?? null);
+      setStripeOnboardingComplete(!!profile.stripe_onboarding_complete);
+      setSubscriptionPrice(profile.subscription_price_eur ? String(profile.subscription_price_eur) : '');
       setBannerUrl(profile.banner_url ?? null);
       setBio(profile.bio ?? '');
       const existingLinks = (profile.social_links as { label: string; url: string }[]) ?? [];
@@ -80,6 +93,48 @@ export default function SettingsPage() {
     if (!userId) return;
     setDisableShorts(value);
     await supabase.from('profiles').update({ disable_shorts: value }).eq('id', userId);
+  }
+
+  async function startStripeOnboarding() {
+    setConnectLoading(true);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const res = await fetch('/api/creator/connect-onboarding', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sessionData.session?.access_token}` },
+    });
+    const data = await res.json();
+    setConnectLoading(false);
+    if (data.url) window.location.href = data.url;
+  }
+
+  async function checkStripeStatus() {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const res = await fetch('/api/creator/check-onboarding', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sessionData.session?.access_token}` },
+    });
+    const data = await res.json();
+    setStripeOnboardingComplete(!!data.complete);
+  }
+
+  async function saveSubscriptionPrice(e: React.FormEvent) {
+    e.preventDefault();
+    setPriceError(null);
+    setPriceLoading(true);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const res = await fetch('/api/creator/set-subscription-price', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionData.session?.access_token}` },
+      body: JSON.stringify({ priceEur: Number(priceInput) }),
+    });
+    const data = await res.json();
+    setPriceLoading(false);
+    if (data.ok) {
+      setSubscriptionPrice(priceInput);
+      setToast({ message: t('subscriptionPriceSavedNote'), type: 'success' });
+    } else {
+      setPriceError(data.error ?? t('donateGenericError'));
+    }
   }
 
   async function changeRatingMode(mode: 'stars' | 'like_dislike') {
@@ -231,6 +286,47 @@ export default function SettingsPage() {
         >
           {t('signOut')}
         </button>
+      </div>
+
+      <div className="panel" style={{ marginBottom: 32 }}>
+        <p className="panel-heading">{t('creatorEarningsTitle')}</p>
+
+        {!stripeOnboardingComplete ? (
+          <>
+            <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 12 }}>{t('creatorEarningsIntro')}</p>
+            <button type="button" onClick={startStripeOnboarding} disabled={connectLoading}>
+              {connectLoading ? t('processing') : t('connectStripeButton')}
+            </button>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: 13, color: '#4dbb7a', marginBottom: 16 }}>✓ {t('stripeConnectedNote')}</p>
+            <form onSubmit={saveSubscriptionPrice}>
+              <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('subscriptionPriceLabel')}</label>
+              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  step="0.5"
+                  placeholder={subscriptionPrice || '5'}
+                  value={priceInput}
+                  onChange={(e) => setPriceInput(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <button type="submit" disabled={priceLoading}>
+                  {priceLoading ? t('saving') : t('saveChanges')}
+                </button>
+              </div>
+              {subscriptionPrice && (
+                <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 8 }}>
+                  {t('currentPriceNote')} {subscriptionPrice} €/{t('perMonth')}
+                </p>
+              )}
+              {priceError && <p className="error-text" style={{ marginTop: 8 }}>{priceError}</p>}
+            </form>
+          </>
+        )}
       </div>
 
       <p className="section-title">{t('profileCustomizationTitle')}</p>

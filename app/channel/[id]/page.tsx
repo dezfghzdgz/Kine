@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import SubscribeButton from '@/components/SubscribeButton';
+import CreatorSubscribeButton from '@/components/CreatorSubscribeButton';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import PostComposer from '@/components/PostComposer';
 import PostCard from '@/components/PostCard';
@@ -281,6 +282,7 @@ function ChannelPageInner() {
 
         <div style={{ paddingBottom: 4, display: 'flex', gap: 8 }}>
           <SubscribeButton channelId={profile.id} />
+          <CreatorSubscribeButton creatorId={profile.id} />
           {isModerator && !isOwner && (
             <button
               onClick={() => setConfirmBlockOpen(true)}
