@@ -16,6 +16,30 @@
   box-sizing: border-box;
 }
 
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--panel-raised);
+  border-radius: 999px;
+  border: 2px solid var(--bg);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--panel-raised) var(--bg);
+}
+
 html, body {
   height: 100%;
 }
@@ -388,6 +412,18 @@ button:disabled {
   border: none !important;
   margin: 0 !important;
   aspect-ratio: auto !important;
+}
+
+@media (max-width: 768px) and (orientation: portrait) {
+  .player-wrap-maximized {
+    top: 50% !important;
+    left: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: 100vh !important;
+    height: 100vw !important;
+    transform: translate(-50%, -50%) rotate(90deg) !important;
+  }
 }
 
 .video-title {

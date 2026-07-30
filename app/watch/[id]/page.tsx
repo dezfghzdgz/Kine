@@ -519,7 +519,7 @@ function WatchPageInner() {
             <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,10,11,0.92)', zIndex: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
               <div style={{ textAlign: 'center', maxWidth: 820, width: '100%' }}>
                 <p style={{ color: 'var(--text-faint)', fontSize: 12, marginBottom: 14 }}>
-                  Další video za {upNextCountdown}s - vyber si, nebo počkej
+                  {t('nextVideoInSecondsNote').replace('{seconds}', String(upNextCountdown))}
                 </p>
                 <div style={{ display: 'flex', gap: 20, justifyContent: 'center', flexWrap: 'wrap' }}>
                   {upNextQueue.slice(0, 2).map((v: any) => (

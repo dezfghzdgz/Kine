@@ -150,6 +150,8 @@ export default function ProfileMenu({
       {confirmSignOut && (
         <ConfirmDialog
           message={t('confirmSignOutNote')}
+          confirmLabel={t('signOut')}
+          danger={false}
           onConfirm={handleSignOut}
           onCancel={() => setConfirmSignOut(false)}
         />

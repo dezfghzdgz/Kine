@@ -6,10 +6,14 @@ export default function ConfirmDialog({
   message,
   onConfirm,
   onCancel,
+  confirmLabel,
+  danger = true,
 }: {
   message: string;
   onConfirm: () => void;
   onCancel: () => void;
+  confirmLabel?: string;
+  danger?: boolean;
 }) {
   const { t } = useLanguage();
   return (
@@ -23,8 +27,8 @@ export default function ConfirmDialog({
           <button onClick={onCancel} style={{ flex: 1, background: 'var(--panel-raised)', color: 'var(--text)' }}>
             {t('cancel')}
           </button>
-          <button onClick={onConfirm} style={{ flex: 1, background: '#b03a3a', color: '#fff' }}>
-            {t('delete')}
+          <button onClick={onConfirm} style={{ flex: 1, background: danger ? '#b03a3a' : 'var(--text)', color: danger ? '#fff' : 'var(--bg)' }}>
+            {confirmLabel ?? t('delete')}
           </button>
         </div>
       </div>

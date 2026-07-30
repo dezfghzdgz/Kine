@@ -560,6 +560,8 @@ export default function SettingsPage() {
       {confirmSignOutSettings && (
         <ConfirmDialog
           message={t('confirmSignOutNote')}
+          confirmLabel={t('signOut')}
+          danger={false}
           onConfirm={handleSignOutFromSettings}
           onCancel={() => setConfirmSignOutSettings(false)}
         />

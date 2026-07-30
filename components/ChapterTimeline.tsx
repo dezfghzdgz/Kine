@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { SpeakerIcon } from './ReactionIcons';
+import { SpeakerIcon, MaximizeIcon, MinimizeIcon } from './ReactionIcons';
 import { useLanguage } from '@/lib/i18n';
 
 type Chapter = { time: number; title: string };
@@ -464,9 +464,9 @@ export default function ChapterTimeline({
 
             <button
               onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
-              style={{ background: 'none', border: 'none', color: '#fff', padding: 0, cursor: 'pointer', fontSize: 14 }}
+              style={{ background: 'none', border: 'none', color: '#fff', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             >
-              {isFullscreen ? '⤡' : '⛶'}
+              {isFullscreen ? <MinimizeIcon size={16} /> : <MaximizeIcon size={16} />}
             </button>
           </div>
         </div>

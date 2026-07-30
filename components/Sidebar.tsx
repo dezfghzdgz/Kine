@@ -9,6 +9,7 @@ import { useMobileNav } from '@/lib/mobileNavContext';
 import BrandLogo from './BrandLogo';
 import ProfileMenu from './ProfileMenu';
 import NotificationBell from './NotificationBell';
+import SparksNavButton from './SparksNavButton';
 import { useUserRole } from '@/lib/useUserRole';
 import { FireIcon, SparkleIcon, DiceIcon, TagIcon } from './ReactionIcons';
 
@@ -206,10 +207,7 @@ export default function Sidebar() {
         <HomeIcon />
         <span>{t('home')}</span>
       </Link>
-      <Link href="/sparks" className={`mobile-nav-item ${pathname === '/sparks' ? 'active' : ''}`}>
-        <SparkIcon />
-        <span>Sparks</span>
-      </Link>
+      <SparksNavButton />
       <button className="mobile-nav-item mobile-nav-create" onClick={() => setCreateMenuOpen(true)}>
         <CreateIcon />
       </button>
@@ -353,7 +351,7 @@ export default function Sidebar() {
   );
 }
 
-function SparkIcon() {
+export function SparkIcon() {
   return (
     <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
       <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" strokeLinejoin="round" />
