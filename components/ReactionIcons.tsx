@@ -102,3 +102,42 @@ export function BellIcon({ muted, size = 18 }: { muted?: boolean; size?: number 
     </svg>
   );
 }
+
+export function FireIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 22c4 0 7-2.7 7-6.5 0-3-2-5-3-7 0 2-1.5 3-2.5 2 .5-3-1-5.5-3.5-7.5.5 3-1 4.5-3 6.5-1.5 1.5-2 3.5-2 6C5 19.3 8 22 12 22z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function SparkleIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 3v4M12 17v4M3 12h4M17 12h4" strokeLinecap="round" />
+      <path d="M6 6l2.5 2.5M15.5 15.5L18 18M18 6l-2.5 2.5M8.5 15.5L6 18" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function DiceIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="4" y="4" width="16" height="16" rx="3" />
+      <circle cx="9" cy="9" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="9" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="15" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="15" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function TagIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M11 3h6a2 2 0 0 1 2 2v6l-8.6 8.6a1.4 1.4 0 0 1-2 0L3.4 14.6a1.4 1.4 0 0 1 0-2L11 3z" strokeLinejoin="round" />
+      <circle cx="15.5" cy="8.5" r="1.3" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}

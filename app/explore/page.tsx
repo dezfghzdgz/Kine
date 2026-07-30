@@ -22,11 +22,11 @@ export default function ExplorePage() {
 
 function ExploreInner() {
   const searchParams = useSearchParams();
-  const { t, lang } = useLanguage();
+  const { t } = useLanguage();
   const TAB_LABELS: Record<Tab, string> = {
-    popular: lang === 'en' ? 'Popular' : 'Populární',
-    trending: lang === 'en' ? 'Trending' : 'Trendy',
-    newest: lang === 'en' ? 'Newest' : 'Nejnovější',
+    popular: t('popular'),
+    trending: t('trending'),
+    newest: t('newest'),
     shorts: 'Sparks',
     surprise: t('surprise'),
   };
@@ -137,31 +137,9 @@ function ExploreInner() {
 
   return (
     <div>
-      <p className="section-title">Explore</p>
-
-      {category && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <span className="tab-btn active">{category}</span>
-          <button
-            onClick={() => setCategory(null)}
-            style={{ background: 'none', color: 'var(--text-faint)', padding: 4, fontSize: 12 }}
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
-      <div className="tab-row" style={{ marginBottom: 12 }}>
-        {(Object.keys(TAB_LABELS) as Tab[]).map((t) => (
-          <button
-            key={t}
-            className={`tab-btn ${tab === t ? 'active' : ''}`}
-            onClick={() => setTab(t)}
-          >
-            {TAB_LABELS[t]}
-          </button>
-        ))}
-      </div>
+      <p className="section-title">
+        Explore {category ? `· ${t(category as any)}` : tab !== 'popular' ? `· ${TAB_LABELS[tab]}` : ''}
+      </p>
 
       {tab === 'popular' && (
         <p style={{ color: 'var(--text-faint)', fontSize: 13, marginTop: -14, marginBottom: 20 }}>

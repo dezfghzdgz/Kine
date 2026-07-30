@@ -10,6 +10,7 @@ import BrandLogo from './BrandLogo';
 import ProfileMenu from './ProfileMenu';
 import NotificationBell from './NotificationBell';
 import { useUserRole } from '@/lib/useUserRole';
+import { FireIcon, SparkleIcon, DiceIcon, TagIcon } from './ReactionIcons';
 
 function baseLinks(t: (key: any) => string) {
   return [
@@ -17,13 +18,16 @@ function baseLinks(t: (key: any) => string) {
   ];
 }
 
-const EXPLORE_SUBLINKS = [
-  { tab: 'trending', label: { cs: 'Trendy', en: 'Trending' }, icon: '🔥' },
-  { tab: 'newest', label: { cs: 'Nejnovější', en: 'Newest' }, icon: '🆕' },
-  { tab: 'surprise', label: { cs: 'Překvapení', en: 'Surprise' }, icon: '🎲' },
-  { category: 'music', label: { cs: 'Hudba', en: 'Music' }, icon: '🎵' },
-  { category: 'movies', label: { cs: 'Filmy', en: 'Films' }, icon: '🎬' },
-  { category: 'gaming', label: { cs: 'Hry', en: 'Games' }, icon: '🎮' },
+const EXPLORE_TABS = [
+  { tab: 'trending', key: 'trending', icon: FireIcon },
+  { tab: 'newest', key: 'newest', icon: SparkleIcon },
+  { tab: 'surprise', key: 'surprise', icon: DiceIcon },
+];
+
+const EXPLORE_CATEGORY_KEYS = [
+  'catCars', 'catTravel', 'catFilm', 'catGaming', 'catMusic',
+  'catComedy', 'catPeople', 'catHowTo', 'catNonprofit', 'catSports',
+  'catScience', 'catEducation', 'catEntertainment', 'catNews', 'catPets',
 ];
 
 function loggedInLinksGroup1(t: (key: any) => string) {
@@ -44,7 +48,7 @@ function loggedInLinksGroup2(t: (key: any) => string) {
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { t, lang } = useLanguage();
+  const { t } = useLanguage();
   const { isModerator } = useUserRole();
   const [exploreOpen, setExploreOpen] = useState(false);
   const { open: mobileNavOpen, close: closeMobileNav } = useMobileNav();
@@ -120,16 +124,19 @@ export default function Sidebar() {
           <span style={{ fontSize: 11, transform: exploreOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}>▾</span>
         </button>
         {exploreOpen && (
-          <div style={{ paddingLeft: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {EXPLORE_SUBLINKS.map((item) => {
-              const href = item.tab ? `/explore?tab=${item.tab}` : `/explore?category=${item.category}`;
-              return (
-                <Link key={href} href={href} className="sidebar-link" style={{ fontSize: 13.5, padding: '8px 14px' }}>
-                  <span style={{ fontSize: 15 }}>{item.icon}</span>
-                  {(item.label as any)[lang] ?? item.label.en}
-                </Link>
-              );
-            })}
+          <div style={{ paddingLeft: 12, display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 320, overflowY: 'auto' }}>
+            {EXPLORE_TABS.map(({ tab, key, icon: Icon }) => (
+              <Link key={tab} href={`/explore?tab=${tab}`} className="sidebar-link" style={{ fontSize: 13.5, padding: '8px 14px' }}>
+                <Icon size={15} />
+                {t(key as any)}
+              </Link>
+            ))}
+            {EXPLORE_CATEGORY_KEYS.map((catKey) => (
+              <Link key={catKey} href={`/explore?category=${catKey}`} className="sidebar-link" style={{ fontSize: 13.5, padding: '8px 14px' }}>
+                <TagIcon size={15} />
+                {t(catKey as any)}
+              </Link>
+            ))}
           </div>
         )}
 
@@ -273,16 +280,19 @@ export default function Sidebar() {
             <span style={{ fontSize: 11, transform: exploreOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}>▾</span>
           </button>
           {exploreOpen && (
-            <div style={{ paddingLeft: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {EXPLORE_SUBLINKS.map((item) => {
-                const href = item.tab ? `/explore?tab=${item.tab}` : `/explore?category=${item.category}`;
-                return (
-                  <Link key={href} href={href} className="sidebar-link" onClick={closeMobileNav} style={{ fontSize: 13.5, padding: '8px 14px' }}>
-                    <span style={{ fontSize: 15 }}>{item.icon}</span>
-                    {(item.label as any)[lang] ?? item.label.en}
-                  </Link>
-                );
-              })}
+            <div style={{ paddingLeft: 12, display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 320, overflowY: 'auto' }}>
+              {EXPLORE_TABS.map(({ tab, key, icon: Icon }) => (
+                <Link key={tab} href={`/explore?tab=${tab}`} className="sidebar-link" onClick={closeMobileNav} style={{ fontSize: 13.5, padding: '8px 14px' }}>
+                  <Icon size={15} />
+                  {t(key as any)}
+                </Link>
+              ))}
+              {EXPLORE_CATEGORY_KEYS.map((catKey) => (
+                <Link key={catKey} href={`/explore?category=${catKey}`} className="sidebar-link" onClick={closeMobileNav} style={{ fontSize: 13.5, padding: '8px 14px' }}>
+                  <TagIcon size={15} />
+                  {t(catKey as any)}
+                </Link>
+              ))}
             </div>
           )}
 
