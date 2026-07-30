@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
 
   const { data: video } = await supabaseServer
     .from('videos')
-    .select('id, cloudflare_video_id, status, custom_thumbnail')
+    .select('id, cloudflare_video_id, status, custom_thumbnail, owner_id, title, visibility')
     .eq('id', videoId)
     .single();
 
@@ -50,6 +50,27 @@ export async function POST(req: NextRequest) {
     if (result.input?.width) updates.width = result.input.width;
     if (result.input?.height) updates.height = result.input.height;
     await supabaseServer.from('videos').update(updates).eq('id', videoId);
+
+    // Video se právě stalo "ready" a je veřejné - vhodná chvíle poslat
+    // oznámení odběratelům, kteří si to u tohohle kanálu přejí (zvoneček
+    // vedle "Odebírat").
+    if (video.visibility === 'public') {
+      const { data: subs } = await supabaseServer
+        .from('subscriptions')
+        .select('subscriber_id')
+        .eq('channel_id', video.owner_id)
+        .eq('notify_new_videos', true);
+
+      if (subs && subs.length > 0) {
+        const rows = subs.map((s: any) => ({
+          user_id: s.subscriber_id,
+          type: 'new_video',
+          message: `Nové video: "${video.title}"`,
+          link: `/watch/${videoId}`,
+        }));
+        await supabaseServer.from('notifications').insert(rows);
+      }
+    }
 
     return NextResponse.json({ status: 'ready' });
   }
