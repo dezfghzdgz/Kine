@@ -41,13 +41,15 @@ function ExploreInner() {
   useEffect(() => {
     const tabParam = searchParams.get('tab') as Tab | null;
     const categoryParam = searchParams.get('category');
-    if (tabParam && Object.keys(TAB_LABELS).includes(tabParam)) setTab(tabParam);
+
     if (categoryParam) {
       setCategory(categoryParam);
       setTab('popular');
+    } else {
+      setCategory(null);
+      setTab(tabParam && Object.keys(TAB_LABELS).includes(tabParam) ? tabParam : 'popular');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     load();

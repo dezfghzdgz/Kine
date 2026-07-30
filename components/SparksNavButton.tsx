@@ -72,9 +72,15 @@ export default function SparksNavButton() {
       </button>
 
       {pickerOpen && (
-        <div className="profile-dropdown" style={{ width: 220 }}>
-          <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: '4px 8px 10px' }}>{t('chooseNotificationIconNote')}</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 4px 8px' }}>
+        <div
+          className="panel"
+          style={{
+            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+            width: 260, zIndex: 500, maxHeight: '80vh', overflowY: 'auto',
+          }}
+        >
+          <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: '4px 0 10px' }}>{t('chooseNotificationIconNote')}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {SPARKS_SHORTCUT_OPTIONS.map((opt) => {
               const OptIcon = opt.icon;
               return (
@@ -94,7 +100,7 @@ export default function SparksNavButton() {
           <button
             onClick={() => setPickerOpen(false)}
             className="profile-dropdown-item"
-            style={{ textAlign: 'center', color: 'var(--text-faint)' }}
+            style={{ textAlign: 'center', color: 'var(--text-faint)', marginTop: 6 }}
           >
             {t('cancel')}
           </button>
