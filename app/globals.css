@@ -1278,6 +1278,16 @@ html[data-theme="gray"] {
 }
 
 @media (max-width: 768px) {
+  .notification-list-dropdown {
+    position: fixed !important;
+    left: 12px !important;
+    right: 12px !important;
+    top: auto !important;
+    bottom: 76px !important;
+    width: auto !important;
+    z-index: 500 !important;
+  }
+
   .content-area-watch .top-bar {
     display: none;
   }

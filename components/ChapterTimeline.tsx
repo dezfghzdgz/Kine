@@ -19,6 +19,8 @@ export default function ChapterTimeline({
   hasCaptions,
   captionsEnabled,
   onToggleCaptions,
+  isMaximized,
+  onToggleMaximize,
 }: {
   chapters: Chapter[];
   duration: number;
@@ -26,6 +28,8 @@ export default function ChapterTimeline({
   hasCaptions?: boolean;
   captionsEnabled?: boolean;
   onToggleCaptions?: () => void;
+  isMaximized: boolean;
+  onToggleMaximize: () => void;
 }) {
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(true);
@@ -49,7 +53,6 @@ export default function ChapterTimeline({
   }, []);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [volumeHover, setVolumeHover] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -137,19 +140,11 @@ export default function ChapterTimeline({
     };
   }, [duration, player]);
 
-  useEffect(() => {
-    function handleFullscreenChange() {
-      setIsFullscreen(!!document.fullscreenElement);
-    }
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
-
   function showControlsTemporarily() {
     setControlsVisible(true);
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     hideTimerRef.current = setTimeout(() => {
-      if (player && !player.paused && !isFullscreen) setControlsVisible(false);
+      if (player && !player.paused && !isMaximized) setControlsVisible(false);
     }, 3000);
   }
 
@@ -195,19 +190,6 @@ export default function ChapterTimeline({
   function togglePlay() {
     if (!player) return;
     paused ? player.play() : player.pause();
-  }
-
-  function toggleFullscreen() {
-    const target = wrapRef.current?.parentElement;
-    if (!target) return;
-    // Appka na spoustě mobilů (hlavně iPhone) nemůže na celou obrazovku
-    // roztáhnout nic jiného než opravdový <video> tag - appka video pouští
-    // přes iframe, takže appce nativní systémová funkce na celou
-    // obrazovku prostě nefunguje. Obejde to appka jednoduše přes vlastní
-    // styl, co appku appce roztáhne přes celý displej sama.
-    const next = !isFullscreen;
-    setIsFullscreen(next);
-    target.classList.toggle('player-wrap-maximized', next);
   }
 
   function handleVolumeSet(ratio: number) {
@@ -463,10 +445,10 @@ export default function ChapterTimeline({
             )}
 
             <button
-              onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
+              onClick={(e) => { e.stopPropagation(); onToggleMaximize(); }}
               style={{ background: 'none', border: 'none', color: '#fff', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             >
-              {isFullscreen ? <MinimizeIcon size={16} /> : <MaximizeIcon size={16} />}
+              {isMaximized ? <MinimizeIcon size={16} /> : <MaximizeIcon size={16} />}
             </button>
           </div>
         </div>

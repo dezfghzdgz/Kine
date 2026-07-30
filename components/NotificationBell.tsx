@@ -83,7 +83,10 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false);
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setIconPickerOpen(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -155,8 +158,8 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
         style={{ position: 'relative' }}
       >
         <NotificationIcon icon={chosenIcon} />
-        {!mobileTrigger && t('notifications')}
-        {mobileTrigger && <span style={{ fontSize: 9 }}>{t('notifications')}</span>}
+        {!mobileTrigger && t((NAV_SHORTCUT_OPTIONS.find((o) => o.key === chosenIcon)?.labelKey ?? 'notifications') as any)}
+        {mobileTrigger && <span style={{ fontSize: 9 }}>{t((NAV_SHORTCUT_OPTIONS.find((o) => o.key === chosenIcon)?.labelKey ?? 'notifications') as any)}</span>}
         {unreadCount > 0 && <span className="notif-badge">{unreadCount}</span>}
       </button>
 
@@ -197,7 +200,7 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
       )}
 
       {open && (
-        <div className="profile-dropdown" style={{ width: 300, maxHeight: 360, overflowY: 'auto' }}>
+        <div className="profile-dropdown notification-list-dropdown" style={{ width: 300, maxHeight: 360, overflowY: 'auto' }}>
           {notifications.length === 0 ? (
             <p style={{ fontSize: 13, color: 'var(--text-faint)', padding: 10 }}>{t('noNotificationsYet')}</p>
           ) : (

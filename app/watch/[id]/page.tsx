@@ -52,6 +52,7 @@ function WatchPageInner() {
   const [playerReady, setPlayerReady] = useState(false);
   const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const [showAiBadge, setShowAiBadge] = useState(true);
+  const [isMaximized, setIsMaximized] = useState(false);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [confirmModDelete, setConfirmModDelete] = useState(false);
@@ -472,7 +473,7 @@ function WatchPageInner() {
       <div className="watch-video-column">
         <div
           ref={wrapRef}
-          className={`player-wrap ${video.height > video.width ? 'player-wrap-vertical' : ''}`}
+          className={`player-wrap ${video.height > video.width ? 'player-wrap-vertical' : ''} ${isMaximized ? 'player-wrap-maximized' : ''}`}
           style={video.height > video.width ? {} : { aspectRatio: '16/9' }}
         >
           <iframe
@@ -510,6 +511,8 @@ function WatchPageInner() {
               hasCaptions={captions.length > 0}
               captionsEnabled={captionsEnabled}
               onToggleCaptions={() => setCaptionsEnabled((v) => !v)}
+              isMaximized={isMaximized}
+              onToggleMaximize={() => setIsMaximized((v) => !v)}
             />
           )}
           {playerReady && captions.length > 0 && captionsEnabled && (
