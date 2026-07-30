@@ -97,14 +97,24 @@ export default function SettingsPage() {
 
   async function startStripeOnboarding() {
     setConnectLoading(true);
-    const { data: sessionData } = await supabase.auth.getSession();
-    const res = await fetch('/api/creator/connect-onboarding', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${sessionData.session?.access_token}` },
-    });
-    const data = await res.json();
-    setConnectLoading(false);
-    if (data.url) window.location.href = data.url;
+    setPriceError(null);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const res = await fetch('/api/creator/connect-onboarding', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${sessionData.session?.access_token}` },
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setPriceError(data.error ?? t('donateGenericError'));
+      }
+    } catch (err: any) {
+      setPriceError(err.message ?? t('donateGenericError'));
+    } finally {
+      setConnectLoading(false);
+    }
   }
 
   async function checkStripeStatus() {
@@ -297,6 +307,7 @@ export default function SettingsPage() {
             <button type="button" onClick={startStripeOnboarding} disabled={connectLoading}>
               {connectLoading ? t('processing') : t('connectStripeButton')}
             </button>
+            {priceError && <p className="error-text" style={{ marginTop: 8 }}>{priceError}</p>}
           </>
         ) : (
           <>

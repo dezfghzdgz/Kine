@@ -14,9 +14,17 @@ import { useUserRole } from '@/lib/useUserRole';
 function baseLinks(t: (key: any) => string) {
   return [
     { href: '/', label: t('home'), icon: HomeIcon },
-    { href: '/explore', label: t('explore'), icon: ExploreIcon },
   ];
 }
+
+const EXPLORE_SUBLINKS = [
+  { tab: 'trending', label: { cs: 'Trendy', en: 'Trending' }, icon: '🔥' },
+  { tab: 'newest', label: { cs: 'Nejnovější', en: 'Newest' }, icon: '🆕' },
+  { tab: 'surprise', label: { cs: 'Překvapení', en: 'Surprise' }, icon: '🎲' },
+  { category: 'music', label: { cs: 'Hudba', en: 'Music' }, icon: '🎵' },
+  { category: 'movies', label: { cs: 'Filmy', en: 'Films' }, icon: '🎬' },
+  { category: 'gaming', label: { cs: 'Hry', en: 'Games' }, icon: '🎮' },
+];
 
 function loggedInLinksGroup1(t: (key: any) => string) {
   return [
@@ -36,8 +44,9 @@ function loggedInLinksGroup2(t: (key: any) => string) {
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const { isModerator } = useUserRole();
+  const [exploreOpen, setExploreOpen] = useState(false);
   const { open: mobileNavOpen, close: closeMobileNav } = useMobileNav();
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [user, setUser] = useState<{ id: string; username: string; avatar_url: string | null } | null>(null);
@@ -98,6 +107,31 @@ export default function Sidebar() {
             </Link>
           );
         })}
+
+        <button
+          className={`sidebar-link ${pathname === '/explore' ? 'active' : ''}`}
+          onClick={() => setExploreOpen((v) => !v)}
+          style={{ justifyContent: 'space-between' }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <ExploreIcon />
+            {t('explore')}
+          </span>
+          <span style={{ fontSize: 11, transform: exploreOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}>▾</span>
+        </button>
+        {exploreOpen && (
+          <div style={{ paddingLeft: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {EXPLORE_SUBLINKS.map((item) => {
+              const href = item.tab ? `/explore?tab=${item.tab}` : `/explore?category=${item.category}`;
+              return (
+                <Link key={href} href={href} className="sidebar-link" style={{ fontSize: 13.5, padding: '8px 14px' }}>
+                  <span style={{ fontSize: 15 }}>{item.icon}</span>
+                  {(item.label as any)[lang] ?? item.label.en}
+                </Link>
+              );
+            })}
+          </div>
+        )}
 
         {user && (
           <>
@@ -226,6 +260,31 @@ export default function Sidebar() {
               {label}
             </Link>
           ))}
+
+          <button
+            className="sidebar-link"
+            onClick={() => setExploreOpen((v) => !v)}
+            style={{ justifyContent: 'space-between' }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <ExploreIcon />
+              {t('explore')}
+            </span>
+            <span style={{ fontSize: 11, transform: exploreOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}>▾</span>
+          </button>
+          {exploreOpen && (
+            <div style={{ paddingLeft: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {EXPLORE_SUBLINKS.map((item) => {
+                const href = item.tab ? `/explore?tab=${item.tab}` : `/explore?category=${item.category}`;
+                return (
+                  <Link key={href} href={href} className="sidebar-link" onClick={closeMobileNav} style={{ fontSize: 13.5, padding: '8px 14px' }}>
+                    <span style={{ fontSize: 15 }}>{item.icon}</span>
+                    {(item.label as any)[lang] ?? item.label.en}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
 
           {user && (
             <>

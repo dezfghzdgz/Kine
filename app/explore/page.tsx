@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
@@ -12,6 +13,15 @@ import { useWatchProgress } from '@/lib/useWatchProgress';
 type Tab = 'popular' | 'trending' | 'newest' | 'shorts' | 'surprise';
 
 export default function ExplorePage() {
+  return (
+    <Suspense fallback={null}>
+      <ExploreInner />
+    </Suspense>
+  );
+}
+
+function ExploreInner() {
+  const searchParams = useSearchParams();
   const { t, lang } = useLanguage();
   const TAB_LABELS: Record<Tab, string> = {
     popular: lang === 'en' ? 'Popular' : 'Populární',
@@ -21,6 +31,7 @@ export default function ExplorePage() {
     surprise: t('surprise'),
   };
   const [tab, setTab] = useState<Tab>('popular');
+  const [category, setCategory] = useState<string | null>(null);
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [highCreditOnly, setHighCreditOnly] = useState(false);
@@ -28,8 +39,19 @@ export default function ExplorePage() {
   const watchProgress = useWatchProgress(videos.map((v: any) => v.id));
 
   useEffect(() => {
+    const tabParam = searchParams.get('tab') as Tab | null;
+    const categoryParam = searchParams.get('category');
+    if (tabParam && Object.keys(TAB_LABELS).includes(tabParam)) setTab(tabParam);
+    if (categoryParam) {
+      setCategory(categoryParam);
+      setTab('popular');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     load();
-  }, [tab, highCreditOnly]);
+  }, [tab, category, highCreditOnly]);
 
   async function load() {
     setLoading(true);
@@ -37,10 +59,14 @@ export default function ExplorePage() {
 
     let query = supabase
       .from('videos')
-      .select('id, title, thumbnail_url, views, duration_seconds, width, height, created_at, profiles!videos_owner_id_fkey(id, username, created_at)')
+      .select('id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, profiles!videos_owner_id_fkey(id, username, created_at)')
       .eq('status', 'ready')
       .eq('visibility', 'public')
       .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso},is_premiere.eq.true`);
+
+    if (category) {
+      query = query.eq('category', category);
+    }
 
     if (tab === 'shorts') {
       query = query.lte('duration_seconds', 120);
@@ -112,6 +138,18 @@ export default function ExplorePage() {
   return (
     <div>
       <p className="section-title">Explore</p>
+
+      {category && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <span className="tab-btn active">{category}</span>
+          <button
+            onClick={() => setCategory(null)}
+            style={{ background: 'none', color: 'var(--text-faint)', padding: 4, fontSize: 12 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="tab-row" style={{ marginBottom: 12 }}>
         {(Object.keys(TAB_LABELS) as Tab[]).map((t) => (
