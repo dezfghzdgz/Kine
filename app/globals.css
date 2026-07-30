@@ -1006,12 +1006,17 @@ html[data-theme="gray"] {
 
 .shorts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 16px;
 }
 
 .video-thumb-vertical {
   aspect-ratio: 9/16;
+}
+
+.shorts-grid > .video-card {
+  max-width: 220px;
+  justify-self: start;
 }
 
 .player-wrap-vertical {

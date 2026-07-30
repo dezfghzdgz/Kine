@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
+import { BellIcon } from './ReactionIcons';
 
 export default function SubscribeButton({ channelId }: { channelId: string }) {
   const router = useRouter();
@@ -94,23 +95,27 @@ export default function SubscribeButton({ channelId }: { channelId: string }) {
               width: 40, height: 40, borderRadius: '50%', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >
-            {notifyNewVideos ? '🔔' : '🔕'}
+            <BellIcon muted={!notifyNewVideos} size={17} />
           </button>
           {bellMenuOpen && (
             <div className="profile-dropdown" style={{ width: 220, top: 'calc(100% + 8px)', bottom: 'auto' }}>
               <button
                 className="profile-dropdown-item"
                 onClick={() => { toggleNotify(); if (!notifyNewVideos) setBellMenuOpen(false); }}
-                style={{ fontWeight: notifyNewVideos ? 700 : 400 }}
+                style={{ fontWeight: notifyNewVideos ? 700 : 400, display: 'flex', alignItems: 'center', gap: 8 }}
               >
-                🔔 {t('notifyAllNewVideos')} {notifyNewVideos ? '✓' : ''}
+                <BellIcon size={15} />
+                <span style={{ flex: 1, textAlign: 'left' }}>{t('notifyAllNewVideos')}</span>
+                {notifyNewVideos && <span>✓</span>}
               </button>
               <button
                 className="profile-dropdown-item"
                 onClick={() => { if (notifyNewVideos) toggleNotify(); setBellMenuOpen(false); }}
-                style={{ fontWeight: !notifyNewVideos ? 700 : 400 }}
+                style={{ fontWeight: !notifyNewVideos ? 700 : 400, display: 'flex', alignItems: 'center', gap: 8 }}
               >
-                🔕 {t('notifyNone')} {!notifyNewVideos ? '✓' : ''}
+                <BellIcon muted size={15} />
+                <span style={{ flex: 1, textAlign: 'left' }}>{t('notifyNone')}</span>
+                {!notifyNewVideos && <span>✓</span>}
               </button>
             </div>
           )}

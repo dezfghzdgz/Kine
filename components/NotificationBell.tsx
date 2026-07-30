@@ -14,13 +14,13 @@ type Notification = {
   type: 'default' | 'collab_invite' | 'like_milestone' | 'donation' | 'subscription' | 'new_video' | 'comment_reply';
 };
 
-const NOTIFICATION_TYPE_STYLES: Record<string, { icon: string; color: string }> = {
-  like_milestone: { icon: '⭐', color: '#f5a623' },
-  donation: { icon: '💛', color: '#f5a623' },
-  subscription: { icon: '💎', color: '#4d9fff' },
-  new_video: { icon: '🎬', color: 'var(--text-faint)' },
-  comment_reply: { icon: '💬', color: 'var(--text-faint)' },
-  default: { icon: '🔔', color: 'var(--text-faint)' },
+const NOTIFICATION_TYPE_STYLES: Record<string, { color: string }> = {
+  like_milestone: { color: '#f5a623' },
+  donation: { color: '#f5a623' },
+  subscription: { color: '#4d9fff' },
+  new_video: { color: 'var(--text-faint)' },
+  comment_reply: { color: 'var(--text-faint)' },
+  default: { color: 'var(--text-faint)' },
 };
 
 export default function NotificationBell({ mobileTrigger = false }: { mobileTrigger?: boolean }) {
@@ -216,16 +216,11 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
                     <button
                       onClick={() => handleClick(n)}
                       className="profile-dropdown-item"
-                      style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontWeight: n.read ? 400 : 600, flex: 1 }}
+                      style={{ display: 'block', fontWeight: n.read ? 400 : 600, flex: 1 }}
                     >
-                      <span style={{ fontSize: 14, flexShrink: 0 }}>
-                        {(NOTIFICATION_TYPE_STYLES[n.type] ?? NOTIFICATION_TYPE_STYLES.default).icon}
-                      </span>
-                      <span>
-                        {n.message}
-                        <span style={{ display: 'block', fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
-                          {new Date(n.created_at).toLocaleString('cs-CZ')}
-                        </span>
+                      {n.message}
+                      <span style={{ display: 'block', fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
+                        {new Date(n.created_at).toLocaleString('cs-CZ')}
                       </span>
                     </button>
                     <button

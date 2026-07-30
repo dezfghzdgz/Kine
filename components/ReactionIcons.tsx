@@ -92,3 +92,13 @@ export function TrashIcon({ size = 18 }: { size?: number }) {
     </svg>
   );
 }
+
+export function BellIcon({ muted, size = 18 }: { muted?: boolean; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M6 9a6 6 0 0 1 12 0c0 3.5 1 5 2 6H4c1-1 2-2.5 2-6z" strokeLinejoin="round" />
+      <path d="M10 19a2 2 0 0 0 4 0" strokeLinecap="round" />
+      {muted && <path d="M3 3l18 18" strokeLinecap="round" />}
+    </svg>
+  );
+}
