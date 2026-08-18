@@ -12,7 +12,7 @@ type Notification = {
   link: string | null;
   read: boolean;
   created_at: string;
-  type: 'default' | 'collab_invite' | 'like_milestone' | 'donation' | 'subscription' | 'new_video' | 'comment_reply';
+  type: 'default' | 'collab_invite' | 'like_milestone' | 'donation' | 'subscription' | 'new_video' | 'comment_reply' | 'moderation_warning';
 };
 
 const NOTIFICATION_TYPE_STYLES: Record<string, { color: string }> = {

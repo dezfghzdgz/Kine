@@ -430,7 +430,6 @@ export default function ChannelStatsPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {filtered.map((v) => {
                 const dist = ratingsByVideo[v.id] ?? [0, 0, 0, 0, 0];
-                const maxCount = Math.max(...dist, 1);
                 const total = dist.reduce((s, n) => s + n, 0);
 
                 return (
@@ -456,13 +455,14 @@ export default function ChannelStatsPage() {
                       <div style={{ paddingLeft: 92, display: 'flex', flexDirection: 'column', gap: 3 }}>
                         {[5, 4, 3, 2, 1].map((stars) => {
                           const count = dist[stars - 1];
+                          const pct = total > 0 ? (count / total) * 100 : 0;
                           return (
                             <div key={stars} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               <span style={{ fontSize: 11, color: 'var(--text-faint)', width: 20 }}>{stars}★</span>
                               <div style={{ flex: 1, height: 6, background: 'var(--panel-raised)', borderRadius: 999, overflow: 'hidden' }}>
-                                <div style={{ width: `${(count / maxCount) * 100}%`, height: '100%', background: 'var(--text)', borderRadius: 999 }} />
+                                <div style={{ width: `${pct}%`, height: '100%', background: 'var(--text)', borderRadius: 999 }} />
                               </div>
-                              <span style={{ fontSize: 11, color: 'var(--text-faint)', width: 20, textAlign: 'right' }}>{count}</span>
+                              <span style={{ fontSize: 11, color: 'var(--text-faint)', width: 42, textAlign: 'right' }}>{Math.round(pct)}% ({count})</span>
                             </div>
                           );
                         })}
