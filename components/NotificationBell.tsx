@@ -21,6 +21,7 @@ const NOTIFICATION_TYPE_STYLES: Record<string, { color: string }> = {
   subscription: { color: '#4d9fff' },
   new_video: { color: 'var(--text-faint)' },
   comment_reply: { color: 'var(--text-faint)' },
+  moderation_warning: { color: '#e0453f' },
   default: { color: 'var(--text-faint)' },
 };
 
@@ -160,7 +161,7 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
         <NotificationIcon icon={chosenIcon} />
         {!mobileTrigger && t((NAV_SHORTCUT_OPTIONS.find((o) => o.key === chosenIcon)?.labelKey ?? 'notifications') as any)}
         {mobileTrigger && <span style={{ fontSize: 9 }}>{t((NAV_SHORTCUT_OPTIONS.find((o) => o.key === chosenIcon)?.labelKey ?? 'notifications') as any)}</span>}
-        {unreadCount > 0 && <span className="notif-badge">{unreadCount}</span>}
+        {chosenIcon === 'notifications' && unreadCount > 0 && <span className="notif-badge">{unreadCount}</span>}
       </button>
 
       {iconPickerOpen && (
@@ -241,7 +242,10 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
                     <button
                       onClick={() => handleClick(n)}
                       className="profile-dropdown-item"
-                      style={{ display: 'block', fontWeight: n.read ? 400 : 600, flex: 1 }}
+                      style={{
+                        display: 'block', fontWeight: n.read ? 400 : 600, flex: 1,
+                        color: n.type === 'moderation_warning' ? '#e0453f' : undefined,
+                      }}
                     >
                       {n.message}
                       <span style={{ display: 'block', fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>

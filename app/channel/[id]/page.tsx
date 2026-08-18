@@ -167,6 +167,14 @@ function ChannelPageInner() {
     setConfirmBlockOpen(false);
     if (!error) {
       setProfile((prev: any) => ({ ...prev, is_banned: nextBanned }));
+      if (nextBanned) {
+        await supabase.from('notifications').insert({
+          user_id: channelId,
+          type: 'moderation_warning',
+          message: t('accountBannedWarningNote'),
+          link: '/rules',
+        });
+      }
     }
   }
 
@@ -175,6 +183,14 @@ function ChannelPageInner() {
     const { error } = await supabase.from('profiles').update({ is_shadow_banned: next }).eq('id', channelId);
     if (!error) {
       setProfile((prev: any) => ({ ...prev, is_shadow_banned: next }));
+      if (next) {
+        await supabase.from('notifications').insert({
+          user_id: channelId,
+          type: 'moderation_warning',
+          message: t('shadowBanWarningNote'),
+          link: '/rules',
+        });
+      }
     }
   }
 
@@ -183,6 +199,14 @@ function ChannelPageInner() {
     const { error } = await supabase.from('profiles').update({ payouts_suspended: next }).eq('id', channelId);
     if (!error) {
       setProfile((prev: any) => ({ ...prev, payouts_suspended: next }));
+      if (next) {
+        await supabase.from('notifications').insert({
+          user_id: channelId,
+          type: 'moderation_warning',
+          message: t('payoutsSuspendedWarningNote'),
+          link: '/rules',
+        });
+      }
     }
   }
   const longVideos = videos.filter((v) => !(v.height && v.width && v.height > v.width && (v.duration_seconds ?? 0) <= 120));
