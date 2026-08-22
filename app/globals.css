@@ -226,6 +226,20 @@ a {
   animation: content-fade-in 0.28s ease both;
 }
 
+/* Karty vykreslené sdílenou komponentou (mají nabídku ⋮) nesmí mít po
+   animaci zachovaný transform. Transform totiž z karty udělá "rámec" pro
+   position: fixed a vlastní vrstvu pro z-index - okno "Nahlásit" by se pak
+   smrsklo na velikost karty a nabídka by se schovala pod horní lištu.
+   Proto tyhle karty jen prolnou, bez posunu. */
+.video-card-interactive {
+  animation-name: card-fade-in;
+}
+
+@keyframes card-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 @keyframes content-fade-in {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
@@ -2190,4 +2204,186 @@ html[data-theme="gray"] {
   font-size: 11.5px;
   color: var(--text-faint);
   margin: 2px 0 0;
+}
+
+/* ---------- Nabídka ⋮ na kartě videa ----------
+   Tři tečky u každé karty: přidat do fronty, uložit, stáhnout, sdílet,
+   schovat z doporučení, nahlásit - bez otevírání videa. */
+
+.video-card {
+  position: relative;
+}
+
+.video-card-link {
+  display: block;
+}
+
+.video-card-title,
+.video-card-meta {
+  padding-right: 26px;
+}
+
+.video-card-sound-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Schválně bez z-index! Jakmile by ho tenhle obal měl, stal by se z něj
+   vlastní "patro" a rozbalená nabídka ani okno "Nahlásit" by se z něj už
+   nedostaly - schovaly by se pod boční menu a horní lištu. */
+.video-card-menu {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+}
+
+.video-card-menu-btn {
+  width: 24px;
+  height: 30px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-faint);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.video-card:hover .video-card-menu-btn,
+.video-card-menu-btn:focus-visible {
+  opacity: 1;
+}
+
+.video-card-menu-btn:hover {
+  color: var(--text);
+  background: var(--panel-raised);
+}
+
+/* Na dotykových zařízeních není kam najet myší, takže je tlačítko vidět
+   pořád - jinak by se k nabídce nikdo nedostal. */
+@media (hover: none) {
+  .video-card-menu-btn {
+    opacity: 1;
+  }
+}
+
+.video-card-menu-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  width: 244px;
+  max-height: 340px;
+  overflow-y: auto;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  z-index: 400;
+  animation: dropdown-in 0.12s ease both;
+}
+
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.video-card-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.video-card-menu-item svg {
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.video-card-menu-item:hover:not(:disabled) {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.video-card-menu-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.video-card-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 5px 4px;
+}
+
+.video-card-menu-note {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin: 6px 4px 2px;
+  line-height: 1.4;
+}
+
+/* Karta po schování videa nebo kanálu - místo zmizení zůstane hláška
+   s možností to vrátit. */
+.video-card-hidden {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 10px;
+  min-height: 190px;
+  padding: 18px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.video-card-hidden-sparks {
+  min-height: 300px;
+}
+
+.video-card-hidden-note {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0;
+  line-height: 1.45;
+}
+
+.video-card-hidden-undo {
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12.5px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.video-card-hidden-undo:hover {
+  border-color: var(--brand);
 }

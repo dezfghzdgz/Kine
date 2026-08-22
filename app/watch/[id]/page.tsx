@@ -25,6 +25,7 @@ import { useUserRole } from '@/lib/useUserRole';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { ShareIcon, WatchLaterIcon, ReportIcon, TrashIcon } from '@/components/ReactionIcons';
 import { detectViewSource } from '@/lib/viewSource';
+import { getQueue, removeFromQueue, clearQueue, subscribeToQueue, type QueuedVideo } from '@/lib/videoQueue';
 
 function formatChapterTime(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -75,6 +76,9 @@ function WatchPageInner() {
   const [playlistInfo, setPlaylistInfo] = useState<{ title: string } | null>(null);
   const [playlistVideos, setPlaylistVideos] = useState<any[]>([]);
   const [playlistPanelOpen, setPlaylistPanelOpen] = useState(true);
+  // Fronta žije v prohlížeči, ne v databázi. Čte se až po vykreslení, ať
+  // se serverová a prohlížečová verze stránky neliší.
+  const [queue, setQueue] = useState<QueuedVideo[]>([]);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<any>(null);
@@ -121,6 +125,16 @@ function WatchPageInner() {
     const timer = setTimeout(() => setShowAiBadge(false), 10000);
     return () => clearTimeout(timer);
   }, [videoId]);
+
+  // Fronta se drží v prohlížeči, takže se může změnit i na jiné kartě -
+  // tímhle se panel překreslí, ať se stane cokoliv.
+  useEffect(() => {
+    function syncQueue() {
+      setQueue(getQueue());
+    }
+    syncQueue();
+    return subscribeToQueue(syncQueue);
+  }, []);
 
   // Klávesové zkratky: mezerník = přehrát/pauza, šipky vlevo/vpravo = posun
   // o 5 s, šipky nahoru/dolů = hlasitost, M = ztlumit, F = celá obrazovka.
@@ -426,9 +440,16 @@ function WatchPageInner() {
 
   const playlistIndex = playlistVideos.findIndex((v) => v.id === videoId);
   const playlistNext = playlistIndex >= 0 ? playlistVideos[playlistIndex + 1] : null;
-  const upNextQueue = playlistNext
-    ? [playlistNext, ...otherVideos].slice(0, 2)
-    : otherVideos;
+
+  // Fronta má přednost před vším ostatním - když si někdo video schválně
+  // zařadil "na řadu", má hrát dřív než playlist i doporučená videa.
+  const queueIndex = queue.findIndex((v) => v.id === videoId);
+  const queueNext = queueIndex >= 0 ? queue[queueIndex + 1] ?? null : queue[0] ?? null;
+  const upNextQueue = [
+    ...(queueNext ? [queueNext] : []),
+    ...(playlistNext ? [playlistNext] : []),
+    ...otherVideos,
+  ].slice(0, 2);
 
   function nextHref(id: string) {
     return playlistId ? `/watch/${id}?playlist=${playlistId}` : `/watch/${id}`;
@@ -762,6 +783,53 @@ function WatchPageInner() {
             </div>
           )}
         </div>
+
+        {/* Fronta - videa přidaná přes ⋮ na kartě. Hraje se přednostně před
+            playlistem i doporučenými videy. */}
+        {queue.length > 0 && (
+          <div className="playlist-panel">
+            <div className="playlist-panel-head">
+              <div style={{ minWidth: 0 }}>
+                <p className="playlist-panel-title" style={{ margin: 0 }}>{t('queuePanelTitle')}</p>
+                <p className="playlist-panel-sub">
+                  {queue.length} {queue.length === 1 ? 'video' : queue.length < 5 ? 'videa' : 'videí'}
+                </p>
+              </div>
+              <button onClick={clearQueue} className="playlist-panel-toggle" style={{ width: 'auto', padding: '0 10px', fontSize: 12 }}>
+                {t('queueClear')}
+              </button>
+            </div>
+
+            <div className="playlist-panel-list">
+              {queue.map((v, i) => (
+                <div key={v.id} className={`playlist-panel-item ${v.id === videoId ? 'current' : ''}`}>
+                  <Link href={`/watch/${v.id}`} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+                    <span className="playlist-panel-index">{v.id === videoId ? '▶' : i + 1}</span>
+                    <span className="playlist-panel-thumb">
+                      {v.thumbnail_url && (
+                        <Image src={v.thumbnail_url} alt={v.title} width={96} height={54} style={{ objectFit: 'cover' }} />
+                      )}
+                      {!!v.duration_seconds && v.duration_seconds > 0 && (
+                        <span className="playlist-panel-duration">{formatChapterTime(v.duration_seconds)}</span>
+                      )}
+                    </span>
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span className="playlist-panel-item-title">{v.title}</span>
+                      <span className="playlist-panel-item-meta">{v.username ?? 'neznámý tvůrce'}</span>
+                    </span>
+                  </Link>
+                  <button
+                    onClick={() => removeFromQueue(v.id)}
+                    aria-label="Odebrat z fronty"
+                    style={{ background: 'none', color: 'var(--text-faint)', padding: '4px 8px', fontSize: 12 }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Panel playlistu: místo tenkého proužku s dvěma odkazy je tu celý
             seznam videí, ve kterém je vidět, kde v playlistu jsi, a dá se

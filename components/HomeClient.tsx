@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
 import VideoCard from '@/components/VideoCard';
 import { scoreVideo, buildBlocks, formatDuration, PAGE_SIZE, Block } from '@/lib/homeRecommendation';
+import { loadHiddenContent, filterHidden } from '@/lib/hiddenContent';
 
 export default function HomeClient({
   initialPool,
@@ -92,7 +93,13 @@ export default function HomeClient({
     Object.entries(hashtagCounts).sort((a, b) => b[1] - a[1]).slice(0, 8).forEach(([h]) => topHashtags.add(h));
 
     const ctx = { subscribedIds, watchedIds, topCategories, topHashtags };
-    const resorted = [...scoredPool].sort((a, b) => scoreVideo(b, ctx) - scoreVideo(a, ctx));
+
+    // Co si divák schoval přes ⋮ ("Nezajímá mě" / "Nedoporučovat kanál"),
+    // to se do doporučení vůbec nedostane.
+    const hidden = await loadHiddenContent(authData.user.id);
+    const visible = filterHidden(scoredPool, hidden);
+
+    const resorted = [...visible].sort((a, b) => scoreVideo(b, ctx) - scoreVideo(a, ctx));
     setScoredPool(resorted);
     reveal(resorted, revealCount, currentPreference);
 

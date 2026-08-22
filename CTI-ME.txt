@@ -1,10 +1,26 @@
-KINE - opravy a novinky (2. kolo)
-=================================
+KINE - opravy a novinky (3. kolo, obsahuje i 1. a 2. kolo)
+==========================================================
 
 CO JE V TETO SLOZCE
-Vsechny soubory, ktere se zmenily, ve stejnych cestach jako v repu.
+Vsechny zmenene soubory ve stejnych cestach jako v repu.
 Rozbal je primo do slozky projektu Kine a prepis puvodni.
-Obsahuje i zmeny z 1. kola, takze staci rozbalit tuhle slozku.
+Staci rozbalit tuhle jednu slozku - obsahuje uplne vsechno.
+
+
+DULEZITE: SQL MIGRACE
+V Supabase -> SQL Editor -> New Query spust obsah techto souboru:
+
+  1) supabase-migration-view-sources.sql    <- POVINNA pro nove statistiky
+     Sloupec "source" ve views_log (odkud divaci prichazeji) + funkce,
+     ktere spocitaji dobu sledovani a dokoukanost.
+
+  2) supabase-migration-hidden-content.sql  <- POVINNA pro "Nezajima me"
+     Tabulky pro schovana videa a kanaly.
+     Bez ni tlacitka "Nezajima me" a "Nedoporucovat kanal" nic neulozi.
+
+  3) supabase-migration-collab-limit.sql    <- volitelna
+     Pojisti primo v databazi limit 4 tvurcu na video.
+
 
 NOVE SOUBORY:
   components/StarDistribution.tsx
@@ -12,22 +28,13 @@ NOVE SOUBORY:
   components/StatsBarList.tsx
   components/StatsHeatmap.tsx
   components/StatsVideoTable.tsx
+  components/VideoCardMenu.tsx
   lib/viewSource.ts
+  lib/videoQueue.ts
+  lib/hiddenContent.ts
   supabase-migration-collab-limit.sql
   supabase-migration-view-sources.sql
-
-
-DULEZITE: SQL MIGRACE
-V Supabase -> SQL Editor -> New Query spust obsah techto dvou souboru:
-
-  1) supabase-migration-view-sources.sql   <- POVINNA pro nove statistiky
-     Prida sloupec "source" do views_log (odkud divaci prichazeji)
-     a dve funkce, ktere spocitaji dobu sledovani a dokoukanost.
-     Bez ni panel "Doba sledovani a dokoukanost" napise, ze migrace chybi,
-     a "Odkud divaci prichazeji" ukaze vsechno jako Neznamé.
-
-  2) supabase-migration-collab-limit.sql   <- volitelna
-     Pojisti primo v databazi limit 4 tvurcu na video.
+  supabase-migration-hidden-content.sql
 
 
 ALTERNATIVA PRO GIT

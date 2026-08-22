@@ -2,9 +2,8 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
+import VideoCard from '@/components/VideoCard';
 import { buildVideoBlocks } from '@/lib/videoBlocks';
 import { computeTrustRatingClient } from '@/lib/trustRatingClient';
 import { useLanguage } from '@/lib/i18n';
@@ -61,7 +60,9 @@ function ExploreInner() {
 
     let query = supabase
       .from('videos')
-      .select('id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, profiles!videos_owner_id_fkey(id, username, created_at)')
+      // cloudflare_video_id je tu kvůli náhledu při najetí myší a stahování
+      // z nabídky ⋮ - bez něj by karta obojí tiše vynechala.
+      .select('id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, cloudflare_video_id, profiles!videos_owner_id_fkey(id, username, created_at)')
       .eq('status', 'ready')
       .eq('visibility', 'public')
       .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso},is_premiere.eq.true`);
@@ -164,52 +165,30 @@ function ExploreInner() {
       ) : videos.length === 0 ? (
         <p style={{ color: 'var(--text-faint)' }}>{t('nothingHereYet')}</p>
       ) : tab === 'shorts' ? (
+        // Karty vykresluje sdílená komponenta - díky tomu má i tady každá
+        // karta nabídku ⋮ (fronta, playlist, sdílet, schovat, nahlásit).
         <div className="shorts-grid">
           {videos.map((video: any) => (
-            <Link href={`/sparks?start=${video.id}`} key={video.id} className="video-card">
-              <div className="video-thumb video-thumb-vertical">
-                {video.thumbnail_url ? (
-                  <Image src={video.thumbnail_url} alt={video.title} width={320} height={180} />
-                ) : null}
-                <div className="play-badge">▶</div>
-                {watchProgress[video.id] > 3 && (
-                  <div className="watch-progress-track">
-                    <div className="watch-progress-fill" style={{ width: `${watchProgress[video.id]}%` }} />
-                  </div>
-                )}
-              </div>
-              <p className="video-card-title">{video.title}</p>
-              <p className="video-card-meta">
-                {video.profiles?.username ?? 'neznámý tvůrce'} · {video.views} {t('views')}
-              </p>
-            </Link>
+            <VideoCard
+              key={video.id}
+              video={video}
+              href={`/sparks?start=${video.id}`}
+              isSparks
+              progressPercent={watchProgress[video.id]}
+            />
           ))}
         </div>
       ) : (
         buildVideoBlocks(videos).map((block, bi) => (
           <div key={bi} className={block.type === 'sparks' ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 20 }}>
             {block.items.map((video: any) => (
-              <Link
-                href={block.type === 'sparks' ? `/sparks?start=${video.id}` : `/watch/${video.id}`}
+              <VideoCard
                 key={video.id}
-                className="video-card"
-              >
-                <div className={block.type === 'sparks' ? 'video-thumb video-thumb-vertical' : 'video-thumb'}>
-                  {video.thumbnail_url ? (
-                    <Image src={video.thumbnail_url} alt={video.title} width={320} height={180} />
-                  ) : null}
-                  <div className="play-badge">▶</div>
-                {watchProgress[video.id] > 3 && (
-                  <div className="watch-progress-track">
-                    <div className="watch-progress-fill" style={{ width: `${watchProgress[video.id]}%` }} />
-                  </div>
-                )}
-                </div>
-                <p className="video-card-title">{video.title}</p>
-                <p className="video-card-meta">
-                  {video.profiles?.username ?? 'neznámý tvůrce'} · {video.views} {t('views')}
-                </p>
-              </Link>
+                video={video}
+                href={block.type === 'sparks' ? `/sparks?start=${video.id}` : `/watch/${video.id}`}
+                isSparks={block.type === 'sparks'}
+                progressPercent={watchProgress[video.id]}
+              />
             ))}
           </div>
         ))

@@ -316,3 +316,32 @@ export function PetIcon({ size = 16 }: { size?: number }) {
     </svg>
   );
 }
+
+/* ---------- Ikonky pro nabídku ⋮ na kartě videa ---------- */
+
+export function QueueIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M3 6.5h11M3 12h11M3 17.5h7" strokeLinecap="round" />
+      <path d="M17 9.5v9M21.5 14h-9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function NotInterestedIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M5.6 5.6l12.8 12.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function BlockChannelIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M7.5 12h9" strokeLinecap="round" />
+    </svg>
+  );
+}

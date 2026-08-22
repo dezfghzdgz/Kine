@@ -6,6 +6,9 @@ import Image from 'next/image';
 import Script from 'next/script';
 import { useLanguage } from '@/lib/i18n';
 import { SpeakerIcon } from './ReactionIcons';
+import VideoCardMenu from './VideoCardMenu';
+import { supabase } from '@/lib/supabaseClient';
+import { unhideVideo, unhideChannel } from '@/lib/hiddenContent';
 
 const HOVER_DELAY_MS = 150;
 const SOUND_PREF_KEY = 'kine-preview-sound-enabled';
@@ -33,6 +36,10 @@ export default function VideoCard({
   const { t } = useLanguage();
   const [previewing, setPreviewing] = useState(false);
   const [muted, setMuted] = useState(true);
+  // Když si divák video (nebo celý kanál) schová, karta na místě zůstane a
+  // změní se na hlášku s možností to vzít zpět - jako na YouTube. Kdyby
+  // rovnou zmizela, ostatní karty by poskočily a nešlo by to vrátit.
+  const [hidden, setHidden] = useState<null | 'video' | 'channel'>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<any>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -91,55 +98,86 @@ export default function VideoCard({
     localStorage.setItem(SOUND_PREF_KEY, String(!next));
   }
 
+  async function undoHide() {
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) return;
+
+    const ownerId = video.owner_id ?? video.profiles?.id;
+    if (hidden === 'channel' && ownerId) {
+      await unhideChannel(data.user.id, ownerId);
+    } else {
+      await unhideVideo(data.user.id, video.id);
+    }
+    setHidden(null);
+  }
+
+  if (hidden) {
+    return (
+      <div className={`video-card video-card-hidden ${isSparks ? 'video-card-hidden-sparks' : ''}`}>
+        <p className="video-card-hidden-note">
+          {hidden === 'channel' ? t('menuHiddenChannelNote') : t('menuHiddenVideoNote')}
+        </p>
+        <button type="button" className="video-card-hidden-undo" onClick={undoHide}>
+          {t('menuUndo')}
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <Link
-      href={href}
-      className="video-card"
+    // Karta už není jeden velký odkaz: nabídka ⋮ a tlačítko zvuku musí být
+    // vedle odkazu, ne v něm - tlačítko uvnitř odkazu je neplatné HTML
+    // a prohlížeče se u něj chovají různě.
+    <div
+      className="video-card video-card-interactive"
       onMouseEnter={startHover}
       onMouseLeave={stopHover}
       onTouchStart={startHover}
       onTouchEnd={stopHover}
     >
       <Script src="https://embed.cloudflarestream.com/embed/sdk.latest.js" strategy="lazyOnload" />
-      <div className={isSparks ? 'video-thumb video-thumb-vertical' : 'video-thumb'}>
-        {video.thumbnail_url && !previewing && (
-          <Image src={video.thumbnail_url} alt={video.title} width={320} height={180} />
-        )}
-        {previewing && (
-          <>
+
+      <Link href={href} className="video-card-link">
+        <div className={isSparks ? 'video-thumb video-thumb-vertical' : 'video-thumb'}>
+          {video.thumbnail_url && !previewing && (
+            <Image src={video.thumbnail_url} alt={video.title} width={320} height={180} />
+          )}
+          {previewing && (
             <iframe
               ref={iframeRef}
               src={`https://iframe.videodelivery.net/${video.cloudflare_video_id}?controls=false`}
               style={{ width: '100%', height: '100%', border: 'none', position: 'absolute', inset: 0, pointerEvents: 'none' }}
               allow="autoplay"
             />
-            <button
-              onClick={toggleMute}
-              style={{
-                position: 'absolute', top: 6, right: 6, zIndex: 2, background: 'rgba(0,0,0,0.75)',
-                border: '1px solid rgba(255,255,255,0.3)', color: '#fff', width: 28, height: 28, padding: 0,
-                borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <SpeakerIcon muted={muted} size={15} />
-            </button>
-          </>
-        )}
-        <div className="play-badge">▶</div>
-        {typeof progressPercent === 'number' && progressPercent > 3 && (
-          <div className="watch-progress-track">
-            <div className="watch-progress-fill" style={{ width: `${progressPercent}%` }} />
-          </div>
-        )}
-        {!previewing && video.duration_seconds && formatDuration ? (
-          <span className="video-duration">{formatDuration(video.duration_seconds)}</span>
-        ) : null}
-      </div>
-      <p className="video-card-title">{video.title}</p>
-      <p className="video-card-meta">
-        {!hideCreator && <>{video.profiles?.username ?? 'neznámý tvůrce'} · </>}
-        {video.views} {t('views')}
-      </p>
-    </Link>
+          )}
+          <div className="play-badge">▶</div>
+          {typeof progressPercent === 'number' && progressPercent > 3 && (
+            <div className="watch-progress-track">
+              <div className="watch-progress-fill" style={{ width: `${progressPercent}%` }} />
+            </div>
+          )}
+          {!previewing && video.duration_seconds && formatDuration ? (
+            <span className="video-duration">{formatDuration(video.duration_seconds)}</span>
+          ) : null}
+        </div>
+        <p className="video-card-title">{video.title}</p>
+        <p className="video-card-meta">
+          {!hideCreator && <>{video.profiles?.username ?? 'neznámý tvůrce'} · </>}
+          {video.views} {t('views')}
+        </p>
+      </Link>
+
+      {previewing && (
+        <button className="video-card-sound-btn" onClick={toggleMute} aria-label="Zvuk náhledu">
+          <SpeakerIcon muted={muted} size={15} />
+        </button>
+      )}
+
+      <VideoCardMenu
+        video={video}
+        onHide={setHidden}
+        onActivity={(active) => { if (active) stopHover(); }}
+      />
+    </div>
   );
 }
