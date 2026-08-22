@@ -43,6 +43,9 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
   const clickCountRef = useRef(0);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  // Chyba se drží pro každou pozvánku zvlášť (klíč = id oznámení), jinak by
+  // se hláška z jedné pozvánky ukazovala pod všemi ostatními.
+  const [collabErrors, setCollabErrors] = useState<Record<string, string>>({});
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -87,6 +90,7 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setOpen(false);
         setIconPickerOpen(false);
+        setCollabErrors({});
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -132,9 +136,10 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
   async function respondToCollabInvite(n: Notification, accept: boolean) {
     const videoIdMatch = n.link?.match(/\/watch\/([a-f0-9-]+)/i);
     const videoId = videoIdMatch?.[1];
+
     if (videoId) {
       const { data: sessionData } = await supabase.auth.getSession();
-      await fetch('/api/videos/respond-collab', {
+      const res = await fetch('/api/videos/respond-collab', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -142,7 +147,24 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
         },
         body: JSON.stringify({ videoId, accept }),
       });
+
+      // Když se odpověď neuloží, pozvánka musí zůstat viset - dřív zmizela
+      // tak jako tak a spolupráce tiše propadla.
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setCollabErrors((prev) => ({
+          ...prev,
+          [n.id]: body.error ?? 'Odpověď se nepodařilo uložit, zkus to znovu.',
+        }));
+        return;
+      }
     }
+
+    setCollabErrors((prev) => {
+      const next = { ...prev };
+      delete next[n.id];
+      return next;
+    });
     await supabase.from('notifications').delete().eq('id', n.id);
     setNotifications((prev) => prev.filter((x) => x.id !== n.id));
   }
@@ -165,12 +187,11 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
       </button>
 
       {iconPickerOpen && (
+        // Výběr ikonky vyjede přímo nad tlačítkem, kterého se týká - stejně
+        // jako ostatní nabídky v menu. Dřív skákal doprostřed obrazovky.
         <div
-          className="panel"
-          style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            width: 260, zIndex: 500, maxHeight: '80vh', overflowY: 'auto',
-          }}
+          className="profile-dropdown"
+          style={{ width: 240, maxHeight: '70vh', overflowY: 'auto' }}
         >
           <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: '4px 0 10px' }}>{t('chooseNotificationIconNote')}</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -184,7 +205,9 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
                   fontWeight: chosenIcon === option.key ? 700 : 400,
                 }}
               >
-                <NotificationIcon icon={option.key} />
+                <span style={{ display: 'flex', flexShrink: 0 }}>
+                  <NotificationIcon icon={option.key} />
+                </span>
                 <span style={{ flex: 1, textAlign: 'left' }}>{t(option.labelKey as any)}</span>
                 {chosenIcon === option.key && <span>✓</span>}
               </button>
@@ -216,6 +239,9 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
                     }}
                   >
                     <p style={{ fontSize: 13, margin: '0 0 8px', fontWeight: 600 }}>{n.message}</p>
+                    {collabErrors[n.id] && (
+                      <p style={{ fontSize: 11.5, color: '#ff6b6b', margin: '0 0 8px' }}>{collabErrors[n.id]}</p>
+                    )}
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button
                         onClick={() => respondToCollabInvite(n, true)}

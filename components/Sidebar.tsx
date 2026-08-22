@@ -125,17 +125,17 @@ export default function Sidebar() {
           <span style={{ fontSize: 11, transform: exploreOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}>▾</span>
         </button>
         {exploreOpen && (
-          <div style={{ paddingLeft: 12, display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 320, overflowY: 'auto' }}>
+          <div className="sidebar-sublist">
             {EXPLORE_TABS.map(({ tab, key, icon: Icon }) => (
-              <Link key={tab} href={`/explore?tab=${tab}`} className="sidebar-link" style={{ fontSize: 13.5, padding: '8px 14px' }}>
-                <Icon size={15} />
-                {t(key as any)}
+              <Link key={tab} href={`/explore?tab=${tab}`} className="sidebar-link sidebar-sublink" title={t(key as any)}>
+                <Icon size={16} />
+                <span>{t(key as any)}</span>
               </Link>
             ))}
             {EXPLORE_CATEGORY_KEYS.map((catKey) => (
-              <Link key={catKey} href={`/explore?category=${catKey}`} className="sidebar-link" style={{ fontSize: 13.5, padding: '8px 14px' }}>
-                <TagIcon size={15} />
-                {t(catKey as any)}
+              <Link key={catKey} href={`/explore?category=${catKey}`} className="sidebar-link sidebar-sublink" title={t(catKey as any)}>
+                <TagIcon size={16} />
+                <span>{t(catKey as any)}</span>
               </Link>
             ))}
           </div>
@@ -278,17 +278,17 @@ export default function Sidebar() {
             <span style={{ fontSize: 11, transform: exploreOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}>▾</span>
           </button>
           {exploreOpen && (
-            <div style={{ paddingLeft: 12, display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 320, overflowY: 'auto' }}>
+            <div className="sidebar-sublist">
               {EXPLORE_TABS.map(({ tab, key, icon: Icon }) => (
-                <Link key={tab} href={`/explore?tab=${tab}`} className="sidebar-link" onClick={closeMobileNav} style={{ fontSize: 13.5, padding: '8px 14px' }}>
-                  <Icon size={15} />
-                  {t(key as any)}
+                <Link key={tab} href={`/explore?tab=${tab}`} className="sidebar-link sidebar-sublink" onClick={closeMobileNav} title={t(key as any)}>
+                  <Icon size={16} />
+                  <span>{t(key as any)}</span>
                 </Link>
               ))}
               {EXPLORE_CATEGORY_KEYS.map((catKey) => (
-                <Link key={catKey} href={`/explore?category=${catKey}`} className="sidebar-link" onClick={closeMobileNav} style={{ fontSize: 13.5, padding: '8px 14px' }}>
-                  <TagIcon size={15} />
-                  {t(catKey as any)}
+                <Link key={catKey} href={`/explore?category=${catKey}`} className="sidebar-link sidebar-sublink" onClick={closeMobileNav} title={t(catKey as any)}>
+                  <TagIcon size={16} />
+                  <span>{t(catKey as any)}</span>
                 </Link>
               ))}
             </div>

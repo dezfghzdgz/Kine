@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 
+/**
+ * Odpověď na pozvánku ke spolupráci na videu.
+ *
+ * Přijetí   -> spolutvůrce se u videa zveřejní a video se objeví i na jeho kanálu.
+ * Odmítnutí -> ze spolupráce odejde jen on sám. Video zůstává tvůrci.
+ *
+ * Dřív odmítnutí smazalo CELÉ video (i z Cloudflare) - stačilo, aby jeden
+ * pozvaný kliknul na "Odmítnout", a nahrávající o video nenávratně přišel.
+ * Kromě toho video zůstalo navždy soukromé, když se pozvaný neozval; teď se
+ * viditelnost vrátí, jakmile na potvrzení nikdo další nečeká.
+ */
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get('Authorization');
   const token = authHeader?.replace('Bearer ', '');
@@ -13,66 +24,53 @@ export async function POST(req: NextRequest) {
   if (!videoId) return NextResponse.json({ error: 'Chybí videoId.' }, { status: 400 });
 
   if (accept) {
-    await supabaseServer
+    const { error } = await supabaseServer
       .from('video_collaborators')
       .update({ status: 'accepted' })
       .eq('video_id', videoId)
       .eq('profile_id', userData.user.id);
 
-    // Pokud už na tohle video nečeká na potvrzení nikdo další, appka mu
-    // vrátí zpátky viditelnost, kterou si tvůrce původně zvolil - video
-    // nesmí zůstat navždy uvězněné jako "soukromé".
-    const { data: stillPending } = await supabaseServer
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  } else {
+    const { error } = await supabaseServer
       .from('video_collaborators')
-      .select('profile_id')
+      .delete()
       .eq('video_id', videoId)
-      .eq('status', 'pending');
+      .eq('profile_id', userData.user.id);
 
-    if (!stillPending || stillPending.length === 0) {
-      const { data: videoRow } = await supabaseServer
-        .from('videos')
-        .select('pending_collab_visibility')
-        .eq('id', videoId)
-        .single();
-
-      if (videoRow?.pending_collab_visibility) {
-        await supabaseServer
-          .from('videos')
-          .update({ visibility: videoRow.pending_collab_visibility, pending_collab_visibility: null })
-          .eq('id', videoId);
-      }
-    }
-
-    return NextResponse.json({ ok: true });
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  // Odmítnutí spolupráce appka bere jako odmítnutí videa samotného -
-  // appka ho smaže úplně (Cloudflare i appky vlastní databáze), ať appce
-  // nezůstávají zbytečně ležet nepotvrzená videa.
-  const { data: video } = await supabaseServer
-    .from('videos')
-    .select('id, cloudflare_video_id')
-    .eq('id', videoId)
-    .single();
+  await releaseVisibilityIfEveryoneAnswered(videoId);
 
-  await supabaseServer
+  return NextResponse.json({ ok: true, accepted: !!accept });
+}
+
+/**
+ * Dokud video čeká na potvrzení, drží ho appka jako soukromé. Jakmile na
+ * odpověď nikdo další nečeká - ať už všichni přijali, nebo někdo odmítl -
+ * vrátí se viditelnost, kterou tvůrce původně zvolil. Video tak nezůstane
+ * uvězněné jako soukromé kvůli někomu, kdo se nikdy neozval.
+ */
+async function releaseVisibilityIfEveryoneAnswered(videoId: string) {
+  const { data: stillPending } = await supabaseServer
     .from('video_collaborators')
-    .delete()
+    .select('profile_id')
     .eq('video_id', videoId)
-    .eq('profile_id', userData.user.id);
+    .eq('status', 'pending');
 
-  if (video) {
-    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-    const apiToken = process.env.CLOUDFLARE_STREAM_API_TOKEN;
+  if (stillPending && stillPending.length > 0) return;
 
-    if (video.cloudflare_video_id) {
-      await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/${video.cloudflare_video_id}`,
-        { method: 'DELETE', headers: { Authorization: `Bearer ${apiToken}` } }
-      );
-    }
-    await supabaseServer.from('videos').delete().eq('id', videoId);
+  const { data: videoRow } = await supabaseServer
+    .from('videos')
+    .select('pending_collab_visibility')
+    .eq('id', videoId)
+    .maybeSingle();
+
+  if (videoRow?.pending_collab_visibility) {
+    await supabaseServer
+      .from('videos')
+      .update({ visibility: videoRow.pending_collab_visibility, pending_collab_visibility: null })
+      .eq('id', videoId);
   }
-
-  return NextResponse.json({ ok: true, deleted: true });
 }

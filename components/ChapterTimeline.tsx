@@ -144,7 +144,9 @@ export default function ChapterTimeline({
     setControlsVisible(true);
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     hideTimerRef.current = setTimeout(() => {
-      if (player && !player.paused && !isMaximized) setControlsVisible(false);
+      // Na celou obrazovku se ovládání schovává úplně stejně jako v okně -
+      // dřív tam zůstávalo natrvalo viset přes video.
+      if (player && !player.paused) setControlsVisible(false);
     }, 3000);
   }
 
@@ -446,6 +448,8 @@ export default function ChapterTimeline({
 
             <button
               onClick={(e) => { e.stopPropagation(); onToggleMaximize(); }}
+              title={isMaximized ? 'Zpět do okna (Esc)' : 'Celá obrazovka (F)'}
+              aria-label={isMaximized ? 'Zpět do okna' : 'Celá obrazovka'}
               style={{ background: 'none', border: 'none', color: '#fff', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             >
               {isMaximized ? <MinimizeIcon size={16} /> : <MaximizeIcon size={16} />}

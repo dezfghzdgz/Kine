@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import StatChartModal from '@/components/StatChartModal';
 import RatingChartModal from '@/components/RatingChartModal';
+import StarDistribution from '@/components/StarDistribution';
 import { computeTrustRatingClient, recordTrustRatingSnapshot, getTotalReactionCount, RATING_UNLOCK_THRESHOLD } from '@/lib/trustRatingClient';
 import FieldHint from '@/components/FieldHint';
 
@@ -52,6 +53,8 @@ export default function ChannelStatsPage() {
   const [requestStatus, setRequestStatus] = useState<string | null>(null);
   const [requesting, setRequesting] = useState(false);
   const [ratingsByVideo, setRatingsByVideo] = useState<Record<string, number[]>>({});
+  // Součet za celý kanál: kolikrát padla 1★, 2★, ... 5★ (index 0 = 1★)
+  const [ratingTotals, setRatingTotals] = useState<number[]>([0, 0, 0, 0, 0]);
   const [trustRating, setTrustRating] = useState<number | null>(null);
   const [trustHistory, setTrustHistory] = useState<{ date: string; score: number }[]>([]);
   const [reactionCount, setReactionCount] = useState(0);
@@ -129,14 +132,17 @@ export default function ChannelStatsPage() {
         .in('video_id', videoIds);
 
       const breakdown: Record<string, number[]> = {};
+      const totals = [0, 0, 0, 0, 0];
       videoIds.forEach((id) => { breakdown[id] = [0, 0, 0, 0, 0]; });
       (allReactions ?? []).forEach((r) => {
         const score = r.score ?? 3;
         if (breakdown[r.video_id] && score >= 1 && score <= 5) {
           breakdown[r.video_id][score - 1]++;
+          totals[score - 1]++;
         }
       });
       setRatingsByVideo(breakdown);
+      setRatingTotals(totals);
     }
 
     const { data: subs } = await supabase.from('subscriptions').select('created_at').eq('channel_id', authData.user.id);
@@ -293,6 +299,11 @@ export default function ChannelStatsPage() {
           )}
         </div>
 
+        <div className="panel" style={{ gridColumn: '1 / -1' }}>
+          <p className="panel-heading">Rozložení hvězdiček (celý kanál)</p>
+          <StarDistribution distribution={ratingTotals} />
+        </div>
+
         <div className="panel">
           <p className="panel-heading">{t('totalCommentsLabel')}</p>
           <p style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>{totalComments}</p>
@@ -430,7 +441,6 @@ export default function ChannelStatsPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {filtered.map((v) => {
                 const dist = ratingsByVideo[v.id] ?? [0, 0, 0, 0, 0];
-                const total = dist.reduce((s, n) => s + n, 0);
 
                 return (
                   <div key={v.id} style={{ paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
@@ -451,23 +461,9 @@ export default function ChannelStatsPage() {
                       <span style={{ fontSize: 13, color: 'var(--text-dim)', flexShrink: 0 }}>{v.views} {t('views')}</span>
                     </Link>
 
-                    {total > 0 && (
-                      <div style={{ paddingLeft: 92, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        {[5, 4, 3, 2, 1].map((stars) => {
-                          const count = dist[stars - 1];
-                          const pct = total > 0 ? (count / total) * 100 : 0;
-                          return (
-                            <div key={stars} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <span style={{ fontSize: 11, color: 'var(--text-faint)', width: 20 }}>{stars}★</span>
-                              <div style={{ flex: 1, height: 6, background: 'var(--panel-raised)', borderRadius: 999, overflow: 'hidden' }}>
-                                <div style={{ width: `${pct}%`, height: '100%', background: 'var(--text)', borderRadius: 999 }} />
-                              </div>
-                              <span style={{ fontSize: 11, color: 'var(--text-faint)', width: 42, textAlign: 'right' }}>{Math.round(pct)}% ({count})</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                    <div style={{ paddingLeft: 92 }}>
+                      <StarDistribution distribution={dist} compact />
+                    </div>
                   </div>
                 );
               })}

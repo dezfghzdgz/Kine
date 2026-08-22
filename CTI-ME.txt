@@ -1,0 +1,38 @@
+KINE - opravy (fullscreen, ikony, statistiky, aktivita, spoluprace)
+===================================================================
+
+CO JE V TETO SLOZCE
+Vsechny soubory, ktere se zmenily, ve stejnych cestach jako v repu.
+Staci je rozbalit primo do slozky projektu Kine a prepsat puvodni.
+
+NOVE SOUBORY (drive neexistovaly):
+  components/StarDistribution.tsx
+  components/WatchCalendar.tsx
+  supabase-migration-collab-limit.sql
+
+ZMENENE SOUBORY:
+  app/activity/page.tsx
+  app/api/videos/respond-collab/route.ts
+  app/channel-stats/page.tsx
+  app/globals.css
+  app/upload/page.tsx
+  app/watch/[id]/page.tsx
+  app/your-videos/[id]/edit/page.tsx
+  components/ChapterTimeline.tsx
+  components/NotificationBell.tsx
+  components/Sidebar.tsx
+  lib/i18n.tsx
+
+
+NEZAPOMEN: SQL MIGRACE
+V Supabase -> SQL Editor -> New Query spust obsah souboru
+supabase-migration-collab-limit.sql
+
+Neni povinna (appka funguje i bez ni), ale zajisti primo v databazi,
+ze na jednom videu muzou byt nejvys 4 tvurci, a dovoli pozvanemu
+odebrat sam sebe ze spoluprace.
+
+
+ALTERNATIVA PRO GIT
+Misto kopirovani souboru jde pouzit prilozeny kine-opravy.patch:
+  git apply kine-opravy.patch

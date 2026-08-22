@@ -53,6 +53,13 @@ function WatchPageInner() {
   const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const [showAiBadge, setShowAiBadge] = useState(true);
   const [isMaximized, setIsMaximized] = useState(false);
+  // Fallback jen pro prohlížeče, které neumí Fullscreen API na obyčejném
+  // prvku (hlavně iPhone Safari) - tam appka zůstane u CSS "na celou plochu".
+  const [cssFullscreen, setCssFullscreen] = useState(false);
+  // Klávesové zkratky se navěšují jen jednou, takže by jim zůstala navždy
+  // hodnota z prvního vykreslení. Aktuální stav si proto držíme i v ref,
+  // aby klávesa F v náhradním režimu fungovala oběma směry.
+  const cssFullscreenRef = useRef(false);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [confirmModDelete, setConfirmModDelete] = useState(false);
@@ -113,6 +120,13 @@ function WatchPageInner() {
     function handleKeyDown(e: KeyboardEvent) {
       const tag = (document.activeElement?.tagName ?? '').toLowerCase();
       if (tag === 'input' || tag === 'textarea') return;
+
+      // Esc ukončí i náhradní CSS variantu celé obrazovky (u skutečné
+      // celé obrazovky si Esc odbaví sám prohlížeč).
+      if (e.key === 'Escape') {
+        setFallbackFullscreen(false);
+      }
+
       const player = playerRef.current;
       if (!player) return;
 
@@ -124,11 +138,78 @@ function WatchPageInner() {
       } else if (e.code === 'ArrowLeft') {
         player.currentTime = Math.max((player.currentTime ?? 0) - 5, 0);
       } else if (e.key.toLowerCase() === 'f') {
-        wrapRef.current?.requestFullscreen?.();
+        e.preventDefault();
+        toggleFullscreen();
       }
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Celá obrazovka řešená přímo prohlížečem (Fullscreen API), ne CSS trikem.
+  // Prohlížeč prvek vytáhne do vlastní "horní vrstvy", takže ho nemůže
+  // rozhodit ani boční menu, ani horní lišta, ani jakýkoliv rodičovský rámec
+  // - přesně jak to funguje na YouTube. Tlačítko Esc / F11 řeší sám prohlížeč.
+  // Zapnutí/vypnutí náhradního CSS režimu na jednom místě, ať stav a ref
+  // nikdy nerozejdou.
+  function setFallbackFullscreen(on: boolean) {
+    cssFullscreenRef.current = on;
+    setCssFullscreen(on);
+    setIsMaximized(on);
+  }
+
+  function toggleFullscreen() {
+    const el = wrapRef.current as any;
+    if (!el) return;
+
+    const doc = document as any;
+    const current = doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
+
+    if (current) {
+      (doc.exitFullscreen ?? doc.webkitExitFullscreen)?.call(doc);
+      return;
+    }
+
+    // Když už appka jede na náhradní CSS variantě, tohle kliknutí ji vypíná.
+    // Bez téhle větve by se z náhradního režimu nedalo vůbec dostat ven.
+    if (cssFullscreenRef.current) {
+      setFallbackFullscreen(false);
+      return;
+    }
+
+    const request = el.requestFullscreen ?? el.webkitRequestFullscreen ?? el.msRequestFullscreen;
+    if (request) {
+      const result = request.call(el);
+      // Když prohlížeč požadavek odmítne, appka nespadne do prázdna a
+      // aspoň roztáhne přehrávač přes stránku.
+      if (result && typeof result.catch === 'function') {
+        result.catch(() => setFallbackFullscreen(true));
+      }
+      return;
+    }
+
+    // Prohlížeč Fullscreen API vůbec nemá (starší iOS Safari)
+    setFallbackFullscreen(true);
+  }
+
+  // Stav si držíme podle prohlížeče, ne podle vlastního klikání - jinak
+  // by ikonka zůstala přehozená, když uživatel odejde přes Esc.
+  useEffect(() => {
+    function syncFullscreenState() {
+      const doc = document as any;
+      const active = !!(doc.fullscreenElement ?? doc.webkitFullscreenElement);
+      setIsMaximized(active);
+      if (active) {
+        cssFullscreenRef.current = false;
+        setCssFullscreen(false);
+      }
+    }
+    document.addEventListener('fullscreenchange', syncFullscreenState);
+    document.addEventListener('webkitfullscreenchange', syncFullscreenState);
+    return () => {
+      document.removeEventListener('fullscreenchange', syncFullscreenState);
+      document.removeEventListener('webkitfullscreenchange', syncFullscreenState);
+    };
   }, []);
 
   function handlePlayerSdkReady() {
@@ -473,8 +554,8 @@ function WatchPageInner() {
       <div className="watch-video-column">
         <div
           ref={wrapRef}
-          className={`player-wrap ${video.height > video.width ? 'player-wrap-vertical' : ''} ${isMaximized ? 'player-wrap-maximized' : ''}`}
-          style={video.height > video.width ? {} : { aspectRatio: '16/9' }}
+          className={`player-wrap ${video.height > video.width ? 'player-wrap-vertical' : ''} ${cssFullscreen ? 'player-wrap-maximized' : ''}`}
+          style={video.height > video.width || isMaximized ? {} : { aspectRatio: '16/9' }}
         >
           <iframe
             ref={iframeRef}
@@ -512,7 +593,7 @@ function WatchPageInner() {
               captionsEnabled={captionsEnabled}
               onToggleCaptions={() => setCaptionsEnabled((v) => !v)}
               isMaximized={isMaximized}
-              onToggleMaximize={() => setIsMaximized((v) => !v)}
+              onToggleMaximize={toggleFullscreen}
             />
           )}
           {playerReady && captions.length > 0 && captionsEnabled && (
@@ -578,24 +659,39 @@ function WatchPageInner() {
             <VerifiedBadge tier={video.profiles?.verification_tier} />
                 {trustRating !== null && trustRating >= 90 && <span title={`Vysoký rating (${trustRating}%)`} style={{ marginLeft: 5, fontSize: 13 }}>⭐</span>}
           </Link>
-          {collaborators.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: -6 }}>
-              {collaborators.map((c, i) => (
-                <Link
-                  key={c.id}
-                  href={`/channel/${c.id}`}
-                  title={c.username}
-                  style={{ marginLeft: i === 0 ? 0 : -8, zIndex: collaborators.length - i }}
-                >
-                  <span className="profile-avatar-small" style={{ width: 28, height: 28, border: '2px solid var(--bg)', display: 'block' }}>
-                    {c.avatar_url ? <img src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
           <span>{video.views} {t('views')}</span>
         </div>
+
+        {/* Spolutvůrci: profily všech, kdo se na videu podíleli, přímo pod
+            videem - každý svoje jméno, avatar a odkaz na kanál. Dřív se
+            mačkali jako pár překrytých koleček bez jmen. */}
+        {collaborators.length > 0 && (
+          <div className="collab-strip">
+            <p className="collab-strip-label">{t('videoCreatorsLabel')}</p>
+
+            <Link href={`/channel/${video.profiles?.id}`} className="collab-chip">
+              <span className="profile-avatar-small" style={{ width: 26, height: 26 }}>
+                {video.profiles?.avatar_url ? (
+                  <img src={video.profiles.avatar_url} alt={creatorName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : null}
+              </span>
+              <span className="collab-chip-name">{creatorName}</span>
+              <span className="collab-chip-role">{t('uploadedByRoleLabel')}</span>
+            </Link>
+
+            {collaborators.map((c) => (
+              <Link key={c.id} href={`/channel/${c.id}`} className="collab-chip">
+                <span className="profile-avatar-small" style={{ width: 26, height: 26 }}>
+                  {c.avatar_url ? (
+                    <img src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : null}
+                </span>
+                <span className="collab-chip-name">{c.username}</span>
+                <span className="collab-chip-role">{t('coCreatorRoleLabel')}</span>
+              </Link>
+            ))}
+          </div>
+        )}
 
         <div className="video-actions-row" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 14 }}>
           <VideoReactions videoId={video.id} ownerId={video.profiles?.id} />

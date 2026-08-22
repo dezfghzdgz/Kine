@@ -8,6 +8,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { buildVideoBlocks } from '@/lib/videoBlocks';
+import WatchCalendar, { dayKey } from '@/components/WatchCalendar';
 
 type Tab = 'liked' | 'disliked' | 'star5' | 'star4' | 'star3' | 'star2' | 'star1' | 'history';
 
@@ -21,6 +22,9 @@ function ActivityPageInner() {
   const [historyVideos, setHistoryVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  // Kalendář u zhlédnutých videí je schovaný - otevře se až kliknutím na 📅.
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   useEffect(() => {
     load();
@@ -104,20 +108,25 @@ function ActivityPageInner() {
     );
   }
 
+  const count = (score: number) => (videosByScore[score] ?? []).length;
+
+  // Každá reakce má vlastní složku - lajky zvlášť, dislajky zvlášť, a
+  // v hvězdičkovém režimu zvlášť každá úroveň hvězd. U každé záložky je
+  // rovnou vidět, kolik v ní videí je.
   const TABS: { key: Tab; label: string }[] =
     ratingMode === 'stars'
       ? [
-          { key: 'star5', label: '5★' },
-          { key: 'star4', label: '4★' },
-          { key: 'star3', label: '3★' },
-          { key: 'star2', label: '2★' },
-          { key: 'star1', label: '1★' },
-          { key: 'history', label: 'Historie' },
+          { key: 'star5', label: `5★ (${count(5)})` },
+          { key: 'star4', label: `4★ (${count(4)})` },
+          { key: 'star3', label: `3★ (${count(3)})` },
+          { key: 'star2', label: `2★ (${count(2)})` },
+          { key: 'star1', label: `1★ (${count(1)})` },
+          { key: 'history', label: `👁 Zhlédnutá (${historyVideos.length})` },
         ]
       : [
-          { key: 'liked', label: '👍 Líbí se mi' },
-          { key: 'disliked', label: '👎 Nelíbí se mi' },
-          { key: 'history', label: 'Historie' },
+          { key: 'liked', label: `👍 Líbí se mi (${count(5)})` },
+          { key: 'disliked', label: `👎 Nelíbí se mi (${count(1)})` },
+          { key: 'history', label: `👁 Zhlédnutá (${historyVideos.length})` },
         ];
 
   const activeList: any[] =
@@ -126,7 +135,24 @@ function ActivityPageInner() {
     : tab === 'disliked' ? videosByScore[1] ?? []
     : videosByScore[Number(tab.replace('star', ''))] ?? [];
 
-  const filtered = query ? activeList.filter((v) => v.title.toLowerCase().includes(query)) : activeList;
+  const byQuery = query ? activeList.filter((v) => v.title.toLowerCase().includes(query)) : activeList;
+
+  // Kolik videí padlo na který den - podle toho se v kalendáři zvýrazní dny,
+  // ve kterých je vůbec co hledat. Počítá se až z výsledků hledání, ne ze
+  // všech videí: jinak by kalendář nabízel dny, které po zadání hledaného
+  // slova dopadnou prázdné.
+  const countsByDay: Record<string, number> = {};
+  if (tab === 'history') {
+    for (const video of byQuery) {
+      if (!video.watched_at) continue;
+      const key = dayKey(video.watched_at);
+      countsByDay[key] = (countsByDay[key] ?? 0) + 1;
+    }
+  }
+  const filtered =
+    tab === 'history' && selectedDay
+      ? byQuery.filter((v) => v.watched_at && dayKey(v.watched_at) === selectedDay)
+      : byQuery;
 
   function renderVideoGrid(list: any[]) {
     return buildVideoBlocks(list).map((block, bi) => (
@@ -153,9 +179,9 @@ function ActivityPageInner() {
     ));
   }
 
-  // Appka historii rozdělí podle dne sledování (Dnes / Včera / konkrétní
-  // datum) - appka appka appka appka appka bez klikání do žádného
-  // kalendáře, jen přehledně po dnech.
+  // Historie je rozdělená podle dne, kdy uživatel video naposledy viděl
+  // (Dnes / Včera / konkrétní datum). Bez klikání je to prostě přehled po
+  // dnech; kdo chce jeden konkrétní den, otevře si nahoře 📅 Kalendář.
   function renderHistoryGroupedByDay(list: any[]) {
     const groups: { label: string; items: any[] }[] = [];
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -175,7 +201,12 @@ function ActivityPageInner() {
 
     return groups.map((g) => (
       <div key={g.label} style={{ marginBottom: 28 }}>
-        <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 12 }}>{g.label}</p>
+        <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 12 }}>
+          {g.label}
+          <span style={{ fontWeight: 400, color: 'var(--text-faint)', marginLeft: 8 }}>
+            · {g.items.length} {g.items.length === 1 ? 'video' : g.items.length < 5 ? 'videa' : 'videí'}
+          </span>
+        </p>
         {renderVideoGrid(g.items)}
       </div>
     ));
@@ -185,18 +216,60 @@ function ActivityPageInner() {
     <div>
       <p className="section-title">{t('yourActivityTitle')}</p>
 
-      <div className="tab-row" style={{ marginBottom: 24, flexWrap: 'wrap' }}>
+      <div className="tab-row" style={{ marginBottom: 16, flexWrap: 'wrap' }}>
         {TABS.map(({ key, label }) => (
-          <button key={key} className={`tab-btn ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)}>
+          <button
+            key={key}
+            className={`tab-btn ${tab === key ? 'active' : ''}`}
+            onClick={() => { setTab(key); if (key !== 'history') setSelectedDay(null); }}
+          >
             {label}
           </button>
         ))}
       </div>
 
+      {tab === 'history' && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setCalendarOpen((v) => !v)}
+              className={`tab-btn ${calendarOpen || selectedDay ? 'active' : ''}`}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              📅 {calendarOpen ? 'Skrýt kalendář' : 'Kalendář'}
+            </button>
+            {selectedDay && (
+              <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>
+                {new Date(`${selectedDay}T00:00:00`).toLocaleDateString('cs-CZ', {
+                  weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+                })}
+                {' · '}
+                <button
+                  onClick={() => setSelectedDay(null)}
+                  style={{ background: 'none', color: 'var(--brand)', padding: 0, fontSize: 13 }}
+                >
+                  zrušit
+                </button>
+              </span>
+            )}
+          </div>
+
+          {calendarOpen && (
+            <WatchCalendar
+              countsByDay={countsByDay}
+              selectedDay={selectedDay}
+              onSelectDay={setSelectedDay}
+            />
+          )}
+        </>
+      )}
+
       {filtered.length === 0 ? (
         <p style={{ color: 'var(--text-faint)' }}>
           {tab === 'history'
-            ? 'Tady uvidíš videa, která jsi nedávno sledoval/a, rozdělená po dnech.'
+            ? selectedDay
+              ? 'Tenhle den jsi nic nesledoval/a.'
+              : 'Tady uvidíš videa, která jsi nedávno sledoval/a, rozdělená po dnech. Konkrétní den si najdeš přes 📅 Kalendář.'
             : 'Videa v této kategorii se objeví tady.'}
         </p>
       ) : tab === 'history' ? (

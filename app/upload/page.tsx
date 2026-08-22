@@ -28,6 +28,11 @@ const LANGUAGE_OPTIONS = [
 type Visibility = 'public' | 'subscribers' | 'private';
 type ScheduleMode = 'now' | 'scheduled' | 'premiere';
 
+// Na jednom videu se můžou podílet nejvýš 4 tvůrci - ten, kdo ho nahrál,
+// a k tomu ještě tři spolutvůrci. Všichni čtyři se pak ukazují pod videem.
+const MAX_VIDEO_CREATORS = 4;
+const MAX_COLLABORATORS = MAX_VIDEO_CREATORS - 1;
+
 export default function UploadPage() {
   const router = useRouter();
   const { t } = useLanguage();
@@ -56,6 +61,9 @@ export default function UploadPage() {
   const [collabSearch, setCollabSearch] = useState('');
   const [collabResults, setCollabResults] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
   const [collabError, setCollabError] = useState<string | null>(null);
+  // Video se nahrálo, ale některé pozvánky ke spolupráci neprošly - tady si
+  // appka drží koho a ke kterému videu, ať to jde dokončit v úpravách.
+  const [failedInvites, setFailedInvites] = useState<{ videoId: string; names: string[] } | null>(null);
 
   async function searchCollaborators(query: string) {
     setCollabSearch(query);
@@ -75,6 +83,17 @@ export default function UploadPage() {
   async function addCollaborator(profile: { id: string; username: string; avatar_url: string | null }) {
     setCollabError(null);
     if (!userId) return;
+
+    // Na jednom videu se můžou podílet nejvýš 4 lidi - ty a další tři.
+    if (selectedCollaborators.length >= MAX_COLLABORATORS) {
+      setCollabError(t('collabLimitReachedNote').replace('{max}', String(MAX_VIDEO_CREATORS)));
+      return;
+    }
+
+    if (profile.id === userId) {
+      setCollabError(t('collabCannotAddYourselfNote'));
+      return;
+    }
 
     // Spolupráci jde nabídnout jen tomu, koho vzájemně odebíráte - ať appku
     // někdo nemůže takhle spamovat cizí lidi.
@@ -230,17 +249,44 @@ export default function UploadPage() {
 
       if (selectedCollaborators.length > 0) {
         await supabase.from('videos').update({ pending_collab_visibility: visibility }).eq('id', newVideoId);
+
+        // Chyby při zvaní se dřív potichu ztratily - tvůrci to vypadalo,
+        // že spolupráce prostě "nefunguje". Teď se sebere a ukáže.
+        const failed: string[] = [];
+        setFailedInvites(null);
+
         await Promise.all(
-          selectedCollaborators.map(async (c) => {
-            await supabase.from('video_collaborators').insert({ video_id: newVideoId, profile_id: c.id, status: 'pending' });
-            await supabase.from('notifications').insert({
+          selectedCollaborators.slice(0, MAX_COLLABORATORS).map(async (c) => {
+            const { error: collabError } = await supabase
+              .from('video_collaborators')
+              .insert({ video_id: newVideoId, profile_id: c.id, status: 'pending' });
+
+            if (collabError) {
+              failed.push(c.username);
+              return;
+            }
+
+            const { error: notifyError } = await supabase.from('notifications').insert({
               user_id: c.id,
               type: 'collab_invite',
               message: t('collabInviteMessage').replace('{title}', title),
               link: `/watch/${newVideoId}`,
             });
+
+            if (notifyError) failed.push(c.username);
           })
         );
+
+        // Video je nahrané, ale někoho se nepodařilo pozvat. Uživatele proto
+        // neposíláme pryč - dřív se hláška nastavila a hned vzápětí zmizela
+        // s přesměrováním na hlavní stránku, takže spolupráce tiše propadla.
+        if (failed.length > 0) {
+          setStatus('processing');
+          await waitUntilReady(newVideoId);
+          setStatus('idle');
+          setFailedInvites({ videoId: newVideoId, names: failed });
+          return;
+        }
       }
 
       setStatus('processing');
@@ -417,7 +463,12 @@ export default function UploadPage() {
         )}
 
         <div className="panel">
-          <p className="panel-heading">{t('collaboratorsLabel')}</p>
+          <p className="panel-heading">
+            {t('collaboratorsLabel')}
+            <span style={{ fontWeight: 400, color: 'var(--text-faint)', fontSize: 12, marginLeft: 8 }}>
+              {selectedCollaborators.length + 1}/{MAX_VIDEO_CREATORS}
+            </span>
+          </p>
           <p style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 10 }}>{t('collaboratorsHint')}</p>
 
           {selectedCollaborators.length > 0 && (
@@ -441,7 +492,13 @@ export default function UploadPage() {
             placeholder={t('searchUsernamePlaceholder')}
             value={collabSearch}
             onChange={(e) => searchCollaborators(e.target.value)}
+            disabled={selectedCollaborators.length >= MAX_COLLABORATORS}
           />
+          {selectedCollaborators.length >= MAX_COLLABORATORS && (
+            <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 6 }}>
+              {t('collabLimitReachedNote').replace('{max}', String(MAX_VIDEO_CREATORS))}
+            </p>
+          )}
           {collabResults.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
               {collabResults.map((r) => (
@@ -657,6 +714,26 @@ export default function UploadPage() {
       </div>
 
       {error && <p className="error-text">{error}</p>}
+
+      {/* Video je nahrané, ale někoho se nepodařilo pozvat ke spolupráci.
+          Zůstáváme na stránce a nabídneme rovnou úpravy videa, ať to jde
+          dotáhnout - dřív hláška zmizela dřív, než ji šlo přečíst. */}
+      {failedInvites && (
+        <div className="panel" style={{ borderColor: '#e0453f' }}>
+          <p className="error-text" style={{ margin: 0 }}>
+            {t('collabInviteFailedNote').replace('{names}', failedInvites.names.join(', '))}
+          </p>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+            <Link href={`/your-videos/${failedInvites.videoId}/edit`} className="reaction-btn">
+              {t('collaboratorsLabel')}
+            </Link>
+            <button type="button" onClick={() => { setFailedInvites(null); router.push('/'); }} style={{ background: 'var(--panel-raised)', color: 'var(--text)' }}>
+              {t('home')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {status === 'uploading' && <p>{t('uploading')} {progress}%</p>}
       {status === 'saving' && <p>{t('savingVideoLabel')}</p>}
       {status === 'processing' && <p>{t('processingVideoNote')}</p>}
@@ -665,7 +742,9 @@ export default function UploadPage() {
         <button type="button" onClick={() => setStep(1)} style={{ background: 'var(--panel-raised)', color: 'var(--text)' }}>
           {t('backButton')}
         </button>
-        <button type="submit" disabled={status !== 'idle'} style={{ flex: 1 }}>
+        {/* Když už je video nahrané (jen se nepovedly pozvánky), nesmí jít
+            odeslat formulář znovu - jinak by se nahrálo podruhé. */}
+        <button type="submit" disabled={status !== 'idle' || !!failedInvites} style={{ flex: 1 }}>
           {status === 'idle' ? t('uploadButton') : t('processing')}
         </button>
       </div>

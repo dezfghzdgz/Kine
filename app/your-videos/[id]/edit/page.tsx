@@ -7,6 +7,11 @@ import { supabase } from '@/lib/supabaseClient';
 import Toast, { ToastType } from '@/components/Toast';
 import { useLanguage } from '@/lib/i18n';
 
+// Na jednom videu se můžou podílet nejvýš 4 tvůrci - ten, kdo ho nahrál,
+// a k tomu tři spolutvůrci. Všichni čtyři se pak ukazují pod videem.
+const MAX_VIDEO_CREATORS = 4;
+const MAX_COLLABORATORS = MAX_VIDEO_CREATORS - 1;
+
 export default function EditVideoPage() {
   const { t } = useLanguage();
   const params = useParams();
@@ -55,6 +60,17 @@ export default function EditVideoPage() {
     setCollabError(null);
     if (!videoOwnerId) return;
 
+    // Na jednom videu se můžou podílet nejvýš 4 lidi - vlastník a tři další.
+    if (collaborators.length >= MAX_COLLABORATORS) {
+      setCollabError(t('collabLimitReachedNote').replace('{max}', String(MAX_VIDEO_CREATORS)));
+      return;
+    }
+
+    if (profileId === videoOwnerId) {
+      setCollabError(t('collabCannotAddYourselfNote'));
+      return;
+    }
+
     // Spolupráci jde nabídnout jen tomu, koho vzájemně odebíráte - ať appku
     // někdo nemůže takhle spamovat cizí lidi.
     const { data: mutualCheck } = await supabase
@@ -86,13 +102,25 @@ export default function EditVideoPage() {
       setVisibility('private');
     }
 
-    await supabase.from('video_collaborators').insert({ video_id: videoId, profile_id: profileId, status: 'pending' });
-    await supabase.from('notifications').insert({
+    // Chyby se dřív spolkly a tvůrci to vypadalo, že se nestalo vůbec nic.
+    const { error: insertError } = await supabase
+      .from('video_collaborators')
+      .insert({ video_id: videoId, profile_id: profileId, status: 'pending' });
+
+    if (insertError) {
+      setCollabError(insertError.message);
+      return;
+    }
+
+    const { error: notifyError } = await supabase.from('notifications').insert({
       user_id: profileId,
       type: 'collab_invite',
       message: t('collabInviteMessage').replace('{title}', title),
       link: `/watch/${videoId}`,
     });
+
+    if (notifyError) setCollabError(notifyError.message);
+
     setCollabSearch('');
     setCollabResults([]);
     loadCollaborators();
@@ -100,7 +128,38 @@ export default function EditVideoPage() {
 
   async function removeCollaborator(profileId: string) {
     await supabase.from('video_collaborators').delete().eq('video_id', videoId).eq('profile_id', profileId);
+    await releasePendingVisibility();
     loadCollaborators();
+  }
+
+  /**
+   * Dokud video čeká na potvrzení spolupráce, drží ho appka jako soukromé.
+   * Jakmile už nikdo nečeká - všichni potvrdili, nebo jsi je odebral -
+   * vrátí se viditelnost, kterou jsi původně zvolil. Dřív video zůstalo
+   * soukromé napořád a nešlo poznat proč.
+   */
+  async function releasePendingVisibility() {
+    const { data: stillPending } = await supabase
+      .from('video_collaborators')
+      .select('profile_id')
+      .eq('video_id', videoId)
+      .eq('status', 'pending');
+
+    if (stillPending && stillPending.length > 0) return;
+
+    const { data: currentVideo } = await supabase
+      .from('videos')
+      .select('pending_collab_visibility')
+      .eq('id', videoId)
+      .maybeSingle();
+
+    if (currentVideo?.pending_collab_visibility) {
+      await supabase
+        .from('videos')
+        .update({ visibility: currentVideo.pending_collab_visibility, pending_collab_visibility: null })
+        .eq('id', videoId);
+      setVisibility(currentVideo.pending_collab_visibility);
+    }
   }
 
   useEffect(() => {
@@ -250,7 +309,12 @@ export default function EditVideoPage() {
       </div>
 
       <div className="panel">
-        <p className="panel-heading">{t('collaboratorsLabel')}</p>
+        <p className="panel-heading">
+          {t('collaboratorsLabel')}
+          <span style={{ fontWeight: 400, color: 'var(--text-faint)', fontSize: 12, marginLeft: 8 }}>
+            {collaborators.length + 1}/{MAX_VIDEO_CREATORS}
+          </span>
+        </p>
         <p style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 10 }}>{t('collaboratorsHint')}</p>
 
         {collaborators.length > 0 && (
@@ -283,7 +347,13 @@ export default function EditVideoPage() {
           placeholder={t('searchUsernamePlaceholder')}
           value={collabSearch}
           onChange={(e) => searchCollaborators(e.target.value)}
+          disabled={collaborators.length >= MAX_COLLABORATORS}
         />
+        {collaborators.length >= MAX_COLLABORATORS && (
+          <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 6 }}>
+            {t('collabLimitReachedNote').replace('{max}', String(MAX_VIDEO_CREATORS))}
+          </p>
+        )}
         {collabResults.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
             {collabResults.map((r) => (
