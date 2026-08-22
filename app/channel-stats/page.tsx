@@ -8,8 +8,63 @@ import { supabase } from '@/lib/supabaseClient';
 import StatChartModal from '@/components/StatChartModal';
 import RatingChartModal from '@/components/RatingChartModal';
 import StarDistribution from '@/components/StarDistribution';
+import StatsBarList, { type BarItem } from '@/components/StatsBarList';
+import StatsHeatmap from '@/components/StatsHeatmap';
+import StatsVideoTable, { formatWatchTime, type VideoStatsRow } from '@/components/StatsVideoTable';
+import { viewSourceLabel } from '@/lib/viewSource';
 import { computeTrustRatingClient, recordTrustRatingSnapshot, getTotalReactionCount, RATING_UNLOCK_THRESHOLD } from '@/lib/trustRatingClient';
 import FieldHint from '@/components/FieldHint';
+
+/** Prázdná mřížka 7 dní x 24 hodin pro graf "kdy se lidi dívají". */
+function emptyHeatmap(): number[][] {
+  return Array.from({ length: 7 }, () => Array(24).fill(0));
+}
+
+type ViewLogRow = { viewed_at: string; source?: string | null; video_id?: string };
+
+const VIEWS_PAGE_SIZE = 1000;
+
+/**
+ * Natáhne VŠECHNA zhlédnutí daných videí, po stránkách.
+ *
+ * Supabase na jeden dotaz vrátí nanejvýš tisíc řádků. Bez stránkování by se
+ * grafy "odkud diváci přicházejí" a "kdy se lidi dívají" po překročení téhle
+ * hranice počítaly z náhodného výřezu dat a tvářily se, že jsou kompletní.
+ *
+ * Sloupec "source" přidává samostatná migrace - dokud neproběhne, appka si
+ * vezme aspoň časy zhlédnutí, ať se kvůli tomu nerozbije celá stránka.
+ */
+async function loadAllViews(videoIds: string[]): Promise<ViewLogRow[]> {
+  const rows: ViewLogRow[] = [];
+  let columns = 'viewed_at, source, video_id';
+
+  for (let page = 0; ; page++) {
+    const from = page * VIEWS_PAGE_SIZE;
+    const { data, error } = await supabase
+      .from('views_log')
+      .select(columns)
+      .in('video_id', videoIds)
+      .order('viewed_at', { ascending: true })
+      .range(from, from + VIEWS_PAGE_SIZE - 1);
+
+    if (error) {
+      if (columns.includes('source')) {
+        // Migrace zatím neproběhla - zkusíme to znovu bez zdroje, od začátku.
+        columns = 'viewed_at, video_id';
+        rows.length = 0;
+        page = -1;
+        continue;
+      }
+      break;
+    }
+
+    const batch = (data ?? []) as any[];
+    rows.push(...batch);
+    if (batch.length < VIEWS_PAGE_SIZE) break;
+  }
+
+  return rows;
+}
 
 type ChartKey = 'subscribers' | 'views' | 'videos' | 'likes' | 'dislikes';
 
@@ -55,6 +110,16 @@ export default function ChannelStatsPage() {
   const [ratingsByVideo, setRatingsByVideo] = useState<Record<string, number[]>>({});
   // Součet za celý kanál: kolikrát padla 1★, 2★, ... 5★ (index 0 = 1★)
   const [ratingTotals, setRatingTotals] = useState<number[]>([0, 0, 0, 0, 0]);
+  const [viewSources, setViewSources] = useState<BarItem[]>([]);
+  const [watchHeatmap, setWatchHeatmap] = useState<number[][]>(emptyHeatmap);
+  const [videoTable, setVideoTable] = useState<VideoStatsRow[]>([]);
+  const [watchStats, setWatchStats] = useState({
+    totalWatchSeconds: 0,
+    avgCompletionPercent: null as number | null,
+    finishedShare: null as number | null,
+    uniqueViewers: 0,
+  });
+  const [watchStatsAvailable, setWatchStatsAvailable] = useState(true);
   const [trustRating, setTrustRating] = useState<number | null>(null);
   const [trustHistory, setTrustHistory] = useState<{ date: string; score: number }[]>([]);
   const [reactionCount, setReactionCount] = useState(0);
@@ -74,11 +139,11 @@ export default function ChannelStatsPage() {
     const [{ data: ownVideos }, { data: collabRows }] = await Promise.all([
       supabase
         .from('videos')
-        .select('id, title, thumbnail_url, views, created_at')
+        .select('id, title, thumbnail_url, views, created_at, duration_seconds')
         .eq('owner_id', authData.user.id),
       supabase
         .from('video_collaborators')
-        .select('status, videos(id, title, thumbnail_url, views, created_at)')
+        .select('status, videos(id, title, thumbnail_url, views, created_at, duration_seconds)')
         .eq('profile_id', authData.user.id),
     ]);
 
@@ -103,9 +168,11 @@ export default function ChannelStatsPage() {
     let avgRating: number | null = null;
 
     if (videoIds.length > 0) {
+      // Jeden dotaz na reakce pro celou stránku - dřív se ta samá tabulka
+      // tahala dvakrát za sebou.
       const { data: reactions } = await supabase
         .from('video_reactions')
-        .select('reaction, score, created_at')
+        .select('video_id, reaction, score, created_at')
         .in('video_id', videoIds);
 
       totalLikes = (reactions ?? []).filter((r) => r.reaction === 'like').length;
@@ -117,8 +184,35 @@ export default function ChannelStatsPage() {
         avgRating = reactions.reduce((sum, r) => sum + (r.score ?? 3), 0) / reactions.length;
       }
 
-      const { data: viewsLog } = await supabase.from('views_log').select('viewed_at').in('video_id', videoIds);
-      viewTimestamps = (viewsLog ?? []).map((v) => new Date(v.viewed_at));
+      // Zdroj zhlédnutí přidává samostatná migrace. Když ještě neproběhla,
+      // dotaz se sloupcem "source" skončí chybou - v tom případě si appka
+      // vezme aspoň časy zhlédnutí, ať se kvůli tomu nerozbije celá stránka.
+      const viewsLog = await loadAllViews(videoIds);
+
+      viewTimestamps = viewsLog.map((v) => new Date(v.viewed_at));
+
+      // Odkud diváci přišli
+      const sourceCounts: Record<string, number> = {};
+      viewsLog.forEach((v) => {
+        const key = v.source ?? 'unknown';
+        sourceCounts[key] = (sourceCounts[key] ?? 0) + 1;
+      });
+      setViewSources(
+        Object.entries(sourceCounts).map(([key, value]) => ({
+          key,
+          label: viewSourceLabel(key),
+          value,
+        }))
+      );
+
+      // Kdy se lidi dívají - mřížka den v týdnu x hodina
+      const heatmap = emptyHeatmap();
+      viewsLog.forEach((v) => {
+        const d = new Date(v.viewed_at);
+        // getDay(): neděle = 0, u nás začíná týden pondělkem
+        heatmap[(d.getDay() + 6) % 7][d.getHours()]++;
+      });
+      setWatchHeatmap(heatmap);
 
       const { count: commentCount } = await supabase
         .from('comments')
@@ -126,15 +220,86 @@ export default function ChannelStatsPage() {
         .in('video_id', videoIds);
       setTotalComments(commentCount ?? 0);
 
-      const { data: allReactions } = await supabase
-        .from('video_reactions')
-        .select('video_id, score')
-        .in('video_id', videoIds);
+      // Doba sledování, dokoukanost a počty komentářů u jednotlivých videí.
+      //
+      // Nejde je spočítat přímo z prohlížeče: rozkoukanost videí je schválně
+      // soukromá (každý vidí jen svoje řádky), takže by tvůrci vycházely
+      // samé nuly. Sečte je proto funkce v databázi, která vrací jen souhrny
+      // za video - nikdy ne to, kdo co sledoval a kam se dostal.
+      const [{ data: perVideo, error: perVideoError }, { data: viewerCount }] = await Promise.all([
+        supabase.rpc('creator_video_stats', { video_ids: videoIds }),
+        supabase.rpc('creator_unique_viewers', { video_ids: videoIds }),
+      ]);
+
+      // Funkce přidává samostatná migrace. Dokud neproběhne, zbytek stránky
+      // musí fungovat dál - jen se místo čísel ukáže pomlčka.
+      setWatchStatsAvailable(!perVideoError);
+
+      const commentsByVideo: Record<string, number> = {};
+      const watchByVideo: Record<string, { seconds: number; completionSum: number; count: number }> = {};
+      let totalWatchSeconds = 0;
+      let completionSum = 0;
+      let completionCount = 0;
+      let finishedRows = 0;
+      let watchRowCount = 0;
+
+      (perVideo ?? []).forEach((row: any) => {
+        commentsByVideo[row.video_id] = Number(row.comment_count ?? 0);
+        const seconds = Number(row.watch_seconds ?? 0);
+        const rowCompletionSum = Number(row.completion_sum ?? 0);
+        const rowCompletionRows = Number(row.completion_rows ?? 0);
+
+        watchByVideo[row.video_id] = {
+          seconds,
+          completionSum: rowCompletionSum,
+          count: rowCompletionRows,
+        };
+
+        totalWatchSeconds += seconds;
+        completionSum += rowCompletionSum;
+        completionCount += rowCompletionRows;
+        finishedRows += Number(row.finished_rows ?? 0);
+        watchRowCount += Number(row.watch_rows ?? 0);
+      });
+
+      setWatchStats({
+        totalWatchSeconds,
+        avgCompletionPercent: completionCount > 0 ? completionSum / completionCount : null,
+        finishedShare: watchRowCount > 0 ? (finishedRows / watchRowCount) * 100 : null,
+        uniqueViewers: Number(viewerCount ?? 0),
+      });
+
+      const ratingByVideo: Record<string, { sum: number; count: number }> = {};
+      (reactions ?? []).forEach((r: any) => {
+        const bucket = ratingByVideo[r.video_id] ?? { sum: 0, count: 0 };
+        bucket.sum += r.score ?? 3;
+        bucket.count++;
+        ratingByVideo[r.video_id] = bucket;
+      });
+
+      setVideoTable(
+        (videos ?? []).map((v: any) => {
+          const rating = ratingByVideo[v.id];
+          const watch = watchByVideo[v.id];
+          return {
+            id: v.id,
+            title: v.title,
+            thumbnail_url: v.thumbnail_url ?? null,
+            created_at: v.created_at,
+            views: v.views ?? 0,
+            avgRating: rating && rating.count > 0 ? rating.sum / rating.count : null,
+            ratingCount: rating?.count ?? 0,
+            comments: commentsByVideo[v.id] ?? 0,
+            completionPercent: watch && watch.count > 0 ? watch.completionSum / watch.count : null,
+            watchSeconds: watch?.seconds ?? 0,
+          };
+        })
+      );
 
       const breakdown: Record<string, number[]> = {};
       const totals = [0, 0, 0, 0, 0];
       videoIds.forEach((id) => { breakdown[id] = [0, 0, 0, 0, 0]; });
-      (allReactions ?? []).forEach((r) => {
+      (reactions ?? []).forEach((r: any) => {
         const score = r.score ?? 3;
         if (breakdown[r.video_id] && score >= 1 && score <= 5) {
           breakdown[r.video_id][score - 1]++;
@@ -234,7 +399,9 @@ export default function ChannelStatsPage() {
   };
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    // Stránka je širší než dřív - srovnávací tabulka a mřížka "kdy se lidi
+    // dívají" potřebují místo, jinak by se pořád posouvaly do stran.
+    <div style={{ maxWidth: 980 }}>
       <p className="section-title">{t('channelStatsTitle')}</p>
 
       <div
@@ -320,6 +487,104 @@ export default function ChannelStatsPage() {
             {t('engagementRateDesc')}
           </p>
         </div>
+      </div>
+
+      {/* Doba sledování a dokoukanost - počítá se z rozkoukanosti, kterou si
+          appka u každého diváka ukládá kvůli "pokračuj, kde jsi skončil". */}
+      <div className="panel" style={{ marginBottom: 20 }}>
+        <p className="panel-heading">
+          Doba sledování a dokoukanost
+          <FieldHint text="Počítá se z toho, kam se přihlášení diváci ve videu dostali. Nepřihlášené diváky sem appka započítat neumí, takže skutečná čísla budou o něco vyšší. Ukazují se jen souhrny, nikdy kdo co sledoval." />
+        </p>
+
+        {!watchStatsAvailable && (
+          <p style={{ fontSize: 12.5, color: '#e0b23f', margin: '0 0 12px' }}>
+            Tahle část potřebuje migraci <code>supabase-migration-view-sources.sql</code> - spusť ji
+            v Supabase a čísla se objeví.
+          </p>
+        )}
+
+        <div className="stat-figure-row">
+          <div>
+            <p className="stat-figure">{formatWatchTime(watchStats.totalWatchSeconds)}</p>
+            <p className="stat-caption">celkem odsledováno</p>
+          </div>
+          <div>
+            <p className="stat-figure">
+              {watchStats.avgCompletionPercent === null ? '—' : `${Math.round(watchStats.avgCompletionPercent)} %`}
+            </p>
+            <p className="stat-caption">průměrně z videa</p>
+          </div>
+          <div>
+            <p className="stat-figure">
+              {watchStats.finishedShare === null ? '—' : `${Math.round(watchStats.finishedShare)} %`}
+            </p>
+            <p className="stat-caption">dokoukalo do konce</p>
+          </div>
+          <div>
+            <p className="stat-figure">{watchStats.uniqueViewers}</p>
+            <p className="stat-caption">přihlášených diváků</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Kolik lidí kanál sleduje a kolik z nich se doopravdy ozve. */}
+      <div className="panel" style={{ marginBottom: 20 }}>
+        <p className="panel-heading">
+          Odběratelé a zapojení
+          <FieldHint text="Kolik ze zhlédnutí skončí reakcí nebo komentářem a kolik zhlédnutí připadá na jednoho odběratele. Ukazuje, jestli lidi jen prokliknou dál, nebo je video opravdu chytne." />
+        </p>
+
+        <div className="stat-figure-row">
+          <div>
+            <p className="stat-figure">{stats.subscriberCount}</p>
+            <p className="stat-caption">odběratelů</p>
+          </div>
+          <div>
+            <p className="stat-figure">
+              {stats.totalViews > 0
+                ? `${(((stats.totalLikes + stats.totalDislikes) / stats.totalViews) * 100).toFixed(1)} %`
+                : '—'}
+            </p>
+            <p className="stat-caption">zhlédnutí s reakcí</p>
+          </div>
+          <div>
+            <p className="stat-figure">
+              {stats.totalViews > 0 ? `${((totalComments / stats.totalViews) * 100).toFixed(1)} %` : '—'}
+            </p>
+            <p className="stat-caption">zhlédnutí s komentářem</p>
+          </div>
+          <div>
+            <p className="stat-figure">
+              {stats.subscriberCount > 0 ? (stats.totalViews / stats.subscriberCount).toFixed(1) : '—'}
+            </p>
+            <p className="stat-caption">zhlédnutí na odběratele</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="panel" style={{ marginBottom: 20 }}>
+        <p className="panel-heading">
+          Odkud diváci přicházejí
+          <FieldHint text="Odkud se na video kliklo. Zhlédnutí zapsaná dřív, než se tohle začalo měřit, jsou vedená jako Neznámé." />
+        </p>
+        <StatsBarList items={viewSources} emptyNote="Zatím žádná zhlédnutí k rozdělení." />
+      </div>
+
+      <div className="panel" style={{ marginBottom: 20 }}>
+        <p className="panel-heading">
+          Kdy se lidi dívají
+          <FieldHint text="Každé políčko je jedna hodina jednoho dne v týdnu. Čím sytější, tím víc zhlédnutí. Řídí se to časem tvého prohlížeče." />
+        </p>
+        <StatsHeatmap counts={watchHeatmap} />
+      </div>
+
+      <div className="panel" style={{ marginBottom: 20 }}>
+        <p className="panel-heading">
+          Srovnání videí
+          <FieldHint text="Klikni na název sloupce a videa se podle něj seřadí. Druhé kliknutí obrátí pořadí." />
+        </p>
+        <StatsVideoTable rows={videoTable} />
       </div>
 
       <div

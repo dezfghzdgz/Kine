@@ -168,3 +168,151 @@ export function PeopleIcon({ size = 18 }: { size?: number }) {
     </svg>
   );
 }
+
+/* ---------- Ikonky kategorií v Explore ----------
+   Každá kategorie má vlastní obrázek, ať se dají rozeznat od sebe na první
+   pohled. Dřív měly všechny stejný štítek. Kreslené stejným stylem jako
+   zbytek appky: čára tloušťky 1.8, mřížka 24x24, bez výplně. */
+
+export function CarIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M3 13l1.8-5.2A2 2 0 0 1 6.7 6.5h10.6a2 2 0 0 1 1.9 1.3L21 13v4.5h-3V16H6v1.5H3V13z" strokeLinejoin="round" />
+      <path d="M3.6 13h16.8" strokeLinecap="round" />
+      <circle cx="7.2" cy="16" r="1.3" />
+      <circle cx="16.8" cy="16" r="1.3" />
+    </svg>
+  );
+}
+
+export function PlaneIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M21 15.5l-8-3V6.2a1.5 1.5 0 0 0-3 0v6.3l-8 3V17l8-1.8v3.1l-2 1.4V21l3.5-.9L15 21v-1.3l-2-1.4v-3.1L21 17v-1.5z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function FilmIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="3" y="4.5" width="18" height="15" rx="2" />
+      <path d="M7.5 4.5v15M16.5 4.5v15M3 12h18M3 8.2h4.5M3 15.8h4.5M16.5 8.2H21M16.5 15.8H21" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function GamepadIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M7.5 8h9a4.5 4.5 0 0 1 4.4 5.4l-.6 3a2.6 2.6 0 0 1-4.6 1.1L14.4 16H9.6l-1.3 1.5a2.6 2.6 0 0 1-4.6-1.1l-.6-3A4.5 4.5 0 0 1 7.5 8z" strokeLinejoin="round" />
+      <path d="M7 11v2.4M5.8 12.2h2.4" strokeLinecap="round" />
+      <circle cx="15.6" cy="11.6" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="17.6" cy="13.4" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function MusicIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M9 18V5.5l10-2v12" strokeLinejoin="round" />
+      <circle cx="6.5" cy="18" r="2.5" />
+      <circle cx="16.5" cy="15.5" r="2.5" />
+    </svg>
+  );
+}
+
+export function ComedyIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M7.5 13.5c1 2.2 2.6 3.3 4.5 3.3s3.5-1.1 4.5-3.3z" strokeLinejoin="round" />
+      <path d="M8.2 9.2h1.6M14.2 9.2h1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function BlogIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="8" r="3.2" />
+      <path d="M5 20c.8-3.4 3.6-5.4 7-5.4s6.2 2 7 5.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function HowToIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M14.5 3.2a4.2 4.2 0 0 0-4.7 6.3L3.6 15.7a1.8 1.8 0 0 0 2.6 2.6l6.2-6.2a4.2 4.2 0 0 0 6.3-4.7l-2.6 2.6-2.5-.7-.7-2.5 2.6-2.6z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function HeartHandIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 9.6l-.9-.9a2.7 2.7 0 0 0-3.8 3.8l4.7 4.6 4.7-4.6a2.7 2.7 0 0 0-3.8-3.8l-.9.9z" strokeLinejoin="round" />
+      <path d="M4 20.5c1.6-1.3 3.6-2 5.4-2h5.2c1.8 0 3.8.7 5.4 2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function SportsIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 3c2.4 2.3 3.7 5.4 3.7 9S14.4 18.7 12 21M12 3C9.6 5.3 8.3 8.4 8.3 12s1.3 6.7 3.7 9" />
+      <path d="M3.4 9.5h17.2M3.4 14.5h17.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function ScienceIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M10 3v6.2L5.2 17A2.2 2.2 0 0 0 7.1 20.4h9.8A2.2 2.2 0 0 0 18.8 17L14 9.2V3" strokeLinejoin="round" />
+      <path d="M9 3h6M7.8 14.4h8.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function EducationIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 4.2L22 9l-10 4.8L2 9l10-4.8z" strokeLinejoin="round" />
+      <path d="M6.5 11.3V16c0 1.5 2.5 2.8 5.5 2.8s5.5-1.3 5.5-2.8v-4.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function EntertainmentIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 3.2l2.6 5.4 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.4l5.9-.8L12 3.2z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function NewsIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M4 5.5h13v13a2 2 0 0 0 2 2H6a2 2 0 0 1-2-2v-13z" strokeLinejoin="round" />
+      <path d="M17 9.5h3v9a2 2 0 0 1-2 2" strokeLinejoin="round" />
+      <path d="M7 9h7M7 12.5h7M7 16h4.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function PetIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <ellipse cx="12" cy="16" rx="4.2" ry="3.4" />
+      <ellipse cx="5.8" cy="11.4" rx="1.9" ry="2.4" />
+      <ellipse cx="18.2" cy="11.4" rx="1.9" ry="2.4" />
+      <ellipse cx="9.2" cy="6.8" rx="1.9" ry="2.4" />
+      <ellipse cx="14.8" cy="6.8" rx="1.9" ry="2.4" />
+    </svg>
+  );
+}

@@ -8,8 +8,19 @@ const COOLDOWN_MS = 30 * 60 * 1000; // 30 minut
 // localStorage smazat). Appka teď navíc hlídá IP adresu, ať pozná
 // opakované počítání odjinud ze stejného místa i tehdy, kdyby appce
 // klient neposlal pravdivý stav svého localStorage.
+/**
+ * Zdroj zhlédnutí ukládáme jen jako krátký očištěný název místa nebo domény.
+ * Cokoliv jiného appka zahodí - do databáze nesmí přistát libovolný text,
+ * který si klient vymyslí.
+ */
+function sanitizeSource(value: unknown): string {
+  if (typeof value !== 'string') return 'unknown';
+  const clean = value.trim().toLowerCase().slice(0, 60);
+  return /^[a-z0-9.-]+$/.test(clean) ? clean : 'unknown';
+}
+
 export async function POST(req: NextRequest) {
-  const { videoId } = await req.json();
+  const { videoId, source } = await req.json();
   if (!videoId) return NextResponse.json({ error: 'Chybí videoId.' }, { status: 400 });
 
   const { data: video } = await supabaseServer.from('videos').select('views').eq('id', videoId).single();
@@ -33,7 +44,16 @@ export async function POST(req: NextRequest) {
   }
 
   await supabaseServer.from('videos').update({ views: (video.views ?? 0) + 1 }).eq('id', videoId);
-  await supabaseServer.from('views_log').insert({ video_id: videoId, ip_address: ip });
+
+  const { error: logError } = await supabaseServer
+    .from('views_log')
+    .insert({ video_id: videoId, ip_address: ip, source: sanitizeSource(source) });
+
+  // Sloupec "source" přidává samostatná migrace. Když ještě neproběhla,
+  // zhlédnutí se nesmí ztratit - appka ho zapíše aspoň bez zdroje.
+  if (logError) {
+    await supabaseServer.from('views_log').insert({ video_id: videoId, ip_address: ip });
+  }
 
   return NextResponse.json({ success: true, counted: true });
 }

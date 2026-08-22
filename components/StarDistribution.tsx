@@ -10,7 +10,10 @@
  * hned poznat, jestli je plný pruh z jednoho hlasu, nebo ze sta.
  */
 
-const STAR_COLORS = ['#e0453f', '#e07a3f', '#e0b23f', '#a8c93f', '#4fbf5f'];
+// Hodnocení má dva póly (špatné vs. dobré) a neutrální střed, takže barvy
+// jdou od červené přes šedou k zelené - ne duhou. Šedá trojka čtenáři
+// říká "ani ryba ani rak" sama od sebe.
+const STAR_COLORS = ['#d64550', '#e08a72', '#8a8a8f', '#6fbf87', '#2fa36b'];
 
 export default function StarDistribution({
   distribution,

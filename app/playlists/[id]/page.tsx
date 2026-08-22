@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -21,6 +21,11 @@ export default function PlaylistDetailPage() {
   const [addError, setAddError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [savingOrder, setSavingOrder] = useState(false);
+  // Prohlížeč po přetažení pošle ještě klik - tímhle ho spolkneme, ať
+  // přesun videa neskončí odchodem na přehrávání.
+  const justDraggedRef = useRef(false);
 
   useEffect(() => {
     load();
@@ -104,19 +109,43 @@ export default function PlaylistDetailPage() {
     load();
   }
 
-  async function handleDrop(targetIndex: number) {
-    if (dragIndex === null || dragIndex === targetIndex) return;
-    const reordered = [...videos];
-    const [moved] = reordered.splice(dragIndex, 1);
-    reordered.splice(targetIndex, 0, moved);
-    setVideos(reordered);
-    setDragIndex(null);
+  /**
+   * Přesune video z jedné pozice na druhou a hned uloží nové pořadí.
+   *
+   * V seznamu se pořadí přepíše okamžitě, ať to nekouká zpožděně, a do
+   * databáze se přepíšou pozice všech videí (proč, viz komentář níž).
+   */
+  async function moveVideo(fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex || toIndex < 0 || toIndex >= videos.length) return;
 
+    const reordered = [...videos];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+    setVideos(reordered);
+    setSavingOrder(true);
+
+    // Přečíslují se schválně všechna videa, ne jen ta přesunutá: videa
+    // přidaná odjinud (z playlistu u videa, z kanálu, při nahrávání) mají
+    // position rovnou 0, takže by se po přeuložení jen části pořadí
+    // rozsypalo. Takhle se to při každém přesunu samo srovná.
     await Promise.all(
       reordered.map((v, i) =>
-        supabase.from('playlist_videos').update({ position: i }).eq('playlist_id', playlistId).eq('video_id', v.id)
+        supabase
+          .from('playlist_videos')
+          .update({ position: i })
+          .eq('playlist_id', playlistId)
+          .eq('video_id', v.id)
       )
     );
+    setSavingOrder(false);
+  }
+
+  async function handleDrop(targetIndex: number) {
+    const from = dragIndex;
+    setDragIndex(null);
+    setDropIndex(null);
+    if (from === null) return;
+    await moveVideo(from, targetIndex);
   }
 
   if (loading) return <p style={{ color: 'var(--text-faint)' }}>{t('loading')}</p>;
@@ -166,20 +195,78 @@ export default function PlaylistDetailPage() {
       </div>
 
       <div>
-        <p className="panel-heading">Playlist ({videos.length})</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <p className="panel-heading" style={{ margin: 0 }}>Playlist ({videos.length})</p>
+          {savingOrder && <span style={{ fontSize: 11.5, color: 'var(--text-faint)' }}>Ukládám pořadí…</span>}
+        </div>
+
+        {isOwner && videos.length > 1 && (
+          <p style={{ fontSize: 11.5, color: 'var(--text-faint)', margin: '6px 0 10px' }}>
+            Pořadí přehodíš šipkami ▲▼ nebo přetažením za ⠿.
+          </p>
+        )}
+
+        {/* Přehazování videí: šipky fungují všude včetně mobilu, tažení za
+            úchyt je rychlejší na počítači. Tahat jde jen za ⠿, ať se
+            omylem nespustí video při snaze video přesunout. */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 24 }}>
           {videos.map((v, i) => (
             <div
               key={v.id}
               draggable={isOwner}
-              onDragStart={() => setDragIndex(i)}
-              onDragOver={(e) => e.preventDefault()}
+              onDragStart={(e) => { setDragIndex(i); e.dataTransfer.effectAllowed = 'move'; }}
+              onDragEnd={() => {
+                setDragIndex(null);
+                setDropIndex(null);
+                // Značka platí jen na okamžik po puštění. Bez toho by
+                // zůstala viset napořád a spolkla by i další obyčejný klik.
+                justDraggedRef.current = true;
+                setTimeout(() => { justDraggedRef.current = false; }, 150);
+              }}
+              onDragOver={(e) => { e.preventDefault(); if (dropIndex !== i) setDropIndex(i); }}
+              onDragLeave={() => { if (dropIndex === i) setDropIndex(null); }}
               onDrop={() => handleDrop(i)}
-              onClick={() => playVideoAt(i)}
-              className="panel"
-              style={{ display: 'flex', gap: 10, alignItems: 'center', padding: 8, cursor: 'pointer' }}
+              // Po přetažení se video nesmí zároveň spustit - dřív tažení
+              // často skončilo tím, že appka odešla na přehrávání.
+              onClick={() => {
+                if (justDraggedRef.current) { justDraggedRef.current = false; return; }
+                playVideoAt(i);
+              }}
+              className={`panel playlist-row ${dragIndex === i ? 'dragging' : ''} ${dropIndex === i && dragIndex !== i ? 'drop-target' : ''}`}
             >
-              {isOwner && <span style={{ cursor: 'grab', color: 'var(--text-faint)', fontSize: 14 }}>⠿</span>}
+              {isOwner && (
+                <>
+                  <span
+                    className="playlist-row-handle"
+                    title="Přetáhni pro změnu pořadí"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    ⠿
+                  </span>
+                  <span className="playlist-move-btns" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="playlist-move-btn"
+                      disabled={i === 0}
+                      onClick={() => moveVideo(i, i - 1)}
+                      title="Posunout nahoru"
+                      aria-label="Posunout nahoru"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      className="playlist-move-btn"
+                      disabled={i === videos.length - 1}
+                      onClick={() => moveVideo(i, i + 1)}
+                      title="Posunout dolů"
+                      aria-label="Posunout dolů"
+                    >
+                      ▼
+                    </button>
+                  </span>
+                </>
+              )}
               <span style={{ fontSize: 12, color: 'var(--text-faint)', width: 16, flexShrink: 0 }}>{i + 1}</span>
               <div style={{ width: 64, height: 36, borderRadius: 6, overflow: 'hidden', flexShrink: 0, background: 'var(--panel-raised)' }}>
                 {v.thumbnail_url && <Image src={v.thumbnail_url} alt={v.title} width={64} height={36} style={{ objectFit: 'cover' }} />}

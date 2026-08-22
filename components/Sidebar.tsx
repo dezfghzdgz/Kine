@@ -11,7 +11,12 @@ import ProfileMenu from './ProfileMenu';
 import NotificationBell from './NotificationBell';
 import SparksNavButton from './SparksNavButton';
 import { useUserRole } from '@/lib/useUserRole';
-import { FireIcon, SparkleIcon, DiceIcon, TagIcon } from './ReactionIcons';
+import {
+  FireIcon, SparkleIcon, DiceIcon,
+  CarIcon, PlaneIcon, FilmIcon, GamepadIcon, MusicIcon, ComedyIcon, BlogIcon,
+  HowToIcon, HeartHandIcon, SportsIcon, ScienceIcon, EducationIcon,
+  EntertainmentIcon, NewsIcon, PetIcon,
+} from './ReactionIcons';
 
 function baseLinks(t: (key: any) => string) {
   return [
@@ -25,10 +30,24 @@ const EXPLORE_TABS = [
   { tab: 'surprise', key: 'surprise', icon: DiceIcon },
 ];
 
-const EXPLORE_CATEGORY_KEYS = [
-  'catCars', 'catTravel', 'catFilm', 'catGaming', 'catMusic',
-  'catComedy', 'catPeople', 'catHowTo', 'catNonprofit', 'catSports',
-  'catScience', 'catEducation', 'catEntertainment', 'catNews', 'catPets',
+// Každá kategorie má vlastní ikonku, ať jde poznat na první pohled -
+// dřív měly všechny ten samý štítek.
+const EXPLORE_CATEGORIES = [
+  { key: 'catCars', icon: CarIcon },
+  { key: 'catTravel', icon: PlaneIcon },
+  { key: 'catFilm', icon: FilmIcon },
+  { key: 'catGaming', icon: GamepadIcon },
+  { key: 'catMusic', icon: MusicIcon },
+  { key: 'catComedy', icon: ComedyIcon },
+  { key: 'catPeople', icon: BlogIcon },
+  { key: 'catHowTo', icon: HowToIcon },
+  { key: 'catNonprofit', icon: HeartHandIcon },
+  { key: 'catSports', icon: SportsIcon },
+  { key: 'catScience', icon: ScienceIcon },
+  { key: 'catEducation', icon: EducationIcon },
+  { key: 'catEntertainment', icon: EntertainmentIcon },
+  { key: 'catNews', icon: NewsIcon },
+  { key: 'catPets', icon: PetIcon },
 ];
 
 function loggedInLinksGroup1(t: (key: any) => string) {
@@ -132,9 +151,9 @@ export default function Sidebar() {
                 <span>{t(key as any)}</span>
               </Link>
             ))}
-            {EXPLORE_CATEGORY_KEYS.map((catKey) => (
+            {EXPLORE_CATEGORIES.map(({ key: catKey, icon: CatIcon }) => (
               <Link key={catKey} href={`/explore?category=${catKey}`} className="sidebar-link sidebar-sublink" title={t(catKey as any)}>
-                <TagIcon size={16} />
+                <CatIcon size={16} />
                 <span>{t(catKey as any)}</span>
               </Link>
             ))}
@@ -285,9 +304,9 @@ export default function Sidebar() {
                   <span>{t(key as any)}</span>
                 </Link>
               ))}
-              {EXPLORE_CATEGORY_KEYS.map((catKey) => (
+              {EXPLORE_CATEGORIES.map(({ key: catKey, icon: CatIcon }) => (
                 <Link key={catKey} href={`/explore?category=${catKey}`} className="sidebar-link sidebar-sublink" onClick={closeMobileNav} title={t(catKey as any)}>
-                  <TagIcon size={16} />
+                  <CatIcon size={16} />
                   <span>{t(catKey as any)}</span>
                 </Link>
               ))}

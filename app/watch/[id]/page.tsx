@@ -24,6 +24,7 @@ import { useLanguage } from '@/lib/i18n';
 import { useUserRole } from '@/lib/useUserRole';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { ShareIcon, WatchLaterIcon, ReportIcon, TrashIcon } from '@/components/ReactionIcons';
+import { detectViewSource } from '@/lib/viewSource';
 
 function formatChapterTime(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -60,13 +61,20 @@ function WatchPageInner() {
   // hodnota z prvního vykreslení. Aktuální stav si proto držíme i v ref,
   // aby klávesa F v náhradním režimu fungovala oběma směry.
   const cssFullscreenRef = useRef(false);
+  // Cedulka ke klávesovým zkratkám. Počítadlo je tu proto, aby se při rychlém
+  // mačkání (třeba šipky doprava) animace pokaždé rozjela znovu od začátku.
+  const [keyHint, setKeyHint] = useState<{ text: string; nonce: number } | null>(null);
+  const keyHintNonceRef = useRef(0);
+  const keyHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const playlistScrolledForRef = useRef<string | null>(null);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [confirmModDelete, setConfirmModDelete] = useState(false);
   const { isModerator } = useUserRole();
   const playlistId = searchParams.get('playlist');
   const [playlistInfo, setPlaylistInfo] = useState<{ title: string } | null>(null);
-  const [playlistVideos, setPlaylistVideos] = useState<{ id: string; title: string; thumbnail_url: string | null }[]>([]);
+  const [playlistVideos, setPlaylistVideos] = useState<any[]>([]);
+  const [playlistPanelOpen, setPlaylistPanelOpen] = useState(true);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<any>(null);
@@ -98,12 +106,12 @@ function WatchPageInner() {
 
       const { data: videoData } = await supabase
         .from('videos')
-        .select('id, title, thumbnail_url')
+        .select('id, title, thumbnail_url, duration_seconds, profiles!videos_owner_id_fkey(username)')
         .in('id', videoIds);
 
       const ordered = videoIds
         .map((id: string) => videoData?.find((v: any) => v.id === id))
-        .filter(Boolean) as { id: string; title: string; thumbnail_url: string | null }[];
+        .filter(Boolean) as any[];
       setPlaylistVideos(ordered);
     })();
   }, [playlistId]);
@@ -114,12 +122,14 @@ function WatchPageInner() {
     return () => clearTimeout(timer);
   }, [videoId]);
 
-  // Klávesové zkratky: mezerník = pauza/přehrát, šipky = posun o 5s, F = celá obrazovka.
-  // Ignorujeme je, pokud uživatel zrovna něco píše (komentář apod.).
+  // Klávesové zkratky: mezerník = přehrát/pauza, šipky vlevo/vpravo = posun
+  // o 5 s, šipky nahoru/dolů = hlasitost, M = ztlumit, F = celá obrazovka.
+  // Ignorujeme je, když uživatel zrovna něco píše (komentář apod.).
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      const tag = (document.activeElement?.tagName ?? '').toLowerCase();
-      if (tag === 'input' || tag === 'textarea') return;
+      const active = document.activeElement as HTMLElement | null;
+      const tag = (active?.tagName ?? '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || active?.isContentEditable) return;
 
       // Esc ukončí i náhradní CSS variantu celé obrazovky (u skutečné
       // celé obrazovky si Esc odbaví sám prohlížeč).
@@ -130,21 +140,116 @@ function WatchPageInner() {
       const player = playerRef.current;
       if (!player) return;
 
-      if (e.code === 'Space') {
+      if (e.code === 'Space' || e.code === 'KeyK') {
         e.preventDefault();
-        player.paused ? player.play() : player.pause();
+        togglePlayPause();
       } else if (e.code === 'ArrowRight') {
-        player.currentTime = (player.currentTime ?? 0) + 5;
+        e.preventDefault();
+        seekBy(5);
       } else if (e.code === 'ArrowLeft') {
-        player.currentTime = Math.max((player.currentTime ?? 0) - 5, 0);
+        e.preventDefault();
+        seekBy(-5);
+      } else if (e.code === 'ArrowUp') {
+        e.preventDefault();
+        changeVolume(0.1);
+      } else if (e.code === 'ArrowDown') {
+        e.preventDefault();
+        changeVolume(-0.1);
+      } else if (e.code === 'KeyM') {
+        e.preventDefault();
+        toggleMute();
       } else if (e.key.toLowerCase() === 'f') {
         e.preventDefault();
         toggleFullscreen();
       }
     }
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    // Zachytáváme v "capture" fázi na okně - stihneme to dřív, než se do
+    // stisku zapojí cokoliv jiného na stránce.
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, []);
+
+  // Přehrávač je cizí iframe (Cloudflare). Jakmile si vezme focus, míří
+  // klávesy dovnitř do něj a naše zkratky přestanou úplně fungovat - přesně
+  // tenhle stav býval po prvním kliknutí do videa. Focus proto vracíme na
+  // rámeček přehrávače, který je díky tabIndex sám o sobě zaměřitelný.
+  function stealFocusBackFromIframe() {
+    if (document.activeElement === iframeRef.current) {
+      wrapRef.current?.focus({ preventScroll: true });
+    }
+  }
+
+  useEffect(() => {
+    // Focus si iframe bere i sám od sebe (třeba když se v něm spustí video),
+    // tak na to koukáme i pravidelně, ne jen při kliknutí.
+    const interval = setInterval(stealFocusBackFromIframe, 400);
+    window.addEventListener('blur', stealFocusBackFromIframe);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('blur', stealFocusBackFromIframe);
+    };
+  }, []);
+
+  // Krátká cedulka uprostřed videa ("+5 s", "Hlasitost 70 %"), ať je po
+  // stisku klávesy hned vidět, že se něco stalo.
+  function flashHint(text: string) {
+    keyHintNonceRef.current += 1;
+    setKeyHint({ text, nonce: keyHintNonceRef.current });
+    if (keyHintTimerRef.current) clearTimeout(keyHintTimerRef.current);
+    keyHintTimerRef.current = setTimeout(() => setKeyHint(null), 900);
+  }
+
+  function togglePlayPause() {
+    const player = playerRef.current;
+    if (!player) return;
+    wrapRef.current?.focus({ preventScroll: true });
+
+    // Po dohrání videa mezerník spustí přehrávání znovu od začátku -
+    // dřív se s dokoukaným videem nedalo dělat vůbec nic.
+    const duration = player.duration ?? video?.duration_seconds ?? 0;
+    const atEnd = player.ended || (duration > 0 && (player.currentTime ?? 0) >= duration - 0.3);
+
+    if (atEnd) {
+      setShowUpNext(false);
+      player.currentTime = 0;
+      player.play();
+      flashHint('Přehrát znovu');
+      return;
+    }
+
+    if (player.paused) {
+      player.play();
+      flashHint('▶');
+    } else {
+      player.pause();
+      flashHint('❚❚');
+    }
+  }
+
+  function seekBy(seconds: number) {
+    const player = playerRef.current;
+    if (!player) return;
+    const duration = player.duration ?? video?.duration_seconds ?? 0;
+    const target = (player.currentTime ?? 0) + seconds;
+    player.currentTime = Math.max(0, duration > 0 ? Math.min(target, duration) : target);
+    flashHint(seconds > 0 ? `+${seconds} s` : `${seconds} s`);
+  }
+
+  function changeVolume(delta: number) {
+    const player = playerRef.current;
+    if (!player) return;
+    const next = Math.max(0, Math.min((player.volume ?? 1) + delta, 1));
+    player.volume = next;
+    player.muted = next === 0;
+    flashHint(`Hlasitost ${Math.round(next * 100)} %`);
+  }
+
+  function toggleMute() {
+    const player = playerRef.current;
+    if (!player) return;
+    player.muted = !player.muted;
+    flashHint(player.muted ? 'Ztlumeno' : 'Zvuk zapnut');
+  }
 
   // Celá obrazovka řešená přímo prohlížečem (Fullscreen API), ne CSS trikem.
   // Prohlížeč prvek vytáhne do vlastní "horní vrstvy", takže ho nemůže
@@ -329,6 +434,20 @@ function WatchPageInner() {
     return playlistId ? `/watch/${id}?playlist=${playlistId}` : `/watch/${id}`;
   }
 
+  // U dlouhého playlistu se seznam sám odroluje na video, které zrovna běží,
+  // ať ho uživatel nemusí hledat. Jen jednou na video - jinak by seznam
+  // uživateli skákal zpátky pokaždé, když se stránka překreslí.
+  function scrollCurrentIntoView(el: HTMLAnchorElement | null) {
+    if (!el || playlistScrolledForRef.current === videoId) return;
+    const list = el.parentElement;
+    if (!list) return;
+
+    playlistScrolledForRef.current = videoId;
+    // el.offsetTop je vůči seznamu (ten je position: relative), takže se
+    // od něj nic dalšího odečítat nesmí.
+    list.scrollTop = Math.max(0, el.offsetTop - list.clientHeight / 2 + el.clientHeight / 2);
+  }
+
   // Po dohrání videa nabídneme další doporučené (nebo další video z
   // playlistu, pokud appku sledujete v playlistu), s automatickým odpočtem
   useEffect(() => {
@@ -437,7 +556,9 @@ function WatchPageInner() {
         fetch('/api/videos/increment-view', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ videoId }),
+          // Posíláme i to, odkud divák přišel - ve statistikách je pak vidět,
+          // co kanálu skutečně vozí diváky.
+          body: JSON.stringify({ videoId, source: detectViewSource() }),
         });
         localStorage.setItem(lastViewKey, String(Date.now()));
       }, 5000);
@@ -554,6 +675,10 @@ function WatchPageInner() {
       <div className="watch-video-column">
         <div
           ref={wrapRef}
+          // tabIndex dělá z rámečku místo, kam se dá vrátit focus, když si
+          // ho vezme iframe přehrávače - bez toho klávesové zkratky umřou.
+          tabIndex={0}
+          onMouseDown={() => wrapRef.current?.focus({ preventScroll: true })}
           className={`player-wrap ${video.height > video.width ? 'player-wrap-vertical' : ''} ${cssFullscreen ? 'player-wrap-maximized' : ''}`}
           style={video.height > video.width || isMaximized ? {} : { aspectRatio: '16/9' }}
         >
@@ -563,7 +688,16 @@ function WatchPageInner() {
             style={{ width: '100%', height: '100%', border: 'none' }}
             allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen;"
             allowFullScreen
+            tabIndex={-1}
           />
+
+          {keyHint && (
+            // key se mění s každým stiskem, takže React prvek nasadí znovu
+            // a animace se rozjede od začátku i při rychlém mačkání.
+            <div key={keyHint.nonce} className="player-key-hint" aria-live="polite">
+              {keyHint.text}
+            </div>
+          )}
           {!playerReady && video.thumbnail_url && (
             <div
               style={{
@@ -629,23 +763,75 @@ function WatchPageInner() {
           )}
         </div>
 
+        {/* Panel playlistu: místo tenkého proužku s dvěma odkazy je tu celý
+            seznam videí, ve kterém je vidět, kde v playlistu jsi, a dá se
+            přeskočit rovnou kamkoliv - tak, jak to má YouTube. */}
         {playlistInfo && (
-          <div className="panel" style={{ marginBottom: 12, padding: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-            <Link href={`/playlists/${playlistId}`} style={{ fontSize: 13, color: 'var(--text-dim)' }}>
-              📃 {t('watchingFromPlaylistLabel')} <strong style={{ color: 'var(--text)' }}>{playlistInfo.title}</strong>
-              {playlistIndex >= 0 && ` (${playlistIndex + 1}/${playlistVideos.length})`}
-            </Link>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {playlistIndex > 0 && (
-                <Link href={nextHref(playlistVideos[playlistIndex - 1].id)} style={{ fontSize: 12 }}>
-                  ← {t('playlistPrevButton')}
+          <div className="playlist-panel">
+            <div className="playlist-panel-head">
+              <div style={{ minWidth: 0 }}>
+                <Link href={`/playlists/${playlistId}`} className="playlist-panel-title">
+                  {playlistInfo.title}
                 </Link>
-              )}
-              {playlistNext && (
-                <Link href={nextHref(playlistNext.id)} style={{ fontSize: 12 }}>
-                  {t('playlistNextButton')} →
-                </Link>
-              )}
+                <p className="playlist-panel-sub">
+                  {t('watchingFromPlaylistLabel')}
+                  {playlistIndex >= 0 && ` · ${playlistIndex + 1}/${playlistVideos.length}`}
+                </p>
+              </div>
+              <button
+                onClick={() => setPlaylistPanelOpen((v) => !v)}
+                className="playlist-panel-toggle"
+                aria-label={playlistPanelOpen ? 'Sbalit seznam' : 'Rozbalit seznam'}
+              >
+                {playlistPanelOpen ? '▴' : '▾'}
+              </button>
+            </div>
+
+            {playlistPanelOpen && (
+              <div className="playlist-panel-list">
+                {playlistVideos.map((v: any, i: number) => {
+                  const isCurrent = v.id === videoId;
+                  return (
+                    <Link
+                      key={v.id}
+                      href={nextHref(v.id)}
+                      className={`playlist-panel-item ${isCurrent ? 'current' : ''}`}
+                      ref={isCurrent ? scrollCurrentIntoView : undefined}
+                    >
+                      <span className="playlist-panel-index">{isCurrent ? '▶' : i + 1}</span>
+                      <span className="playlist-panel-thumb">
+                        {v.thumbnail_url && (
+                          <Image src={v.thumbnail_url} alt={v.title} width={96} height={54} style={{ objectFit: 'cover' }} />
+                        )}
+                        {v.duration_seconds > 0 && (
+                          <span className="playlist-panel-duration">{formatChapterTime(v.duration_seconds)}</span>
+                        )}
+                      </span>
+                      <span style={{ minWidth: 0, flex: 1 }}>
+                        <span className="playlist-panel-item-title">{v.title}</span>
+                        <span className="playlist-panel-item-meta">{v.profiles?.username ?? 'neznámý tvůrce'}</span>
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="playlist-panel-foot">
+              <Link
+                href={playlistIndex > 0 ? nextHref(playlistVideos[playlistIndex - 1].id) : '#'}
+                className={`playlist-panel-nav ${playlistIndex > 0 ? '' : 'disabled'}`}
+                aria-disabled={playlistIndex <= 0}
+              >
+                ← {t('playlistPrevButton')}
+              </Link>
+              <Link
+                href={playlistNext ? nextHref(playlistNext.id) : '#'}
+                className={`playlist-panel-nav ${playlistNext ? '' : 'disabled'}`}
+                aria-disabled={!playlistNext}
+              >
+                {t('playlistNextButton')} →
+              </Link>
             </div>
           </div>
         )}

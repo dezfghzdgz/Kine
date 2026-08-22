@@ -211,9 +211,13 @@ a {
   letter-spacing: 0.02em;
 }
 
+/* auto-fill, ne auto-fit! Při auto-fit prázdné sloupce zmizí a poslední
+   řádek s méně videy se roztáhne přes celou šířku - proto byly u "Další
+   videa" některé karty najednou obří. S auto-fill zůstávají sloupce
+   stejně široké pořád, ať je v řádku videí kolik chce. */
 .video-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 24px;
 }
 
@@ -1751,4 +1755,439 @@ html[data-theme="gray"] {
   color: var(--text-faint);
   width: 100%;
   margin: 0 0 2px 0;
+}
+
+/* ---------- Cedulka ke klávesovým zkratkám v přehrávači ---------- */
+
+.player-key-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 7;
+  background: rgba(10, 10, 11, 0.78);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 10px;
+  pointer-events: none;
+  animation: key-hint-fade 0.9s ease forwards;
+  white-space: nowrap;
+}
+
+@keyframes key-hint-fade {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+  15% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.player-wrap:focus,
+.player-wrap:focus-visible {
+  outline: none;
+}
+
+/* ---------- Panel playlistu u přehrávače ----------
+   Dřív to byl jen tenký proužek se dvěma odkazy, ve kterém nešlo nic najít.
+   Teď je to celý seznam videí: vidíš, kolikáté video hraje, kolik jich
+   zbývá, a klikneš rovnou na to, které chceš. */
+
+.playlist-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.playlist-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.playlist-panel-title {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playlist-panel-title:hover {
+  color: var(--brand);
+}
+
+.playlist-panel-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.playlist-panel-toggle {
+  background: var(--panel-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.playlist-panel-list {
+  max-height: 264px;
+  overflow-y: auto;
+  position: relative;
+}
+
+.playlist-panel-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s ease;
+}
+
+.playlist-panel-item:last-child {
+  border-bottom: none;
+}
+
+.playlist-panel-item:hover {
+  background: var(--panel-raised);
+}
+
+.playlist-panel-item.current {
+  background: var(--panel-raised);
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
+.playlist-panel-index {
+  width: 20px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.playlist-panel-item.current .playlist-panel-index {
+  color: var(--brand);
+}
+
+.playlist-panel-thumb {
+  position: relative;
+  width: 88px;
+  height: 50px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--panel-raised);
+  display: block;
+}
+
+.playlist-panel-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.playlist-panel-duration {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  font-size: 10px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.playlist-panel-item-title {
+  display: block;
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playlist-panel-item-meta {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playlist-panel-foot {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.playlist-panel-nav {
+  flex: 1;
+  text-align: center;
+  font-size: 12.5px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.playlist-panel-nav:hover {
+  border-color: var(--brand);
+}
+
+.playlist-panel-nav.disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* ---------- Přehazování videí v playlistu ---------- */
+
+.playlist-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.playlist-row.dragging {
+  opacity: 0.4;
+}
+
+.playlist-row.drop-target {
+  border-color: var(--brand);
+}
+
+.playlist-row-handle {
+  cursor: grab;
+  color: var(--text-faint);
+  font-size: 14px;
+  flex-shrink: 0;
+  padding: 0 2px;
+  background: none;
+  border: none;
+  line-height: 1;
+}
+
+.playlist-row-handle:active {
+  cursor: grabbing;
+}
+
+.playlist-move-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.playlist-move-btn {
+  width: 22px;
+  height: 17px;
+  padding: 0;
+  font-size: 10px;
+  line-height: 1;
+  border-radius: 5px;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.playlist-move-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--brand);
+}
+
+.playlist-move-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ---------- Statistiky: mřížka "kdy se lidi dívají" ---------- */
+
+.heatmap-row {
+  display: grid;
+  grid-template-columns: 26px repeat(24, 1fr);
+  gap: 2px;
+  margin-bottom: 2px;
+  align-items: center;
+}
+
+.heatmap-day-label {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  text-align: right;
+  padding-right: 4px;
+}
+
+.heatmap-hour-label {
+  font-size: 9.5px;
+  color: var(--text-faint);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.heatmap-cell {
+  display: block;
+  height: 16px;
+  border-radius: 3px;
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.heatmap-legend-cell {
+  width: 16px;
+}
+
+/* ---------- Statistiky: tabulka pro srovnání videí ---------- */
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  min-width: 720px;
+}
+
+.stats-table th {
+  text-align: right;
+  padding: 0 8px 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.stats-table td {
+  padding: 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-table td:first-child {
+  text-align: left;
+  width: 40%;
+  min-width: 200px;
+  white-space: normal;
+}
+
+.stats-table tbody tr:hover td {
+  background: var(--panel-raised);
+}
+
+.stats-table-sort {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stats-table-sort:hover,
+.stats-table-sort.active {
+  color: var(--text);
+}
+
+.stats-table-arrow {
+  font-size: 9px;
+  opacity: 0.6;
+}
+
+.stats-table-sort.active .stats-table-arrow {
+  opacity: 1;
+  color: var(--brand);
+}
+
+.stats-table-video {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.stats-table-thumb {
+  width: 64px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--panel-raised);
+  display: block;
+}
+
+.stats-table-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.stats-table-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.35;
+}
+
+.stats-table-video:hover .stats-table-title {
+  color: var(--brand);
+}
+
+/* ---------- Statistiky: řádek s čísly ---------- */
+
+.stat-figure-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+}
+
+.stat-figure {
+  font-size: 21px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-caption {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin: 2px 0 0;
 }

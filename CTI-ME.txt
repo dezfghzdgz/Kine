@@ -1,38 +1,34 @@
-KINE - opravy (fullscreen, ikony, statistiky, aktivita, spoluprace)
-===================================================================
+KINE - opravy a novinky (2. kolo)
+=================================
 
 CO JE V TETO SLOZCE
 Vsechny soubory, ktere se zmenily, ve stejnych cestach jako v repu.
-Staci je rozbalit primo do slozky projektu Kine a prepsat puvodni.
+Rozbal je primo do slozky projektu Kine a prepis puvodni.
+Obsahuje i zmeny z 1. kola, takze staci rozbalit tuhle slozku.
 
-NOVE SOUBORY (drive neexistovaly):
+NOVE SOUBORY:
   components/StarDistribution.tsx
   components/WatchCalendar.tsx
+  components/StatsBarList.tsx
+  components/StatsHeatmap.tsx
+  components/StatsVideoTable.tsx
+  lib/viewSource.ts
   supabase-migration-collab-limit.sql
-
-ZMENENE SOUBORY:
-  app/activity/page.tsx
-  app/api/videos/respond-collab/route.ts
-  app/channel-stats/page.tsx
-  app/globals.css
-  app/upload/page.tsx
-  app/watch/[id]/page.tsx
-  app/your-videos/[id]/edit/page.tsx
-  components/ChapterTimeline.tsx
-  components/NotificationBell.tsx
-  components/Sidebar.tsx
-  lib/i18n.tsx
+  supabase-migration-view-sources.sql
 
 
-NEZAPOMEN: SQL MIGRACE
-V Supabase -> SQL Editor -> New Query spust obsah souboru
-supabase-migration-collab-limit.sql
+DULEZITE: SQL MIGRACE
+V Supabase -> SQL Editor -> New Query spust obsah techto dvou souboru:
 
-Neni povinna (appka funguje i bez ni), ale zajisti primo v databazi,
-ze na jednom videu muzou byt nejvys 4 tvurci, a dovoli pozvanemu
-odebrat sam sebe ze spoluprace.
+  1) supabase-migration-view-sources.sql   <- POVINNA pro nove statistiky
+     Prida sloupec "source" do views_log (odkud divaci prichazeji)
+     a dve funkce, ktere spocitaji dobu sledovani a dokoukanost.
+     Bez ni panel "Doba sledovani a dokoukanost" napise, ze migrace chybi,
+     a "Odkud divaci prichazeji" ukaze vsechno jako Neznamé.
+
+  2) supabase-migration-collab-limit.sql   <- volitelna
+     Pojisti primo v databazi limit 4 tvurcu na video.
 
 
 ALTERNATIVA PRO GIT
-Misto kopirovani souboru jde pouzit prilozeny kine-opravy.patch:
   git apply kine-opravy.patch
