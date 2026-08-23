@@ -1,7 +1,13 @@
 export type VideoBlock = { type: 'long' | 'sparks'; items: any[] };
 
-const CHUNK_LONG = 4;
-const CHUNK_SPARKS = 5;
+// Kolik videí je v jedné dávce mezi pruhy Sparks.
+//
+// Dřív tu byla čtyřka - jenže na širokém monitoru se do řádku vejde klidně
+// šest karet, takže dávka o čtyřech nechala dva sloupce prázdné a vpravo
+// zůstala velká díra. Dvanáctka se beze zbytku rozpadne na řádky po 1, 2,
+// 3, 4 i 6 kartách, takže řádky vycházejí zaplněné na všech šířkách.
+const CHUNK_LONG = 12;
+const CHUNK_SPARKS = 12;
 
 export function isSpark(video: any): boolean {
   return !!(video.height && video.width && video.height > video.width && (video.duration_seconds ?? 0) <= 120);

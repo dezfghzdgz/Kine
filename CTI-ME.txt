@@ -1,41 +1,33 @@
-KINE - opravy a novinky (3. kolo, obsahuje i 1. a 2. kolo)
-==========================================================
+KINE - 5. kolo (jen soubory z tohoto kola)
+==========================================
 
-CO JE V TETO SLOZCE
-Vsechny zmenene soubory ve stejnych cestach jako v repu.
-Rozbal je primo do slozky projektu Kine a prepis puvodni.
-Staci rozbalit tuhle jednu slozku - obsahuje uplne vsechno.
-
-
-DULEZITE: SQL MIGRACE
-V Supabase -> SQL Editor -> New Query spust obsah techto souboru:
-
-  1) supabase-migration-view-sources.sql    <- POVINNA pro nove statistiky
-     Sloupec "source" ve views_log (odkud divaci prichazeji) + funkce,
-     ktere spocitaji dobu sledovani a dokoukanost.
-
-  2) supabase-migration-hidden-content.sql  <- POVINNA pro "Nezajima me"
-     Tabulky pro schovana videa a kanaly.
-     Bez ni tlacitka "Nezajima me" a "Nedoporucovat kanal" nic neulozi.
-
-  3) supabase-migration-collab-limit.sql    <- volitelna
-     Pojisti primo v databazi limit 4 tvurcu na video.
-
+Rozbal do slozky projektu a prepis puvodni. Cesty odpovidaji repu.
 
 NOVE SOUBORY:
-  components/StarDistribution.tsx
-  components/WatchCalendar.tsx
-  components/StatsBarList.tsx
-  components/StatsHeatmap.tsx
-  components/StatsVideoTable.tsx
-  components/VideoCardMenu.tsx
-  lib/viewSource.ts
-  lib/videoQueue.ts
-  lib/hiddenContent.ts
-  supabase-migration-collab-limit.sql
-  supabase-migration-view-sources.sql
-  supabase-migration-hidden-content.sql
+  app/admin/revenue-share/page.tsx        <- stranka pro administratora
+  app/api/admin/revenue-share/route.ts    <- serverove API k podilum
+  lib/revenueShare.ts                     <- stupne a vypocet podilu
+  supabase-migration-revenue-share.sql    <- MIGRACE
+
+ZMENENE:
+  app/api/videos/increment-view/route.ts
+  app/channel-stats/page.tsx
+  app/globals.css
+  components/NotificationBell.tsx
+  components/Sidebar.tsx
+  lib/homeRecommendation.ts
+  lib/i18n.tsx
+  lib/useUserRole.ts
+  lib/videoBlocks.ts
 
 
-ALTERNATIVA PRO GIT
-  git apply kine-opravy.patch
+MIGRACE (Supabase -> SQL Editor -> New Query)
+  supabase-migration-revenue-share.sql   <- POVINNA
+
+  Prida podil z vydelku (25 % / 55 % / rucni), novy druh oznameni
+  "milnik zhlednuti" a funkci pro bezpecne pocitani zhlednuti.
+  Bez ni se panel "Rozdeleni vydelku" ukaze s vychozimi 25 %
+  a stranka pro administratora nic neulozi.
+
+POZOR: stranka /admin/revenue-share je videt jen uctu, ktery ma
+v tabulce profiles nastaveno is_admin = true.

@@ -2,8 +2,11 @@ export type Block = { type: 'long' | 'sparks'; items: any[] };
 
 export const RECOMMENDATION_POOL_SIZE = 300;
 export const PAGE_SIZE = 40;
-const CHUNK_LONG = 4;
-const CHUNK_SPARKS = 5;
+// Kolik videí je v jedné dávce mezi pruhy Sparks. Dvanáctka se beze zbytku
+// rozpadne na řádky po 1, 2, 3, 4 i 6 kartách - dřívější čtyřka nechávala
+// na širokém monitoru vpravo prázdné sloupce.
+const CHUNK_LONG = 12;
+const CHUNK_SPARKS = 12;
 
 export function formatDuration(seconds: number | null) {
   if (!seconds) return '';

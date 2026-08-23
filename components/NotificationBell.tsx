@@ -12,18 +12,32 @@ type Notification = {
   link: string | null;
   read: boolean;
   created_at: string;
-  type: 'default' | 'collab_invite' | 'like_milestone' | 'donation' | 'subscription' | 'new_video' | 'comment_reply' | 'moderation_warning';
+  type: 'default' | 'collab_invite' | 'like_milestone' | 'view_milestone' | 'donation' | 'subscription' | 'new_video' | 'comment_reply' | 'moderation_warning';
 };
 
-const NOTIFICATION_TYPE_STYLES: Record<string, { color: string }> = {
-  like_milestone: { color: '#f5a623' },
-  donation: { color: '#f5a623' },
-  subscription: { color: '#4d9fff' },
-  new_video: { color: 'var(--text-faint)' },
-  comment_reply: { color: 'var(--text-faint)' },
-  moderation_warning: { color: '#e0453f' },
-  default: { color: 'var(--text-faint)' },
+/**
+ * Každý druh oznámení má vlastní barvu, ikonku a název druhu.
+ *
+ * Dřív měla polovina typů stejnou šedou a lajky splývaly s dary, takže se
+ * v seznamu nedalo nic najít očima. Barvy jsou schválně vybrané tak, aby
+ * šly rozeznat i s barvoslepostí - nespoléhá se jen na barvu, u každého
+ * řádku je i ikonka a popisek druhu.
+ */
+const NOTIFICATION_TYPE_STYLES: Record<string, { color: string; icon: string; labelKey: string }> = {
+  like_milestone: { color: '#4fbf87', icon: '👍', labelKey: 'notifTypeLike' },
+  view_milestone: { color: '#4d9fff', icon: '👁', labelKey: 'notifTypeViews' },
+  subscription: { color: '#b07cf5', icon: '👥', labelKey: 'notifTypeSubscriber' },
+  collab_invite: { color: '#f5a623', icon: '🤝', labelKey: 'notifTypeCollab' },
+  comment_reply: { color: '#45c9c9', icon: '💬', labelKey: 'notifTypeComment' },
+  donation: { color: '#f07eb0', icon: '💛', labelKey: 'notifTypeDonation' },
+  new_video: { color: '#8a8a8f', icon: '🎬', labelKey: 'notifTypeNewVideo' },
+  moderation_warning: { color: '#e0453f', icon: '⚠', labelKey: 'notifTypeWarning' },
+  default: { color: '#8a8a8f', icon: '•', labelKey: 'notifTypeOther' },
 };
+
+function styleForType(type: string) {
+  return NOTIFICATION_TYPE_STYLES[type] ?? NOTIFICATION_TYPE_STYLES.default;
+}
 
 const NAV_SHORTCUT_OPTIONS = [
   { key: 'notifications', href: null, labelKey: 'notifications' },
@@ -260,11 +274,17 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
                 ) : (
                   <div
                     key={n.id}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 4,
-                      borderLeft: `3px solid ${(NOTIFICATION_TYPE_STYLES[n.type] ?? NOTIFICATION_TYPE_STYLES.default).color}`,
-                    }}
+                    className="notification-row"
+                    style={{ borderLeftColor: styleForType(n.type).color }}
                   >
+                    <span
+                      className="notification-type-icon"
+                      style={{ background: `${styleForType(n.type).color}22`, color: styleForType(n.type).color }}
+                      aria-hidden="true"
+                    >
+                      {styleForType(n.type).icon}
+                    </span>
+
                     <button
                       onClick={() => handleClick(n)}
                       className="profile-dropdown-item"
@@ -273,6 +293,12 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
                         color: n.type === 'moderation_warning' ? '#e0453f' : undefined,
                       }}
                     >
+                      <span
+                        className="notification-type-label"
+                        style={{ color: styleForType(n.type).color }}
+                      >
+                        {t(styleForType(n.type).labelKey as any)}
+                      </span>
                       {n.message}
                       <span style={{ display: 'block', fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
                         {new Date(n.created_at).toLocaleString('cs-CZ')}

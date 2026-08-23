@@ -69,7 +69,7 @@ function loggedInLinksGroup2(t: (key: any) => string) {
 export default function Sidebar() {
   const pathname = usePathname();
   const { t } = useLanguage();
-  const { isModerator } = useUserRole();
+  const { isModerator, isAdmin } = useUserRole();
   const [exploreOpen, setExploreOpen] = useState(false);
   const { open: mobileNavOpen, close: closeMobileNav } = useMobileNav();
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
@@ -199,6 +199,11 @@ export default function Sidebar() {
         {isModerator && (
           <Link href="/moderation/reports" className={`sidebar-link ${pathname === '/moderation/reports' ? 'active' : ''}`}>
             🚩 {t('reportsPageTitle')}
+          </Link>
+        )}
+        {isAdmin && (
+          <Link href="/admin/revenue-share" className={`sidebar-link ${pathname === '/admin/revenue-share' ? 'active' : ''}`}>
+            💰 {t('revenueShareLabel')}
           </Link>
         )}
       </nav>
@@ -345,6 +350,11 @@ export default function Sidebar() {
           {isModerator && (
             <Link href="/moderation/reports" className="sidebar-link" onClick={closeMobileNav}>
               🚩 {t('reportsPageTitle')}
+            </Link>
+          )}
+          {isAdmin && (
+            <Link href="/admin/revenue-share" className="sidebar-link" onClick={closeMobileNav}>
+              💰 {t('revenueShareLabel')}
             </Link>
           )}
 

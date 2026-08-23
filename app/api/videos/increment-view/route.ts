@@ -19,11 +19,33 @@ function sanitizeSource(value: unknown): string {
   return /^[a-z0-9.-]+$/.test(clean) ? clean : 'unknown';
 }
 
+/**
+ * Kulaté počty zhlédnutí, u kterých má smysl tvůrce upozornit.
+ *
+ * Do stovky po malých krocích (ať má radost i malý kanál), pak už jen
+ * desetinásobky - jinak by u velkého videa přišlo oznámení každou chvíli.
+ */
+function isViewMilestone(views: number): boolean {
+  const smallMilestones = [10, 25, 50, 100, 250, 500];
+  if (smallMilestones.includes(views)) return true;
+  if (views < 1000) return false;
+
+  // 1 000, 5 000, 10 000, 50 000, 100 000, ...
+  for (let step = 1000; step <= 1_000_000_000; step *= 10) {
+    if (views === step || views === step * 5) return true;
+  }
+  return false;
+}
+
 export async function POST(req: NextRequest) {
   const { videoId, source } = await req.json();
   if (!videoId) return NextResponse.json({ error: 'Chybí videoId.' }, { status: 400 });
 
-  const { data: video } = await supabaseServer.from('videos').select('views').eq('id', videoId).single();
+  const { data: video } = await supabaseServer
+    .from('videos')
+    .select('views, title, owner_id')
+    .eq('id', videoId)
+    .single();
   if (!video) return NextResponse.json({ error: 'Video nenalezeno.' }, { status: 404 });
 
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? req.headers.get('x-real-ip') ?? 'unknown';
@@ -43,7 +65,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, counted: false });
   }
 
-  await supabaseServer.from('videos').update({ views: (video.views ?? 0) + 1 }).eq('id', videoId);
+  // Přičtení řeší funkce v databázi, aby se souběžná zhlédnutí nepřebíjela
+  // (dva diváci naráz by jinak přečetli stejné číslo a jedno by se ztratilo).
+  // Dokud neproběhne migrace, appka spadne zpátky na starý způsob.
+  const { data: incremented, error: incrementError } = await supabaseServer
+    .rpc('increment_video_views', { target_video_id: videoId });
+
+  let newViews: number;
+  if (incrementError || typeof incremented !== 'number') {
+    newViews = (video.views ?? 0) + 1;
+    await supabaseServer.from('videos').update({ views: newViews }).eq('id', videoId);
+  } else {
+    newViews = incremented;
+  }
+
+  // Milník zhlédnutí - tvůrce se dozví, že video přeskočilo kulaté číslo.
+  // Jen na vybraných číslech, ať mu appka nechrlí oznámení u každého kliku.
+  if (video.owner_id && isViewMilestone(newViews)) {
+    await supabaseServer.from('notifications').insert({
+      user_id: video.owner_id,
+      type: 'view_milestone',
+      message: `Tvoje video "${video.title}" má ${newViews} zhlédnutí!`,
+      link: `/watch/${videoId}`,
+    });
+  }
 
   const { error: logError } = await supabaseServer
     .from('views_log')

@@ -891,9 +891,10 @@ html[data-theme="light"] .profile-avatar-small {
 
 /* ---------- Toast notifications ---------- */
 
+/* Hláška vyjíždí až pod horní lištou, ať se s reklamním pruhem nepere. */
 .toast {
   position: fixed;
-  top: 24px;
+  top: 92px;
   right: 24px;
   display: flex;
   align-items: center;
@@ -1058,6 +1059,9 @@ html[data-theme="gray"] {
 
 /* ---------- Top bar: search icon + ad banner ---------- */
 
+/* Horní lišta drží nahoře při scrollování, takže pod ní musí být plná
+   barva pozadí - dřív byla průhledná a odjíždějící náhledy videí se přes
+   ni prosvítaly. */
 .top-bar {
   display: flex;
   align-items: stretch;
@@ -1069,6 +1073,7 @@ html[data-theme="gray"] {
   top: 0;
   z-index: 250;
   isolation: isolate;
+  background: var(--bg);
 }
 
 .top-bar-search-icon {
@@ -2396,4 +2401,68 @@ html[data-theme="gray"] {
 
 .video-card-hidden-undo:hover {
   border-color: var(--brand);
+}
+
+/* ---------- Oznámení: barevné rozlišení podle druhu ---------- */
+
+.notification-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  border-left: 3px solid var(--border);
+  border-radius: 0 8px 8px 0;
+}
+
+.notification-type-icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin: 9px 0 0 8px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.notification-type-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+/* ---------- Rozdělení výdělků (statistiky kanálu) ---------- */
+
+.revenue-split-bar {
+  display: flex;
+  height: 34px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.revenue-split-creator,
+.revenue-split-platform {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: width 0.3s ease;
+}
+
+.revenue-split-creator {
+  background: var(--brand);
+  color: #0a0a0b;
+}
+
+.revenue-split-platform {
+  background: var(--panel-raised);
+  color: var(--text-dim);
 }
