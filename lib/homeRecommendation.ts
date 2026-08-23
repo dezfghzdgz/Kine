@@ -1,7 +1,27 @@
 export type Block = { type: 'long' | 'sparks'; items: any[] };
 
-export const RECOMMENDATION_POOL_SIZE = 300;
-export const PAGE_SIZE = 40;
+/**
+ * Kolik videí si hlavní stránka řekne najednou.
+ *
+ * Dřív tu byl pevný strop: appka stáhla 300 nejnovějších videí, seřadila si
+ * je v prohlížeči a tím to skončilo. Mělo to dvě vady - nekonečné scrollování
+ * došlo u třístého videa a starší video se nahoru nedostalo nikdy, protože se
+ * do těch 300 vůbec nevešlo. Teď se videa berou po dávkách přímo z databáze,
+ * takže strop není žádný a prohlížeč nemusí naráz zpracovat celý balík.
+ *
+ * Osmačtyřicítka se beze zbytku dělí dvanácti (dávka dlouhých videí mezi
+ * pruhy Sparks) i šesti (dávka Sparks).
+ */
+export const FEED_BATCH = 48;
+
+/**
+ * Kolik posledních zhlédnutí se bere v potaz při "tohle už jsi viděl".
+ *
+ * Celá historie se stahovat nedá: databáze vrátí nanejvýš tisíc řádků a
+ * navíc bez určeného pořadí, takže po tisícovce zhlédnutých videí by se
+ * penalizace u starších tiše rozbila a feed by začal recyklovat.
+ */
+export const WATCHED_HISTORY_LIMIT = 500;
 // Kolik videí je v jedné dávce mezi pruhy Sparks. Dvanáctka se beze zbytku
 // rozpadne na řádky po 1, 2, 3, 4 i 6 kartách - dřívější čtyřka nechávala
 // na širokém monitoru vpravo prázdné sloupce.

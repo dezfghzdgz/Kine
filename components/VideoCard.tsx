@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import Script from 'next/script';
 import { useLanguage } from '@/lib/i18n';
 import { SpeakerIcon } from './ReactionIcons';
 import VideoCardMenu from './VideoCardMenu';
@@ -18,7 +17,7 @@ function getSoundPref() {
   return localStorage.getItem(SOUND_PREF_KEY) === 'true';
 }
 
-export default function VideoCard({
+function VideoCard({
   video,
   href,
   isSparks,
@@ -147,8 +146,6 @@ export default function VideoCard({
       onTouchStart={startHover}
       onTouchEnd={stopHover}
     >
-      <Script src="https://embed.cloudflarestream.com/embed/sdk.latest.js" strategy="lazyOnload" />
-
       <Link href={href} className="video-card-link">
         <div className={isSparks ? 'video-thumb video-thumb-vertical' : 'video-thumb'}>
           {video.thumbnail_url && !previewing && (
@@ -204,3 +201,12 @@ export default function VideoCard({
     </div>
   );
 }
+
+/**
+ * Karta se překreslí, jen když se jí změní vlastní data.
+ *
+ * Hlavní stránka donačítá videa po dávkách a při každé dávce se sáhne na
+ * seznam bloků. Bez tohohle by React překreslil i všechny karty, které už
+ * dávno na obrazovce jsou - a právě tam appka viditelně škubla.
+ */
+export default memo(VideoCard);

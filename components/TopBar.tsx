@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useMobileNav } from '@/lib/mobileNavContext';
+import { OPEN_SEARCH_EVENT } from './KeyboardShortcuts';
 
 const SCOPED_PATHS = ['/activity', '/downloaded', '/your-videos', '/playlists', '/subscriptions', '/watch-later'];
 
@@ -35,6 +36,15 @@ export default function TopBar() {
     setActive(true);
     setTimeout(() => inputRef.current?.focus(), 0);
   }
+
+  // Klávesa "/" kdekoliv v appce otevře tohle pole a rovnou do něj skočí.
+  useEffect(() => {
+    function handleOpenRequest() {
+      openSearch();
+    }
+    window.addEventListener(OPEN_SEARCH_EVENT, handleOpenRequest);
+    return () => window.removeEventListener(OPEN_SEARCH_EVENT, handleOpenRequest);
+  }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

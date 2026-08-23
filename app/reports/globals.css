@@ -211,6 +211,108 @@ a {
   letter-spacing: 0.02em;
 }
 
+/* Vysvětlivka nad feedem - "tohle tu není a tady je proč". Schválně tichá,
+   ať nepřebíjí samotná videa, ale s tlačítkem hned po ruce. */
+.feed-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin: 0 0 16px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-raised);
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.feed-notice-action {
+  background: none;
+  border: none;
+  padding: 0;
+  width: auto;
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.feed-notice-action:hover {
+  color: var(--text);
+}
+
+/* ---------- Klávesové zkratky ---------- */
+
+/* Karta vybraná klávesou j/k. Kroužek je outline, ne border - border by
+   kartu o dva pixely nafoukl a celá mřížka by při každém posunu poskočila. */
+.video-card-keyboard-focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+  border-radius: var(--radius);
+}
+
+.shortcuts-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.shortcuts-panel {
+  width: 100%;
+  max-width: 380px;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-raised);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+}
+
+.shortcuts-title {
+  margin: 0 0 16px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.shortcuts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.shortcuts-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.shortcuts-list kbd {
+  flex-shrink: 0;
+  min-width: 44px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
 /* auto-fill, ne auto-fit! Při auto-fit prázdné sloupce zmizí a poslední
    řádek s méně videy se roztáhne přes celou šířku - proto byly u "Další
    videa" některé karty najednou obří. S auto-fill zůstávají sloupce
