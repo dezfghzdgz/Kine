@@ -1059,9 +1059,9 @@ html[data-theme="gray"] {
 
 /* ---------- Top bar: search icon + ad banner ---------- */
 
-/* Horní lišta drží nahoře při scrollování, takže pod ní musí být plná
-   barva pozadí - dřív byla průhledná a odjíždějící náhledy videí se přes
-   ni prosvítaly. */
+/* Horní lišta odjíždí pryč spolu s obsahem - není přilepená nahoře.
+   Díky tomu pod ní nevzniká žádný černý pruh a při scrollování jsou
+   vidět jen videa. */
 .top-bar {
   display: flex;
   align-items: stretch;
@@ -1069,11 +1069,10 @@ html[data-theme="gray"] {
   margin: 0 0 28px 0;
   padding-top: 8px;
   height: 72px;
-  position: sticky;
-  top: 0;
-  z-index: 250;
-  isolation: isolate;
-  background: var(--bg);
+  position: relative;
+  /* Vysoko schválně: rozbalené rozšířené hledání musí být nad kartami
+     videí, jejichž nabídka ⋮ se otevírá nahoru a má 400. */
+  z-index: 500;
 }
 
 .top-bar-search-icon {

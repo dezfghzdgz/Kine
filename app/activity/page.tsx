@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { useLanguage } from '@/lib/i18n';
+import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { useWatchProgress } from '@/lib/useWatchProgress';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -9,11 +9,12 @@ import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { buildVideoBlocks } from '@/lib/videoBlocks';
 import WatchCalendar, { dayKey } from '@/components/WatchCalendar';
+import { videoCountLabel } from '@/lib/plural';
 
 type Tab = 'liked' | 'disliked' | 'star5' | 'star4' | 'star3' | 'star2' | 'star1' | 'history';
 
 function ActivityPageInner() {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const searchParams = useSearchParams();
   const query = searchParams.get('q')?.toLowerCase() ?? '';
   const [ratingMode, setRatingMode] = useState<'stars' | 'like_dislike'>('like_dislike');
@@ -102,7 +103,7 @@ function ActivityPageInner() {
   if (!userId) {
     return (
       <div className="auth-gate">
-        <p>Pro zobrazení aktivity se musíš nejdřív přihlásit.</p>
+        <p>{t('loginToViewStatsNote')}</p>
         <Link href="/login">{t('loginLink')}</Link>
       </div>
     );
@@ -121,12 +122,12 @@ function ActivityPageInner() {
           { key: 'star3', label: `3★ (${count(3)})` },
           { key: 'star2', label: `2★ (${count(2)})` },
           { key: 'star1', label: `1★ (${count(1)})` },
-          { key: 'history', label: `👁 Zhlédnutá (${historyVideos.length})` },
+          { key: 'history', label: `\u{1F441} ${t('activityWatchedTab')} (${historyVideos.length})` },
         ]
       : [
-          { key: 'liked', label: `👍 Líbí se mi (${count(5)})` },
-          { key: 'disliked', label: `👎 Nelíbí se mi (${count(1)})` },
-          { key: 'history', label: `👁 Zhlédnutá (${historyVideos.length})` },
+          { key: 'liked', label: `\u{1F44D} ${t('activityLikedTab')} (${count(5)})` },
+          { key: 'disliked', label: `\u{1F44E} ${t('activityDislikedTab')} (${count(1)})` },
+          { key: 'history', label: `\u{1F441} ${t('activityWatchedTab')} (${historyVideos.length})` },
         ];
 
   const activeList: any[] =
@@ -171,7 +172,7 @@ function ActivityPageInner() {
             </div>
             <p className="video-card-title">{video.title}</p>
             <p className="video-card-meta">
-              {video.profiles?.username ?? 'neznámý tvůrce'} · {video.views} {t('views')}
+              {video.profiles?.username ?? t('unknownCreator')} · {video.views} {t('views')}
             </p>
           </Link>
         ))}
@@ -190,9 +191,9 @@ function ActivityPageInner() {
     for (const video of list) {
       const d = new Date(video.watched_at); d.setHours(0, 0, 0, 0);
       let label: string;
-      if (d.getTime() === today.getTime()) label = 'Dnes';
-      else if (d.getTime() === yesterday.getTime()) label = 'Včera';
-      else label = new Date(video.watched_at).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric' });
+      if (d.getTime() === today.getTime()) label = t('todayLabel');
+      else if (d.getTime() === yesterday.getTime()) label = t('yesterdayLabel');
+      else label = new Date(video.watched_at).toLocaleDateString(DATE_LOCALES[lang], { day: 'numeric', month: 'long', year: 'numeric' });
 
       let group = groups.find((g) => g.label === label);
       if (!group) { group = { label, items: [] }; groups.push(group); }
@@ -204,7 +205,7 @@ function ActivityPageInner() {
         <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 12 }}>
           {g.label}
           <span style={{ fontWeight: 400, color: 'var(--text-faint)', marginLeft: 8 }}>
-            · {g.items.length} {g.items.length === 1 ? 'video' : g.items.length < 5 ? 'videa' : 'videí'}
+            · {videoCountLabel(g.items.length, lang, t)}
           </span>
         </p>
         {renderVideoGrid(g.items)}
@@ -236,11 +237,11 @@ function ActivityPageInner() {
               className={`tab-btn ${calendarOpen || selectedDay ? 'active' : ''}`}
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}
             >
-              📅 {calendarOpen ? 'Skrýt kalendář' : 'Kalendář'}
+              📅 {calendarOpen ? t('activityHideCalendar') : t('activityCalendar')}
             </button>
             {selectedDay && (
               <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>
-                {new Date(`${selectedDay}T00:00:00`).toLocaleDateString('cs-CZ', {
+                {new Date(`${selectedDay}T00:00:00`).toLocaleDateString(DATE_LOCALES[lang], {
                   weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
                 })}
                 {' · '}
@@ -248,7 +249,7 @@ function ActivityPageInner() {
                   onClick={() => setSelectedDay(null)}
                   style={{ background: 'none', color: 'var(--brand)', padding: 0, fontSize: 13 }}
                 >
-                  zrušit
+                  {t('activityClearShort')}
                 </button>
               </span>
             )}
@@ -268,9 +269,9 @@ function ActivityPageInner() {
         <p style={{ color: 'var(--text-faint)' }}>
           {tab === 'history'
             ? selectedDay
-              ? 'Tenhle den jsi nic nesledoval/a.'
-              : 'Tady uvidíš videa, která jsi nedávno sledoval/a, rozdělená po dnech. Konkrétní den si najdeš přes 📅 Kalendář.'
-            : 'Videa v této kategorii se objeví tady.'}
+              ? t('activityNothingThatDay')
+              : t('activityHistoryEmpty')
+            : t('activityCategoryEmpty')}
         </p>
       ) : tab === 'history' ? (
         renderHistoryGroupedByDay(filtered)

@@ -1,5 +1,7 @@
 'use client';
 
+import { useLanguage } from '@/lib/i18n';
+
 /**
  * Rozložení hvězdiček jako procentuální graf.
  *
@@ -25,13 +27,14 @@ export default function StarDistribution({
   compact?: boolean;
   showSummary?: boolean;
 }) {
+  const { t } = useLanguage();
   const dist = [0, 1, 2, 3, 4].map((i) => distribution[i] ?? 0);
   const total = dist.reduce((sum, n) => sum + n, 0);
 
   if (total === 0) {
     return (
       <p style={{ fontSize: compact ? 11.5 : 13, color: 'var(--text-faint)', margin: 0 }}>
-        Zatím bez hodnocení
+        {t('ratingNoneYet')}
       </p>
     );
   }
@@ -44,7 +47,7 @@ export default function StarDistribution({
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
           <span style={{ fontSize: compact ? 15 : 22, fontWeight: 700 }}>{average.toFixed(1)}</span>
           <span style={{ fontSize: compact ? 11 : 13, color: 'var(--text-faint)' }}>
-            / 5 · {total} hodnocení
+            / 5 · {total} {t('ratingsWord')}
           </span>
         </div>
       )}

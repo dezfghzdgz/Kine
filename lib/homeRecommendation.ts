@@ -6,7 +6,7 @@ export const PAGE_SIZE = 40;
 // rozpadne na řádky po 1, 2, 3, 4 i 6 kartách - dřívější čtyřka nechávala
 // na širokém monitoru vpravo prázdné sloupce.
 const CHUNK_LONG = 12;
-const CHUNK_SPARKS = 12;
+const CHUNK_SPARKS = 6;
 
 export function formatDuration(seconds: number | null) {
   if (!seconds) return '';
@@ -47,8 +47,13 @@ export function scoreVideo(
 }
 
 export function buildBlocks(longVideos: any[], sparksVideos: any[], preference: 'short' | 'long'): Block[] {
+  // Střídání dlouhých videí a Sparks. Dřív tu byly dvě dávky dlouhých za
+  // sebou - jenže od chvíle, co má dávka dvanáct videí místo čtyř, by
+  // Sparks naskočily až po čtyřiadvaceti videích, takže na malém kanálu
+  // nebyly na hlavní stránce vidět vůbec. Teď přijde pruh Sparks hned
+  // po první dávce.
   const pattern: ('long' | 'sparks')[] =
-    preference === 'short' ? ['sparks', 'sparks', 'long'] : ['long', 'long', 'sparks'];
+    preference === 'short' ? ['sparks', 'long'] : ['long', 'sparks'];
 
   const blocks: Block[] = [];
   let longIndex = 0;

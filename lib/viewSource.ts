@@ -58,22 +58,29 @@ export function detectViewSource(): ViewSource {
   return match ? match.source : 'home';
 }
 
-/** Hezký název zdroje pro statistiky. */
-export function viewSourceLabel(source: string): string {
-  const labels: Record<string, string> = {
-    home: 'Hlavní stránka',
-    explore: 'Prozkoumat',
-    search: 'Hledání',
-    subscriptions: 'Odběry',
-    playlist: 'Playlist',
-    channel: 'Kanál',
-    sparks: 'Sparks',
-    hashtag: 'Hashtag',
-    watch: 'Doporučená videa',
-    activity: 'Aktivita a historie',
-    direct: 'Přímý odkaz',
-    external: 'Odjinud',
-    unknown: 'Neznámé',
-  };
-  return labels[source] ?? source;
+/**
+ * Překladový klíč k názvu zdroje.
+ *
+ * Vrací klíč, ne hotový text - popisky se pak zobrazí v jazyce, který má
+ * uživatel nastavený. U cizích webů se vrací null, protože doména se
+ * nepřekládá (ukáže se tak, jak je: třeba "youtube.com").
+ */
+const SOURCE_LABEL_KEYS: Record<string, string> = {
+  home: 'srcHome',
+  explore: 'srcExplore',
+  search: 'srcSearch',
+  subscriptions: 'srcSubscriptions',
+  playlist: 'srcPlaylist',
+  channel: 'srcChannel',
+  sparks: 'srcSparks',
+  hashtag: 'srcHashtag',
+  watch: 'srcWatch',
+  activity: 'srcActivity',
+  direct: 'srcDirect',
+  external: 'srcExternal',
+  unknown: 'srcUnknown',
+};
+
+export function viewSourceLabelKey(source: string): string | null {
+  return SOURCE_LABEL_KEYS[source] ?? null;
 }

@@ -1,33 +1,30 @@
-KINE - 5. kolo (jen soubory z tohoto kola)
+KINE - 6. kolo (jen soubory z tohoto kola)
 ==========================================
 
-Rozbal do slozky projektu a prepis puvodni. Cesty odpovidaji repu.
+Rozbal do slozky projektu a prepis puvodni. ZADNA MIGRACE tentokrat.
 
-NOVE SOUBORY:
-  app/admin/revenue-share/page.tsx        <- stranka pro administratora
-  app/api/admin/revenue-share/route.ts    <- serverove API k podilum
-  lib/revenueShare.ts                     <- stupne a vypocet podilu
-  supabase-migration-revenue-share.sql    <- MIGRACE
+NOVY SOUBOR:
+  lib/plural.ts        <- spravne sklonovani poctu videi
 
 ZMENENE:
-  app/api/videos/increment-view/route.ts
+  app/activity/page.tsx
   app/channel-stats/page.tsx
   app/globals.css
+  app/playlists/[id]/page.tsx
+  app/watch/[id]/page.tsx
+  components/ChapterTimeline.tsx
   components/NotificationBell.tsx
-  components/Sidebar.tsx
+  components/SparksCard.tsx
+  components/StarDistribution.tsx
+  components/StatsBarList.tsx
+  components/StatsHeatmap.tsx
+  components/StatsVideoTable.tsx
+  components/VideoCard.tsx
+  components/WatchCalendar.tsx
   lib/homeRecommendation.ts
   lib/i18n.tsx
-  lib/useUserRole.ts
   lib/videoBlocks.ts
+  lib/viewSource.ts
 
-
-MIGRACE (Supabase -> SQL Editor -> New Query)
-  supabase-migration-revenue-share.sql   <- POVINNA
-
-  Prida podil z vydelku (25 % / 55 % / rucni), novy druh oznameni
-  "milnik zhlednuti" a funkci pro bezpecne pocitani zhlednuti.
-  Bez ni se panel "Rozdeleni vydelku" ukaze s vychozimi 25 %
-  a stranka pro administratora nic neulozi.
-
-POZOR: stranka /admin/revenue-share je videt jen uctu, ktery ma
-v tabulce profiles nastaveno is_admin = true.
+POZOR: lib/viewSource.ts uz neexportuje viewSourceLabel(), ale
+viewSourceLabelKey(). Pokud sis ho nekde volal sam, oprav to.

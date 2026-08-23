@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
-import { useLanguage } from '@/lib/i18n';
+import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { DownloadIcon, PeopleIcon, PlaylistIcon, WatchLaterIcon, BellIcon } from './ReactionIcons';
 
 type Notification = {
@@ -48,7 +48,7 @@ const NAV_SHORTCUT_OPTIONS = [
 ];
 
 export default function NotificationBell({ mobileTrigger = false }: { mobileTrigger?: boolean }) {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
@@ -168,7 +168,7 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
         const body = await res.json().catch(() => ({}));
         setCollabErrors((prev) => ({
           ...prev,
-          [n.id]: body.error ?? 'Odpověď se nepodařilo uložit, zkus to znovu.',
+          [n.id]: body.error ?? t('collabResponseFailed'),
         }));
         return;
       }
@@ -301,7 +301,7 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
                       </span>
                       {n.message}
                       <span style={{ display: 'block', fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
-                        {new Date(n.created_at).toLocaleString('cs-CZ')}
+                        {new Date(n.created_at).toLocaleString(DATE_LOCALES[lang])}
                       </span>
                     </button>
                     <button

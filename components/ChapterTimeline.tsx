@@ -448,8 +448,8 @@ export default function ChapterTimeline({
 
             <button
               onClick={(e) => { e.stopPropagation(); onToggleMaximize(); }}
-              title={isMaximized ? 'Zpět do okna (Esc)' : 'Celá obrazovka (F)'}
-              aria-label={isMaximized ? 'Zpět do okna' : 'Celá obrazovka'}
+              title={isMaximized ? t('playerFullscreenOff') : t('playerFullscreenOn')}
+              aria-label={isMaximized ? t('playerFullscreenOff') : t('playerFullscreenOn')}
               style={{ background: 'none', border: 'none', color: '#fff', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             >
               {isMaximized ? <MinimizeIcon size={16} /> : <MaximizeIcon size={16} />}

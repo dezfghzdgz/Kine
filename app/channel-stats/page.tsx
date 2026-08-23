@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useLanguage } from '@/lib/i18n';
+import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
@@ -11,7 +11,10 @@ import StarDistribution from '@/components/StarDistribution';
 import StatsBarList, { type BarItem } from '@/components/StatsBarList';
 import StatsHeatmap from '@/components/StatsHeatmap';
 import StatsVideoTable, { formatWatchTime, type VideoStatsRow } from '@/components/StatsVideoTable';
-import { viewSourceLabel } from '@/lib/viewSource';
+import { viewSourceLabelKey } from '@/lib/viewSource';
+import {
+  effectiveCreatorPercent, nextTierFor, PARTNER_STATUS_LABELS, type PartnerStatus,
+} from '@/lib/revenueShare';
 import { computeTrustRatingClient, recordTrustRatingSnapshot, getTotalReactionCount, RATING_UNLOCK_THRESHOLD } from '@/lib/trustRatingClient';
 import FieldHint from '@/components/FieldHint';
 
@@ -76,7 +79,7 @@ const TIER_MULTIPLIER: Record<string, number> = {
 };
 
 export default function ChannelStatsPage() {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const TIER_LABELS: Record<string, string> = {
     basic: t('tierBasic'),
     silver: t('tierSilver'),
@@ -110,7 +113,9 @@ export default function ChannelStatsPage() {
   const [ratingsByVideo, setRatingsByVideo] = useState<Record<string, number[]>>({});
   // Součet za celý kanál: kolikrát padla 1★, 2★, ... 5★ (index 0 = 1★)
   const [ratingTotals, setRatingTotals] = useState<number[]>([0, 0, 0, 0, 0]);
-  const [viewSources, setViewSources] = useState<BarItem[]>([]);
+  // Ukládá se klíč, ne hotový text - překlad se udělá až při vykreslení,
+  // jinak by popisky zamrzly v jazyce, který platil při načtení stránky.
+  const [viewSources, setViewSources] = useState<{ key: string; labelKey: string | null; value: number }[]>([]);
   const [watchHeatmap, setWatchHeatmap] = useState<number[][]>(emptyHeatmap);
   const [videoTable, setVideoTable] = useState<VideoStatsRow[]>([]);
   const [watchStats, setWatchStats] = useState({
@@ -120,6 +125,12 @@ export default function ChannelStatsPage() {
     uniqueViewers: 0,
   });
   const [watchStatsAvailable, setWatchStatsAvailable] = useState(true);
+  const [revenueShare, setRevenueShare] = useState<{
+    percent: number | null;
+    status: PartnerStatus;
+    note: string | null;
+    manual: boolean;
+  }>({ percent: null, status: 'standard', note: null, manual: false });
   const [trustRating, setTrustRating] = useState<number | null>(null);
   const [trustHistory, setTrustHistory] = useState<{ date: string; score: number }[]>([]);
   const [reactionCount, setReactionCount] = useState(0);
@@ -200,7 +211,7 @@ export default function ChannelStatsPage() {
       setViewSources(
         Object.entries(sourceCounts).map(([key, value]) => ({
           key,
-          label: viewSourceLabel(key),
+          labelKey: viewSourceLabelKey(key),
           value,
         }))
       );
@@ -312,9 +323,31 @@ export default function ChannelStatsPage() {
 
     const { data: subs } = await supabase.from('subscriptions').select('created_at').eq('channel_id', authData.user.id);
 
-    const { data: profile } = await supabase.from('profiles').select('verification_tier, created_at, payouts_suspended').eq('id', authData.user.id).single();
+    // Podíl z výdělků přidává samostatná migrace. Když ještě neproběhla,
+    // dotaz s těmi sloupci selže - proto se zkouší nejdřív s nimi a pak
+    // bez nich, ať zbytek statistik funguje dál.
+    const withShare = await supabase
+      .from('profiles')
+      .select('verification_tier, created_at, payouts_suspended, revenue_share_percent, partner_status, revenue_share_note, revenue_share_manual')
+      .eq('id', authData.user.id)
+      .single();
+
+    const profile = withShare.error
+      ? (await supabase
+          .from('profiles')
+          .select('verification_tier, created_at, payouts_suspended')
+          .eq('id', authData.user.id)
+          .single()).data as any
+      : (withShare.data as any);
+
     setVerificationTier(profile?.verification_tier ?? 'none');
     setPayoutsSuspended(!!profile?.payouts_suspended);
+    setRevenueShare({
+      percent: profile?.revenue_share_percent ?? null,
+      status: (profile?.partner_status ?? 'standard') as PartnerStatus,
+      note: profile?.revenue_share_note ?? null,
+      manual: !!profile?.revenue_share_manual,
+    });
 
     if (profile?.created_at) {
       const score = await computeTrustRatingClient(authData.user.id, profile.created_at);
@@ -467,7 +500,7 @@ export default function ChannelStatsPage() {
         </div>
 
         <div className="panel" style={{ gridColumn: '1 / -1' }}>
-          <p className="panel-heading">Rozložení hvězdiček (celý kanál)</p>
+          <p className="panel-heading">{t('statsStarDistTitle')}</p>
           <StarDistribution distribution={ratingTotals} />
         </div>
 
@@ -493,37 +526,36 @@ export default function ChannelStatsPage() {
           appka u každého diváka ukládá kvůli "pokračuj, kde jsi skončil". */}
       <div className="panel" style={{ marginBottom: 20 }}>
         <p className="panel-heading">
-          Doba sledování a dokoukanost
-          <FieldHint text="Počítá se z toho, kam se přihlášení diváci ve videu dostali. Nepřihlášené diváky sem appka započítat neumí, takže skutečná čísla budou o něco vyšší. Ukazují se jen souhrny, nikdy kdo co sledoval." />
+          {t('statsWatchTimeTitle')}
+          <FieldHint text={t('statsWatchTimeHint')} />
         </p>
 
         {!watchStatsAvailable && (
           <p style={{ fontSize: 12.5, color: '#e0b23f', margin: '0 0 12px' }}>
-            Tahle část potřebuje migraci <code>supabase-migration-view-sources.sql</code> - spusť ji
-            v Supabase a čísla se objeví.
+            {t('statsMigrationNeeded').replace('{file}', 'supabase-migration-view-sources.sql')}
           </p>
         )}
 
         <div className="stat-figure-row">
           <div>
             <p className="stat-figure">{formatWatchTime(watchStats.totalWatchSeconds)}</p>
-            <p className="stat-caption">celkem odsledováno</p>
+            <p className="stat-caption">{t('statsTotalWatched')}</p>
           </div>
           <div>
             <p className="stat-figure">
               {watchStats.avgCompletionPercent === null ? '—' : `${Math.round(watchStats.avgCompletionPercent)} %`}
             </p>
-            <p className="stat-caption">průměrně z videa</p>
+            <p className="stat-caption">{t('statsAvgOfVideo')}</p>
           </div>
           <div>
             <p className="stat-figure">
               {watchStats.finishedShare === null ? '—' : `${Math.round(watchStats.finishedShare)} %`}
             </p>
-            <p className="stat-caption">dokoukalo do konce</p>
+            <p className="stat-caption">{t('statsFinishedShare')}</p>
           </div>
           <div>
             <p className="stat-figure">{watchStats.uniqueViewers}</p>
-            <p className="stat-caption">přihlášených diváků</p>
+            <p className="stat-caption">{t('statsSignedInViewers')}</p>
           </div>
         </div>
       </div>
@@ -531,14 +563,14 @@ export default function ChannelStatsPage() {
       {/* Kolik lidí kanál sleduje a kolik z nich se doopravdy ozve. */}
       <div className="panel" style={{ marginBottom: 20 }}>
         <p className="panel-heading">
-          Odběratelé a zapojení
-          <FieldHint text="Kolik ze zhlédnutí skončí reakcí nebo komentářem a kolik zhlédnutí připadá na jednoho odběratele. Ukazuje, jestli lidi jen prokliknou dál, nebo je video opravdu chytne." />
+          {t('statsEngagementTitle')}
+          <FieldHint text={t('statsEngagementHint')} />
         </p>
 
         <div className="stat-figure-row">
           <div>
             <p className="stat-figure">{stats.subscriberCount}</p>
-            <p className="stat-caption">odběratelů</p>
+            <p className="stat-caption">{t('statsSubscribersShort')}</p>
           </div>
           <div>
             <p className="stat-figure">
@@ -546,43 +578,51 @@ export default function ChannelStatsPage() {
                 ? `${(((stats.totalLikes + stats.totalDislikes) / stats.totalViews) * 100).toFixed(1)} %`
                 : '—'}
             </p>
-            <p className="stat-caption">zhlédnutí s reakcí</p>
+            <p className="stat-caption">{t('statsViewsWithReaction')}</p>
           </div>
           <div>
             <p className="stat-figure">
               {stats.totalViews > 0 ? `${((totalComments / stats.totalViews) * 100).toFixed(1)} %` : '—'}
             </p>
-            <p className="stat-caption">zhlédnutí s komentářem</p>
+            <p className="stat-caption">{t('statsViewsWithComment')}</p>
           </div>
           <div>
             <p className="stat-figure">
               {stats.subscriberCount > 0 ? (stats.totalViews / stats.subscriberCount).toFixed(1) : '—'}
             </p>
-            <p className="stat-caption">zhlédnutí na odběratele</p>
+            <p className="stat-caption">{t('statsViewsPerSubscriber')}</p>
           </div>
         </div>
       </div>
 
       <div className="panel" style={{ marginBottom: 20 }}>
         <p className="panel-heading">
-          Odkud diváci přicházejí
-          <FieldHint text="Odkud se na video kliklo. Zhlédnutí zapsaná dřív, než se tohle začalo měřit, jsou vedená jako Neznámé." />
+          {t('statsSourcesTitle')}
+          <FieldHint text={t('statsSourcesHint')} />
         </p>
-        <StatsBarList items={viewSources} emptyNote="Zatím žádná zhlédnutí k rozdělení." />
+        <StatsBarList
+          items={viewSources.map((s) => ({
+            key: s.key,
+            // Cizí doména se nepřekládá, ukáže se tak, jak je.
+            label: s.labelKey ? t(s.labelKey as any) : s.key,
+            value: s.value,
+          }))}
+          emptyNote={t('statsSourcesEmpty')}
+        />
       </div>
 
       <div className="panel" style={{ marginBottom: 20 }}>
         <p className="panel-heading">
-          Kdy se lidi dívají
-          <FieldHint text="Každé políčko je jedna hodina jednoho dne v týdnu. Čím sytější, tím víc zhlédnutí. Řídí se to časem tvého prohlížeče." />
+          {t('statsWhenTitle')}
+          <FieldHint text={t('statsWhenHint')} />
         </p>
         <StatsHeatmap counts={watchHeatmap} />
       </div>
 
       <div className="panel" style={{ marginBottom: 20 }}>
         <p className="panel-heading">
-          Srovnání videí
-          <FieldHint text="Klikni na název sloupce a videa se podle něj seřadí. Druhé kliknutí obrátí pořadí." />
+          {t('statsCompareTitle')}
+          <FieldHint text={t('statsCompareHint')} />
         </p>
         <StatsVideoTable rows={videoTable} />
       </div>
@@ -644,6 +684,51 @@ export default function ChannelStatsPage() {
           </p>
         )}
       </div>
+
+      {/* Kolik z výdělku zůstává tvůrci a kolik jde platformě. */}
+      {(() => {
+        const percent = effectiveCreatorPercent(
+          revenueShare.percent,
+          revenueShare.manual,
+          stats.subscriberCount
+        );
+        // Další stupeň má smysl slibovat jen tomu, komu se podíl řídí sám.
+        const nextTier = revenueShare.manual ? null : nextTierFor(stats.subscriberCount);
+
+        return (
+          <div className="panel" style={{ marginBottom: 20 }}>
+            <p className="panel-heading">
+              {t('revenueShareLabel')}
+              <FieldHint text={t('revenueSplitHint')} />
+            </p>
+
+            <div className="revenue-split-bar">
+              <div className="revenue-split-creator" style={{ width: `${percent}%` }}>
+                {percent >= 18 && <span>{t('revenueSplitYou')} {percent} %</span>}
+              </div>
+              <div className="revenue-split-platform" style={{ width: `${100 - percent}%` }}>
+                {100 - percent >= 18 && <span>Kine {100 - percent} %</span>}
+              </div>
+            </div>
+
+            {revenueShare.manual && (
+              <p style={{ fontSize: 12.5, color: 'var(--text-dim)', margin: '10px 0 0' }}>
+                {PARTNER_STATUS_LABELS[revenueShare.status]}
+                {revenueShare.note ? ` · ${revenueShare.note}` : ''}
+              </p>
+            )}
+
+            {nextTier && (
+              <p style={{ fontSize: 12.5, color: 'var(--text-faint)', margin: '10px 0 0' }}>
+                {t('revenueSplitNextTier')
+                  .replace('{count}', String(nextTier.minSubscribers))
+                  .replace('{percent}', String(nextTier.creatorPercent))
+                  .replace('{missing}', String(nextTier.minSubscribers - stats.subscriberCount))}
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       <div className="panel">
         {payoutsSuspended && (
@@ -720,7 +805,7 @@ export default function ChannelStatsPage() {
                           {v.title}
                         </p>
                         <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
-                          {new Date(v.created_at).toLocaleDateString('cs-CZ')}
+                          {new Date(v.created_at).toLocaleDateString(DATE_LOCALES[lang])}
                         </p>
                       </div>
                       <span style={{ fontSize: 13, color: 'var(--text-dim)', flexShrink: 0 }}>{v.views} {t('views')}</span>

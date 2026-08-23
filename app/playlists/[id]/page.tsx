@@ -175,7 +175,7 @@ export default function PlaylistDetailPage() {
         {firstVideo && (
           <>
             <h1 className="video-title">{firstVideo.title}</h1>
-            <p className="video-meta">{firstVideo.profiles?.username ?? 'neznámý tvůrce'} · {firstVideo.views} {t('views')}</p>
+            <p className="video-meta">{firstVideo.profiles?.username ?? t('unknownCreator')} · {firstVideo.views} {t('views')}</p>
           </>
         )}
 
@@ -197,12 +197,12 @@ export default function PlaylistDetailPage() {
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <p className="panel-heading" style={{ margin: 0 }}>Playlist ({videos.length})</p>
-          {savingOrder && <span style={{ fontSize: 11.5, color: 'var(--text-faint)' }}>Ukládám pořadí…</span>}
+          {savingOrder && <span style={{ fontSize: 11.5, color: 'var(--text-faint)' }}>{t('playlistSavingOrder')}</span>}
         </div>
 
         {isOwner && videos.length > 1 && (
           <p style={{ fontSize: 11.5, color: 'var(--text-faint)', margin: '6px 0 10px' }}>
-            Pořadí přehodíš šipkami ▲▼ nebo přetažením za ⠿.
+            {t('playlistReorderHint')}
           </p>
         )}
 
@@ -238,7 +238,7 @@ export default function PlaylistDetailPage() {
                 <>
                   <span
                     className="playlist-row-handle"
-                    title="Přetáhni pro změnu pořadí"
+                    title={t('playlistDragHandle')}
                     onClick={(e) => e.stopPropagation()}
                   >
                     ⠿
@@ -249,8 +249,8 @@ export default function PlaylistDetailPage() {
                       className="playlist-move-btn"
                       disabled={i === 0}
                       onClick={() => moveVideo(i, i - 1)}
-                      title="Posunout nahoru"
-                      aria-label="Posunout nahoru"
+                      title={t('playlistMoveUp')}
+                      aria-label={t('playlistMoveUp')}
                     >
                       ▲
                     </button>
@@ -259,8 +259,8 @@ export default function PlaylistDetailPage() {
                       className="playlist-move-btn"
                       disabled={i === videos.length - 1}
                       onClick={() => moveVideo(i, i + 1)}
-                      title="Posunout dolů"
-                      aria-label="Posunout dolů"
+                      title={t('playlistMoveDown')}
+                      aria-label={t('playlistMoveDown')}
                     >
                       ▼
                     </button>

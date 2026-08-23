@@ -1,5 +1,7 @@
 'use client';
 
+import { useLanguage } from '@/lib/i18n';
+
 /**
  * Vodorovný žebříček - "kolik čeho" seřazené odshora dolů.
  *
@@ -12,7 +14,7 @@ export type BarItem = { key: string; label: string; value: number };
 
 export default function StatsBarList({
   items,
-  emptyNote = 'Zatím nejsou data.',
+  emptyNote,
   maxRows = 8,
   valueSuffix = '',
 }: {
@@ -21,10 +23,11 @@ export default function StatsBarList({
   maxRows?: number;
   valueSuffix?: string;
 }) {
+  const { t } = useLanguage();
   const total = items.reduce((sum, i) => sum + i.value, 0);
 
   if (total === 0) {
-    return <p style={{ fontSize: 13, color: 'var(--text-faint)', margin: 0 }}>{emptyNote}</p>;
+    return <p style={{ fontSize: 13, color: 'var(--text-faint)', margin: 0 }}>{emptyNote ?? t('statsNoDataYet')}</p>;
   }
 
   const sorted = [...items].sort((a, b) => b.value - a.value);
@@ -34,7 +37,7 @@ export default function StatsBarList({
   // Zbytek se nikdy nezamlčí - slije se do jednoho řádku "Ostatní", ať
   // součet pořád sedí na 100 %.
   const rows = restValue > 0
-    ? [...shown, { key: '__rest', label: 'Ostatní', value: restValue }]
+    ? [...shown, { key: '__rest', label: t('statsOther'), value: restValue }]
     : shown;
 
   const max = Math.max(...rows.map((r) => r.value), 1);

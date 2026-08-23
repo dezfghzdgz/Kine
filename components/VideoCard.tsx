@@ -179,7 +179,7 @@ export default function VideoCard({
       </Link>
 
       {previewing && (
-        <button className="video-card-sound-btn" onClick={toggleMute} aria-label="Zvuk náhledu">
+        <button className="video-card-sound-btn" onClick={toggleMute} aria-label={t('previewSound')}>
           <SpeakerIcon muted={muted} size={15} />
         </button>
       )}
@@ -190,7 +190,7 @@ export default function VideoCard({
         <Link href={href} className="video-card-textlink">
           <p className="video-card-title">{video.title}</p>
           <p className="video-card-meta">
-            {!hideCreator && <>{video.profiles?.username ?? 'neznámý tvůrce'} · </>}
+            {!hideCreator && <>{video.profiles?.username ?? t('unknownCreator')} · </>}
             {video.views} {t('views')}
           </p>
         </Link>

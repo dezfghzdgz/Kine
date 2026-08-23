@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 
 /**
  * Kdy se lidi dívají - mřížka 7 dní x 24 hodin.
@@ -11,14 +12,21 @@ import { useMemo } from 'react';
  * duha, ve které by nešlo poznat, co je víc.
  */
 
-const DAY_LABELS = ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'];
-
 export default function StatsHeatmap({
   /** counts[den 0-6 od pondělí][hodina 0-23] */
   counts,
 }: {
   counts: number[][];
 }) {
+  const { t, lang } = useLanguage();
+  const locale = DATE_LOCALES[lang];
+
+  // Zkratky dnů od pondělí, v jazyce uživatele. 5. 1. 2026 bylo pondělí.
+  const dayLabels = useMemo(() => {
+    const formatter = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+    return Array.from({ length: 7 }, (_, i) => formatter.format(new Date(2026, 0, 5 + i)));
+  }, [locale]);
+
   const { max, total, best } = useMemo(() => {
     let max = 0;
     let total = 0;
@@ -38,7 +46,7 @@ export default function StatsHeatmap({
   if (total === 0) {
     return (
       <p style={{ fontSize: 13, color: 'var(--text-faint)', margin: 0 }}>
-        Zatím není dost zhlédnutí, aby z toho šlo něco vyčíst.
+        {t('heatmapNotEnough')}
       </p>
     );
   }
@@ -46,10 +54,13 @@ export default function StatsHeatmap({
   return (
     <div>
       <p style={{ fontSize: 12.5, color: 'var(--text-dim)', margin: '0 0 12px' }}>
-        Nejvíc se lidi dívají <strong style={{ color: 'var(--text)' }}>
-          {DAY_LABELS[best.day]} v {best.hour}:00
+        {t('heatmapPeak')}{' '}
+        <strong style={{ color: 'var(--text)' }}>
+          {dayLabels[best.day]} {best.hour}:00
         </strong>{' '}
-        <span style={{ color: 'var(--text-faint)' }}>({best.value} zhlédnutí)</span>
+        <span style={{ color: 'var(--text-faint)' }}>
+          {t('heatmapViewsCount').replace('{count}', String(best.value))}
+        </span>
       </p>
 
       <div style={{ overflowX: 'auto' }}>
@@ -66,12 +77,15 @@ export default function StatsHeatmap({
 
           {counts.map((row, day) => (
             <div key={day} className="heatmap-row">
-              <span className="heatmap-day-label">{DAY_LABELS[day]}</span>
+              <span className="heatmap-day-label">{dayLabels[day]}</span>
               {row.map((value, hour) => (
                 <span
                   key={hour}
                   className="heatmap-cell"
-                  title={`${DAY_LABELS[day]} ${hour}:00–${hour}:59 · ${value} zhlédnutí`}
+                  title={t('heatmapCellTitle')
+                    .replace('{day}', dayLabels[day])
+                    .replace(/\{hour\}/g, String(hour))
+                    .replace('{count}', String(value))}
                   style={{
                     // Sytost = podíl na nejsilnější hodině. Odmocnina
                     // zvedne slabá políčka, ať nejsou úplně neviditelná.
@@ -86,7 +100,7 @@ export default function StatsHeatmap({
       </div>
 
       <div className="heatmap-legend">
-        <span>méně</span>
+        <span>{t('heatmapLess')}</span>
         {[0, 0.25, 0.5, 0.75, 1].map((step) => (
           <span
             key={step}
@@ -97,7 +111,7 @@ export default function StatsHeatmap({
             }}
           />
         ))}
-        <span>více</span>
+        <span>{t('heatmapMore')}</span>
       </div>
     </div>
   );

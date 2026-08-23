@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 
 /**
  * Srovnání videí mezi sebou.
@@ -27,13 +28,13 @@ export type VideoStatsRow = {
 
 type SortKey = 'created_at' | 'views' | 'avgRating' | 'comments' | 'completionPercent' | 'watchSeconds';
 
-const COLUMNS: { key: SortKey; label: string; title: string }[] = [
-  { key: 'views', label: 'Zhlédnutí', title: 'Kolikrát se video přehrálo' },
-  { key: 'avgRating', label: 'Hodnocení', title: 'Průměrné hodnocení a počet hodnocení' },
-  { key: 'comments', label: 'Komentáře', title: 'Počet komentářů pod videem' },
-  { key: 'completionPercent', label: 'Dokoukanost', title: 'Kolik procent videa lidi průměrně vidí' },
-  { key: 'watchSeconds', label: 'Odsledováno', title: 'Kolik času lidi u videa dohromady strávili' },
-  { key: 'created_at', label: 'Nahráno', title: 'Datum nahrání' },
+const COLUMN_KEYS: { key: SortKey; labelKey: string }[] = [
+  { key: 'views', labelKey: 'tableColViews' },
+  { key: 'avgRating', labelKey: 'tableColRating' },
+  { key: 'comments', labelKey: 'tableColComments' },
+  { key: 'completionPercent', labelKey: 'tableColCompletion' },
+  { key: 'watchSeconds', labelKey: 'tableColWatched' },
+  { key: 'created_at', labelKey: 'tableColUploaded' },
 ];
 
 export function formatWatchTime(seconds: number): string {
@@ -46,11 +47,12 @@ export function formatWatchTime(seconds: number): string {
 }
 
 export default function StatsVideoTable({ rows }: { rows: VideoStatsRow[] }) {
+  const { t, lang } = useLanguage();
   const [sortKey, setSortKey] = useState<SortKey>('views');
   const [ascending, setAscending] = useState(false);
 
   if (rows.length === 0) {
-    return <p style={{ fontSize: 13, color: 'var(--text-faint)' }}>Zatím tu nejsou žádná videa k porovnání.</p>;
+    return <p style={{ fontSize: 13, color: 'var(--text-faint)' }}>{t('tableEmpty')}</p>;
   }
 
   function toggleSort(key: SortKey) {
@@ -81,15 +83,15 @@ export default function StatsVideoTable({ rows }: { rows: VideoStatsRow[] }) {
       <table className="stats-table">
         <thead>
           <tr>
-            <th style={{ textAlign: 'left' }}>Video</th>
-            {COLUMNS.map((col) => (
-              <th key={col.key} title={col.title}>
+            <th style={{ textAlign: 'left' }}>{t('tableColVideo')}</th>
+            {COLUMN_KEYS.map((col) => (
+              <th key={col.key}>
                 <button
                   type="button"
                   onClick={() => toggleSort(col.key)}
                   className={`stats-table-sort ${sortKey === col.key ? 'active' : ''}`}
                 >
-                  {col.label}
+                  {t(col.labelKey as any)}
                   <span className="stats-table-arrow">
                     {sortKey === col.key ? (ascending ? '▲' : '▼') : '⇅'}
                   </span>
@@ -124,7 +126,7 @@ export default function StatsVideoTable({ rows }: { rows: VideoStatsRow[] }) {
               <td>{row.completionPercent === null ? '—' : `${Math.round(row.completionPercent)} %`}</td>
               <td>{formatWatchTime(row.watchSeconds)}</td>
               <td style={{ color: 'var(--text-faint)' }}>
-                {new Date(row.created_at).toLocaleDateString('cs-CZ')}
+                {new Date(row.created_at).toLocaleDateString(DATE_LOCALES[lang])}
               </td>
             </tr>
           ))}

@@ -26,6 +26,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import { ShareIcon, WatchLaterIcon, ReportIcon, TrashIcon } from '@/components/ReactionIcons';
 import { detectViewSource } from '@/lib/viewSource';
 import { getQueue, removeFromQueue, clearQueue, subscribeToQueue, type QueuedVideo } from '@/lib/videoQueue';
+import { videoCountLabel } from '@/lib/plural';
 
 function formatChapterTime(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -34,7 +35,7 @@ function formatChapterTime(seconds: number) {
 }
 
 function WatchPageInner() {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -227,7 +228,7 @@ function WatchPageInner() {
       setShowUpNext(false);
       player.currentTime = 0;
       player.play();
-      flashHint('Přehrát znovu');
+      flashHint(t('playerReplay'));
       return;
     }
 
@@ -255,14 +256,14 @@ function WatchPageInner() {
     const next = Math.max(0, Math.min((player.volume ?? 1) + delta, 1));
     player.volume = next;
     player.muted = next === 0;
-    flashHint(`Hlasitost ${Math.round(next * 100)} %`);
+    flashHint(t('playerVolume').replace('{percent}', String(Math.round(next * 100))));
   }
 
   function toggleMute() {
     const player = playerRef.current;
     if (!player) return;
     player.muted = !player.muted;
-    flashHint(player.muted ? 'Ztlumeno' : 'Zvuk zapnut');
+    flashHint(player.muted ? t('playerMuted') : t('playerUnmuted'));
   }
 
   // Celá obrazovka řešená přímo prohlížečem (Fullscreen API), ne CSS trikem.
@@ -684,7 +685,7 @@ function WatchPageInner() {
     );
   }
 
-  const creatorName = video.profiles?.display_name ?? video.profiles?.username ?? 'neznámý tvůrce';
+  const creatorName = video.profiles?.display_name ?? video.profiles?.username ?? t('unknownCreator');
   const chapters: { time: number; title: string }[] = video.chapters ?? [];
   const captions: { time: number; text: string }[] = video.captions ?? [];
 
@@ -792,7 +793,7 @@ function WatchPageInner() {
               <div style={{ minWidth: 0 }}>
                 <p className="playlist-panel-title" style={{ margin: 0 }}>{t('queuePanelTitle')}</p>
                 <p className="playlist-panel-sub">
-                  {queue.length} {queue.length === 1 ? 'video' : queue.length < 5 ? 'videa' : 'videí'}
+                  {videoCountLabel(queue.length, lang, t)}
                 </p>
               </div>
               <button onClick={clearQueue} className="playlist-panel-toggle" style={{ width: 'auto', padding: '0 10px', fontSize: 12 }}>
@@ -815,12 +816,12 @@ function WatchPageInner() {
                     </span>
                     <span style={{ minWidth: 0, flex: 1 }}>
                       <span className="playlist-panel-item-title">{v.title}</span>
-                      <span className="playlist-panel-item-meta">{v.username ?? 'neznámý tvůrce'}</span>
+                      <span className="playlist-panel-item-meta">{v.username ?? t('unknownCreator')}</span>
                     </span>
                   </Link>
                   <button
                     onClick={() => removeFromQueue(v.id)}
-                    aria-label="Odebrat z fronty"
+                    aria-label={t('queueRemove')}
                     style={{ background: 'none', color: 'var(--text-faint)', padding: '4px 8px', fontSize: 12 }}
                   >
                     ✕
@@ -877,7 +878,7 @@ function WatchPageInner() {
                       </span>
                       <span style={{ minWidth: 0, flex: 1 }}>
                         <span className="playlist-panel-item-title">{v.title}</span>
-                        <span className="playlist-panel-item-meta">{v.profiles?.username ?? 'neznámý tvůrce'}</span>
+                        <span className="playlist-panel-item-meta">{v.profiles?.username ?? t('unknownCreator')}</span>
                       </span>
                     </Link>
                   );
@@ -1027,7 +1028,7 @@ function WatchPageInner() {
                   </div>
                   <p className="video-card-title">{v.title}</p>
                   <p className="video-card-meta">
-                    {v.profiles?.username ?? 'neznámý tvůrce'} · {v.views} {t('views')}
+                    {v.profiles?.username ?? t('unknownCreator')} · {v.views} {t('views')}
                   </p>
                 </Link>
               ))}

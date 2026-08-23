@@ -212,7 +212,7 @@ export default function SparksCard({
     soundEnabledRef.current = !next;
   }
 
-  const creatorName = video.profiles?.display_name ?? video.profiles?.username ?? 'neznámý tvůrce';
+  const creatorName = video.profiles?.display_name ?? video.profiles?.username ?? t('unknownCreator');
 
   return (
     <div className="spark-slide">
