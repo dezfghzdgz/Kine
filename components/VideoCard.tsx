@@ -124,6 +124,18 @@ export default function VideoCard({
     );
   }
 
+  // Náhled při najetí musí vyplnit rámeček stejně jako obrázek náhledu
+  // (ořízne se, nemá černé okraje). iframe se nedá "object-fit: cover"
+  // jako obrázek, tak ho o kousek zvětšíme, aby video rámeček přesně
+  // pokrylo. Zvětšení počítáme z poměru stran videa vůči rámečku - bez
+  // toho se vodorovné video ve svislé kartě Sparks scvrklo na proužek.
+  const containerAspect = isSparks ? 9 / 16 : 16 / 9;
+  const sourceAspect = video.width && video.height ? video.width / video.height : 16 / 9;
+  const coverScale = Math.min(
+    Math.max(sourceAspect / containerAspect, containerAspect / sourceAspect),
+    4
+  );
+
   return (
     // Karta už není jeden velký odkaz: nabídka ⋮ a tlačítko zvuku musí být
     // vedle odkazu, ne v něm - tlačítko uvnitř odkazu je neplatné HTML
@@ -146,7 +158,11 @@ export default function VideoCard({
             <iframe
               ref={iframeRef}
               src={`https://iframe.videodelivery.net/${video.cloudflare_video_id}?controls=false`}
-              style={{ width: '100%', height: '100%', border: 'none', position: 'absolute', inset: 0, pointerEvents: 'none' }}
+              style={{
+                width: '100%', height: '100%', border: 'none', position: 'absolute',
+                inset: 0, pointerEvents: 'none',
+                transform: `scale(${coverScale})`, transformOrigin: 'center',
+              }}
               allow="autoplay"
             />
           )}
@@ -160,11 +176,6 @@ export default function VideoCard({
             <span className="video-duration">{formatDuration(video.duration_seconds)}</span>
           ) : null}
         </div>
-        <p className="video-card-title">{video.title}</p>
-        <p className="video-card-meta">
-          {!hideCreator && <>{video.profiles?.username ?? 'neznámý tvůrce'} · </>}
-          {video.views} {t('views')}
-        </p>
       </Link>
 
       {previewing && (
@@ -173,11 +184,23 @@ export default function VideoCard({
         </button>
       )}
 
-      <VideoCardMenu
-        video={video}
-        onHide={setHidden}
-        onActivity={(active) => { if (active) stopHover(); }}
-      />
+      {/* Text a tři tečky jsou hned pod videem v jednom řádku - jako na
+          YouTube. Tečky tak sedí u názvu, ne až na spodku celé karty. */}
+      <div className="video-card-footer">
+        <Link href={href} className="video-card-textlink">
+          <p className="video-card-title">{video.title}</p>
+          <p className="video-card-meta">
+            {!hideCreator && <>{video.profiles?.username ?? 'neznámý tvůrce'} · </>}
+            {video.views} {t('views')}
+          </p>
+        </Link>
+
+        <VideoCardMenu
+          video={video}
+          onHide={setHidden}
+          onActivity={(active) => { if (active) stopHover(); }}
+        />
+      </div>
     </div>
   );
 }

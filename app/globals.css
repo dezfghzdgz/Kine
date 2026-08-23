@@ -2218,9 +2218,17 @@ html[data-theme="gray"] {
   display: block;
 }
 
-.video-card-title,
-.video-card-meta {
-  padding-right: 26px;
+/* Řádek pod videem: text vlevo, tři tečky vpravo hned u názvu. */
+.video-card-footer {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.video-card-textlink {
+  display: block;
+  flex: 1;
+  min-width: 0;
 }
 
 .video-card-sound-btn {
@@ -2241,18 +2249,20 @@ html[data-theme="gray"] {
   justify-content: center;
 }
 
-/* Schválně bez z-index! Jakmile by ho tenhle obal měl, stal by se z něj
-   vlastní "patro" a rozbalená nabídka ani okno "Nahlásit" by se z něj už
-   nedostaly - schovaly by se pod boční menu a horní lištu. */
+/* Tři tečky sedí v řádku hned pod videem, u názvu. Schválně bez z-index:
+   jakmile by ho tenhle obal měl, stal by se z něj vlastní "patro" a
+   rozbalená nabídka ani okno "Nahlásit" by se z něj už nedostaly - schovaly
+   by se pod boční menu a horní lištu. */
 .video-card-menu {
-  position: absolute;
-  right: 0;
-  bottom: 0;
+  position: relative;
+  flex-shrink: 0;
+  /* Zarovná tečky do výšky názvu (ten má nad sebou 10px mezeru). */
+  margin-top: 9px;
 }
 
 .video-card-menu-btn {
-  width: 24px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   background: none;
   border: none;
