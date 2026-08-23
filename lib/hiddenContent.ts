@@ -34,16 +34,36 @@ export async function loadHiddenContent(userId: string): Promise<HiddenContent> 
   };
 }
 
-/** Vyhodí ze seznamu videa, která si divák (nebo jejichž kanál) schoval. */
-export function filterHidden<T extends { id: string; owner_id?: string; profiles?: { id?: string } }>(
-  videos: T[],
-  hidden: HiddenContent
-): T[] {
+/**
+ * Kdo video nahrál.
+ *
+ * Supabase vrací navázaný profil jednou jako objekt a jindy jako pole -
+ * podle toho, jak je vazba v dotazu napsaná. Bereme obojí, ať se na tom
+ * volající nemusí trápit.
+ */
+function ownerIdOf(video: any): string | undefined {
+  if (video?.owner_id) return video.owner_id;
+  const profiles = video?.profiles;
+  if (Array.isArray(profiles)) return profiles[0]?.id;
+  return profiles?.id;
+}
+
+/**
+ * Vyhodí ze seznamu videa, která si divák (nebo jejichž kanál) schoval.
+ *
+ * Typ videa se schválně nijak neomezuje: každá stránka si z databáze tahá
+ * jiné sloupce, takže jakékoliv přesnější omezení by se s některým z těch
+ * tvarů rozešlo a build by spadl. Funkce vrátí přesně ten typ, který
+ * dostala.
+ */
+export function filterHidden<T>(videos: T[], hidden: HiddenContent): T[] {
   if (hidden.videoIds.size === 0 && hidden.channelIds.size === 0) return videos;
 
-  return videos.filter((v) => {
-    if (hidden.videoIds.has(v.id)) return false;
-    const owner = v.owner_id ?? v.profiles?.id;
+  return videos.filter((video) => {
+    const id = (video as any)?.id;
+    if (id && hidden.videoIds.has(id)) return false;
+
+    const owner = ownerIdOf(video);
     return !(owner && hidden.channelIds.has(owner));
   });
 }
