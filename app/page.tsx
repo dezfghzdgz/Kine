@@ -8,6 +8,7 @@ import { useLanguage } from '@/lib/i18n';
 import { useWatchProgress } from '@/lib/useWatchProgress';
 import VideoCard from '@/components/VideoCard';
 import { scoreVideo, buildBlocks, formatDuration, PAGE_SIZE, RECOMMENDATION_POOL_SIZE, Block } from '@/lib/homeRecommendation';
+import { loadHiddenContent, filterHidden } from '@/lib/hiddenContent';
 
 export default function HomePage() {
   const { t } = useLanguage();
@@ -107,9 +108,25 @@ export default function HomePage() {
 
     const shadowBannedIds = new Set((shadowBanned ?? []).map((p: any) => p.id));
 
-    let pool = (candidates ?? []).filter((v: any) => !shadowBannedIds.has(v.owner_id));
+    // Shadow ban schová videa ostatním, ale ne jejich autorovi - o to
+    // v něm jde. Dřív mizela i jemu samotnému, takže si toho okamžitě
+    // všiml a rovnou bylo poznat, že s účtem něco je.
+    let pool = (candidates ?? []).filter(
+      (v: any) => !shadowBannedIds.has(v.owner_id) || v.owner_id === authData.user?.id
+    );
+
+    // Co si divák schoval přes ⋮ ("Nezajímá mě" / "Nedoporučovat kanál").
+    // Tohle dřív viselo v komponentě, která se nakonec nikde nepoužívala,
+    // takže obě tlačítka na hlavní stránce ve skutečnosti nic nedělala.
+    if (authData.user) {
+      const hidden = await loadHiddenContent(authData.user.id);
+      pool = filterHidden(pool, hidden);
+    }
 
     if (disableShorts) {
+      // Nastavení "Vypnout Sparks a krátký obsah" v Nastavení. Když jsou
+      // Sparks vidět všude jinde, jen ne na hlavní stránce, bývá zapnuté
+      // právě tohle.
       pool = pool.filter((v: any) => !(v.height && v.width && v.height > v.width && (v.duration_seconds ?? 0) <= 120));
     }
 
