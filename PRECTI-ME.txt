@@ -1,0 +1,67 @@
+OPRAVA BUILDU - KINE
+====================
+
+Co se stalo
+-----------
+Posílal jsem soubory jednotlivě a několik jich má stejný název
+(page.tsx, layout.tsx, route.ts). Při ukládání se pak některé
+dostaly do špatné složky nebo se vůbec nedostaly do repa. Proto
+je tady všechno naráz i se složkami - stačí to rozbalit a nic
+se nemůže splést.
+
+Build teď padá na tom, že app/globals.css skončil v app/reports/.
+
+
+1) ROZBALIT
+-----------
+Rozbal tenhle archiv do kořene repa (tam, kde je package.json)
+a nech přepsat existující soubory.
+
+Přijde tím 15 souborů:
+
+  app/globals.css                          <- byl ve špatné složce
+  app/layout.tsx                           <- byla tam stará verze
+  app/page.tsx                             <- byla tam stará verze
+  app/watch/[id]/layout.tsx                <- úplně chyběl (náhledy odkazů)
+  app/watch/[id]/page.tsx                  <- byla tam stará verze
+  app/channel/[id]/layout.tsx              <- úplně chyběl (náhledy odkazů)
+  app/channel/[id]/page.tsx                <- byla tam stará verze
+  app/explore/page.tsx                     <- byla tam stará verze
+  app/sparks/page.tsx                      <- byla tam stará verze
+  app/admin/revenue-share/page.tsx         <- úplně chyběl
+  app/api/admin/revenue-share/route.ts     <- úplně chyběl
+  app/admin/verifications/page.tsx         <- byl přepsaný cizím obsahem
+  app/api/admin/verification-requests/route.ts  <- byl přepsaný cizím obsahem
+  lib/hiddenContent.ts                     <- byla tam stará verze
+  lib/videoBlocks.ts                       <- byla tam stará verze
+
+
+2) SMAZAT DVA SOUBORY
+---------------------
+Tohle archiv udělat nemůže, musíš ručně:
+
+  app/reports/globals.css
+      Sem globals.css omylem spadl. Zůstat tam nemá.
+
+  components/HomeClient.tsx
+      Mrtvý kód, nikde se nepoužívá. Odkazuje se na PAGE_SIZE,
+      který už v lib/homeRecommendation.ts není - build by na
+      tom spadl hned po opravě CSS.
+
+Z příkazové řádky:
+
+  git rm app/reports/globals.css components/HomeClient.tsx
+
+
+3) NA VERCELU
+-------------
+Zkontroluj, že je nastavená proměnná NEXT_PUBLIC_SITE_URL na
+skutečnou adresu (např. https://kine-lac.vercel.app). Bez ní se
+do náhledů odkazů propíše localhost:3000 a obrázky se nenačtou.
+
+
+Pozn.: app/admin/verifications/page.tsx a
+app/api/admin/verification-requests/route.ts měly v repu obsah
+stránky pro podíl na výdělcích - někdy dřív se do nich uložil
+soubor, který tam nepatřil. Archiv vrací jejich původní obsah
+a revenue-share dává na jeho vlastní cestu.

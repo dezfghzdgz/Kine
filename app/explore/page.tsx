@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import VideoCard from '@/components/VideoCard';
-import { buildVideoBlocks } from '@/lib/videoBlocks';
+import { buildVideoBlocks, isSpark } from '@/lib/videoBlocks';
 import { computeTrustRatingClient } from '@/lib/trustRatingClient';
 import { useLanguage } from '@/lib/i18n';
 import { useWatchProgress } from '@/lib/useWatchProgress';
@@ -71,10 +71,6 @@ function ExploreInner() {
       query = query.eq('category', category);
     }
 
-    if (tab === 'shorts') {
-      query = query.lte('duration_seconds', 120);
-    }
-
     if (tab === 'popular') {
       query = query.order('views', { ascending: false });
     }
@@ -92,7 +88,11 @@ function ExploreInner() {
     let results = data ?? [];
 
     if (tab === 'shorts') {
-      results = results.filter((v: any) => v.height && v.width && v.height > v.width);
+      // Stejné pravidlo jako všude jinde (lib/videoBlocks). Dřív se délka
+      // ořezávala rovnou v dotazu přes lte(120) - jenže to zahodí i videa,
+      // u kterých délka v databázi chybí, takže záložka Sparks ukazovala
+      // něco jiného než hlavní stránka.
+      results = results.filter(isSpark);
     }
 
     if (tab === 'surprise') {

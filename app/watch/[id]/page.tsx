@@ -146,6 +146,11 @@ function WatchPageInner() {
       const tag = (active?.tagName ?? '').toLowerCase();
       if (tag === 'input' || tag === 'textarea' || active?.isContentEditable) return;
 
+      // Kombinace s Ctrl/Cmd/Alt patří prohlížeči nebo zkratkám appky
+      // (Ctrl+K = hledání), ne přehrávači. Bez tohohle by Ctrl+K vedle
+      // otevření hledání ještě zastavil video.
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
       // Esc ukončí i náhradní CSS variantu celé obrazovky (u skutečné
       // celé obrazovky si Esc odbaví sám prohlížeč).
       if (e.key === 'Escape') {

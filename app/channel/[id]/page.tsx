@@ -10,7 +10,7 @@ import CreatorSubscribeButton from '@/components/CreatorSubscribeButton';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import PostComposer from '@/components/PostComposer';
 import PostCard from '@/components/PostCard';
-import { buildVideoBlocks } from '@/lib/videoBlocks';
+import { buildVideoBlocks, isSpark } from '@/lib/videoBlocks';
 import { useLanguage } from '@/lib/i18n';
 import { computeTrustRatingClient, getTotalReactionCount, RATING_UNLOCK_THRESHOLD } from '@/lib/trustRatingClient';
 import { useUserRole } from '@/lib/useUserRole';
@@ -209,8 +209,8 @@ function ChannelPageInner() {
       }
     }
   }
-  const longVideos = videos.filter((v) => !(v.height && v.width && v.height > v.width && (v.duration_seconds ?? 0) <= 120));
-  const sparkVideos = videos.filter((v) => v.height && v.width && v.height > v.width && (v.duration_seconds ?? 0) <= 120);
+  const longVideos = videos.filter((v) => !isSpark(v));
+  const sparkVideos = videos.filter(isSpark);
 
   function renderVideoGrid(list: any[]) {
     if (list.length === 0) {

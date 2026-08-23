@@ -9,8 +9,44 @@ export type VideoBlock = { type: 'long' | 'sparks'; items: any[] };
 const CHUNK_LONG = 12;
 const CHUNK_SPARKS = 6;
 
+// Do pruhu Sparks se počítá video na výšku do dvou minut. Číslo i pravidlo
+// jsou schválně na jednom místě - dřív se stejná podmínka opisovala zvlášť
+// na hlavní stránce, v Exploreru, na kanálu i v samotných Sparks, takže
+// stačilo jedno místo opravit a stránky si přestaly odpovídat.
+export const SPARK_MAX_SECONDS = 120;
+
 export function isSpark(video: any): boolean {
-  return !!(video.height && video.width && video.height > video.width && (video.duration_seconds ?? 0) <= 120);
+  return !!(
+    video.height &&
+    video.width &&
+    video.height > video.width &&
+    (video.duration_seconds ?? 0) <= SPARK_MAX_SECONDS
+  );
+}
+
+/**
+ * Videa, kterým do Sparks chybí jen kousek.
+ *
+ * Když se pruh Sparks neukáže, bývá to skoro vždycky jedním z těchhle dvou
+ * důvodů: video na výšku je delší než dvě minuty, nebo u něj v databázi
+ * chybí rozměry (starší nahrávky před migrací, která width/height přidala).
+ * Bez rozměrů se video nemá jak poznat, takže se veze mezi běžnými videi.
+ */
+export function nearMissSparks(videos: any[]) {
+  let portraitTooLong = 0;
+  let missingDimensions = 0;
+
+  for (const video of videos) {
+    if (!video.width || !video.height) {
+      missingDimensions++;
+      continue;
+    }
+    if (video.height > video.width && (video.duration_seconds ?? 0) > SPARK_MAX_SECONDS) {
+      portraitTooLong++;
+    }
+  }
+
+  return { portraitTooLong, missingDimensions };
 }
 
 export function buildVideoBlocks(

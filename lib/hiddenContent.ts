@@ -97,3 +97,17 @@ export async function hideChannel(userId: string, channelId: string) {
 export async function unhideChannel(userId: string, channelId: string) {
   return supabase.from('hidden_channels').delete().eq('user_id', userId).eq('channel_id', channelId);
 }
+
+/**
+ * Vrátí zpátky všechno schované najednou.
+ *
+ * "Nezajímá mě" byla do teď jednosměrka - kliknutím video zmizelo z
+ * doporučení a nikde v appce nebylo, jak si ho vrátit. Odsud to jde jedním
+ * tlačítkem přímo z hlavní stránky.
+ */
+export async function clearHiddenContent(userId: string) {
+  await Promise.all([
+    supabase.from('hidden_videos').delete().eq('user_id', userId),
+    supabase.from('hidden_channels').delete().eq('user_id', userId),
+  ]);
+}

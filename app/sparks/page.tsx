@@ -8,6 +8,7 @@ import SparksCard from '@/components/SparksCard';
 import CommentSection from '@/components/CommentSection';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import { useLanguage } from '@/lib/i18n';
+import { isSpark } from '@/lib/videoBlocks';
 
 function SparksPageInner() {
   const { t } = useLanguage();
@@ -75,7 +76,7 @@ function SparksPageInner() {
       .order('created_at', { ascending: false })
       .limit(80);
 
-    const sparks = (data ?? []).filter((v: any) => v.height && v.width && v.height > v.width && (v.duration_seconds ?? 0) <= 120);
+    const sparks = (data ?? []).filter(isSpark);
     setVideos(sparks);
 
     if (startId) {

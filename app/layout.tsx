@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Script from 'next/script';
 import AppShellChrome from '@/components/AppShellChrome';
 import { LanguageProvider } from '@/lib/i18n';
 import { MobileNavProvider } from '@/lib/mobileNavContext';
@@ -40,6 +41,11 @@ export default function RootLayout({
             <AppShellChrome>{children}</AppShellChrome>
           </MobileNavProvider>
         </LanguageProvider>
+        {/* Přehrávač Cloudflare (kvůli náhledům při najetí myší) se načte
+            jednou pro celou appku. Dřív si ho o načtení říkala každá karta
+            zvlášť, takže na plném feedu vzniklo pár desítek zbytečných
+            komponent. */}
+        <Script src="https://embed.cloudflarestream.com/embed/sdk.latest.js" strategy="lazyOnload" />
       </body>
     </html>
   );
