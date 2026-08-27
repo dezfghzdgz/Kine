@@ -437,12 +437,43 @@ function WatchPageInner() {
     };
   }, []);
 
+  /**
+   * Spustí přehrávání a nevzdá to po prvním pokusu.
+   *
+   * Přehrávač je cizí iframe a povel se do něj posílá zprávou. Když ještě
+   * nestihl načíst svůj obsah, zpráva nemá kam dojít a tiše se ztratí -
+   * přehrávač pak zůstane stát a nic se neděje. Při běžném otevření stránky
+   * to nevadí, protože se mezitím stahuje skript Cloudflare a iframe má čas.
+   * Při přepnutí z obalu na video je ale skript dávno načtený, appka se
+   * napojí skoro okamžitě a povel se ztratí skoro vždycky.
+   *
+   * Proto se to zkouší dokola, dokud video opravdu nejede.
+   */
+  function startPlayback(player: any, seekTo?: number | null) {
+    let attempts = 0;
+
+    function attempt() {
+      // Mezitím se mohl přehrávač vyměnit (jiné video, přepnutí na obal).
+      if (playerRef.current !== player) return;
+
+      if (typeof seekTo === 'number' && seekTo > 0 && (player.currentTime ?? 0) < seekTo - 1) {
+        player.currentTime = seekTo;
+      }
+      player.play?.();
+
+      attempts++;
+      if (player.paused === false || attempts > 20) return;
+      setTimeout(attempt, 150);
+    }
+
+    attempt();
+  }
+
   function handlePlayerSdkReady() {
     if (iframeRef.current && (window as any).Stream) {
       playerRef.current = (window as any).Stream(iframeRef.current);
       playerRef.current.muted = false;
       playerRef.current.volume = 1;
-      playerRef.current.play?.();
       setPlayerReady(true);
 
       // Lišta dole je ovladač toho, co zrovna hraje. U hudby přepnuté na
@@ -456,33 +487,24 @@ function WatchPageInner() {
       const handoff = handoffTimeRef.current;
       if (handoff !== null && handoff > 0) {
         handoffTimeRef.current = null;
-        setTimeout(() => {
-          if (playerRef.current) {
-            playerRef.current.currentTime = handoff;
-            playerRef.current.play();
-          }
-        }, 300);
+        startPlayback(playerRef.current, handoff);
         return;
       }
 
       const t = searchParams.get('t');
       if (t) {
         const seconds = Number(t);
-        if (!Number.isNaN(seconds)) {
-          setTimeout(() => {
-            if (playerRef.current) {
-              playerRef.current.currentTime = seconds;
-              playerRef.current.play();
-            }
-          }, 300);
-        }
-      } else if (!isMusicRef.current) {
+        startPlayback(playerRef.current, Number.isNaN(seconds) ? null : seconds);
+      } else if (isMusicRef.current) {
+        startPlayback(playerRef.current);
+      } else {
         // Bez odkazu na konkrétní okamžik naváže appka tam, kde divák
         // naposledy skončil - klidně i z jiného zařízení, protože pozice
         // se ukládá do databáze, ne jen do prohlížeče.
         //
         // U hudby ne. Skladba se pouští od začátku: nikdo si nepustí písničku
         // proto, aby začala v půlce, i když ji předtím poslouchal.
+        startPlayback(playerRef.current);
         resumeFromSavedProgress();
       }
     }

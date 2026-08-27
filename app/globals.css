@@ -3059,3 +3059,75 @@ body.has-music-bar .content-area-fullbleed {
     padding: 20px 14px 18px;
   }
 }
+
+/* ---------- Stažené: hudba zvlášť od videí ---------- */
+
+.downloaded-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.downloaded-filters {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.downloaded-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.downloaded-filter:hover {
+  background: none;
+  color: var(--text);
+}
+
+.downloaded-filter-active,
+.downloaded-filter-active:hover {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.downloaded-filter-count {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+.downloaded-play-music {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-raised);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.downloaded-play-music:hover {
+  background: var(--panel-raised);
+  border-color: var(--brand);
+  color: var(--brand);
+}

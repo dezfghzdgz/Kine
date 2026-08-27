@@ -1,36 +1,20 @@
-KINE - lišta jako ovladač
-=========================
+KINE - přepnutí na video, hlasitost, stažené
+============================================
 
 Rozbal do kořene repa a nech přepsat. Žádná migrace.
 
-UPRAVENÉ (7 souborů, žádný nový):
-  lib/musicPlayer.tsx            components/MusicMiniPlayer.tsx
-  components/MusicStage.tsx      components/MusicIcons.tsx
-  app/watch/[id]/page.tsx        app/globals.css
+UPRAVENÉ (6 souborů, žádný nový):
+  app/watch/[id]/page.tsx     app/downloaded/page.tsx
+  components/ChapterTimeline.tsx  components/ReactionIcons.tsx
+  components/MusicIcons.tsx   app/globals.css
   lib/i18n.tsx
 
-
-CO SI OVĚŘIT
-------------
-1. Pusť skladbu, přepni na Video: lišta zůstane a ukazuje ten samý čas
-   jako video. Pauza v liště zastaví video a naopak.
-2. Táhni posuvníkem nahoře na liště - musí to jít táhnout, ne jen
-   kliknout. Funguje i šipkami, když na něj klikneš.
-3. Najeď na reproduktor v liště: vyjede posuvník hlasitosti. Klikni na
-   reproduktor: ztlumí se. Klikni znovu: vrátí se přesně tam, kde byla.
-4. Přeskoč na další skladbu: musí se změnit obal i dole v liště.
-5. Podívej se dolů vlevo - profil a Notifications musí být vidět,
-   lišta začíná až za sloupcem.
-6. Zúži okno pod 768 px: sloupec zmizí a lišta se roztáhne přes celou
-   šířku.
-
-
-JAK SE TO TEĎ CHOVÁ
--------------------
-Hraje vždycky jen jeden zdroj. Když běží video, hudba stojí; když
-pustíš hudbu z lišty, zastaví se video. Není způsob, jak dostat
-obojí naráz.
-
-Přeskočení na další skladbu při běžícím videu bere jako "chci
-poslouchat" - video se zastaví a další skladba se rozjede v liště.
-Video zůstane stát tam, kde bylo.
+CO OVĚŘIT
+---------
+1. Pusť skladbu na obalu, přepni na Video: video se MUSÍ rozjet, a to
+   od stejného času, kde skončil obal.
+2. Přepni tam a zpět několikrát za sebou.
+3. Ztlum a odtlum v přehrávači videa - ikona se mění podle hlasitosti
+   (potichu jedna vlnka, nahlas dvě, ztlumeno přeškrtnutá).
+4. Stažené: přepínač Vše / Hudba / Videa a tlačítko Pustit hudbu.
+   Karty tam teď mají tři tečky (playlist, fronta, stáhnout).
