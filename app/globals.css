@@ -2567,3 +2567,405 @@ html[data-theme="gray"] {
   background: var(--panel-raised);
   color: var(--text-dim);
 }
+
+/* ---------- Hudební režim ---------- */
+
+/* Skutečný přehrávač hudby. Je to iframe od Cloudflare, který musí zůstat
+   vykreslený, aby zvuk hrál - proto se jen odsune mimo obrazovku a ne
+   display:none, po kterém prohlížeče médium uspí nebo rovnou zahodí. */
+.music-engine-frame {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Tlačítka přehrávání jsou plochá - globální styl pro <button> jim dává
+   světlé pozadí, které by tady vypadalo jako patnáct bílých čtverců. */
+.music-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.music-btn:hover {
+  color: var(--text);
+  background: var(--panel-raised);
+}
+
+.music-btn-active {
+  color: var(--brand);
+}
+
+.music-btn-primary {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.music-btn-primary:hover {
+  background: var(--text);
+  color: var(--bg);
+  opacity: 0.85;
+}
+
+.music-btn-large {
+  width: 52px;
+  height: 52px;
+}
+
+.music-time {
+  flex-shrink: 0;
+  min-width: 40px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+/* Posuvník času i hlasitosti. Vlastní vzhled musí být napsaný zvlášť pro
+   WebKit a pro Firefox - společný zápis pro obojí neexistuje. */
+.music-range {
+  flex: 1;
+  width: 100%;
+  height: 4px;
+  padding: 0;
+  border-radius: 999px;
+  background: var(--border);
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.music-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  background: var(--text);
+}
+
+.music-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  background: var(--text);
+}
+
+.music-range-volume {
+  flex: 0 0 auto;
+  width: 110px;
+}
+
+/* ---------- Obal místo videa ---------- */
+
+.music-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 28px 24px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.music-stage-cover {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(340px, 70vw);
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--panel-raised);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+.music-stage-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.music-stage-cover-empty {
+  font-size: 64px;
+  color: var(--text-faint);
+}
+
+.music-stage-info {
+  text-align: center;
+}
+
+.music-stage-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.music-stage-creator {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.music-stage-seek {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 520px;
+}
+
+.music-stage-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.music-stage-volume {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-faint);
+}
+
+/* ---------- Fronta vedle přehrávače ---------- */
+
+.music-queue {
+  width: 100%;
+  max-width: 520px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.music-queue-title {
+  margin: 0 0 10px 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.music-queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.music-queue-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.music-queue-list li:hover {
+  background: var(--panel-raised);
+}
+
+.music-queue-current {
+  background: var(--panel-raised);
+}
+
+.music-queue-current .music-queue-name {
+  color: var(--brand);
+}
+
+.music-queue-index {
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.music-queue-link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  color: inherit;
+  text-decoration: none;
+}
+
+.music-queue-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.music-queue-creator {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.music-queue-time {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+/* ---------- Přepínač Obal / Video ---------- */
+
+.music-view-switch {
+  display: inline-flex;
+  gap: 2px;
+  margin-top: 12px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.music-view-option {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.music-view-option:hover {
+  color: var(--text);
+  background: none;
+}
+
+.music-view-option-active,
+.music-view-option-active:hover {
+  background: var(--text);
+  color: var(--bg);
+}
+
+/* ---------- Lišta dole ---------- */
+
+.music-mini {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.35);
+}
+
+/* Vlas postupu úplně nahoře na liště - stejný nápad jako proužek na kartě. */
+.music-mini-progress {
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--border);
+}
+
+.music-mini-progress-fill {
+  height: 100%;
+  background: var(--brand);
+  transition: width 0.25s linear;
+}
+
+.music-mini-track {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+  color: inherit;
+  text-decoration: none;
+}
+
+.music-mini-cover {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--panel-raised);
+}
+
+.music-mini-cover-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+}
+
+.music-mini-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.music-mini-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.music-mini-meta {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.music-mini-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Aby lišta nezakryla poslední řádek stránky. */
+body.has-music-bar .content-area,
+body.has-music-bar .content-area-fullbleed {
+  padding-bottom: 96px;
+}
+
+@media (max-width: 640px) {
+  .music-mini {
+    gap: 10px;
+    padding: 8px 12px;
+  }
+
+  .music-mini-meta {
+    display: none;
+  }
+
+  .music-stage {
+    padding: 20px 14px 18px;
+  }
+}

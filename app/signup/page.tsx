@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import Toast, { ToastType } from '@/components/Toast';
 import { useLanguage } from '@/lib/i18n';
+import { validateUsername } from '@/lib/username';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -27,6 +28,17 @@ export default function SignupPage() {
       return;
     }
 
+    // Jméno se kontroluje ještě před založením účtu - jinak by v Supabase
+    // vznikl přihlašovací účet, ke kterému se profil nedá dopsat.
+    // Skutečnou stráží je stejně databáze (supabase-migration-username-rules.sql),
+    // tohle je jen proto, aby se chyba dala přečíst.
+    const usernameProblem = validateUsername(username);
+    if (usernameProblem) {
+      setError(t(usernameProblem));
+      setToast({ message: t('signupFailed'), type: 'error' });
+      return;
+    }
+
     setLoading(true);
 
     const { data, error: signupError } = await supabase.auth.signUp({
@@ -44,8 +56,8 @@ export default function SignupPage() {
     if (data.session) {
       const { error: profileError } = await supabase.from('profiles').insert({
         id: data.user!.id,
-        username,
-        display_name: username,
+        username: username.trim(),
+        display_name: username.trim(),
       });
 
       if (profileError) {

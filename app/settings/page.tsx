@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import Toast, { ToastType } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { validateUsername } from '@/lib/username';
 
 export default function SettingsPage() {
   const { t } = useLanguage();
@@ -250,12 +251,22 @@ export default function SettingsPage() {
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
     if (!userId) return;
+
+    // Prázdné jméno se sem dostalo právě tudy - pole nemá "required" a
+    // uložit se dalo cokoliv. Databáze to teď odmítne sama, ale hláška
+    // odtamtud je pro čtení dost nepříjemná.
+    const usernameProblem = validateUsername(username);
+    if (usernameProblem) {
+      setToast({ message: t(usernameProblem), type: 'error' });
+      return;
+    }
+
     setSaving(true);
 
     const { error } = await supabase
       .from('profiles')
       .update({
-        username,
+        username: username.trim(),
         display_name: displayName,
         bio,
         social_links: socialLinks.filter((l) => l.label.trim() && l.url.trim()),

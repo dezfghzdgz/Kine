@@ -120,6 +120,7 @@ export default function VideoCardMenu({
       thumbnail_url: video.thumbnail_url ?? null,
       duration_seconds: video.duration_seconds ?? null,
       username: video.profiles?.username ?? null,
+      cloudflare_video_id: video.cloudflare_video_id ?? null,
     });
     setNote(added ? t('menuAddedToQueue') : t('menuAlreadyInQueue'));
   }

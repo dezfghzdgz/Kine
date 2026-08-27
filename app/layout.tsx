@@ -3,6 +3,7 @@ import Script from 'next/script';
 import AppShellChrome from '@/components/AppShellChrome';
 import { LanguageProvider } from '@/lib/i18n';
 import { MobileNavProvider } from '@/lib/mobileNavContext';
+import { MusicPlayerProvider } from '@/lib/musicPlayer';
 import './globals.css';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
@@ -38,7 +39,12 @@ export default function RootLayout({
       <body>
         <LanguageProvider>
           <MobileNavProvider>
-            <AppShellChrome>{children}</AppShellChrome>
+            {/* Hudba musí být nad kostrou appky, ne uvnitř stránky. Přehrávač
+                je cizí iframe od Cloudflare a Next.js ho při každém přechodu
+                na jinou stránku odpojí - odsud přechody nevidí a hraje dál. */}
+            <MusicPlayerProvider>
+              <AppShellChrome>{children}</AppShellChrome>
+            </MusicPlayerProvider>
           </MobileNavProvider>
         </LanguageProvider>
         {/* Přehrávač Cloudflare (kvůli náhledům při najetí myší) se načte

@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import KeyboardShortcuts from './KeyboardShortcuts';
+import MusicMiniPlayer from './MusicMiniPlayer';
 
 export default function AppShellChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -17,6 +18,10 @@ export default function AppShellChrome({ children }: { children: React.ReactNode
           vypíná jen posun mezi kartami - tam "K" znamená přehrát/pauza,
           stejně jako na YouTube. */}
       {!isSparks && <KeyboardShortcuts cardNavigation={!isWatch} />}
+
+      {/* Lišta s hudbou. Sama se schová, když nic nehraje nebo když
+          stránka videa ukazuje velký obal té samé skladby. */}
+      <MusicMiniPlayer />
       <Sidebar />
       {isSparks ? (
         <div className="content-area-fullbleed">{children}</div>

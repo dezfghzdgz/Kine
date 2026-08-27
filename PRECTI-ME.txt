@@ -1,67 +1,64 @@
-OPRAVA BUILDU - KINE
-====================
-
-Co se stalo
------------
-Posílal jsem soubory jednotlivě a několik jich má stejný název
-(page.tsx, layout.tsx, route.ts). Při ukládání se pak některé
-dostaly do špatné složky nebo se vůbec nedostaly do repa. Proto
-je tady všechno naráz i se složkami - stačí to rozbalit a nic
-se nemůže splést.
-
-Build teď padá na tom, že app/globals.css skončil v app/reports/.
-
+KINE - jména a hudební režim
+============================
 
 1) ROZBALIT
 -----------
-Rozbal tenhle archiv do kořene repa (tam, kde je package.json)
-a nech přepsat existující soubory.
+Rozbal do kořene repa (tam, kde je package.json) a nech přepsat.
+Posílám to zase se složkami - je tu pět nových souborů a několik
+se stejným názvem jako jinde v projektu.
 
-Přijde tím 15 souborů:
+NOVÉ SOUBORY:
+  lib/username.ts               <- pravidla pro jména (pro hlášku v prohlížeči)
+  lib/playbackMode.ts           <- kategorie -> režim přehrávání
+  lib/musicPlayer.tsx           <- trvalý přehrávač v kostře appky
+  lib/musicQueue.ts             <- z čeho se skládá hudební fronta
+  components/MusicIcons.tsx     <- ikonky přehrávání
+  components/MusicStage.tsx     <- obal místo videa
+  components/MusicMiniPlayer.tsx <- lišta dole
+  supabase-migration-username-rules.sql
 
-  app/globals.css                          <- byl ve špatné složce
-  app/layout.tsx                           <- byla tam stará verze
-  app/page.tsx                             <- byla tam stará verze
-  app/watch/[id]/layout.tsx                <- úplně chyběl (náhledy odkazů)
-  app/watch/[id]/page.tsx                  <- byla tam stará verze
-  app/channel/[id]/layout.tsx              <- úplně chyběl (náhledy odkazů)
-  app/channel/[id]/page.tsx                <- byla tam stará verze
-  app/explore/page.tsx                     <- byla tam stará verze
-  app/sparks/page.tsx                      <- byla tam stará verze
-  app/admin/revenue-share/page.tsx         <- úplně chyběl
-  app/api/admin/revenue-share/route.ts     <- úplně chyběl
-  app/admin/verifications/page.tsx         <- byl přepsaný cizím obsahem
-  app/api/admin/verification-requests/route.ts  <- byl přepsaný cizím obsahem
-  lib/hiddenContent.ts                     <- byla tam stará verze
-  lib/videoBlocks.ts                       <- byla tam stará verze
-
-
-2) SMAZAT DVA SOUBORY
----------------------
-Tohle archiv udělat nemůže, musíš ručně:
-
-  app/reports/globals.css
-      Sem globals.css omylem spadl. Zůstat tam nemá.
-
-  components/HomeClient.tsx
-      Mrtvý kód, nikde se nepoužívá. Odkazuje se na PAGE_SIZE,
-      který už v lib/homeRecommendation.ts není - build by na
-      tom spadl hned po opravě CSS.
-
-Z příkazové řádky:
-
-  git rm app/reports/globals.css components/HomeClient.tsx
+UPRAVENÉ:
+  app/layout.tsx, app/globals.css, app/watch/[id]/page.tsx,
+  app/signup/page.tsx, app/settings/page.tsx,
+  components/AppShellChrome.tsx, components/VideoCardMenu.tsx,
+  lib/i18n.tsx, lib/videoQueue.ts
 
 
-3) NA VERCELU
--------------
-Zkontroluj, že je nastavená proměnná NEXT_PUBLIC_SITE_URL na
-skutečnou adresu (např. https://kine-lac.vercel.app). Bez ní se
-do náhledů odkazů propíše localhost:3000 a obrázky se nenačtou.
+2) MIGRACE - TOHLE NEZAPOMEŇ
+----------------------------
+Supabase -> SQL Editor -> New Query -> vlož celý obsah souboru
+supabase-migration-username-rules.sql a spusť.
+
+Bez ní bude appka fungovat, ale prázdné jméno si bude moct
+vzít kdokoliv - formulář v prohlížeči se dá obejít.
+
+DŮLEŽITÉ: na řádku s "TADY JE ID ÚČTU" je natvrdo tvoje id
+(bf125a6c-f88c-47c4-9b9d-3ccc96ab313f), vytažené z adresy tvého
+kanálu. Kdyby to náhodou nebyl ten účet, který má mít prázdné
+jméno, přepiš ho před spuštěním.
 
 
-Pozn.: app/admin/verifications/page.tsx a
-app/api/admin/verification-requests/route.ts měly v repu obsah
-stránky pro podíl na výdělcích - někdy dřív se do nich uložil
-soubor, který tam nepatřil. Archiv vrací jejich původní obsah
-a revenue-share dává na jeho vlastní cestu.
+3) CO SI OVĚŘIT PO NASAZENÍ
+---------------------------
+- Nastavení -> zkus si smazat jméno a uložit: musí to odmítnout
+  s hláškou. Tvůj účet ale prázdné jméno má a nechá si ho.
+- Nahraj video s kategorií Hudba, otevři ho: místo videa bude obal
+  s ovládáním a přepínačem Obal/Video.
+- Nech hudbu hrát a klikni na Home: dole naskočí lišta a hudba
+  hraje dál.
+- Klikni v liště na název skladby: vrátí tě to na stránku videa
+  a hudba se NESMÍ spustit od začátku.
+
+
+4) CO JE NOVÉHO PRO DIVÁKA
+--------------------------
+Hudba se pozná podle kategorie "Hudba" - nic dalšího nastavovat
+nemusíš a do databáze kvůli tomu nic nepřibylo. Svislé krátké
+video zůstane Sparks, i kdybys ho dal do Hudby.
+
+Fronta je ta, kterou už appka měla pod třemi tečkami. Když je
+prázdná, poskládá se z hudby nabízené vedle videa.
+
+Film (ztlumené okolí, kapitoly a titulky napřed) je zatím jen
+v mapě režimů v lib/playbackMode.ts - vzhled pro něj je
+samostatný krok, stačí říct.
