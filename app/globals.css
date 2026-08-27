@@ -2864,35 +2864,92 @@ html[data-theme="gray"] {
 
 /* ---------- Lišta dole ---------- */
 
+/* Začíná až za levým sloupcem. Ten je sticky, vysoký přes celou obrazovku
+   a má dole profil - přes celou šířku by ho lišta zakryla. */
 .music-mini {
   position: fixed;
-  left: 0;
+  left: 220px;
   right: 0;
   bottom: 0;
   z-index: 150;
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 10px 20px;
+  padding: 12px 20px 10px;
   border-top: 1px solid var(--border);
   background: var(--panel);
   box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.35);
 }
 
-/* Vlas postupu úplně nahoře na liště - stejný nápad jako proužek na kartě. */
-.music-mini-progress {
+/* Posun ve skladbě. Sedí na horní hraně lišty a je to opravdový posuvník,
+   takže se dá táhnout, ne jen kliknout - a funguje i ze šipek na klávesnici.
+   Puntík se ukáže až při najetí, ať lišta v klidu vypadá jako tenká linka. */
+.music-mini-seek {
   position: absolute;
-  top: -1px;
+  top: -7px;
   left: 0;
-  right: 0;
-  height: 2px;
+  width: 100%;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.music-mini-seek::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--brand) var(--music-progress, 0%),
+    var(--border) var(--music-progress, 0%)
+  );
+}
+
+.music-mini-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -4px;
+  border: none;
+  border-radius: 50%;
+  background: var(--brand);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.music-mini-seek::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
   background: var(--border);
 }
 
-.music-mini-progress-fill {
-  height: 100%;
+.music-mini-seek::-moz-range-progress {
+  height: 3px;
+  border-radius: 999px;
   background: var(--brand);
-  transition: width 0.25s linear;
+}
+
+.music-mini-seek::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border: none;
+  border-radius: 50%;
+  background: var(--brand);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.music-mini:hover .music-mini-seek::-webkit-slider-thumb,
+.music-mini-seek:focus-visible::-webkit-slider-thumb {
+  opacity: 1;
+}
+
+.music-mini:hover .music-mini-seek::-moz-range-thumb,
+.music-mini-seek:focus-visible::-moz-range-thumb {
+  opacity: 1;
 }
 
 .music-mini-track {
@@ -2949,16 +3006,49 @@ html[data-theme="gray"] {
   flex-shrink: 0;
 }
 
+/* Posuvník hlasitosti se rozjede až při najetí na tlačítko reproduktoru,
+   ať lišta nezabírá víc místa, než musí. */
+.music-mini-volume {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.music-mini-volume .music-range-volume {
+  width: 0;
+  opacity: 0;
+  transition: width 0.18s ease, opacity 0.18s ease;
+}
+
+.music-mini-volume:hover .music-range-volume,
+.music-mini-volume:focus-within .music-range-volume {
+  width: 90px;
+  opacity: 1;
+}
+
 /* Aby lišta nezakryla poslední řádek stránky. */
 body.has-music-bar .content-area,
 body.has-music-bar .content-area-fullbleed {
   padding-bottom: 96px;
 }
 
+@media (max-width: 768px) {
+  .music-mini {
+    left: 0;
+  }
+}
+
 @media (max-width: 640px) {
   .music-mini {
     gap: 10px;
-    padding: 8px 12px;
+    padding: 10px 12px 8px;
+  }
+
+  /* Na telefonu není na posuvník hlasitosti místo - zůstane tlačítko
+     ztlumení, které stačí. */
+  .music-mini-volume .music-range-volume,
+  .music-mini-volume:hover .music-range-volume {
+    display: none;
   }
 
   .music-mini-meta {

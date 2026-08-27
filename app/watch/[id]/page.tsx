@@ -445,6 +445,13 @@ function WatchPageInner() {
       playerRef.current.play?.();
       setPlayerReady(true);
 
+      // Lišta dole je ovladač toho, co zrovna hraje. U hudby přepnuté na
+      // video tedy musí ovládat tenhle přehrávač, ne hudbu na pozadí -
+      // jinak by v ní běžel jiný čas, než co je slyšet.
+      if (isMusicRef.current) {
+        musicCommands.registerPageVideo({ player: playerRef.current, trackId: videoId });
+      }
+
       // Přepnutí z obalu na video: skladba pokračuje tam, kde ji obal nechal.
       const handoff = handoffTimeRef.current;
       if (handoff !== null && handoff > 0) {
@@ -555,6 +562,7 @@ function WatchPageInner() {
     playerRef.current = null;
     setPlayerReady(false);
     setShowUpNext(false);
+    musicCommands.registerPageVideo(null);
 
     if (showMusicStage) return;
 
@@ -565,7 +573,12 @@ function WatchPageInner() {
       }
     }, 150);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      // Přehrávač stránky za chvíli zmizí - lišta na něj nesmí zůstat
+      // napojená, jinak by ovládala něco, co už neexistuje.
+      musicCommands.registerPageVideo(null);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [video?.id, showMusicStage]);
 
@@ -829,7 +842,7 @@ function WatchPageInner() {
             Zvuk jede z trvalého přehrávače v kostře appky, takže hraje dál
             i po odchodu. Dva přehrávače naráz by hrály přes sebe. */}
         {showMusicStage ? (
-          <MusicStage coverUrl={video.thumbnail_url ?? null} />
+          <MusicStage />
         ) : (
                   <div
                     ref={wrapRef}
