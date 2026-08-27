@@ -43,7 +43,20 @@ type MusicCommands = {
   openTrack: (track: MusicTrack, queue?: MusicTrack[]) => void;
   toggle: () => void;
   pause: () => void;
+  resume: () => void;
   stop: () => void;
+  /** Kolik už skladba hraje. Čte se z ref, takže si kvůli tomu nikdo nemusí brát tikající stav. */
+  getCurrentTime: () => number;
+  /**
+   * "Na stránce se právě rozjelo video, hudba drž."
+   *
+   * Bez tohohle stačilo přepnout na Video a hrálo obojí naráz, každé v jiném
+   * čase. Zastavit hudbu při přepnutí nestačí - je to jednorázový povel a
+   * kdykoliv se cokoliv rozhodne skladbu zase rozjet, jsme tam, kde jsme byli.
+   * Tohle je stav, ne povel: dokud je zapnutý, hudba hrát nesmí, a lišta dole
+   * se schová, aby ji nešlo pustit ani ručně.
+   */
+  setVideoTakeover: (active: boolean) => void;
   next: () => void;
   previous: () => void;
   seek: (seconds: number) => void;
@@ -64,6 +77,7 @@ type MusicState = {
   repeat: RepeatMode;
   shuffle: boolean;
   stageId: string | null;
+  videoTakeover: boolean;
 };
 
 const EMPTY_STATE: MusicState = {
@@ -76,6 +90,7 @@ const EMPTY_STATE: MusicState = {
   repeat: 'off',
   shuffle: false,
   stageId: null,
+  videoTakeover: false,
 };
 
 const CommandsContext = createContext<MusicCommands | null>(null);
@@ -129,6 +144,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const [repeat, setRepeat] = useState<RepeatMode>('off');
   const [shuffle, setShuffle] = useState(false);
   const [stageId, setStageId] = useState<string | null>(null);
+  const [videoTakeover, setVideoTakeoverState] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<any>(null);
@@ -142,6 +158,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const shuffleRef = useRef(false);
   const volumeRef = useRef(1);
   const currentTimeRef = useRef(0);
+  const takeoverRef = useRef(false);
 
   trackRef.current = track;
   queueRef.current = queue;
@@ -149,6 +166,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   shuffleRef.current = shuffle;
   volumeRef.current = volume;
   currentTimeRef.current = currentTime;
+  takeoverRef.current = videoTakeover;
 
   useEffect(() => {
     setRepeat(readStored(REPEAT_KEY, ['off', 'one', 'all'] as const, 'off'));
@@ -156,6 +174,12 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     const savedVolume = readStoredVolume();
     if (savedVolume !== null) setVolumeState(savedVolume);
   }, []);
+
+  // Druhá pojistka. Kdyby se skladba napojila až po přepnutí na video
+  // (napojení je smyčka, ne okamžik), povel z přepínače by se ztratil.
+  useEffect(() => {
+    if (videoTakeover) playerRef.current?.pause?.();
+  }, [videoTakeover, track?.id]);
 
   const pickNextIndex = useCallback((): number | null => {
     const list = queueRef.current;
@@ -235,7 +259,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       });
       player.addEventListener('ended', handleEnded);
 
-      player.play?.();
+      // Skladba se rozjede jen tehdy, když zvuk nedrží video na stránce.
+      if (!takeoverRef.current) player.play?.();
       clearInterval(interval);
     }, 60);
 
@@ -264,6 +289,18 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       },
       pause() {
         playerRef.current?.pause?.();
+      },
+      resume() {
+        if (takeoverRef.current) return;
+        playerRef.current?.play?.();
+      },
+      getCurrentTime() {
+        return currentTimeRef.current;
+      },
+      setVideoTakeover(active) {
+        takeoverRef.current = active;
+        setVideoTakeoverState(active);
+        if (active) playerRef.current?.pause?.();
       },
       stop() {
         playerRef.current?.pause?.();
@@ -338,8 +375,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   );
 
   const state = useMemo<MusicState>(
-    () => ({ track, queue, playing, currentTime, duration, volume, repeat, shuffle, stageId }),
-    [track, queue, playing, currentTime, duration, volume, repeat, shuffle, stageId]
+    () => ({ track, queue, playing, currentTime, duration, volume, repeat, shuffle, stageId, videoTakeover }),
+    [track, queue, playing, currentTime, duration, volume, repeat, shuffle, stageId, videoTakeover]
   );
 
   return (

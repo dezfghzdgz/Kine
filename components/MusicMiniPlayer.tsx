@@ -14,10 +14,14 @@ import { PlayIcon, PauseIcon, PreviousIcon, NextIcon, CloseIcon, clock } from '.
  */
 export default function MusicMiniPlayer() {
   const { t } = useLanguage();
-  const { track, playing, currentTime, duration, stageId } = useMusicState();
+  const { track, playing, currentTime, duration, stageId, videoTakeover } = useMusicState();
   const commands = useMusicCommands();
 
-  const visible = !!track && stageId !== track.id;
+  // Lišta zmizí ve dvou případech: stránka videa ukazuje velký obal té samé
+  // skladby, nebo se na stránce rozjelo video a to má zvuk pro sebe. V druhém
+  // případě se schová schválně i tlačítko přehrát - jinak by šlo pustit hudbu
+  // přes běžící video.
+  const visible = !!track && stageId !== track.id && !videoTakeover;
 
   // Lišta stojí na místě přes celou šířku, takže by jinak zakryla poslední
   // řádek stránky. Značka na <body> přidá dole místo přesně na tu dobu,

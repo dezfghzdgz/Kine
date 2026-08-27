@@ -6,12 +6,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import FieldHint from '@/components/FieldHint';
 import { useLanguage } from '@/lib/i18n';
-
-const CATEGORY_KEYS = [
-  'catCars', 'catTravel', 'catFilm', 'catGaming', 'catMusic',
-  'catComedy', 'catPeople', 'catHowTo', 'catNonprofit', 'catSports',
-  'catScience', 'catEducation', 'catEntertainment', 'catNews', 'catPets',
-] as const;
+import { CATEGORY_KEYS } from '@/lib/categories';
 
 const LANGUAGE_OPTIONS = [
   { code: 'cs', key: 'langOptCzech' },

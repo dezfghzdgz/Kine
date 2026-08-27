@@ -82,7 +82,7 @@ export default function BrandLogo({ className, onNavigate }: { className?: strin
 
     // Appka chvilku počká, než na jedno kliknutí opravdu naviguje pryč -
     // pokud mezitím přijde další klik (směřující k 5), appka tohle
-    // odložené přesměrování zruší, ať appku appku appce nezavře uprostřed
+    // odložené přesměrování zruší, ať to uživateli nezmizí pod rukama
     // rychlého poklepávání.
     if (navigateTimerRef.current) clearTimeout(navigateTimerRef.current);
     navigateTimerRef.current = setTimeout(() => {

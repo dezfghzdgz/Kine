@@ -5,8 +5,10 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import PostComments from './PostComments';
 import { ThumbsUpIcon, ThumbsDownIcon } from './ReactionIcons';
+import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 
 export default function PostCard({ post, userId }: { post: any; userId: string | null }) {
+  const { lang } = useLanguage();
   const router = useRouter();
   const [options, setOptions] = useState<{ text: string; votes: number }[]>(post.poll_options ?? []);
   const [myVote, setMyVote] = useState<number | null>(null);
@@ -112,7 +114,7 @@ export default function PostCard({ post, userId }: { post: any; userId: string |
       )}
 
       <p style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 10, marginBottom: 0 }}>
-        {new Date(post.created_at).toLocaleDateString('cs-CZ')}
+        {new Date(post.created_at).toLocaleDateString(DATE_LOCALES[lang])}
       </p>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 8 }}>

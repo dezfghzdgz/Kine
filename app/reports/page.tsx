@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useUserRole } from '@/lib/useUserRole';
-import { useLanguage } from '@/lib/i18n';
+import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 
 export default function ModerationReportsPage() {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const { isModerator } = useUserRole();
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +58,7 @@ export default function ModerationReportsPage() {
                 <p style={{ fontWeight: 600, margin: 0 }}>{r.reason}</p>
                 {r.details && <p style={{ fontSize: 13, color: 'var(--text-dim)', margin: '4px 0' }}>{r.details}</p>}
                 <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
-                  {t('reportedByLabel')} {r.profiles?.username ?? '—'} · {new Date(r.created_at).toLocaleDateString('cs-CZ')}
+                  {t('reportedByLabel')} {r.profiles?.username ?? '—'} · {new Date(r.created_at).toLocaleDateString(DATE_LOCALES[lang])}
                 </p>
                 {r.video_id && r.videos && (
                   <Link href={`/watch/${r.video_id}`} style={{ fontSize: 13 }}>

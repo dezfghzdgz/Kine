@@ -91,6 +91,11 @@ function WatchPageInner() {
   // na Video, má ho příště rovnou.
   const [musicView, setMusicView] = useState<'cover' | 'video'>('cover');
   const musicCommands = useMusicCommands();
+  // Čas, na který má naskočit přehrávač stránky po přepnutí z obalu.
+  const handoffTimeRef = useRef<number | null>(null);
+  // Napojení přehrávače běží ve smyčce, která si drží funkci z jednoho
+  // vykreslení - přes ref se k ní dostane vždycky aktuální hodnota.
+  const isMusicRef = useRef(false);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<any>(null);
@@ -157,7 +162,26 @@ function WatchPageInner() {
     }
   }, []);
 
+  /**
+   * Přepnutí mezi obalem a videem.
+   *
+   * Obojí je ta samá skladba, takže si oba pohledy předají čas - dřív se
+   * video rozjelo od nuly, hudba běžela dál a hrálo to dvakrát, každé
+   * jinde. Povel se posílá rovnou tady, ne přes efekt: efekt se spustí až
+   * po překreslení a mezitím je slyšet obojí.
+   */
   function changeMusicView(view: 'cover' | 'video') {
+    if (view === 'video') {
+      handoffTimeRef.current = musicCommands.getCurrentTime();
+      musicCommands.setVideoTakeover(true);
+    } else {
+      const playedTo = playerRef.current?.currentTime;
+      handoffTimeRef.current = null;
+      musicCommands.setVideoTakeover(false);
+      if (typeof playedTo === 'number' && playedTo > 0) musicCommands.seek(playedTo);
+      musicCommands.resume();
+    }
+
     setMusicView(view);
     try {
       localStorage.setItem(MUSIC_VIEW_KEY, view);
@@ -168,6 +192,7 @@ function WatchPageInner() {
 
   const mode = playbackMode(video);
   const showMusicStage = mode === 'music' && musicView === 'cover';
+  isMusicRef.current = mode === 'music';
 
   /**
    * Předání skladby trvalému přehrávači.
@@ -195,12 +220,22 @@ function WatchPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [video?.id, showMusicStage, otherVideos, queue]);
 
-  // Video a hudba nesmí hrát naráz. Jakmile se rozjede přehrávač stránky,
-  // hudba na pozadí se zastaví - lišta dole zůstane, takže se dá pustit zpátky.
+  /**
+   * Kdo má zvuk.
+   *
+   * Dokud je na stránce vidět přehrávač videa, hudba mlčí - a to jako stav,
+   * ne jako jednorázový povel. Předtím tu bylo "jakmile bude přehrávač
+   * připravený, zastav hudbu", jenže to je jeden okamžik: cokoliv, co
+   * skladbu potom zase rozjelo, už nic nezastavilo a hrálo obojí.
+   *
+   * Platí to i pro obyčejná videa, ne jen pro hudební: když si pustíš video,
+   * hudba na pozadí ztichne, stejně jako na YouTube.
+   */
   useEffect(() => {
-    if (playerReady && !showMusicStage) musicCommands.pause();
+    musicCommands.setVideoTakeover(!!video && !showMusicStage);
+    return () => musicCommands.setVideoTakeover(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playerReady, showMusicStage]);
+  }, [video?.id, showMusicStage]);
 
   // Klávesové zkratky: mezerník = přehrát/pauza, šipky vlevo/vpravo = posun
   // o 5 s, šipky nahoru/dolů = hlasitost, M = ztlumit, F = celá obrazovka.
@@ -410,6 +445,19 @@ function WatchPageInner() {
       playerRef.current.play?.();
       setPlayerReady(true);
 
+      // Přepnutí z obalu na video: skladba pokračuje tam, kde ji obal nechal.
+      const handoff = handoffTimeRef.current;
+      if (handoff !== null && handoff > 0) {
+        handoffTimeRef.current = null;
+        setTimeout(() => {
+          if (playerRef.current) {
+            playerRef.current.currentTime = handoff;
+            playerRef.current.play();
+          }
+        }, 300);
+        return;
+      }
+
       const t = searchParams.get('t');
       if (t) {
         const seconds = Number(t);
@@ -421,12 +469,13 @@ function WatchPageInner() {
             }
           }, 300);
         }
-      } else {
-        // Bez odkazu na konkrétní okamžik appka zkusí appku appku
-        // pokračovat tam, kde appku appku appka appku naposledy
-        // sledoval - klidně i z jiného zařízení, appka appku pozici
-        // appku ukládá do databáze appky, ne jen appku appku appku
-        // appku telefonu appku appku prohlížeči.
+      } else if (!isMusicRef.current) {
+        // Bez odkazu na konkrétní okamžik naváže appka tam, kde divák
+        // naposledy skončil - klidně i z jiného zařízení, protože pozice
+        // se ukládá do databáze, ne jen do prohlížeče.
+        //
+        // U hudby ne. Skladba se pouští od začátku: nikdo si nepustí písničku
+        // proto, aby začala v půlce, i když ji předtím poslouchal.
         resumeFromSavedProgress();
       }
     }
@@ -454,15 +503,15 @@ function WatchPageInner() {
           playerRef.current.play();
           const mm = Math.floor(history.progress_seconds / 60);
           const ss = String(history.progress_seconds % 60).padStart(2, '0');
-          setToast({ message: `Pokračuješ od ${mm}:${ss}`, type: 'success' });
+          setToast({ message: t('resumingFromLabel').replace('{time}', `${mm}:${ss}`), type: 'success' });
         }
       }, 300);
     }
   }
 
-  // Uloží rozkoukanost videa (appku appku appku appka), aby se dala
-  // najít i z jiného zařízení - jednou za 8 sekund, ne při každém
-  // snímku, ať appka appku appku databázi appku appku zbytečně nezavaluje.
+  // Uloží, kde divák ve videu skončil, aby se dalo navázat i z jiného
+  // zařízení - jednou za 8 sekund, ne při každém snímku, ať to zbytečně
+  // nezavaluje databázi.
   useEffect(() => {
     if (!playerReady) return;
     const interval = setInterval(async () => {
@@ -491,13 +540,23 @@ function WatchPageInner() {
     return () => clearInterval(interval);
   }, [playerReady, video?.id]);
 
-  // Zkoušíme opakovaně (ne jen jednou), dokud se přehrávač skutečně
-  // nepřipojí - řeší to spolehlivě jak první návštěvu, tak přechod
-  // mezi videi, bez ohledu na to, kdy přesně doběhne načtení skriptu.
+  /**
+   * Napojení na přehrávač stránky.
+   *
+   * Zkouší se opakovaně, ne jen jednou - kdy přesně doběhne načtení skriptu
+   * Cloudflare se předem neví.
+   *
+   * Hlídá se i přepnutí obal/video, ne jen změna videa. V režimu obalu žádný
+   * přehrávač stránky není, takže by smyčka běžela naprázdno pořád dokola,
+   * a hlavně: po prvním přepnutí na video se smyčka sama ukončí, takže při
+   * druhém přepnutí by už nebylo co napojit a přehrávač by zůstal mrtvý.
+   */
   useEffect(() => {
+    playerRef.current = null;
     setPlayerReady(false);
     setShowUpNext(false);
-    playerRef.current = null;
+
+    if (showMusicStage) return;
 
     const interval = setInterval(() => {
       if (iframeRef.current && (window as any).Stream && !playerRef.current) {
@@ -507,7 +566,8 @@ function WatchPageInner() {
     }, 150);
 
     return () => clearInterval(interval);
-  }, [video?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video?.id, showMusicStage]);
 
   const playlistIndex = playlistVideos.findIndex((v) => v.id === videoId);
   const playlistNext = playlistIndex >= 0 ? playlistVideos[playlistIndex + 1] : null;

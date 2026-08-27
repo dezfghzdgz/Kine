@@ -1,64 +1,36 @@
-KINE - jména a hudební režim
-============================
+KINE - opravy hudby a překladů
+==============================
 
-1) ROZBALIT
------------
-Rozbal do kořene repa (tam, kde je package.json) a nech přepsat.
-Posílám to zase se složkami - je tu pět nových souborů a několik
-se stejným názvem jako jinde v projektu.
+Rozbal do kořene repa a nech přepsat. Žádná migrace tentokrát není.
 
-NOVÉ SOUBORY:
-  lib/username.ts               <- pravidla pro jména (pro hlášku v prohlížeči)
-  lib/playbackMode.ts           <- kategorie -> režim přehrávání
-  lib/musicPlayer.tsx           <- trvalý přehrávač v kostře appky
-  lib/musicQueue.ts             <- z čeho se skládá hudební fronta
-  components/MusicIcons.tsx     <- ikonky přehrávání
-  components/MusicStage.tsx     <- obal místo videa
-  components/MusicMiniPlayer.tsx <- lišta dole
-  supabase-migration-username-rules.sql
+NOVÝ SOUBOR:
+  lib/categories.ts    <- seznam kategorií a jejich názvy pro diváka
 
 UPRAVENÉ:
-  app/layout.tsx, app/globals.css, app/watch/[id]/page.tsx,
-  app/signup/page.tsx, app/settings/page.tsx,
-  components/AppShellChrome.tsx, components/VideoCardMenu.tsx,
-  lib/i18n.tsx, lib/videoQueue.ts
+  app/watch/[id]/page.tsx      lib/musicPlayer.tsx
+  components/MusicMiniPlayer.tsx  components/CommentSection.tsx
+  components/Sidebar.tsx       components/PostCard.tsx
+  app/upload/page.tsx          app/reports/page.tsx
+  lib/i18n.tsx                 app/activity/page.tsx
+  components/BrandLogo.tsx     app/api/creator/connect-onboarding/route.ts
 
 
-2) MIGRACE - TOHLE NEZAPOMEŇ
-----------------------------
-Supabase -> SQL Editor -> New Query -> vlož celý obsah souboru
-supabase-migration-username-rules.sql a spusť.
-
-Bez ní bude appka fungovat, ale prázdné jméno si bude moct
-vzít kdokoliv - formulář v prohlížeči se dá obejít.
-
-DŮLEŽITÉ: na řádku s "TADY JE ID ÚČTU" je natvrdo tvoje id
-(bf125a6c-f88c-47c4-9b9d-3ccc96ab313f), vytažené z adresy tvého
-kanálu. Kdyby to náhodou nebyl ten účet, který má mít prázdné
-jméno, přepiš ho před spuštěním.
-
-
-3) CO SI OVĚŘIT PO NASAZENÍ
----------------------------
-- Nastavení -> zkus si smazat jméno a uložit: musí to odmítnout
-  s hláškou. Tvůj účet ale prázdné jméno má a nechá si ho.
-- Nahraj video s kategorií Hudba, otevři ho: místo videa bude obal
-  s ovládáním a přepínačem Obal/Video.
-- Nech hudbu hrát a klikni na Home: dole naskočí lišta a hudba
-  hraje dál.
-- Klikni v liště na název skladby: vrátí tě to na stránku videa
-  a hudba se NESMÍ spustit od začátku.
+CO SI OVĚŘIT PO NASAZENÍ
+------------------------
+1. Pusť hudbu na obalu, přepni na Video: hudba musí ztichnout, lišta
+   dole zmizet a video naskočit na ten samý čas.
+2. Přepni zpátky na Obal a znovu na Video, a ještě jednou. Musí to
+   fungovat pokaždé, ne jen napoprvé.
+3. Otevři písničku, kterou jsi předtím poslouchal do půlky: musí
+   začít od začátku a nesmí naskočit hláška o pokračování.
+4. U obyčejného videa (ne hudby) hláška o pokračování zůstává, ale
+   je přeložená podle nastaveného jazyka.
+5. Karta Technical u videa: Category musí být "Hudba"/"Music" podle
+   jazyka, ne "catMusic". Datum nahrání taky v jazyce diváka.
 
 
-4) CO JE NOVÉHO PRO DIVÁKA
---------------------------
-Hudba se pozná podle kategorie "Hudba" - nic dalšího nastavovat
-nemusíš a do databáze kvůli tomu nic nepřibylo. Svislé krátké
-video zůstane Sparks, i kdybys ho dal do Hudby.
-
-Fronta je ta, kterou už appka měla pod třemi tečkami. Když je
-prázdná, poskládá se z hudby nabízené vedle videa.
-
-Film (ztlumené okolí, kapitoly a titulky napřed) je zatím jen
-v mapě režimů v lib/playbackMode.ts - vzhled pro něj je
-samostatný krok, stačí říct.
+ZBYLO
+-----
+app/admin/verifications/page.tsx má pořád natvrdo českou větu
+"odběratelů v době žádosti" - je to stránka jen pro tebe, tak jsem
+tam nesahal. Řekni, jestli to mám přeložit taky.

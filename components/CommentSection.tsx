@@ -11,7 +11,8 @@ import EmojiPicker from './EmojiPicker';
 import { useUserRole } from '@/lib/useUserRole';
 import SupporterBadge from './SupporterBadge';
 import ReportModal from './ReportModal';
-import { useLanguage } from '@/lib/i18n';
+import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
+import { categoryLabel } from '@/lib/categories';
 
 type Comment = {
   id: string;
@@ -89,7 +90,7 @@ export default function CommentSection({
   onSeek?: (seconds: number) => void;
 }) {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const { isModerator } = useUserRole();
   const LANGUAGE_LABELS: Record<string, string> = {
     cs: t('langOptCzech'), sk: t('langOptSlovak'), en: t('langOptEnglish'), de: t('langOptGerman'),
@@ -425,9 +426,9 @@ export default function CommentSection({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {[
             [t('videoDurationLabel'), formatDuration(video?.duration_seconds ?? null)],
-            [t('categoryLabel'), video?.category ?? '—'],
+            [t('categoryLabel'), categoryLabel(video?.category, t)],
             [t('videoLanguageFieldLabel'), video?.language ? (LANGUAGE_LABELS[video.language] ?? video.language) : '—'],
-            [t('uploadedLabel'), video ? new Date(video.created_at).toLocaleDateString('cs-CZ') : '—'],
+            [t('uploadedLabel'), video ? new Date(video.created_at).toLocaleDateString(DATE_LOCALES[lang]) : '—'],
             [t('madeForKidsFieldLabel'), video?.made_for_kids ? t('yesLabel') : t('noLabel')],
             [t('visibilityLabel'), video?.visibility === 'public' ? t('shortVisibilityPublic') : video?.visibility === 'private' ? t('shortVisibilityPrivate') : t('shortVisibilitySubscribers')],
           ].map(([label, value]) => (
