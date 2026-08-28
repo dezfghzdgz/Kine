@@ -24,7 +24,7 @@ export default function LoginPage() {
   // samotné na tom nesmí nikdy zůstat "viset".
   async function callLockoutApi(action: 'check' | 'record-failure' | 'reset') {
     try {
-      const res = await fetch('/api/auth/login-attempt', {
+      const res = await fetch('/api/login-attempt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, action }),

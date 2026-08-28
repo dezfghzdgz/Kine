@@ -1,20 +1,45 @@
-KINE - přepnutí na video, hlasitost, stažené
-============================================
+KINE - bezpečnostní opravy
+==========================
 
-Rozbal do kořene repa a nech přepsat. Žádná migrace.
+1) SPUSŤ MIGRACI JAKO PRVNÍ
+---------------------------
+Supabase -> SQL Editor -> New Query -> vlož celý obsah
+supabase-migration-security-fixes.sql a spusť.
 
-UPRAVENÉ (6 souborů, žádný nový):
-  app/watch/[id]/page.tsx     app/downloaded/page.tsx
-  components/ChapterTimeline.tsx  components/ReactionIcons.tsx
-  components/MusicIcons.tsx   app/globals.css
-  lib/i18n.tsx
+Tohle je naléhavé. Do té doby si kdokoliv přihlášený může
+z konzole prohlížeče nastavit vlastní podíl z výdělků na 100 %:
 
-CO OVĚŘIT
----------
-1. Pusť skladbu na obalu, přepni na Video: video se MUSÍ rozjet, a to
-   od stejného času, kde skončil obal.
-2. Přepni tam a zpět několikrát za sebou.
-3. Ztlum a odtlum v přehrávači videa - ikona se mění podle hlasitosti
-   (potichu jedna vlnka, nahlas dvě, ztlumeno přeškrtnutá).
-4. Stažené: přepínač Vše / Hudba / Videa a tlačítko Pustit hudbu.
-   Karty tam teď mají tři tečky (playlist, fronta, stáhnout).
+  supabase.from('profiles').update({revenue_share_percent:100}).eq('id', mojeId)
+
+Je to moje chyba - migrace s pravidly pro jména přepsala funkci
+protect_admin_fields a vypadla z ní pole kolem výdělků.
+
+2) ROZBAL SOUBORY
+-----------------
+Rozbal do kořene repa a nech přepsat.
+
+NOVÉ:  lib/safeUrl.ts, supabase-migration-security-fixes.sql
+UPRAVENÉ: app/channel/[id]/page.tsx, app/donate/page.tsx,
+          app/login/page.tsx, components/Sidebar.tsx, lib/i18n.tsx,
+          app/api/donate/create-checkout-session/route.ts
+
+3) CO OVĚŘIT
+------------
+- Přihlášený (ne service role) zkus v SQL editoru:
+    update profiles set revenue_share_percent = 100 where id = auth.uid();
+  Číslo se NESMÍ změnit.
+- Levý sloupec -> Nahlášení: musí otevřít stránku, ne 404.
+- Dary: pole pro vlastní částku říká € a bere od 1.
+- Dej si do profilu odkaz "javascript:alert(1)" - na kanálu se
+  vůbec nemá zobrazit.
+
+4) CO JSEM NEOPRAVIL
+--------------------
+Zbytek nálezů je v odpovědi v chatu. Nejdůležitější zbývající:
+- veřejně čitelná tabulka profiles (prozrazuje shadow ban a
+  interní poznámky) - potřebuje pohled s vybranými sloupci
+- views_log vydává IP adresy všech diváků komukoliv (GDPR)
+- notifikace může komukoliv poslat kdokoliv
+- soukromá videa nejsou u Cloudflare chráněná podepsanými odkazy
+- strop 1000 řádků na řadě stránek (Historie, Stažené, Líbí se mi,
+  statistiky kanálu, oznámení odběratelům)

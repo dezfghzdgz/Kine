@@ -35,7 +35,7 @@ export default function DonatePage() {
     const res = await fetch('/api/donate/create-checkout-session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amountCzk: amount, userId }),
+      body: JSON.stringify({ amountEur: amount, userId }),
     });
     const data = await res.json();
     setLoading(false);
@@ -91,7 +91,7 @@ export default function DonatePage() {
           placeholder={t('donateCustomAmountPlaceholder')}
           value={customAmount}
           onChange={(e) => { setCustomAmount(e.target.value); setSelected(null); }}
-          min={20}
+          min={1}
           style={{ marginBottom: 12 }}
         />
         {error && <p className="error-text">{error}</p>}
