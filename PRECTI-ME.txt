@@ -1,29 +1,61 @@
-KINE - konec falešných potvrzení
-================================
+KINE - dobrání zapomenutého balíčku
+===================================
 
-Rozbal do kořene repa a nech přepsat. Žádná migrace.
+CO SE STALO
+-----------
+Balíček "soukromí, ban, strop 1000 řádků" se do repa nedostal.
+Ten poslední (falešná potvrzení) ano - a ten z něj používá
+lib/loadAll.ts, který přišel právě v tom zapomenutém. Proto build
+padá na "Can't resolve '@/lib/loadAll'".
 
-UPRAVENÉ (9 souborů, žádný nový):
-  app/downloaded/page.tsx     app/upload/page.tsx
-  app/reports/page.tsx        components/ReportModal.tsx
-  components/CommentSection.tsx  components/AddToPlaylist.tsx
-  components/DownloadButton.tsx  lib/i18n.tsx  app/globals.css
+Je to moje chyba: poslal jsem dva balíčky za sebou a druhý závisel
+na prvním, aniž bych to napsal dost nahlas.
 
-CO OVĚŘIT
----------
-1. "Stažené" se v levém sloupci jmenují Historie stažení a nahoře
-   je věta, že soubory jsou u tebe v zařízení. U každé položky je
-   Stáhnout znovu.
-2. Nahlaš video - poděkování se ukáže jen když se to opravdu uloží.
-   Ve frontě moderátora je důvod ve tvém jazyce.
-3. Přidej video do playlistu - vedle tlačítka naskočí "Přidáno
-   do playlistu".
-4. Napiš dva komentáře hned po sobě - druhý řekne, ať počkáš,
-   a text ti v poli zůstane (dřív to byl systémový alert).
+Tenhle archiv obsahuje všechno, co v repu chybí. Nic z toho, co už
+tam je, nepřepisuje špatně - ověřil jsem, že po rozbalení bude repo
+přesně shodné s mojí kopií.
 
-POZNÁMKA K OFFLINE
-------------------
-Opravdové offline (přehrávání bez internetu) tenhle balíček nedělá.
-Stojí a padá to na tom, jestli jde soubor od Cloudflare stáhnout
-z JavaScriptu. Test je v odpovědi v chatu - je to jeden příkaz
-v konzoli prohlížeče.
+
+1) MIGRACE - MUSÍ BĚŽET SPOLU S KÓDEM
+-------------------------------------
+Supabase -> SQL Editor -> New Query -> vlož celý obsah
+supabase-migration-privacy-fixes.sql a spusť.
+
+Nasadit kód bez migrace nebo migraci bez kódu NEJDE. Migrace bere
+appce právo číst některé sloupce přímo a upravený kód si je bere
+funkcí my_account(). Když nasadíš jen jedno, přestane fungovat
+rozpoznání moderátora a statistiky kanálu.
+
+Pokud jsi ještě nespustil supabase-migration-security-fixes.sql
+z předchozího balíčku, spusť nejdřív ten - je v něm ta věc
+s podílem na výdělcích, kterou si mohl kdokoliv nastavit sám.
+
+
+2) ROZBALIT
+-----------
+Rozbal do kořene repa (tam, kde je package.json) a přepiš.
+
+14 souborů, z toho tři nové nebo obnovené:
+  lib/loadAll.ts                                <- kvůli tomuhle padal build
+  supabase-migration-privacy-fixes.sql          <- nová migrace
+  app/api/admin/verification-requests/review/route.ts
+
+Ten poslední v repu chyběl - někdy cestou se smazal. Bez něj
+schvalování a zamítání žádostí o ověření končilo na 404,
+protože app/admin/verifications/page.tsx na tu adresu posílá
+požadavek.
+
+
+3) CO OVĚŘIT PO NASAZENÍ
+------------------------
+Jako přihlášený (ne service role) v SQL editoru:
+  select is_shadow_banned from profiles limit 1;   -> musí selhat
+  select ip_address from views_log limit 1;        -> musí selhat
+  select * from my_account();                      -> jeden řádek
+
+V appce:
+- Statistiky kanálu a stránka moderátora musí fungovat dál.
+- Shadow ban někomu zapni a odhlas se: jeho videa nesmí být vidět
+  nikde, ale on sám je vidí.
+- Zabanovaný účet nesmí nahrát video ani napsat komentář.
+- Admin -> Ověření: schválení žádosti musí projít, ne 404.

@@ -37,7 +37,7 @@ function SubscriptionsPageInner() {
 
     const { data: subs } = await supabase
       .from('subscriptions')
-      .select('channel_id, profiles!subscriptions_channel_id_fkey(id, username, display_name, avatar_url, verification_tier, is_shadow_banned)')
+      .select('channel_id, profiles!subscriptions_channel_id_fkey(id, username, display_name, avatar_url, verification_tier)')
       .eq('subscriber_id', authData.user.id);
 
     const channelList = (subs ?? []).map((s: any) => s.profiles).filter(Boolean);
@@ -45,7 +45,10 @@ function SubscriptionsPageInner() {
 
     // Shadow-bannovaný tvůrce zůstává v seznamu odběrů (výše), ale jeho
     // videa/posty se v samotném feedu nezobrazí.
-    const channelIds = channelList.filter((c: any) => !c.is_shadow_banned).map((c: any) => c.id);
+    // Shadow ban schovává videa už databáze (restriktivní politika na
+    // tabulce videos), takže se tu nefiltruje nic - a hlavně se sem
+    // netahá sloupec, který by prozradil, kdo ho má.
+    const channelIds = channelList.map((c: any) => c.id);
     if (channelIds.length > 0) {
       const [{ data: videoData }, { data: postData }] = await Promise.all([
         supabase

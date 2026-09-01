@@ -16,14 +16,14 @@ export function useUserRole() {
       if (!authData.user) return;
       setUserId(authData.user.id);
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role, is_admin')
-        .eq('id', authData.user.id)
-        .maybeSingle();
+      // Sloupce role a is_admin si z prohlížeče přečíst nejde - byly by
+      // čitelné i o cizích lidech (viz supabase-migration-privacy-fixes).
+      // Funkce my_account vrací schválně jen řádek volajícího.
+      const { data } = await supabase.rpc('my_account');
+      const account = Array.isArray(data) ? data[0] : data;
 
-      setRole((profile?.role as 'user' | 'moderator' | 'admin') ?? 'user');
-      setIsAdmin(!!profile?.is_admin);
+      setRole((account?.role as 'user' | 'moderator' | 'admin') ?? 'user');
+      setIsAdmin(!!account?.is_admin);
     })();
   }, []);
 

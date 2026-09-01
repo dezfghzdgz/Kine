@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
+import { fetchAllRows, fetchByIds } from '@/lib/loadAll';
 
 function WatchLaterPageInner() {
   const { t } = useLanguage();
@@ -47,10 +48,7 @@ function WatchLaterPageInner() {
 
     const videoIds = (items ?? []).map((i) => i.video_id);
     if (videoIds.length > 0) {
-      const { data: videoData } = await supabase
-        .from('videos')
-        .select('id, title, thumbnail_url, views, profiles!videos_owner_id_fkey(username)')
-        .in('id', videoIds);
+      const videoData = await fetchByIds<any>('videos', 'id, title, thumbnail_url, views, profiles!videos_owner_id_fkey(username)', videoIds);
       const ordered = videoIds.map((id) => videoData?.find((v) => v.id === id)).filter(Boolean);
       setVideos(ordered as any[]);
     }

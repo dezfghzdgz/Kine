@@ -26,7 +26,6 @@ type FeedContext = {
   preference: 'short' | 'long';
   disableShorts: boolean;
   hidden: HiddenContent;
-  shadowBannedIds: Set<string>;
   subscribedIds: Set<string>;
   watchedIds: Set<string>;
   topCategories: Set<string>;
@@ -100,8 +99,6 @@ export default function HomePage() {
     const { data: authData } = await supabase.auth.getUser();
     const user = authData.user ?? null;
 
-    const shadowBannedPromise = supabase.from('profiles').select('id').eq('is_shadow_banned', true);
-
     const subscribedIds = new Set<string>();
     const watchedIds = new Set<string>();
     const topCategories = new Set<string>();
@@ -153,14 +150,11 @@ export default function HomePage() {
       Object.entries(hashtagCounts).sort((a, b) => b[1] - a[1]).slice(0, 8).forEach(([h]) => topHashtags.add(h));
     }
 
-    const { data: shadowBanned } = await shadowBannedPromise;
-
     ctxRef.current = {
       userId: user?.id ?? null,
       preference,
       disableShorts,
       hidden,
-      shadowBannedIds: new Set((shadowBanned ?? []).map((p: any) => p.id)),
       subscribedIds,
       watchedIds,
       topCategories,
@@ -244,10 +238,10 @@ export default function HomePage() {
   function applyFilters(rows: any[], ctx: FeedContext) {
     let batch = rows.filter((v: any) => !seenIdsRef.current.has(v.id));
 
-    // Shadow ban schová videa ostatním, ale ne jejich autorovi - o to
-    // v něm jde. Dřív mizela i jemu samotnému, takže si toho okamžitě
-    // všiml a rovnou bylo poznat, že s účtem něco je.
-    batch = batch.filter((v: any) => !ctx.shadowBannedIds.has(v.owner_id) || v.owner_id === ctx.userId);
+    // Shadow ban tady schválně není. Řeší ho databáze (restriktivní
+    // politika na tabulce videos), takže platí i v Exploreru, hledání a
+    // na hashtazích - dřív se filtrovalo jen tady a seznam
+    // shadow-bannovaných si přitom mohl stáhnout kdokoliv.
 
     // Co si divák schoval přes ⋮ ("Nezajímá mě" / "Nedoporučovat kanál").
     batch = filterHidden(batch, ctx.hidden);

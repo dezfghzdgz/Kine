@@ -323,22 +323,16 @@ export default function ChannelStatsPage() {
 
     const { data: subs } = await supabase.from('subscriptions').select('created_at').eq('channel_id', authData.user.id);
 
-    // Podíl z výdělků přidává samostatná migrace. Když ještě neproběhla,
-    // dotaz s těmi sloupci selže - proto se zkouší nejdřív s nimi a pak
-    // bez nich, ať zbytek statistik funguje dál.
-    const withShare = await supabase
-      .from('profiles')
-      .select('verification_tier, created_at, payouts_suspended, revenue_share_percent, partner_status, revenue_share_note, revenue_share_manual')
-      .eq('id', authData.user.id)
-      .single();
+    // Úroveň ověření a datum založení jsou veřejné, podíl z výdělků a
+    // pozastavení výplat ne - ty vrací funkce my_account, a to jen
+    // majiteli účtu.
+    const [{ data: publicPart }, { data: accountRows }] = await Promise.all([
+      supabase.from('profiles').select('verification_tier, created_at').eq('id', authData.user.id).single(),
+      supabase.rpc('my_account'),
+    ]);
 
-    const profile = withShare.error
-      ? (await supabase
-          .from('profiles')
-          .select('verification_tier, created_at, payouts_suspended')
-          .eq('id', authData.user.id)
-          .single()).data as any
-      : (withShare.data as any);
+    const account: any = Array.isArray(accountRows) ? accountRows[0] : accountRows;
+    const profile: any = { ...(publicPart ?? {}), ...(account ?? {}) };
 
     setVerificationTier(profile?.verification_tier ?? 'none');
     setPayoutsSuspended(!!profile?.payouts_suspended);

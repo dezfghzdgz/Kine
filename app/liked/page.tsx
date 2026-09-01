@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { fetchAllRows, fetchByIds } from '@/lib/loadAll';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useLanguage } from '@/lib/i18n';
@@ -36,17 +37,18 @@ function LikedPageInner() {
 
     // V režimu hvězdiček ukazujeme všechna ohodnocená videa (jakékoliv skóre),
     // v režimu lajk/dislike jen ta, co dostala lajk.
-    let reactionsQuery = supabase
-      .from('video_reactions')
-      .select('video_id, score')
-      .eq('user_id', authData.user.id);
+    const reactions = await fetchAllRows((from, to) => {
+      let q = supabase
+        .from('video_reactions')
+        .select('video_id, score')
+        .eq('user_id', authData.user!.id)
+        .order('video_id', { ascending: true })
+        .range(from, to);
+      if (mode === 'like_dislike') q = q.gte('score', 4);
+      return q;
+    });
 
-    if (mode === 'like_dislike') {
-      reactionsQuery = reactionsQuery.gte('score', 4);
-    }
-
-    const { data: reactions } = await reactionsQuery;
-    const videoIds = (reactions ?? []).map((r) => r.video_id);
+    const videoIds = reactions.map((r: any) => r.video_id);
 
     if (videoIds.length === 0) {
       setVideos([]);
@@ -54,14 +56,16 @@ function LikedPageInner() {
       return;
     }
 
-    const { data } = await supabase
-      .from('videos')
-      .select('id, title, thumbnail_url, views, profiles!videos_owner_id_fkey(username)')
-      .in('id', videoIds)
-      .eq('status', 'ready');
+    // Stav se filtruje až tady - fetchByIds posílá jen seznam
+    // identifikátorů, aby se dotaz rozdělil na krátké adresy.
+    const data = (await fetchByIds<any>(
+      'videos',
+      'id, title, thumbnail_url, views, status, profiles!videos_owner_id_fkey(username)',
+      videoIds
+    )).filter((v) => v.status === 'ready');
 
-    const scoreByVideo = new Map((reactions ?? []).map((r) => [r.video_id, r.score]));
-    const withScores = (data ?? []).map((v) => ({ ...v, myScore: scoreByVideo.get(v.id) }));
+    const scoreByVideo = new Map(reactions.map((r: any) => [r.video_id, r.score]));
+    const withScores = data.map((v) => ({ ...v, myScore: scoreByVideo.get(v.id) }));
 
     setVideos(withScores);
     setLoading(false);

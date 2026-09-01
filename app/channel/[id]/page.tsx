@@ -55,7 +55,7 @@ function ChannelPageInner() {
       supabase.auth.getUser(),
       supabase
         .from('profiles')
-        .select('id, username, display_name, avatar_url, banner_url, bio, social_links, verification_tier, created_at, trailer_video_id, is_banned, is_shadow_banned, payouts_suspended, trailer:videos!profiles_trailer_video_id_fkey(id, title, cloudflare_video_id, thumbnail_url)')
+        .select('id, username, display_name, avatar_url, banner_url, bio, social_links, verification_tier, created_at, trailer_video_id, trailer:videos!profiles_trailer_video_id_fkey(id, title, cloudflare_video_id, thumbnail_url)')
         .eq('id', channelId)
         .single(),
       supabase
@@ -65,7 +65,14 @@ function ChannelPageInner() {
     ]);
 
     setUserId(authData.user?.id ?? null);
-    setProfile(profileData);
+    // Stav moderace (zablokován, shadow ban, pozastavené výplaty) se z
+    // prohlížeče přečíst nedá - byl by vidět i tomu, koho se týká, a
+    // shadow ban tím ztrácí smysl. Funkce ho vydá jen moderátorovi,
+    // ostatním vrátí prázdno.
+    const { data: flagRows } = await supabase.rpc('moderation_flags', { channel_id: channelId });
+    const flags: any = Array.isArray(flagRows) ? flagRows[0] : flagRows;
+
+    setProfile({ ...(profileData as any), ...(flags ?? {}) });
     setSubscriberCount(count ?? 0);
     if (profileData) {
       computeTrustRatingClient(profileData.id, profileData.created_at).then(async (score) => {

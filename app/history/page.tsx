@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
+import { fetchAllRows, fetchByIds } from '@/lib/loadAll';
 import { useLanguage } from '@/lib/i18n';
 
 function HistoryPageInner() {
@@ -27,25 +28,23 @@ function HistoryPageInner() {
     }
     setUserId(authData.user.id);
 
-    const { data: history } = await supabase
-      .from('watch_history')
-      .select('video_id, watched_at')
-      .eq('user_id', authData.user.id)
-      .order('watched_at', { ascending: false });
+    // Po dávkách: bez toho vrátí databáze nejvýš tisíc řádků a zbytek
+    // historie tiše zmizí. fetchByIds navíc rozdělí dotaz na videa, aby
+    // adresa nepřerostla - u pár stovek položek se dotaz jinak neprovede
+    // vůbec a stránka zůstane prázdná bez chybové hlášky.
+    const history = await fetchAllRows((from, to) =>
+      supabase
+        .from('watch_history')
+        .select('video_id, watched_at')
+        .eq('user_id', authData.user!.id)
+        .order('watched_at', { ascending: false })
+        .range(from, to)
+    );
 
-    const videoIds = (history ?? []).map((h) => h.video_id);
-
+    const videoIds = history.map((h: any) => h.video_id);
     if (videoIds.length > 0) {
-      const { data: videoData } = await supabase
-        .from('videos')
-        .select('id, title, thumbnail_url, views, profiles!videos_owner_id_fkey(username)')
-        .in('id', videoIds);
-
-      // Zachovej pořadí podle toho, kdy byly sledovány naposledy
-      const ordered = videoIds
-        .map((id) => videoData?.find((v) => v.id === id))
-        .filter(Boolean);
-      setVideos(ordered as any[]);
+      // Pořadí drží historie, ne databáze - proto ho fetchByIds zachovává.
+      setVideos(await fetchByIds<any>('videos', 'id, title, thumbnail_url, views, profiles!videos_owner_id_fkey(username)', videoIds));
     }
 
     setLoading(false);
