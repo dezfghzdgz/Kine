@@ -139,11 +139,23 @@ export default function ProfileMenu({
 
           <div className="profile-dropdown-divider" style={{ marginTop: 10 }} />
 
-          <div style={{ display: 'flex', gap: 10, padding: '8px 10px 4px', fontSize: 11, color: 'var(--text-faint)', flexWrap: 'wrap' }}>
-            <Link href="/terms">Terms</Link>
-            <Link href="/privacy">Privacy</Link>
-            <Link href="/rules">Rules</Link>
-            <a href="mailto:kinesupport@gmail.com">Support</a>
+          {/* Odhlásit se v nabídce chybělo. Potvrzovací okno i obsluha tu
+              byly napsané celou dobu, jen na ně nikde nevedlo tlačítko -
+              přihlášený člověk se z appky neměl jak odhlásit. */}
+          <button
+            className="profile-dropdown-item profile-dropdown-signout"
+            onClick={() => { setOpen(false); setConfirmSignOut(true); }}
+          >
+            {t('signOut')}
+          </button>
+
+          <div className="profile-dropdown-divider" />
+
+          <div className="profile-dropdown-legal">
+            <Link href="/terms">{t('termsLink')}</Link>
+            <Link href="/privacy">{t('privacyLink')}</Link>
+            <Link href="/rules">{t('rulesLink')}</Link>
+            <a href="mailto:kinesupport@gmail.com">{t('supportLink')}</a>
           </div>
         </div>
       )}

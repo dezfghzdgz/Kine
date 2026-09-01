@@ -1,15 +1,90 @@
+/* =====================================================================
+   Základ vzhledu
+   =====================================================================
+   Dřív si každé pravidlo v tomhle souboru volilo velikost písma, rohy
+   i délku přechodu po svém. Bylo tu 20 různých velikostí písma (včetně
+   9,5 / 11,5 / 13,5 px - půlpixel se nemá kam vykreslit a text je po něm
+   rozmazaný), 9 různých rohů a 15 různě dlouhých přechodů. Jednotlivě to
+   nikdo nepozná, dohromady je to přesně ten pocit "nějak to vypadá
+   levně".
+
+   Odteď se bere všechno odsud. Když budeš přidávat nové věci, saháš po
+   těchhle proměnných místo konkrétních čísel.
+   ===================================================================== */
+
 :root {
+  /* --- barvy ---------------------------------------------------- */
   --bg: #050506;
-  --panel: #0d0d0f;
-  --panel-raised: #131316;
-  --border: #202024;
+  /* Panel byl proti pozadí světlejší o 3 % - na obrazovce to nebylo
+     poznat a všechno splývalo do jedné šedé plochy. */
+  --panel: #101014;
+  --panel-raised: #17171c;
+  --border: #26262d;
   --text: #f2f2f0;
-  --text-dim: #8a8a8f;
-  --text-faint: #55555a;
+  /* Tyhle dvě byly moc tmavé: popisky pod videem měly kontrast 3,4:1,
+     což je pod hranicí čitelnosti (WCAG chce 4,5:1). Vypadalo to
+     vybledle a na jasném displeji se to špatně četlo. */
+  --text-dim: #9c9ca5;
+  --text-faint: #74747e;
   --accent: #dcdce0;
   --accent-line: rgba(255, 255, 255, 0.08);
   --brand: #00c9a7;
+  /* Ztlumená značka pro plochy a prstence - plná barva je na výplň moc
+     křiklavá. */
+  --brand-soft: rgba(0, 201, 167, 0.16);
+
+  /* --- písmo ------------------------------------------------------ */
+  /* Osm kroků, žádné půlpixely. Rozestupy jsou úmyslně nestejné: dole
+     po jednom pixelu (drobné popisky se musí dát odlišit), nahoře
+     skokem (nadpis má být vidět, že je nadpis). */
+  --fs-2xs: 11px;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 19px;
+  --fs-2xl: 23px;
+  --fs-3xl: 30px;
+
+  /* Čím větší text, tím těsněji. Bez tohohle vypadají velké nadpisy
+     rozsypaně - je to jeden z hlavních rozdílů mezi "web" a "produkt". */
+  --track-tight: -0.02em;
+  --track-snug: -0.011em;
+  --track-normal: 0;
+
+  /* --- rohy -------------------------------------------------------- */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+  /* Ponecháno kvůli místům, která ho už používají. */
   --radius: 14px;
+
+  /* --- hloubka ------------------------------------------------------ */
+  /* Vlas světla po horní hraně. Takhle vypadá plocha nasvícená shora,
+     a je to levnější trik než stín - právě on dělá "drahý" dojem. */
+  --hairline: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.55);
+
+  /* --- pohyb -------------------------------------------------------- */
+  /* Jedna křivka na všechno. Rychle se rozjede, pomalu dojede - tak se
+     hýbou věci, které mají hmotnost. Výchozí "ease" působí gumově. */
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --dur-3: 280ms;
+
+  /* --- mezery ------------------------------------------------------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
 }
 
 * {
@@ -27,7 +102,7 @@
 
 ::-webkit-scrollbar-thumb {
   background: var(--panel-raised);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 2px solid var(--bg);
 }
 
@@ -47,14 +122,100 @@ html, body {
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Inter tu bylo napsané od začátku, ale nikde se nenačítalo - appka
+     tedy celou dobu jela systémovým písmem (na Windows Segoe UI, na
+     Androidu Roboto). Teď ho načítá app/layout.tsx přes next/font a
+     posílá sem proměnnou --font-inter. Zbytek řádku je záložní řetěz
+     pro případ, že se písmo nestihne načíst. */
+  /* Náhrada uvnitř var() je tu schválně: kdyby proměnná chyběla (třeba
+     když se písmo při sestavení nestáhne), celý řádek font-family by byl
+     neplatný a prohlížeč by spadl na svoje výchozí patkové písmo -
+     appka by se vykreslila jako dokument ve Wordu. Ověřeno, stalo se mi
+     to při první zkoušce. */
+  font-family: var(--font-inter, 'Inter'), -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   margin: 0;
-  letter-spacing: 0.01em;
+  /* Bylo 0.01em - rozestup navíc potřebuje systémové písmo, Inter ne.
+     S ním text vypadal roztažený. */
+  letter-spacing: var(--track-normal);
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  /* Na tmavém pozadí je tenčí vykreslení podstatně čistší. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Čísla se stejnou šířkou číslic. Počty zhlédnutí, délky videí a časy
+   v přehrávači se tak při přepočtu nekývají do stran. */
+.video-duration,
+.video-card-meta,
+.music-time,
+.stat-value,
+time {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Prohlížeč dává odstavcům odshora i odspodu mezeru 1em. V appce, kde
+   se skoro všechno skládá do flexu s vlastní mezerou, se to sčítalo -
+   proto byly rozestupy pod náhledy a nadpisy pokaždé jinak velké.
+   Spodní mezera zůstává (odstavce textu ji potřebují), horní a poslední
+   ne. */
+p {
+  margin: 0 0 10px;
+}
+
+p:last-child {
+  margin-bottom: 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  letter-spacing: var(--track-tight);
+  line-height: 1.2;
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+/* ---------- Vidět, kde jsem klávesnicí ----------
+
+   V celém souboru bylo dohromady sedm pravidel pro focus a jedno z nich
+   ho rovnou vypínalo. Kdo appku ovládá klávesnicí (nebo si jen vyjede
+   tabulátorem), neviděl, kde je. Tohle platí všude a jen při ovládání
+   klávesnicí - po kliknutí myší se prstenec neukáže. */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+::selection {
+  background: var(--brand-soft);
+  color: var(--text);
+}
+
+/* Kdo má v systému vypnuté animace, nedostane je ani tady. Není to jen
+   zdvořilost - lidem s poruchou rovnováhy z pohyblivého rozhraní bývá
+   fyzicky špatně. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ---------- App shell: sidebar + content ---------- */
@@ -122,9 +283,9 @@ a {
   align-items: center;
   gap: 12px;
   padding: 11px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   color: var(--text-dim);
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 500;
   background: none;
   border: none;
@@ -166,7 +327,7 @@ a {
   height: 36px;
   min-height: 36px;
   padding: 0 14px;
-  font-size: 13.5px;
+  font-size: 14px;
   gap: 10px;
   line-height: 1;
 }
@@ -203,12 +364,17 @@ a {
 
 /* ---------- Video grid (home / curated selection) ---------- */
 
+/* Nadpis sekce byl 15px/600, název videa 13,5px/500 - rozdíl skoro
+   žádný, takže stránka neměla hierarchii a působila jako výpis z
+   databáze. Teď je nadpis o dvě velikosti výš a písmo je stažené
+   k sobě. */
 .section-title {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--fs-xl);
+  font-weight: 650;
   color: var(--text);
-  margin: 0 0 18px 0;
-  letter-spacing: 0.02em;
+  margin: 0 0 var(--sp-4) 0;
+  letter-spacing: var(--track-tight);
+  line-height: 1.25;
 }
 
 /* Vysvětlivka nad feedem - "tohle tu není a tady je proč". Schválně tichá,
@@ -217,14 +383,15 @@ a {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  margin: 0 0 16px 0;
+  gap: var(--sp-2);
+  padding: 11px var(--sp-4);
+  margin: 0 0 var(--sp-4) 0;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--panel-raised);
+  box-shadow: var(--hairline);
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
 }
 
@@ -234,10 +401,15 @@ a {
   padding: 0;
   width: auto;
   color: var(--brand);
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 600;
+  /* Podtržení odteď sedí pod účařím a nepřeškrtává háčky a čárky -
+     v češtině to bylo poznat na každém druhém slově. */
   text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
   cursor: pointer;
+  transition: color var(--dur-1) var(--ease);
 }
 
 .feed-notice-action:hover {
@@ -304,7 +476,7 @@ a {
   min-width: 44px;
   padding: 4px 8px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   background: var(--panel);
   color: var(--text);
   font-family: inherit;
@@ -374,7 +546,7 @@ a {
 
 .skeleton-line {
   height: 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--panel-raised);
 }
 
@@ -399,14 +571,27 @@ a {
 .video-thumb {
   position: relative;
   aspect-ratio: 16/9;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   background: linear-gradient(135deg, #1a1a1e, #08080a);
-  border: 1px solid var(--border);
+  /* Rámeček nahradil vnitřní stín. Border kreslí ostrou linku vně
+     obrázku a v rohu se rozchází se zaoblením; vnitřní stín kopíruje
+     tvar přesně a působí spíš jako odlesk hrany než jako čára. */
+  border: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  transition: transform var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+
+/* Zvednutí je schválně na náhledu, ne na celé kartě: transform na kartě
+   by z ní udělal rámec pro position: fixed a nabídka ⋮ by se do ní
+   zavřela (je to popsané o kus výš u .video-card-interactive). */
+.video-card:hover .video-thumb {
+  transform: translateY(-2px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), var(--shadow-md);
 }
 
 .video-thumb img {
-  transition: transform 0.25s ease;
+  transition: transform var(--dur-3) var(--ease);
 }
 
 .video-card:hover .video-thumb img {
@@ -420,19 +605,47 @@ a {
   display: block;
 }
 
+/* Tlačítko přehrát bylo vysázené znakem ▶ z písma. Každý systém ho
+   kreslí jinak (na Windows často jako barevné emoji) a nedá se
+   sjednotit. Znak se teď schová a kolečko i trojúhelník kreslí CSS -
+   všude stejně. */
 .video-thumb .play-badge {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 0;
   opacity: 0;
-  transition: opacity 0.15s ease;
-  background: rgba(0, 0, 0, 0.25);
+  transition: opacity var(--dur-2) var(--ease);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.12));
+}
+
+.video-thumb .play-badge::after {
+  content: '';
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(12, 12, 15, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 4px 16px rgba(0, 0, 0, 0.45);
+  /* Trojúhelník je posunutý o dva pixely doprava - opticky vystředěný,
+     ne matematicky. Vystředěný na pixel vypadá, že táhne doleva. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff'%3E%3Cpath d='M9 6.5v11l9-5.5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 55% center;
+  background-size: 22px 22px;
+  transform: scale(0.9);
+  transition: transform var(--dur-2) var(--ease);
 }
 
 .video-card:hover .play-badge {
   opacity: 1;
+}
+
+.video-card:hover .play-badge::after {
+  transform: scale(1);
 }
 
 .watch-progress-track {
@@ -451,24 +664,47 @@ a {
 
 .video-duration {
   position: absolute;
-  bottom: 6px;
-  right: 8px;
-  font-size: 11px;
-  background: rgba(0, 0, 0, 0.65);
+  bottom: var(--sp-2);
+  right: var(--sp-2);
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  letter-spacing: var(--track-normal);
+  color: #fff;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
+  transition: opacity var(--dur-2) var(--ease);
+}
+
+/* Při najetí ustoupí, ať nepřekáží tlačítku přehrát. */
+.video-card:hover .video-duration {
+  opacity: 0;
 }
 
 .video-card-title {
   font-weight: 500;
-  font-size: 13.5px;
-  margin: 10px 0 2px 0;
+  /* Bylo 13,5px - půlpixel, takže rozmazané. */
+  font-size: var(--fs-md);
+  line-height: 1.35;
+  letter-spacing: var(--track-snug);
+  margin: 10px 0 3px 0;
   color: var(--text);
+  /* Dlouhý název se odteď zalomí nejvýš na dva řádky a zbytek se
+     ukončí třemi tečkami. Bez toho karty v mřížce nebyly stejně
+     vysoké a řádek vypadal rozházeně. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color var(--dur-1) var(--ease);
 }
 
 .video-card-meta {
   color: var(--text-faint);
-  font-size: 12px;
+  font-size: var(--fs-xs);
+  margin: 0;
 }
 
 /* ---------- Forms (login/signup/upload) ---------- */
@@ -481,17 +717,29 @@ a {
   gap: 12px;
 }
 
-input, textarea {
+input, textarea, select {
   background: var(--panel-raised);
   border: 1px solid var(--border);
   color: var(--text);
-  padding: 11px 13px;
-  border-radius: 8px;
-  font-size: 14px;
-  transition: border-color 0.15s ease;
+  padding: 11px var(--sp-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-md);
+  font-family: inherit;
+  box-shadow: var(--hairline);
+  transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
 }
 
-input:focus, textarea:focus {
+input::placeholder, textarea::placeholder {
+  color: var(--text-faint);
+}
+
+input:hover, textarea:hover {
+  border-color: #33333c;
+}
+
+/* Myší kliknutí prstenec nedostane (byl by rušivý), klávesnice ano -
+   to řeší pravidlo :focus-visible nahoře. */
+input:focus, textarea:focus, select:focus {
   outline: none;
   border-color: var(--text-dim);
 }
@@ -500,25 +748,29 @@ button {
   background: var(--text);
   color: var(--bg);
   border: none;
-  padding: 11px 16px;
-  border-radius: 8px;
+  padding: 11px var(--sp-4);
+  border-radius: var(--radius-sm);
   font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
-  font-size: 14px;
-  transition: transform 0.12s ease, opacity 0.15s ease, background-color 0.15s ease;
+  font-size: var(--fs-md);
+  letter-spacing: var(--track-snug);
+  transition: transform var(--dur-1) var(--ease), filter var(--dur-2) var(--ease),
+              background-color var(--dur-2) var(--ease), opacity var(--dur-2) var(--ease);
 }
 
 button:active {
-  transform: scale(0.96);
+  transform: scale(0.97);
 }
 
-button:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-button:hover {
-  opacity: 0.9;
+/* Bylo "opacity: 0.9" - bílé tlačítko tím prosvítalo pozadím a při
+   najetí vypadalo, jako by zprůhlednělo. Ztmavení drží plochu plnou.
+   Platí schválně jen pro tlačítka bez vlastní třídy, tedy pro ta, která
+   opravdu mají bílé pozadí z pravidla nad tím. Kdyby to platilo na
+   všechna, ztmavla by při najetí i tlačítka průhledná a ikonová - a ta
+   mají naopak zesvětlit. */
+button:not([class]):hover:not(:disabled) {
+  background: #e4e4e1;
 }
 
 button:disabled {
@@ -557,7 +809,7 @@ button:disabled {
 }
 
 .player-wrap {
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   background: #000;
   border: 1px solid var(--border);
@@ -659,7 +911,7 @@ button:disabled {
 }
 
 .panel-heading {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
   margin: 0 0 14px 0;
@@ -701,7 +953,7 @@ button:disabled {
 .toggle-switch {
   width: 38px;
   height: 20px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--panel-raised);
   border: 1px solid var(--border);
   position: relative;
@@ -745,7 +997,7 @@ button:disabled {
   color: var(--text-dim);
   border: 1px solid var(--border);
   padding: 8px 14px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   min-height: 38px;
   font-size: 13px;
   font-weight: 500;
@@ -829,7 +1081,7 @@ button:disabled {
 }
 
 .comment-actions {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-faint);
   display: flex;
   gap: 12px;
@@ -917,7 +1169,7 @@ html[data-theme="light"] .profile-avatar-small {
   width: 240px;
   background: var(--panel-raised);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 10px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
   z-index: 500;
@@ -936,7 +1188,7 @@ html[data-theme="light"] .profile-avatar-small {
 }
 
 .profile-dropdown-name {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   margin: 0;
   max-width: 170px;
@@ -969,15 +1221,46 @@ html[data-theme="light"] .profile-avatar-small {
   background: none;
   border: none;
   color: var(--text);
-  font-size: 13px;
-  padding: 9px 8px;
-  border-radius: 8px;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  letter-spacing: var(--track-normal);
+  padding: 9px var(--sp-2);
+  border-radius: var(--radius-xs);
   cursor: pointer;
   text-align: left;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
 
 .profile-dropdown-item:hover:not(:disabled) {
   background: var(--border);
+}
+
+/* Odhlášení je jediná položka v nabídce, po které se něco ztratí -
+   ať je poznat na první pohled. */
+.profile-dropdown-signout {
+  color: var(--text-dim);
+}
+
+.profile-dropdown-signout:hover:not(:disabled) {
+  color: #ff8b8b;
+  background: rgba(255, 107, 107, 0.1);
+}
+
+.profile-dropdown-legal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-2) var(--sp-1);
+  font-size: var(--fs-2xs);
+  color: var(--text-faint);
+}
+
+.profile-dropdown-legal a {
+  transition: color var(--dur-1) var(--ease);
+}
+
+.profile-dropdown-legal a:hover {
+  color: var(--text-dim);
 }
 
 .profile-dropdown-item:disabled {
@@ -1002,7 +1285,7 @@ html[data-theme="light"] .profile-avatar-small {
   align-items: center;
   gap: 10px;
   padding: 14px 18px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   font-weight: 500;
   color: #fff;
@@ -1073,7 +1356,7 @@ html[data-theme="gray"] {
   position: relative;
   width: 72px;
   height: 22px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: linear-gradient(to right, #0a0a0b, #8a8a8f, #f2f2f0);
   border: 1px solid var(--border);
   cursor: pointer;
@@ -1164,13 +1447,16 @@ html[data-theme="gray"] {
 /* Horní lišta odjíždí pryč spolu s obsahem - není přilepená nahoře.
    Díky tomu pod ní nevzniká žádný černý pruh a při scrollování jsou
    vidět jen videa. */
+/* Lišta měla 72 px a byly v ní dvě velké prázdné plochy - hledání a
+   rámeček s nápisem "Ad space". Zabíraly vršek každé stránky a nic
+   nedělaly. Teď je lišta nižší a je v ní jedna věc: hledání. */
 .top-bar {
   display: flex;
   align-items: stretch;
-  gap: 12px;
-  margin: 0 0 28px 0;
-  padding-top: 8px;
-  height: 72px;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-5) 0;
+  padding-top: var(--sp-1);
+  height: 48px;
   position: relative;
   /* Vysoko schválně: rozbalené rozšířené hledání musí být nad kartami
      videí, jejichž nabídka ⋮ se otevírá nahoru a má 400. */
@@ -1181,7 +1467,7 @@ html[data-theme="gray"] {
   flex-shrink: 0;
   width: 40px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   justify-content: center;
 }
 
@@ -1190,49 +1476,110 @@ html[data-theme="gray"] {
   min-width: 0;
 }
 
-.top-bar-ad {
+/* Zavřený stav hledání. Dřív to byla ikona lupy velikosti tlačítka a
+   vedle ní prázdný rámeček - vypadalo to jako nedodělané místo. Teď to
+   vypadá jako vyhledávací pole, protože to vyhledávací pole je. */
+.top-bar-search-trigger {
   height: 100%;
   flex: 1;
-  border: 1px dashed var(--border);
-  border-radius: 10px;
+  min-width: 0;
+  max-width: 560px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: var(--text-faint);
-  font-size: 13px;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-3);
   background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--hairline);
+  color: var(--text-faint);
+  font-size: var(--fs-md);
+  font-weight: 400;
+  letter-spacing: var(--track-normal);
+  text-align: left;
+  cursor: text;
+  transition: border-color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+}
+
+.top-bar-search-trigger:hover:not(:disabled) {
+  border-color: #33333c;
+  background: var(--panel-raised);
+}
+
+.top-bar-search-trigger-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Zkratka "/" napsaná přímo v poli. Kdo ji zná, použije ji; kdo ne,
+   dozví se, že existuje - a nemusí kvůli tomu nikam chodit. */
+.top-bar-search-hint {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background: var(--panel-raised);
+  color: var(--text-faint);
+  font-size: var(--fs-2xs);
+  line-height: 1.4;
 }
 
 .top-bar-search-icon-btn {
   height: 100%;
-  width: 44px;
+  width: 40px;
   flex-shrink: 0;
-  margin-right: 10px;
+  margin-right: var(--sp-2);
+  padding: 0;
+  color: var(--text-dim);
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--hairline);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  transition: color var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
+}
+
+.top-bar-search-icon-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: #33333c;
 }
 
 .top-bar-search-form {
   height: 100%;
+  max-width: 560px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0 12px;
-  animation: search-slide-in 0.18s ease;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--hairline);
+  padding: 0 var(--sp-3);
+  animation: search-slide-in var(--dur-2) var(--ease);
+}
+
+.top-bar-search-form:focus-within {
+  border-color: var(--text-dim);
 }
 
 .top-bar-search-form input {
   flex: 1;
+  min-width: 0;
   border: none;
   background: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.top-bar-search-form input:focus,
+.top-bar-search-form input:focus-visible {
+  border: none;
+  box-shadow: none;
 }
 
 /* ---------- Notification bell ---------- */
@@ -1242,7 +1589,7 @@ html[data-theme="gray"] {
   color: #fff;
   font-size: 10px;
   font-weight: 700;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   padding: 1px 6px;
   margin-left: auto;
 }
@@ -1367,7 +1714,7 @@ html[data-theme="gray"] {
   background: rgba(10,10,11,0.85);
   color: #fff;
   padding: 8px 16px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 13px;
   z-index: 10;
 }
@@ -1418,7 +1765,7 @@ html[data-theme="gray"] {
   position: relative;
   height: 3px;
   background: rgba(255,255,255,0.35);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   cursor: pointer;
   overflow: visible;
   transition: width 0.15s ease, opacity 0.15s ease;
@@ -1430,7 +1777,7 @@ html[data-theme="gray"] {
   top: 0;
   bottom: 0;
   background: #fff;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   pointer-events: none;
 }
 
@@ -1685,7 +2032,7 @@ html[data-theme="gray"] {
     align-items: center;
     gap: 2px;
     color: var(--text-faint);
-    font-size: 9.5px;
+    font-size: 10px;
     background: none;
     border: none;
     padding: 4px 8px;
@@ -1732,7 +2079,7 @@ html[data-theme="gray"] {
     width: 36px;
     height: 4px;
     background: var(--border);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     margin: 6px auto 14px;
   }
 }
@@ -1743,7 +2090,7 @@ html[data-theme="gray"] {
   background: var(--panel-raised);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   width: 32px;
   height: 32px;
   font-size: 16px;
@@ -1781,8 +2128,8 @@ html[data-theme="gray"] {
   background: var(--panel-raised);
   color: var(--text);
   border: 1px solid transparent;
-  border-radius: 8px;
-  font-size: 12.5px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
   cursor: pointer;
   padding: 0;
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -1817,7 +2164,7 @@ html[data-theme="gray"] {
   font-size: 9px;
   line-height: 1;
   padding: 2px 3px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--brand);
   color: #0a0a0b;
   font-weight: 700;
@@ -1843,7 +2190,7 @@ html[data-theme="gray"] {
   align-items: center;
   gap: 8px;
   padding: 6px 12px 6px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--panel);
   border: 1px solid var(--border);
   font-size: 13px;
@@ -1865,7 +2212,7 @@ html[data-theme="gray"] {
 }
 
 .collab-chip-role {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--text-faint);
   flex-shrink: 0;
 }
@@ -1890,7 +2237,7 @@ html[data-theme="gray"] {
   font-size: 15px;
   font-weight: 600;
   padding: 10px 18px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   pointer-events: none;
   animation: key-hint-fade 0.9s ease forwards;
   white-space: nowrap;
@@ -1932,7 +2279,7 @@ html[data-theme="gray"] {
 
 .playlist-panel-title {
   display: block;
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
   overflow: hidden;
@@ -1954,7 +2301,7 @@ html[data-theme="gray"] {
   background: var(--panel-raised);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   width: 30px;
   height: 30px;
   flex-shrink: 0;
@@ -1996,7 +2343,7 @@ html[data-theme="gray"] {
   width: 20px;
   flex-shrink: 0;
   text-align: center;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-faint);
 }
 
@@ -2009,7 +2356,7 @@ html[data-theme="gray"] {
   width: 88px;
   height: 50px;
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
   background: var(--panel-raised);
   display: block;
@@ -2030,7 +2377,7 @@ html[data-theme="gray"] {
   background: rgba(0, 0, 0, 0.72);
   color: #fff;
   padding: 1px 4px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 .playlist-panel-item-title {
@@ -2044,7 +2391,7 @@ html[data-theme="gray"] {
 
 .playlist-panel-item-meta {
   display: block;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-faint);
   margin-top: 2px;
   overflow: hidden;
@@ -2062,9 +2409,9 @@ html[data-theme="gray"] {
 .playlist-panel-nav {
   flex: 1;
   text-align: center;
-  font-size: 12.5px;
+  font-size: 13px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--panel-raised);
   border: 1px solid var(--border);
   color: var(--text);
@@ -2127,7 +2474,7 @@ html[data-theme="gray"] {
   padding: 0;
   font-size: 10px;
   line-height: 1;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   background: var(--panel-raised);
   border: 1px solid var(--border);
   color: var(--text-dim);
@@ -2155,14 +2502,14 @@ html[data-theme="gray"] {
 }
 
 .heatmap-day-label {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--text-faint);
   text-align: right;
   padding-right: 4px;
 }
 
 .heatmap-hour-label {
-  font-size: 9.5px;
+  font-size: 10px;
   color: var(--text-faint);
   text-align: center;
   line-height: 1.4;
@@ -2171,7 +2518,7 @@ html[data-theme="gray"] {
 .heatmap-cell {
   display: block;
   height: 16px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 .heatmap-legend {
@@ -2192,7 +2539,7 @@ html[data-theme="gray"] {
 .stats-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12.5px;
+  font-size: 13px;
   min-width: 720px;
 }
 
@@ -2263,7 +2610,7 @@ html[data-theme="gray"] {
   width: 64px;
   height: 36px;
   flex-shrink: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
   background: var(--panel-raised);
   display: block;
@@ -2307,7 +2654,7 @@ html[data-theme="gray"] {
 }
 
 .stat-caption {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-faint);
   margin: 2px 0 0;
 }
@@ -2372,7 +2719,7 @@ html[data-theme="gray"] {
   padding: 0;
   background: none;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   color: var(--text-faint);
   font-size: 16px;
   line-height: 1;
@@ -2408,7 +2755,7 @@ html[data-theme="gray"] {
   overflow-y: auto;
   background: var(--panel-raised);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 6px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   z-index: 400;
@@ -2428,7 +2775,7 @@ html[data-theme="gray"] {
   padding: 9px 10px;
   background: none;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: var(--text-dim);
   font-size: 13px;
   text-align: left;
@@ -2458,7 +2805,7 @@ html[data-theme="gray"] {
 }
 
 .video-card-menu-note {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-faint);
   margin: 6px 4px 2px;
   line-height: 1.4;
@@ -2476,7 +2823,7 @@ html[data-theme="gray"] {
   padding: 18px;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 }
 
 .video-card-hidden-sparks {
@@ -2494,9 +2841,9 @@ html[data-theme="gray"] {
   background: var(--panel-raised);
   border: 1px solid var(--border);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 13px;
   padding: 7px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
@@ -2519,7 +2866,7 @@ html[data-theme="gray"] {
   width: 24px;
   height: 24px;
   margin: 9px 0 0 8px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2541,10 +2888,10 @@ html[data-theme="gray"] {
 .revenue-split-bar {
   display: flex;
   height: 34px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   border: 1px solid var(--border);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -2641,7 +2988,7 @@ html[data-theme="gray"] {
   width: 100%;
   height: 4px;
   padding: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--border);
   appearance: none;
   -webkit-appearance: none;
@@ -2776,7 +3123,7 @@ html[data-theme="gray"] {
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
 }
 
@@ -2817,13 +3164,13 @@ html[data-theme="gray"] {
 }
 
 .music-queue-creator {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-faint);
 }
 
 .music-queue-time {
   flex-shrink: 0;
-  font-size: 11.5px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
 }
@@ -2836,14 +3183,14 @@ html[data-theme="gray"] {
   margin-top: 12px;
   padding: 3px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--panel);
 }
 
 .music-view-option {
   padding: 6px 16px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: none;
   color: var(--text-dim);
   font-size: 13px;
@@ -2900,7 +3247,7 @@ html[data-theme="gray"] {
 
 .music-mini-seek::-webkit-slider-runnable-track {
   height: 3px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: linear-gradient(
     to right,
     var(--brand) var(--music-progress, 0%),
@@ -2922,13 +3269,13 @@ html[data-theme="gray"] {
 
 .music-mini-seek::-moz-range-track {
   height: 3px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--border);
 }
 
 .music-mini-seek::-moz-range-progress {
   height: 3px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--brand);
 }
 
@@ -2967,7 +3314,7 @@ html[data-theme="gray"] {
   width: 42px;
   height: 42px;
   object-fit: cover;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--panel-raised);
 }
 
@@ -2988,13 +3335,13 @@ html[data-theme="gray"] {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
 }
 
 .music-mini-meta {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
@@ -3076,7 +3423,7 @@ body.has-music-bar .content-area-fullbleed {
   gap: 2px;
   padding: 3px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--panel);
 }
 
@@ -3086,7 +3433,7 @@ body.has-music-bar .content-area-fullbleed {
   gap: 7px;
   padding: 6px 14px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: none;
   color: var(--text-dim);
   font-size: 13px;
@@ -3118,7 +3465,7 @@ body.has-music-bar .content-area-fullbleed {
   gap: 7px;
   padding: 8px 16px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--panel-raised);
   color: var(--text);
   font-size: 13px;
@@ -3141,7 +3488,7 @@ body.has-music-bar .content-area-fullbleed {
 
 .downloaded-explainer {
   margin: -10px 0 18px 0;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text-faint);
   max-width: 60ch;
 }
@@ -3150,4 +3497,53 @@ body.has-music-bar .content-area-fullbleed {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* ---------- "Nenačetlo se to" ----------
+
+   Patří k components/LoadFailed.tsx. Stránky, které při výpadku sítě
+   zůstávaly navěky na kostře, teď ukážou tohle. */
+
+.load-failed {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: var(--sp-4);
+  margin: var(--sp-3) 0 var(--sp-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel-raised);
+  box-shadow: var(--hairline);
+  color: var(--text-dim);
+}
+
+.load-failed > svg {
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.load-failed-text {
+  flex: 1;
+  min-width: 200px;
+}
+
+.load-failed-title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  letter-spacing: var(--track-snug);
+}
+
+.load-failed-note {
+  margin: 2px 0 0;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.load-failed-retry {
+  flex-shrink: 0;
+  padding: 9px var(--sp-4);
+  font-size: var(--fs-sm);
 }

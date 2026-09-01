@@ -1,104 +1,118 @@
-KINE - migrace soukromí, do třetice
-===================================
+KINE - vzhled, první kolo
+=========================
 
-2 soubory:
-  supabase-migration-privacy-fixes.sql   <- přepsaná migrace
-  app/login/page.tsx                     <- musí jít s ní
+7 souborů, z toho jeden nový (components/LoadFailed.tsx).
+Rozbal do kořene repa (tam, kde je package.json) a přepiš.
 
-
-PROČ TO DVAKRÁT SPADLO
-----------------------
-Supabase pouští celý skript jako jednu transakci. Jediný příkaz, který
-se odvolá na sloupec, co v databázi není, shodí úplně všechno - i to,
-co už proběhlo. Proto se nevytvořila ani funkce my_account() a appka na
-ni dostávala 404.
-
-Napoprvé to spadlo na výpisu sloupců v grantu. Ten jsem opravil - ale
-neprošel jsem zbytek souboru, jestli tam ta samá past není znovu. Byla,
-hned o třicet řádků níž, v těle funkce my_account(). To je moje chyba,
-ne dvě různé.
-
-Chybí ti stripe_account_id a stripe_onboarding_complete, což znamená, že
-u tebe nikdy neproběhla supabase-migration-creator-subscriptions.sql.
-Nová migrace si všechny sloupce, které jmenuje, na začátku sama doplní
-(přesně tak, jak je zakládá jejich původní migrace), takže spadnout na
-tomhle už nemůže.
-
-Mimochodem - kvůli té neproběhlé migraci ti nejspíš nejde ani Nastavení:
-stránka si tahá subscription_price_eur a ten sloupec taky nemáš, takže
-celý dotaz končí chybou. Doplňuje se to tady s ním. Až budeš mít čas,
-pusť si supabase-migration-creator-subscriptions.sql celou - kvůli
-tabulce channel_subscriptions, tu tenhle skript nezakládá.
+Tohle nemá nic společného s migrací - ta jede zvlášť a nezávisle.
 
 
-CO JSEM NAŠEL NAVÍC (a je to horší než ta spadlá migrace)
----------------------------------------------------------
-Zkusil jsem si migraci pustit na skutečném Postgresu s napodobeninou
-tvojí databáze. Ukázalo se, že v té původní podobě by ti rozbila
-moderování.
+PROČ TO VYPADALO LEVNĚ (a co s tím)
+------------------------------------
+Nešlo o jednu velkou věc, ale o spoustu malých, které se sčítají.
+Změřil jsem to, ne odhadl:
 
-Politiky vypadají takhle:
+1) INTER SE NIKDY NENAČÍTALO
+   V CSS bylo od začátku napsané font-family: 'Inter', ale písmo se
+   nikde nestahovalo. Appka tedy celou dobu jela systémovým písmem -
+   na Windows Segoe UI, na Androidu Roboto, na Macu San Francisco.
+   Vypadala proto na každém počítači jinak a nikde jako vlastní věc.
+   Tohle je podle mě půlka toho pocitu.
 
-  using (exists (select 1 from profiles p
-                 where p.id = auth.uid() and p.role in ('moderator','admin')))
+   Teď ho načítá next/font. Stáhne se při sestavení a servíruje se
+   z tvojí domény, takže prohlížeč nikam nechodí a text při načtení
+   nepodskočí. Je tam i latin-ext (ě, ř, ů, ł) a cyrilice kvůli
+   ukrajinštině - bez nich by se háčky braly z náhradního písma a
+   v jednom slově by se míchala dvě.
 
-Podmínku politiky vyhodnocuje databáze pod právy toho, kdo se ptá.
-Jakmile se uživateli sebere právo číst profiles.role, tenhle poddotaz
-skončí chybou "permission denied for table profiles" - a s ním celý
-dotaz. Nepřestal by fungovat jeden sloupec, ale fronta hlášení, mazání
-cizích videí a komentářů, vypínání komentářů i blokování účtů.
+2) DVACET RŮZNÝCH VELIKOSTÍ PÍSMA
+   Mezi nimi 9,5 / 10,5 / 11,5 / 12,5 / 13,5 / 14,5 px. Půlpixel se
+   nemá kam vykreslit, takže se text rozmaže - je to jeden z těch
+   rozdílů, které člověk nepojmenuje, ale vidí. Teď je z toho osm
+   kroků, samá celá čísla.
 
-Nová migrace ty politiky přepíše na funkci is_staff(), která si roli
-přečte sama (security definer). Přepisuje jen ty, jejichž podmínka
-přesně sedí na známý tvar - cokoliv jiného nechá být a radši nechá
-příslušný sloupec veřejný, než aby naslepo přepsala politiku, kterou
-nezná. Co takhle zůstalo, vypíše na konci.
+3) STRÁNKA NEMĚLA HIERARCHII
+   Nadpis sekce byl 15px/600, název videa 13,5px/500. Rozdíl skoro
+   žádný, takže hlavní stránka vypadala jako výpis z databáze. Nadpis
+   je teď o dvě velikosti výš a stažený k sobě.
 
-Funkce jsou schválně dvě: is_staff() (role moderátor/admin) a
-is_staff_or_admin() (a navíc příznak is_admin). Appka ty dvě věci
-odděluje - v lib/useUserRole.ts je to napsané výslovně - a jedna
-společná funkce by ten rozdíl potichu smazala.
+4) POPISKY BYLY SKORO NEČITELNÉ
+   Jméno kanálu a počet zhlédnutí měly proti pozadí kontrast 3,4:1.
+   Norma pro čitelnost chce 4,5:1. Vypadalo to vybledle. Zesvětleno.
+
+5) VRŠEK KAŽDÉ STRÁNKY ZABÍRALY DVĚ PRÁZDNÉ PLOCHY
+   Lišta měla 72 px na výšku, byla v ní ikona lupy a vedle ní rámeček
+   čárkovanou čarou s nápisem "Ad space". Anglicky, na každé stránce.
+   Zůstalo jedno vyhledávací pole, které vypadá jako vyhledávací pole.
+
+6) TLAČÍTKO PŘEHRÁT BYL ZNAK Z PÍSMA
+   ▶ si každý systém kreslí po svém, Windows často jako barevné emoji,
+   a nedá se to sjednotit. Kolečko i trojúhelník teď kreslí CSS.
+
+7) DEVĚT RŮZNÝCH ROHŮ, PATNÁCT RŮZNÝCH PŘECHODŮ
+   3, 4, 5, 6, 7, 8, 10, 12 a 999 px. Přechody 0,12 až 0,3 s, všechny
+   s výchozí křivkou "ease", která působí gumově. Teď jsou čtyři rohy
+   a jedna křivka - rychle se rozjede, pomalu dojede, jako věci, které
+   mají hmotnost.
+
+8) KLÁVESNICE NEBYLA VIDĚT
+   V celém souboru bylo sedm pravidel pro focus a jedno z nich ho
+   rovnou vypínalo. Kdo appku ovládá klávesnicí (nebo si jen vyjede
+   tabulátorem), nevěděl, kde je. Přibyl i ohled na vypnuté animace
+   v systému - lidem s poruchou rovnováhy z pohyblivého rozhraní bývá
+   fyzicky špatně.
+
+Všechno je to psané jako proměnné na začátku globals.css. Když budeš
+přidávat nové věci, ber čísla odtamtud, ne z hlavy - jinak se to za pár
+měsíců zase rozejde.
 
 
-PROČ JDE app/login/page.tsx S TÍM
----------------------------------
-Přihlašovací stránka si četla agreed_to_rules přímo z profiles. Po
-migraci ten sloupec zavřený je, takže by celý dotaz skončil chybou,
-appka by profil vyhodnotila jako neexistující a při každém přihlášení
-by se pokusila založit další a poslala tě na souhlas s pravidly dokola.
-Teď si ten údaj bere z my_account().
+TŘI VĚCI, KTERÉ APPKA NEUMĚLA
+-----------------------------
+ODHLÁSIT SE
+  V nabídce profilu nebylo. Potvrzovací okno i obsluha byly napsané celou
+  dobu, jen na ně nikde nevedlo tlačítko - přihlášený člověk se z appky
+  neměl jak odhlásit. Doplněno.
 
-Nasadit jedno bez druhého tedy nejde ani teď.
+HORNÍ LIŠTA BYLA CELÁ ANGLICKY
+  Jako jediná komponenta v appce. Přeloženo do všech osmi jazyků.
+  Zároveň se teď mění atribut lang na stránce - dřív tam natvrdo stálo
+  "en", takže prohlížeč nabízel překlad české stránky do češtiny a
+  čtečky obrazovky ji četly anglickou výslovností.
 
+DOMOVSKÁ STRÁNKA PŘI VÝPADKU SÍTĚ LHALA
+  Tohle je z toho nejhorší a našel jsem to až při procházení kódu.
+  Chyba dotazu se zahazovala (Supabase u spadlého spojení nevyhodí
+  výjimku, jen vrátí prázdno), z prázdné odpovědi appce vyšlo "kratší
+  dávka = konec seznamu" a divákovi ukázala:
 
-POSTUP
-------
-1) Rozbal do kořene repa (tam, kde je package.json) a přepiš.
-2) Supabase -> SQL Editor -> New Query -> vlož celý obsah
-   supabase-migration-privacy-fixes.sql a spusť.
-3) Přečti si tabulku, kterou vypíše na konci. Zajímá tě hlavně řádek
-   "profiles: zustaly verejne..." - pokud tam něco je, znamená to, že na
-   ten sloupec sahá politika, kterou skript nepřepsal. Pošli mi to,
-   dodělám ji.
-4) Nasaď kód.
+      "Zatím tu nejsou žádná videa. Nahraj první."
+
+  Při vypadlé wifi tedy appka tvrdila, že je celá platforma prázdná.
+  Teď se výpadek pozná od skutečně prázdné platformy a nabídne se další
+  pokus, aniž by se ztratilo, co už je načtené.
 
 
 CO JSEM OVĚŘIL
 --------------
-Lokální Postgres 16, napodobenina tvojí databáze (tedy bez těch
-chybějících sloupců), 32 kontrol - všechny prošly:
-- moderátor dál vidí hlášení, upraví cizí video, smaže cizí komentář
-  a zabanuje účet
-- divák nepřečte role, is_shadow_banned ani ip_address, ale username ano
-- účet, který má jen is_admin, se moderátorem nestal
-- my_account() vrací jen vlastní řádek, nepřihlášený ji nezavolá vůbec
-- shadow ban: cizí videa zmizí všem, jemu samotnému zůstanou
-- zabanovaný nenahraje video, nenapíše komentář ani příspěvek
-- oznámení s odkazem ven neprojde, s odkazem dovnitř ano
+- Typová kontrola celého projektu prošla.
+- Všech sedm souborů se přeloží.
+- Vzhled jsem si vykreslil v prohlížeči (Chromium) na skutečné stránce
+  s tímhle CSS, před i po, a prošel očima. Obrázek posílám zvlášť.
+- Při tom se ukázala moje vlastní chyba: napsal jsem font-family:
+  var(--font-inter), ... a když ta proměnná chybí, je celý řádek
+  neplatný a prohlížeč spadne na patkové písmo - appka by se vykreslila
+  jako dokument ve Wordu. Opraveno náhradou uvnitř var().
+- Mobil (500 px): postranní panel se schová, mřížka je jednosloupcová,
+  nic nepřetéká.
 
-A ještě zvlášť:
-- migrace projde i na databázi, které chybí views_log, notifications
-  nebo posts
-- projde i na úplně holé tabulce profiles (jen id a username)
-- dá se pustit opakovaně, třikrát po sobě, se stejným výsledkem
-- politiku, kterou nezná, nechá být a moderování přes ni dál funguje
+Co ověřeno není: jak to vypadá s opravdovým Interem. Tady v prostředí
+ho nemám čím stáhnout, takže na obrázcích je náhradní písmo. U tebe
+bude výsledek o kus lepší, ne horší.
+
+
+CO BYCH DĚLAL DÁL
+-----------------
+Tohle je základ - písmo, stupnice, hierarchie. Na něm se teď dá stavět
+dál: stránka videa, přehrávač, kanál, hudba. A pak mobil pořádně, ne
+jen "nerozsype se".
