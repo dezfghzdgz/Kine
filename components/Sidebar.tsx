@@ -203,7 +203,7 @@ export default function Sidebar() {
           </Link>
         )}
         {isModerator && (
-          <Link href="/reports" className={`sidebar-link ${pathname === '/reports' ? 'active' : ''}`}>
+          <Link href="/moderation/reports" className={`sidebar-link ${pathname === '/moderation/reports' ? 'active' : ''}`}>
             🚩 {t('reportsPageTitle')}
           </Link>
         )}
@@ -354,7 +354,7 @@ export default function Sidebar() {
             </Link>
           )}
           {isModerator && (
-            <Link href="/reports" className="sidebar-link" onClick={closeMobileNav}>
+            <Link href="/moderation/reports" className="sidebar-link" onClick={closeMobileNav}>
               🚩 {t('reportsPageTitle')}
             </Link>
           )}

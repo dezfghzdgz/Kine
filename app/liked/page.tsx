@@ -7,6 +7,7 @@ import { fetchAllRows, fetchByIds } from '@/lib/loadAll';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useLanguage } from '@/lib/i18n';
+import LoadFailed from '@/components/LoadFailed';
 
 function LikedPageInner() {
   const { t } = useLanguage();
@@ -14,11 +15,33 @@ function LikedPageInner() {
   const query = searchParams.get('q')?.toLowerCase() ?? '';
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  // Dotaz může spadnout (vypadlá síť, propadlé přihlášení). Bez tohohle
+  // stránka tvrdila, že seznam je prázdný.
+  const [loadFailed, setLoadFailed] = useState(false);
   const [ratingMode, setRatingMode] = useState<'stars' | 'like_dislike'>('like_dislike');
 
   useEffect(() => {
-    load();
+    startLoad();
   }, []);
+
+  /**
+   * Načtení seznamu tak, aby se dalo poznat, že se nepovedlo.
+   *
+   * fetchAllRows/fetchByIds odteď chybu vyhodí místo toho, aby vrátily
+   * prázdno - jinak se výpadek sítě tvářil úplně stejně jako prázdný
+   * seznam a stránka napsala "zatím tu nic není" i tomu, kdo tu má sto
+   * položek.
+   */
+  async function startLoad() {
+    setLoading(true);
+    setLoadFailed(false);
+    try {
+      await load();
+    } catch {
+      setLoadFailed(true);
+      setLoading(false);
+    }
+  }
 
   async function load() {
     const { data: authData } = await supabase.auth.getUser();
@@ -71,6 +94,7 @@ function LikedPageInner() {
     setLoading(false);
   }
 
+  if (loadFailed) return <LoadFailed onRetry={startLoad} />;
   if (loading) return <p style={{ color: 'var(--text-faint)' }}>{t('loading')}</p>;
 
   const filtered = query ? videos.filter((v) => v.title.toLowerCase().includes(query)) : videos;

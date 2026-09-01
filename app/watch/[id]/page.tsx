@@ -31,6 +31,7 @@ import { playbackMode } from '@/lib/playbackMode';
 import { buildMusicQueue, trackFromVideo } from '@/lib/musicQueue';
 import { useMusicCommands } from '@/lib/musicPlayer';
 import MusicStage from '@/components/MusicStage';
+import { startPlayback as beginPlayback } from '@/lib/playerStart';
 
 const MUSIC_VIEW_KEY = 'kine-music-view';
 
@@ -59,6 +60,9 @@ function WatchPageInner() {
   const [inWatchLater, setInWatchLater] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
+  // Přehrávač se nerozjel a je potřeba do něj kliknout. Bez tohohle
+  // zůstal černý obdélník bez ovládání a nedalo se s ním nic dělat.
+  const [needsPlayTap, setNeedsPlayTap] = useState(false);
   const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const [showAiBadge, setShowAiBadge] = useState(true);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -99,6 +103,9 @@ function WatchPageInner() {
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<any>(null);
+  // Úklid rozjížděcí smyčky. Kdyby zůstala běžet po výměně přehrávače,
+  // posílala by povely do něčeho, co už na obrazovce není.
+  const playbackCleanupRef = useRef<(() => void) | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -438,35 +445,21 @@ function WatchPageInner() {
   }, []);
 
   /**
-   * Spustí přehrávání a nevzdá to po prvním pokusu.
+   * Spustí přehrávání a nevzdá to.
    *
-   * Přehrávač je cizí iframe a povel se do něj posílá zprávou. Když ještě
-   * nestihl načíst svůj obsah, zpráva nemá kam dojít a tiše se ztratí -
-   * přehrávač pak zůstane stát a nic se neděje. Při běžném otevření stránky
-   * to nevadí, protože se mezitím stahuje skript Cloudflare a iframe má čas.
-   * Při přepnutí z obalu na video je ale skript dávno načtený, appka se
-   * napojí skoro okamžitě a povel se ztratí skoro vždycky.
-   *
-   * Proto se to zkouší dokola, dokud video opravdu nejede.
+   * Vlastní postup je v lib/playerStart.ts - je to tam schválně zvlášť,
+   * aby se dal otestovat bez prohlížeče (tests/playerStart.test.mjs).
+   * Tady zůstává jen napojení na stránku.
    */
   function startPlayback(player: any, seekTo?: number | null) {
-    let attempts = 0;
-
-    function attempt() {
-      // Mezitím se mohl přehrávač vyměnit (jiné video, přepnutí na obal).
-      if (playerRef.current !== player) return;
-
-      if (typeof seekTo === 'number' && seekTo > 0 && (player.currentTime ?? 0) < seekTo - 1) {
-        player.currentTime = seekTo;
-      }
-      player.play?.();
-
-      attempts++;
-      if (player.paused === false || attempts > 20) return;
-      setTimeout(attempt, 150);
-    }
-
-    attempt();
+    playbackCleanupRef.current?.();
+    playbackCleanupRef.current = beginPlayback({
+      player,
+      seekTo,
+      isCurrent: () => playerRef.current === player,
+      onStarted: () => setNeedsPlayTap(false),
+      onNeedsTap: () => setNeedsPlayTap(true),
+    });
   }
 
   function handlePlayerSdkReady() {
@@ -581,8 +574,11 @@ function WatchPageInner() {
    * druhém přepnutí by už nebylo co napojit a přehrávač by zůstal mrtvý.
    */
   useEffect(() => {
+    playbackCleanupRef.current?.();
+    playbackCleanupRef.current = null;
     playerRef.current = null;
     setPlayerReady(false);
+    setNeedsPlayTap(false);
     setShowUpNext(false);
     musicCommands.registerPageVideo(null);
 
@@ -597,6 +593,8 @@ function WatchPageInner() {
 
     return () => {
       clearInterval(interval);
+      playbackCleanupRef.current?.();
+      playbackCleanupRef.current = null;
       // Přehrávač stránky za chvíli zmizí - lišta na něj nesmí zůstat
       // napojená, jinak by ovládala něco, co už neexistuje.
       musicCommands.registerPageVideo(null);
@@ -817,20 +815,55 @@ function WatchPageInner() {
       return;
     }
 
-    const { data: systemPlaylist } = await supabase
+    let { data: systemPlaylist } = await supabase
       .from('playlists')
       .select('id')
       .eq('owner_id', userId)
       .eq('is_system', true)
       .maybeSingle();
 
-    if (!systemPlaylist) return;
+    // Systémový playlist "Sledovat později" zakládá registrace - a to bez
+    // kontroly, jestli se to povedlo. Komu tehdy zápis selhal, ten ho nemá
+    // vůbec, a tlačítko tady se dosud jen tiše vrátilo: kliknutí, nic se
+    // nestalo, žádná hláška. Chybějící playlist se proto založí teď.
+    if (!systemPlaylist) {
+      const { data: created, error: createError } = await supabase
+        .from('playlists')
+        .insert({ owner_id: userId, title: t('watchLater'), color: '#3a5a8a', is_system: true })
+        .select('id')
+        .single();
+
+      if (createError || !created) {
+        setToast({ message: t('menuActionFailed'), type: 'error' });
+        return;
+      }
+      systemPlaylist = created;
+    }
 
     if (inWatchLater) {
-      await supabase.from('playlist_videos').delete().eq('playlist_id', systemPlaylist.id).eq('video_id', videoId);
+      const { error } = await supabase
+        .from('playlist_videos')
+        .delete()
+        .eq('playlist_id', systemPlaylist.id)
+        .eq('video_id', videoId);
+
+      if (error) {
+        setToast({ message: t('menuActionFailed'), type: 'error' });
+        return;
+      }
       setInWatchLater(false);
     } else {
-      await supabase.from('playlist_videos').upsert({ playlist_id: systemPlaylist.id, video_id: videoId });
+      // Chyba se tu dřív nečetla, takže se tlačítko přeplo na "✓" i když
+      // se nic neuložilo. Po obnovení stránky bylo video pryč a vypadalo
+      // to, že appka maže seznamy.
+      const { error } = await supabase
+        .from('playlist_videos')
+        .upsert({ playlist_id: systemPlaylist.id, video_id: videoId });
+
+      if (error) {
+        setToast({ message: t('menuActionFailed'), type: 'error' });
+        return;
+      }
       setInWatchLater(true);
     }
   }
@@ -899,6 +932,22 @@ function WatchPageInner() {
                           backgroundSize: 'cover', backgroundPosition: 'center',
                         }}
                       />
+                    )}
+                    {/* Záchranná brzda. Přehrávač jede bez vlastního
+                        ovládání, takže když se sám nerozjede, nedalo se
+                        s ním do teď udělat vůbec nic. */}
+                    {needsPlayTap && (
+                      <button
+                        type="button"
+                        className="player-tap-to-play"
+                        onClick={() => {
+                          setNeedsPlayTap(false);
+                          playerRef.current?.play?.();
+                        }}
+                      >
+                        <span className="player-tap-to-play-icon" aria-hidden="true" />
+                        {t('tapToPlay')}
+                      </button>
                     )}
                     {video.is_ai_generated && showAiBadge && (
                       <div

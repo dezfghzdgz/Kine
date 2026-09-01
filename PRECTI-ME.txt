@@ -1,118 +1,124 @@
-KINE - vzhled, první kolo
-=========================
+KINE - přepnutí na video, stahování a další chyby
+=================================================
 
-7 souborů, z toho jeden nový (components/LoadFailed.tsx).
-Rozbal do kořene repa (tam, kde je package.json) a přepiš.
+15 souborů. Rozbal do kořene repa a přepiš.
 
-Tohle nemá nic společného s migrací - ta jede zvlášť a nezávisle.
-
-
-PROČ TO VYPADALO LEVNĚ (a co s tím)
-------------------------------------
-Nešlo o jednu velkou věc, ale o spoustu malých, které se sčítají.
-Změřil jsem to, ne odhadl:
-
-1) INTER SE NIKDY NENAČÍTALO
-   V CSS bylo od začátku napsané font-family: 'Inter', ale písmo se
-   nikde nestahovalo. Appka tedy celou dobu jela systémovým písmem -
-   na Windows Segoe UI, na Androidu Roboto, na Macu San Francisco.
-   Vypadala proto na každém počítači jinak a nikde jako vlastní věc.
-   Tohle je podle mě půlka toho pocitu.
-
-   Teď ho načítá next/font. Stáhne se při sestavení a servíruje se
-   z tvojí domény, takže prohlížeč nikam nechodí a text při načtení
-   nepodskočí. Je tam i latin-ext (ě, ř, ů, ł) a cyrilice kvůli
-   ukrajinštině - bez nich by se háčky braly z náhradního písma a
-   v jednom slově by se míchala dvě.
-
-2) DVACET RŮZNÝCH VELIKOSTÍ PÍSMA
-   Mezi nimi 9,5 / 10,5 / 11,5 / 12,5 / 13,5 / 14,5 px. Půlpixel se
-   nemá kam vykreslit, takže se text rozmaže - je to jeden z těch
-   rozdílů, které člověk nepojmenuje, ale vidí. Teď je z toho osm
-   kroků, samá celá čísla.
-
-3) STRÁNKA NEMĚLA HIERARCHII
-   Nadpis sekce byl 15px/600, název videa 13,5px/500. Rozdíl skoro
-   žádný, takže hlavní stránka vypadala jako výpis z databáze. Nadpis
-   je teď o dvě velikosti výš a stažený k sobě.
-
-4) POPISKY BYLY SKORO NEČITELNÉ
-   Jméno kanálu a počet zhlédnutí měly proti pozadí kontrast 3,4:1.
-   Norma pro čitelnost chce 4,5:1. Vypadalo to vybledle. Zesvětleno.
-
-5) VRŠEK KAŽDÉ STRÁNKY ZABÍRALY DVĚ PRÁZDNÉ PLOCHY
-   Lišta měla 72 px na výšku, byla v ní ikona lupy a vedle ní rámeček
-   čárkovanou čarou s nápisem "Ad space". Anglicky, na každé stránce.
-   Zůstalo jedno vyhledávací pole, které vypadá jako vyhledávací pole.
-
-6) TLAČÍTKO PŘEHRÁT BYL ZNAK Z PÍSMA
-   ▶ si každý systém kreslí po svém, Windows často jako barevné emoji,
-   a nedá se to sjednotit. Kolečko i trojúhelník teď kreslí CSS.
-
-7) DEVĚT RŮZNÝCH ROHŮ, PATNÁCT RŮZNÝCH PŘECHODŮ
-   3, 4, 5, 6, 7, 8, 10, 12 a 999 px. Přechody 0,12 až 0,3 s, všechny
-   s výchozí křivkou "ease", která působí gumově. Teď jsou čtyři rohy
-   a jedna křivka - rychle se rozjede, pomalu dojede, jako věci, které
-   mají hmotnost.
-
-8) KLÁVESNICE NEBYLA VIDĚT
-   V celém souboru bylo sedm pravidel pro focus a jedno z nich ho
-   rovnou vypínalo. Kdo appku ovládá klávesnicí (nebo si jen vyjede
-   tabulátorem), nevěděl, kde je. Přibyl i ohled na vypnuté animace
-   v systému - lidem s poruchou rovnováhy z pohyblivého rozhraní bývá
-   fyzicky špatně.
-
-Všechno je to psané jako proměnné na začátku globals.css. Když budeš
-přidávat nové věci, ber čísla odtamtud, ne z hlavy - jinak se to za pár
-měsíců zase rozejde.
+POZOR: app/globals.css je tu i z minulého kola (vzhled). Když jsi ten
+minulý balíček ještě nerozbalil, rozbal nejdřív jeho - tenhle na něm
+staví.
 
 
-TŘI VĚCI, KTERÉ APPKA NEUMĚLA
------------------------------
-ODHLÁSIT SE
-  V nabídce profilu nebylo. Potvrzovací okno i obsluha byly napsané celou
-  dobu, jen na ně nikde nevedlo tlačítko - přihlášený člověk se z appky
-  neměl jak odhlásit. Doplněno.
+1) PŘEPNU Z HUDBY NA VIDEO A VIDEO SE NENAČTE
+---------------------------------------------
+Našel jsem to. Rozjezd přehrávače to zkoušel dvacetkrát po 150 ms, tedy
+tři vteřiny, a pak to vzdal.
 
-HORNÍ LIŠTA BYLA CELÁ ANGLICKY
-  Jako jediná komponenta v appce. Přeloženo do všech osmi jazyků.
-  Zároveň se teď mění atribut lang na stránce - dřív tam natvrdo stálo
-  "en", takže prohlížeč nabízel překlad české stránky do češtiny a
-  čtečky obrazovky ji četly anglickou výslovností.
+Tři vteřiny na rozjezd cizího iframu nestačí. Přehrávač od Cloudflare si
+po vložení do stránky musí stáhnout vlastní skript, pak manifest a pak
+první kus videa. Když se do těch tří vteřin nevešel - a na pomalejším
+připojení se nevejde skoro nikdy - povel "hraj" se ztratil a už ho
+nikdo nezopakoval. Přehrávač zůstal stát navždy.
 
-DOMOVSKÁ STRÁNKA PŘI VÝPADKU SÍTĚ LHALA
-  Tohle je z toho nejhorší a našel jsem to až při procházení kódu.
-  Chyba dotazu se zahazovala (Supabase u spadlého spojení nevyhodí
-  výjimku, jen vrátí prázdno), z prázdné odpovědi appce vyšlo "kratší
-  dávka = konec seznamu" a divákovi ukázala:
+A protože jede schválně bez vlastního ovládání (?controls=false), nešel
+spustit ani ručně. Zbyl černý obdélník, se kterým se nedalo nic dělat.
+Přesně to, co popisuješ.
 
-      "Zatím tu nejsou žádná videa. Nahraj první."
+Co je jinak:
+- Řídí se to událostmi přehrávače. Ten sám řekne "jsem připravený" a
+  teprve tehdy se pouští - není to hádání.
+- Pokusy zůstaly jako záloha, ale řídnou a trvají až do 13. vteřiny.
+- Když se to ani tak nerozjede, objeví se po čtyřech vteřinách tlačítko
+  Přehrát. Pokusy na pozadí běží dál, takže když se to mezitím rozjede
+  samo, tlačítko zmizí.
+- Převíjení (předání času z obalu na video) má nově toleranci. Dřív se
+  převíjelo při každém pokusu dokola, což pokaždé zahodilo, co se stihlo
+  načíst - přehrávač se tím sám držel na místě.
 
-  Při vypadlé wifi tedy appka tvrdila, že je celá platforma prázdná.
-  Teď se výpadek pozná od skutečně prázdné platformy a nabídne se další
-  pokus, aniž by se ztratilo, co už je načtené.
+Postup je vytažený do lib/playerStart.ts, aby se dal otestovat bez
+prohlížeče. tests/playerStart.test.mjs má 14 kontrol, spustíš je:
+
+    node tests/playerStart.test.mjs
+
+Je mezi nimi i přesně tenhle případ: "iframe se rozjede až po 7
+vteřinách - stará verze to vzdala po 3, tahle ne".
+
+Čím si nejsem jistý: Cloudflare se z mého prostředí nedá zavolat, takže
+jsem to nemohl přehrát naživo. Testuju napodobeninu přehrávače, ne
+skutečný. Jestli to po nasazení nepůjde pořád, napiš mi - a jestli se
+objeví to tlačítko Přehrát, je to důležitá informace: znamená to, že
+appka povely posílá a nedojdou.
+
+
+2) STAHOVÁNÍ
+------------
+Dvě věci, obě nepříjemné.
+
+Tlačítko Stáhnout (pod videem): novou kartu prohlížeč pustí jen chvíli
+po kliknutí. Tohle tlačítko ale čekalo, až Cloudflare soubor připraví -
+klidně minutu - a teprve pak volalo window.open. Prohlížeč kartu tiše
+zablokoval. Nestáhlo se nic, žádná chyba se neukázala, tlačítko se
+vrátilo do normálu. Ale do historie stažení se to zapsalo jako stažené.
+
+Nabídka pod třemi tečkami: tuhle past měla ošetřenou správně, zato do
+historie nezapisovala vůbec. Kdo stahoval odtamtud, měl stránku
+"Stažené" trvale prázdnou, ať stáhl kolik chtěl.
+
+Obojí je teď na jednom místě (lib/download.ts) a chová se stejně: když
+se karta otevřít nedá, nabídne se odkaz, na který klikneš sám. Do
+historie se zapisuje až ve chvíli, kdy se soubor opravdu otevřel.
+
+
+3) PĚT MÍST, KDE APPKA TVRDILA NEPRAVDU
+---------------------------------------
+Tohle je ta samá třída chyb jako ta domovská stránka minule. Nechal
+jsem to projít celý kód:
+
+- HISTORIE, STAŽENÉ, LÍBÍ SE MI, SLEDOVAT POZDĚJI
+  Načítání dlouhých seznamů při chybě vracelo prázdno. Při výpadku sítě
+  nebo propadlém přihlášení tedy stránka napsala "zatím tu nic není"
+  člověku, který tam má sto položek. Horší varianta: když spadl jen
+  jeden dotaz ze sta, tiše zmizela stovka videí ze seznamu - stránka
+  vypadala v pořádku, jen v ní kus chyběl.
+
+- KOMENTÁŘE
+  Chyba dotazu se nečetla vůbec. Pod videem se objevilo "Zatím žádné
+  komentáře" i u videa, které jich má padesát. Tvůrce si mohl myslet,
+  že mu je někdo smazal.
+
+- SPARKS
+  Totéž: "Zatím tu nejsou žádné Sparks."
+
+- ZHLÉDNOUT POZDĚJI (na stránce videa)
+  Kdo nemá systémový playlist (zakládá ho registrace, taky bez kontroly,
+  jestli se to povedlo), tomu tlačítko nedělalo vůbec nic. Klik a ticho.
+  Chybějící playlist se teď založí. A když zápis selže, tlačítko se už
+  nepřepne na "✓" - dřív se přepnulo vždycky, takže po obnovení stránky
+  bylo video pryč a vypadalo to, že appka maže seznamy.
+
+- OBRÁZEK U KOMENTÁŘE
+  Když se nepovedl upload, komentář odešel bez obrázku a mlčky. Navíc
+  červená hláška o neúspěchu zůstávala viset i po úspěšném odeslání.
 
 
 CO JSEM OVĚŘIL
 --------------
 - Typová kontrola celého projektu prošla.
-- Všech sedm souborů se přeloží.
-- Vzhled jsem si vykreslil v prohlížeči (Chromium) na skutečné stránce
-  s tímhle CSS, před i po, a prošel očima. Obrázek posílám zvlášť.
-- Při tom se ukázala moje vlastní chyba: napsal jsem font-family:
-  var(--font-inter), ... a když ta proměnná chybí, je celý řádek
-  neplatný a prohlížeč spadne na patkové písmo - appka by se vykreslila
-  jako dokument ve Wordu. Opraveno náhradou uvnitř var().
-- Mobil (500 px): postranní panel se schová, mřížka je jednosloupcová,
-  nic nepřetéká.
-
-Co ověřeno není: jak to vypadá s opravdovým Interem. Tady v prostředí
-ho nemám čím stáhnout, takže na obrázcích je náhradní písmo. U tebe
-bude výsledek o kus lepší, ne horší.
+- Všech 15 souborů se přeloží.
+- 14 kontrol rozjezdu přehrávače prošlo (dvě z nich jsem si nejdřív
+  napsal špatně - kód byl v právu, ne můj test).
 
 
-CO BYCH DĚLAL DÁL
------------------
-Tohle je základ - písmo, stupnice, hierarchie. Na něm se teď dá stavět
-dál: stránka videa, přehrávač, kanál, hudba. A pak mobil pořádně, ne
-jen "nerozsype se".
+CO ZŮSTÁVÁ NA PŘÍŠTĚ
+--------------------
+Při procházení vypadly ještě tyhle, na které jsem už nesáhl:
+
+- NAHRÁVÁNÍ: když se video úspěšně nahraje a chyba přijde až potom
+  (třeba při čekání na zpracování), tlačítko "Nahrát" zase ožije a
+  dalším kliknutím se nahraje celé znovu jako nový záznam. Počítá se
+  přitom do denního limitu 5 videí. Tohle bych řešil hned příště.
+- POČET ODBĚRATELŮ: počítá se z neomezeného dotazu, takže větší kanál
+  bude navždy ukazovat 1000.
+- PLAYLIST NA STRÁNCE VIDEA: u playlistu s ~200 položkami spadne dotaz
+  celý a panel zůstane prázdný, včetně automatického přehrávání dál.
+- ZAPOČÍTÁVÁNÍ ZHLÉDNUTÍ: časovač se nezruší při odchodu, takže se
+  zhlédnutí započítá i tomu, kdo video zavřel po vteřině.

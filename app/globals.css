@@ -3547,3 +3547,39 @@ body.has-music-bar .content-area-fullbleed {
   padding: 9px var(--sp-4);
   font-size: var(--fs-sm);
 }
+
+/* Tlačítko, které se objeví, když se přehrávač sám nerozjede.
+   Iframe od Cloudflare jede bez vlastního ovládání, takže bez tohohle
+   zůstal černý obdélník, se kterým nešlo hnout. */
+.player-tap-to-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
+  border-radius: var(--radius-pill);
+  background: rgba(12, 12, 15, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), var(--shadow-md);
+  color: #fff;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  animation: content-fade-in var(--dur-3) var(--ease) both;
+}
+
+.player-tap-to-play:hover:not(:disabled) {
+  background: rgba(20, 20, 24, 0.82);
+}
+
+.player-tap-to-play-icon {
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 7px 0 7px 12px;
+  border-color: transparent transparent transparent #fff;
+}

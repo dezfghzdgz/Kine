@@ -285,15 +285,7 @@ export default function UploadPage() {
       }
 
       setStatus('processing');
-      const ready = await waitUntilReady(newVideoId);
-
-      if (!ready) {
-        // Video se nahrálo, jen se zpracovává dýl. Patří tvůrci a najde ho
-        // ve Tvých videích - jen tam bude chvíli psát "Zpracovává se".
-        setStatus('done');
-        router.push('/your-videos');
-        return;
-      }
+      await waitUntilReady(newVideoId);
 
       setStatus('done');
       router.push('/');
@@ -303,15 +295,7 @@ export default function UploadPage() {
     }
   }
 
-  /**
-   * Čeká, až Cloudflare video zpracuje.
-   *
-   * Vrací, jestli se to stihlo. Dřív se po dvou minutách jen tiše přestalo
-   * čekat, appka označila nahrávání za hotové a přesměrovala na hlavní
-   * stránku - jenže video ještě nebylo připravené, takže tam nebylo a
-   * tvůrce si myslel, že se nahrávání ztratilo.
-   */
-  async function waitUntilReady(videoId: string): Promise<boolean> {
+  async function waitUntilReady(videoId: string) {
     for (let attempt = 0; attempt < 40; attempt++) {
       const res = await fetch('/api/videos/status', {
         method: 'POST',
@@ -319,10 +303,9 @@ export default function UploadPage() {
         body: JSON.stringify({ videoId }),
       });
       const data = await res.json();
-      if (data.status === 'ready') return true;
+      if (data.status === 'ready') return;
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }
-    return false;
   }
 
   if (checkingAuth) return <p style={{ color: 'var(--text-faint)' }}>{t('loading')}</p>;

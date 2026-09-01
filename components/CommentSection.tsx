@@ -13,6 +13,7 @@ import SupporterBadge from './SupporterBadge';
 import ReportModal from './ReportModal';
 import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { categoryLabel } from '@/lib/categories';
+import LoadFailed from './LoadFailed';
 
 type Comment = {
   id: string;
@@ -111,6 +112,9 @@ export default function CommentSection({
   // Proč se komentář neodeslal. Dřív se chyba nikam nepsala a komentář
   // prostě zmizel i s textem, který do něj člověk napsal.
   const [postError, setPostError] = useState<string | null>(null);
+  // Komentáře se nepodařilo načíst. Bez tohohle se pod videem vykreslilo
+  // "Zatím žádné komentáře" - i u videa, které jich má padesát.
+  const [commentsFailed, setCommentsFailed] = useState(false);
 
   useEffect(() => {
     loadComments();
@@ -118,11 +122,22 @@ export default function CommentSection({
   }, [videoId]);
 
   async function loadComments() {
-    const { data: rawComments } = await supabase
+    setCommentsFailed(false);
+
+    const { data: rawComments, error } = await supabase
       .from('comments')
       .select('id, content, created_at, parent_id, timestamp_seconds, user_id, pinned, image_url, profiles!comments_user_id_fkey(username, is_supporter)')
       .eq('video_id', videoId)
       .order('created_at', { ascending: false });
+
+    // Chyba se tu dřív nečetla vůbec. Při spadlém dotazu vyšlo z databáze
+    // null, komentáře se přepsaly na prázdný seznam a pod videem se
+    // objevilo "Zatím žádné komentáře" - tvůrce tak u svého videa viděl
+    // nulu, i když jich tam byly desítky.
+    if (error) {
+      setCommentsFailed(true);
+      return;
+    }
 
     if (!rawComments) {
       setComments([]);
@@ -174,10 +189,18 @@ export default function CommentSection({
       const ext = imageFile.name.split('.').pop();
       const path = `${authData.user.id}/${Date.now()}.${ext}`;
       const { error: uploadError } = await supabase.storage.from('comment-images').upload(path, imageFile);
-      if (!uploadError) {
-        const { data } = supabase.storage.from('comment-images').getPublicUrl(path);
-        imageUrl = data.publicUrl;
+
+      // Neúspěšný upload se dřív jen přeskočil: komentář odešel bez
+      // obrázku, pole se vyprázdnila a nikdo se nedozvěděl, že se obrázek
+      // ztratil. Radši komentář neodešleme, ať se dá zkusit znovu.
+      if (uploadError) {
+        setPosting(false);
+        setPostError(t('commentImageFailed'));
+        return;
       }
+
+      const { data } = supabase.storage.from('comment-images').getPublicUrl(path);
+      imageUrl = data.publicUrl;
     }
 
     const { error: commentError } = await supabase.from('comments').insert({
@@ -195,6 +218,10 @@ export default function CommentSection({
       setPostError(t('commentFailed'));
       return;
     }
+
+    // Povedlo se. Bez tohohle zůstala pod formulářem viset červená hláška
+    // z předchozího neúspěšného pokusu, i když komentář mezitím prošel.
+    setPostError(null);
 
     if (parentId) {
       const parentComment = comments.find((c) => c.id === parentId);
@@ -429,8 +456,12 @@ export default function CommentSection({
             </div>
           ))}
 
-          {flowComments.length === 0 && (
-            <p style={{ color: 'var(--text-faint)', fontSize: 13 }}>{t('noCommentsYet')}</p>
+          {commentsFailed ? (
+            <LoadFailed onRetry={loadComments} />
+          ) : (
+            flowComments.length === 0 && (
+              <p style={{ color: 'var(--text-faint)', fontSize: 13 }}>{t('noCommentsYet')}</p>
+            )
           )}
         </>
       )}

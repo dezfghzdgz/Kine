@@ -14,6 +14,7 @@ import type { MusicTrack } from '@/lib/musicPlayer';
 import { trackFromVideo } from '@/lib/musicQueue';
 import { PlayIcon } from '@/components/MusicIcons';
 import DownloadButton from '@/components/DownloadButton';
+import LoadFailed from '@/components/LoadFailed';
 
 type Filter = 'all' | 'music' | 'video';
 
@@ -23,13 +24,35 @@ function DownloadedPageInner() {
   const query = searchParams.get('q')?.toLowerCase() ?? '';
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  // Dotaz může spadnout (vypadlá síť, propadlé přihlášení). Bez tohohle
+  // stránka tvrdila, že seznam je prázdný.
+  const [loadFailed, setLoadFailed] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
   const musicCommands = useMusicCommands();
 
   useEffect(() => {
-    load();
+    startLoad();
   }, []);
+
+  /**
+   * Načtení seznamu tak, aby se dalo poznat, že se nepovedlo.
+   *
+   * fetchAllRows/fetchByIds odteď chybu vyhodí místo toho, aby vrátily
+   * prázdno - jinak se výpadek sítě tvářil úplně stejně jako prázdný
+   * seznam a stránka napsala "zatím tu nic není" i tomu, kdo tu má sto
+   * položek.
+   */
+  async function startLoad() {
+    setLoading(true);
+    setLoadFailed(false);
+    try {
+      await load();
+    } catch {
+      setLoadFailed(true);
+      setLoading(false);
+    }
+  }
 
   async function load() {
     const { data: authData } = await supabase.auth.getUser();
@@ -88,6 +111,7 @@ function DownloadedPageInner() {
     musicCommands.openTrack(tracks[0], tracks);
   }
 
+  if (loadFailed) return <LoadFailed onRetry={startLoad} />;
   if (loading) return <p style={{ color: 'var(--text-faint)' }}>{t('loading')}</p>;
 
   if (!userId) {

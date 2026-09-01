@@ -32,7 +32,13 @@ export async function fetchAllRows<T = any>(
 
   for (let from = 0; from < maxRows; from += PAGE) {
     const { data, error } = await build(from, from + PAGE - 1);
-    if (error) break;
+
+    // Chyba se dřív jen "breakla" ven a vrátil se prázdný seznam. Volající
+    // to nijak nerozeznal od skutečně prázdného výsledku, takže při výpadku
+    // sítě nebo propadlém přihlášení stránka klidně napsala "Zatím sis nic
+    // nestáhl" člověku, který má ve stažených čtyřicet videí. Odteď se
+    // chyba vyhodí a stránka si s ní musí poradit.
+    if (error) throw error;
 
     const batch = data ?? [];
     all.push(...batch);
@@ -61,7 +67,12 @@ export async function fetchByIds<T extends { id: string }>(
   for (let i = 0; i < ids.length; i += ID_CHUNK) {
     const chunk = ids.slice(i, i + ID_CHUNK);
     const { data, error } = await supabase.from(table).select(columns).in('id', chunk);
-    if (error) continue;
+
+    // Stejný důvod jako výš, jen zákeřnější: "continue" tiše vyhodilo
+    // celou stovku videí ze seznamu. Stránka se vykreslila, vypadala
+    // v pořádku a jen v ní chyběl kus obsahu - to se nedá poznat.
+    if (error) throw error;
+
     for (const row of (data ?? []) as unknown as T[]) found.set(row.id, row);
   }
 
