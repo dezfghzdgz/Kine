@@ -108,6 +108,9 @@ export default function CommentSection({
   const [userId, setUserId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [lastPostedAt, setLastPostedAt] = useState(0);
+  // Proč se komentář neodeslal. Dřív se chyba nikam nepsala a komentář
+  // prostě zmizel i s textem, který do něj člověk napsal.
+  const [postError, setPostError] = useState<string | null>(null);
 
   useEffect(() => {
     loadComments();
@@ -152,7 +155,7 @@ export default function CommentSection({
     if (content.length > 2000) return;
 
     if (Date.now() - lastPostedAt < 3000) {
-      alert('Moc rychle za sebou - počkej pár vteřin a zkus to znovu.');
+      setPostError(t('commentTooFast'));
       return;
     }
 
@@ -177,13 +180,21 @@ export default function CommentSection({
       }
     }
 
-    await supabase.from('comments').insert({
+    const { error: commentError } = await supabase.from('comments').insert({
       video_id: videoId,
       user_id: authData.user.id,
       content: content.trim(),
       parent_id: parentId,
       image_url: imageUrl,
     });
+
+    // Když se komentář neuložil, pole se nesmí vyprázdnit - jinak zmizí
+    // i to, co člověk napsal, a on si myslí, že se komentář ztratil.
+    if (commentError) {
+      setPosting(false);
+      setPostError(t('commentFailed'));
+      return;
+    }
 
     if (parentId) {
       const parentComment = comments.find((c) => c.id === parentId);
@@ -325,6 +336,7 @@ export default function CommentSection({
               </p>
             )}
             <button type="submit" disabled={posting} style={{ alignSelf: 'flex-start' }}>{t('postComment')}</button>
+            {postError && <p className="error-text" style={{ fontSize: 12.5 }}>{postError}</p>}
           </form>
           )}
 
@@ -411,6 +423,7 @@ export default function CommentSection({
                   />
                   <EmojiPicker onSelect={(emoji) => setReplyText((v) => v + emoji)} />
                   <button type="submit" disabled={posting}>{t('postComment')}</button>
+                  {postError && <p className="error-text" style={{ fontSize: 12.5 }}>{postError}</p>}
                 </form>
               )}
             </div>

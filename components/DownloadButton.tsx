@@ -3,8 +3,19 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { DownloadIcon } from './ReactionIcons';
+import { useLanguage } from '@/lib/i18n';
 
-export default function DownloadButton({ videoId, cloudflareVideoId }: { videoId: string; cloudflareVideoId: string }) {
+export default function DownloadButton({
+  videoId,
+  cloudflareVideoId,
+  label,
+}: {
+  videoId: string;
+  cloudflareVideoId: string;
+  /** Jiný text tlačítka. V historii stažení je to "Stáhnout znovu". */
+  label?: string;
+}) {
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,7 +78,7 @@ export default function DownloadButton({ videoId, cloudflareVideoId }: { videoId
   return (
     <div>
       <button className="reaction-btn" onClick={handleDownload} disabled={loading} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {loading ? 'Připravuji…' : <><DownloadIcon size={16} /> Stáhnout</>}
+        {loading ? t('downloadPreparing') : <><DownloadIcon size={16} /> {label ?? t('downloadButton')}</>}
       </button>
       {error && <p className="error-text" style={{ marginTop: 4 }}>{error}</p>}
     </div>

@@ -5,6 +5,7 @@ import { useLanguage } from '@/lib/i18n';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
+import { fetchAllRows, fetchByIds } from '@/lib/loadAll';
 import VideoCard from '@/components/VideoCard';
 import { formatDuration } from '@/lib/homeRecommendation';
 import { isMusicVideo } from '@/lib/playbackMode';
@@ -12,6 +13,7 @@ import { useMusicCommands } from '@/lib/musicPlayer';
 import type { MusicTrack } from '@/lib/musicPlayer';
 import { trackFromVideo } from '@/lib/musicQueue';
 import { PlayIcon } from '@/components/MusicIcons';
+import DownloadButton from '@/components/DownloadButton';
 
 type Filter = 'all' | 'music' | 'video';
 
@@ -37,27 +39,27 @@ function DownloadedPageInner() {
     }
     setUserId(authData.user.id);
 
-    const { data: downloads } = await supabase
-      .from('downloads')
-      .select('video_id, downloaded_at')
-      .eq('user_id', authData.user.id)
-      .order('downloaded_at', { ascending: false });
+    const downloads = await fetchAllRows((from, to) =>
+      supabase
+        .from('downloads')
+        .select('video_id, downloaded_at')
+        .eq('user_id', authData.user!.id)
+        .order('downloaded_at', { ascending: false })
+        .range(from, to)
+    );
 
-    const videoIds = (downloads ?? []).map((d) => d.video_id);
+    const videoIds = downloads.map((d: any) => d.video_id);
 
     if (videoIds.length > 0) {
       // Kategorie a rozměry jsou tu kvůli tomu, aby appka poznala hudbu od
       // videa. cloudflare_video_id kvůli přehrávání a náhledu při najetí -
       // bez něj karta obojí tiše vynechá.
-      const { data: videoData } = await supabase
-        .from('videos')
-        .select(
-          'id, title, thumbnail_url, views, duration_seconds, width, height, category, cloudflare_video_id, owner_id, profiles!videos_owner_id_fkey(id, username)'
-        )
-        .in('id', videoIds);
-
-      const ordered = videoIds.map((id) => videoData?.find((v) => v.id === id)).filter(Boolean);
-      setVideos(ordered as any[]);
+      const ordered = await fetchByIds<any>(
+        'videos',
+        'id, title, thumbnail_url, views, duration_seconds, width, height, category, cloudflare_video_id, owner_id, profiles!videos_owner_id_fkey(id, username)',
+        videoIds
+      );
+      setVideos(ordered);
     }
 
     setLoading(false);
@@ -115,6 +117,10 @@ function DownloadedPageInner() {
   return (
     <div>
       <p className="section-title">{t('downloadedTitle')}</p>
+      {/* Stránka neschovává soubory, jen si pamatuje, co sis stáhl. Dokud
+          to tu nebylo napsané, jméno "Stažené" slibovalo offline, které
+          appka neumí. */}
+      <p className="downloaded-explainer">{t('downloadedExplainer')}</p>
 
       <div className="downloaded-toolbar">
         <div className="downloaded-filters" role="group" aria-label={t('downloadedTitle')}>
@@ -150,7 +156,18 @@ function DownloadedPageInner() {
         // nebo do fronty, což tady dřív nešlo vůbec.
         <div className="video-grid">
           {shown.map((v: any) => (
-            <VideoCard key={v.id} video={v} href={`/watch/${v.id}`} formatDuration={formatDuration} />
+            <div key={v.id} className="downloaded-item">
+              <VideoCard video={v} href={`/watch/${v.id}`} formatDuration={formatDuration} />
+              {/* Soubor na disku je, ale odkaz na něj dávno zmizel -
+                  tohle je jediná věc, kvůli které má smysl sem chodit. */}
+              {v.cloudflare_video_id && (
+                <DownloadButton
+                  videoId={v.id}
+                  cloudflareVideoId={v.cloudflare_video_id}
+                  label={t('downloadAgain')}
+                />
+              )}
+            </div>
           ))}
         </div>
       )}

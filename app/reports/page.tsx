@@ -55,7 +55,12 @@ export default function ModerationReportsPage() {
           <div key={r.id} className="panel" style={{ opacity: r.status === 'reviewed' ? 0.5 : 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
               <div>
-                <p style={{ fontWeight: 600, margin: 0 }}>{r.reason}</p>
+                {/* Důvod se ukládá jako klíč, přeloží se až tady - jinak
+                    by měl moderátor frontu v pěti jazycích podle toho,
+                    jaký jazyk měl zrovna nahlašující. */}
+                <p style={{ fontWeight: 600, margin: 0 }}>
+                  {r.reason?.startsWith('reason') ? t(r.reason as any) : r.reason}
+                </p>
                 {r.details && <p style={{ fontSize: 13, color: 'var(--text-dim)', margin: '4px 0' }}>{r.details}</p>}
                 <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
                   {t('reportedByLabel')} {r.profiles?.username ?? '—'} · {new Date(r.created_at).toLocaleDateString(DATE_LOCALES[lang])}

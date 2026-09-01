@@ -1,45 +1,29 @@
-KINE - bezpečnostní opravy
-==========================
+KINE - konec falešných potvrzení
+================================
 
-1) SPUSŤ MIGRACI JAKO PRVNÍ
----------------------------
-Supabase -> SQL Editor -> New Query -> vlož celý obsah
-supabase-migration-security-fixes.sql a spusť.
+Rozbal do kořene repa a nech přepsat. Žádná migrace.
 
-Tohle je naléhavé. Do té doby si kdokoliv přihlášený může
-z konzole prohlížeče nastavit vlastní podíl z výdělků na 100 %:
+UPRAVENÉ (9 souborů, žádný nový):
+  app/downloaded/page.tsx     app/upload/page.tsx
+  app/reports/page.tsx        components/ReportModal.tsx
+  components/CommentSection.tsx  components/AddToPlaylist.tsx
+  components/DownloadButton.tsx  lib/i18n.tsx  app/globals.css
 
-  supabase.from('profiles').update({revenue_share_percent:100}).eq('id', mojeId)
+CO OVĚŘIT
+---------
+1. "Stažené" se v levém sloupci jmenují Historie stažení a nahoře
+   je věta, že soubory jsou u tebe v zařízení. U každé položky je
+   Stáhnout znovu.
+2. Nahlaš video - poděkování se ukáže jen když se to opravdu uloží.
+   Ve frontě moderátora je důvod ve tvém jazyce.
+3. Přidej video do playlistu - vedle tlačítka naskočí "Přidáno
+   do playlistu".
+4. Napiš dva komentáře hned po sobě - druhý řekne, ať počkáš,
+   a text ti v poli zůstane (dřív to byl systémový alert).
 
-Je to moje chyba - migrace s pravidly pro jména přepsala funkci
-protect_admin_fields a vypadla z ní pole kolem výdělků.
-
-2) ROZBAL SOUBORY
------------------
-Rozbal do kořene repa a nech přepsat.
-
-NOVÉ:  lib/safeUrl.ts, supabase-migration-security-fixes.sql
-UPRAVENÉ: app/channel/[id]/page.tsx, app/donate/page.tsx,
-          app/login/page.tsx, components/Sidebar.tsx, lib/i18n.tsx,
-          app/api/donate/create-checkout-session/route.ts
-
-3) CO OVĚŘIT
-------------
-- Přihlášený (ne service role) zkus v SQL editoru:
-    update profiles set revenue_share_percent = 100 where id = auth.uid();
-  Číslo se NESMÍ změnit.
-- Levý sloupec -> Nahlášení: musí otevřít stránku, ne 404.
-- Dary: pole pro vlastní částku říká € a bere od 1.
-- Dej si do profilu odkaz "javascript:alert(1)" - na kanálu se
-  vůbec nemá zobrazit.
-
-4) CO JSEM NEOPRAVIL
---------------------
-Zbytek nálezů je v odpovědi v chatu. Nejdůležitější zbývající:
-- veřejně čitelná tabulka profiles (prozrazuje shadow ban a
-  interní poznámky) - potřebuje pohled s vybranými sloupci
-- views_log vydává IP adresy všech diváků komukoliv (GDPR)
-- notifikace může komukoliv poslat kdokoliv
-- soukromá videa nejsou u Cloudflare chráněná podepsanými odkazy
-- strop 1000 řádků na řadě stránek (Historie, Stažené, Líbí se mi,
-  statistiky kanálu, oznámení odběratelům)
+POZNÁMKA K OFFLINE
+------------------
+Opravdové offline (přehrávání bez internetu) tenhle balíček nedělá.
+Stojí a padá to na tom, jestli jde soubor od Cloudflare stáhnout
+z JavaScriptu. Test je v odpovědi v chatu - je to jeden příkaz
+v konzoli prohlížeče.
