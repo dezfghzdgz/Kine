@@ -1,61 +1,104 @@
-KINE - dobrání zapomenutého balíčku
+KINE - migrace soukromí, do třetice
 ===================================
 
-CO SE STALO
------------
-Balíček "soukromí, ban, strop 1000 řádků" se do repa nedostal.
-Ten poslední (falešná potvrzení) ano - a ten z něj používá
-lib/loadAll.ts, který přišel právě v tom zapomenutém. Proto build
-padá na "Can't resolve '@/lib/loadAll'".
-
-Je to moje chyba: poslal jsem dva balíčky za sebou a druhý závisel
-na prvním, aniž bych to napsal dost nahlas.
-
-Tenhle archiv obsahuje všechno, co v repu chybí. Nic z toho, co už
-tam je, nepřepisuje špatně - ověřil jsem, že po rozbalení bude repo
-přesně shodné s mojí kopií.
+2 soubory:
+  supabase-migration-privacy-fixes.sql   <- přepsaná migrace
+  app/login/page.tsx                     <- musí jít s ní
 
 
-1) MIGRACE - MUSÍ BĚŽET SPOLU S KÓDEM
--------------------------------------
-Supabase -> SQL Editor -> New Query -> vlož celý obsah
-supabase-migration-privacy-fixes.sql a spusť.
+PROČ TO DVAKRÁT SPADLO
+----------------------
+Supabase pouští celý skript jako jednu transakci. Jediný příkaz, který
+se odvolá na sloupec, co v databázi není, shodí úplně všechno - i to,
+co už proběhlo. Proto se nevytvořila ani funkce my_account() a appka na
+ni dostávala 404.
 
-Nasadit kód bez migrace nebo migraci bez kódu NEJDE. Migrace bere
-appce právo číst některé sloupce přímo a upravený kód si je bere
-funkcí my_account(). Když nasadíš jen jedno, přestane fungovat
-rozpoznání moderátora a statistiky kanálu.
+Napoprvé to spadlo na výpisu sloupců v grantu. Ten jsem opravil - ale
+neprošel jsem zbytek souboru, jestli tam ta samá past není znovu. Byla,
+hned o třicet řádků níž, v těle funkce my_account(). To je moje chyba,
+ne dvě různé.
 
-Pokud jsi ještě nespustil supabase-migration-security-fixes.sql
-z předchozího balíčku, spusť nejdřív ten - je v něm ta věc
-s podílem na výdělcích, kterou si mohl kdokoliv nastavit sám.
+Chybí ti stripe_account_id a stripe_onboarding_complete, což znamená, že
+u tebe nikdy neproběhla supabase-migration-creator-subscriptions.sql.
+Nová migrace si všechny sloupce, které jmenuje, na začátku sama doplní
+(přesně tak, jak je zakládá jejich původní migrace), takže spadnout na
+tomhle už nemůže.
 
-
-2) ROZBALIT
------------
-Rozbal do kořene repa (tam, kde je package.json) a přepiš.
-
-14 souborů, z toho tři nové nebo obnovené:
-  lib/loadAll.ts                                <- kvůli tomuhle padal build
-  supabase-migration-privacy-fixes.sql          <- nová migrace
-  app/api/admin/verification-requests/review/route.ts
-
-Ten poslední v repu chyběl - někdy cestou se smazal. Bez něj
-schvalování a zamítání žádostí o ověření končilo na 404,
-protože app/admin/verifications/page.tsx na tu adresu posílá
-požadavek.
+Mimochodem - kvůli té neproběhlé migraci ti nejspíš nejde ani Nastavení:
+stránka si tahá subscription_price_eur a ten sloupec taky nemáš, takže
+celý dotaz končí chybou. Doplňuje se to tady s ním. Až budeš mít čas,
+pusť si supabase-migration-creator-subscriptions.sql celou - kvůli
+tabulce channel_subscriptions, tu tenhle skript nezakládá.
 
 
-3) CO OVĚŘIT PO NASAZENÍ
-------------------------
-Jako přihlášený (ne service role) v SQL editoru:
-  select is_shadow_banned from profiles limit 1;   -> musí selhat
-  select ip_address from views_log limit 1;        -> musí selhat
-  select * from my_account();                      -> jeden řádek
+CO JSEM NAŠEL NAVÍC (a je to horší než ta spadlá migrace)
+---------------------------------------------------------
+Zkusil jsem si migraci pustit na skutečném Postgresu s napodobeninou
+tvojí databáze. Ukázalo se, že v té původní podobě by ti rozbila
+moderování.
 
-V appce:
-- Statistiky kanálu a stránka moderátora musí fungovat dál.
-- Shadow ban někomu zapni a odhlas se: jeho videa nesmí být vidět
-  nikde, ale on sám je vidí.
-- Zabanovaný účet nesmí nahrát video ani napsat komentář.
-- Admin -> Ověření: schválení žádosti musí projít, ne 404.
+Politiky vypadají takhle:
+
+  using (exists (select 1 from profiles p
+                 where p.id = auth.uid() and p.role in ('moderator','admin')))
+
+Podmínku politiky vyhodnocuje databáze pod právy toho, kdo se ptá.
+Jakmile se uživateli sebere právo číst profiles.role, tenhle poddotaz
+skončí chybou "permission denied for table profiles" - a s ním celý
+dotaz. Nepřestal by fungovat jeden sloupec, ale fronta hlášení, mazání
+cizích videí a komentářů, vypínání komentářů i blokování účtů.
+
+Nová migrace ty politiky přepíše na funkci is_staff(), která si roli
+přečte sama (security definer). Přepisuje jen ty, jejichž podmínka
+přesně sedí na známý tvar - cokoliv jiného nechá být a radši nechá
+příslušný sloupec veřejný, než aby naslepo přepsala politiku, kterou
+nezná. Co takhle zůstalo, vypíše na konci.
+
+Funkce jsou schválně dvě: is_staff() (role moderátor/admin) a
+is_staff_or_admin() (a navíc příznak is_admin). Appka ty dvě věci
+odděluje - v lib/useUserRole.ts je to napsané výslovně - a jedna
+společná funkce by ten rozdíl potichu smazala.
+
+
+PROČ JDE app/login/page.tsx S TÍM
+---------------------------------
+Přihlašovací stránka si četla agreed_to_rules přímo z profiles. Po
+migraci ten sloupec zavřený je, takže by celý dotaz skončil chybou,
+appka by profil vyhodnotila jako neexistující a při každém přihlášení
+by se pokusila založit další a poslala tě na souhlas s pravidly dokola.
+Teď si ten údaj bere z my_account().
+
+Nasadit jedno bez druhého tedy nejde ani teď.
+
+
+POSTUP
+------
+1) Rozbal do kořene repa (tam, kde je package.json) a přepiš.
+2) Supabase -> SQL Editor -> New Query -> vlož celý obsah
+   supabase-migration-privacy-fixes.sql a spusť.
+3) Přečti si tabulku, kterou vypíše na konci. Zajímá tě hlavně řádek
+   "profiles: zustaly verejne..." - pokud tam něco je, znamená to, že na
+   ten sloupec sahá politika, kterou skript nepřepsal. Pošli mi to,
+   dodělám ji.
+4) Nasaď kód.
+
+
+CO JSEM OVĚŘIL
+--------------
+Lokální Postgres 16, napodobenina tvojí databáze (tedy bez těch
+chybějících sloupců), 32 kontrol - všechny prošly:
+- moderátor dál vidí hlášení, upraví cizí video, smaže cizí komentář
+  a zabanuje účet
+- divák nepřečte role, is_shadow_banned ani ip_address, ale username ano
+- účet, který má jen is_admin, se moderátorem nestal
+- my_account() vrací jen vlastní řádek, nepřihlášený ji nezavolá vůbec
+- shadow ban: cizí videa zmizí všem, jemu samotnému zůstanou
+- zabanovaný nenahraje video, nenapíše komentář ani příspěvek
+- oznámení s odkazem ven neprojde, s odkazem dovnitř ano
+
+A ještě zvlášť:
+- migrace projde i na databázi, které chybí views_log, notifications
+  nebo posts
+- projde i na úplně holé tabulce profiles (jen id a username)
+- dá se pustit opakovaně, třikrát po sobě, se stejným výsledkem
+- politiku, kterou nezná, nechá být a moderování přes ni dál funguje

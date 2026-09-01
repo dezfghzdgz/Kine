@@ -77,11 +77,22 @@ export default function LoginPage() {
       let redirectTo: string | null = null;
 
       if (data.user) {
-        const { data: existingProfile } = await supabase
-          .from('profiles')
-          .select('id, rating_mode, agreed_to_rules, content_preference')
-          .eq('id', data.user.id)
-          .maybeSingle();
+        // agreed_to_rules se z prohlížeče přímo nečte - je zavřený spolu
+        // s ostatními údaji o účtu. Vydá ho funkce my_account(), a to jen
+        // svému majiteli. Kdyby se tenhle sloupec nechal v selectu, celý
+        // dotaz by skončil chybou a appka by při každém přihlášení
+        // vyhodnotila profil jako neexistující - tedy pokus o založení
+        // dalšího a odeslání na souhlas s pravidly dokola.
+        const [{ data: existingProfile }, { data: accountRows }] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('id, rating_mode, content_preference')
+            .eq('id', data.user.id)
+            .maybeSingle(),
+          supabase.rpc('my_account'),
+        ]);
+
+        const account: any = Array.isArray(accountRows) ? accountRows[0] : accountRows;
 
         if (!existingProfile) {
           const fallbackUsername = data.user.email?.split('@')[0] ?? `user_${data.user.id.slice(0, 6)}`;
@@ -97,7 +108,7 @@ export default function LoginPage() {
             is_system: true,
           });
           redirectTo = '/agree-to-rules';
-        } else if (!existingProfile.agreed_to_rules) {
+        } else if (!account?.agreed_to_rules) {
           redirectTo = '/agree-to-rules';
         } else if (!existingProfile.rating_mode) {
           redirectTo = '/choose-rating-mode';
