@@ -1,85 +1,97 @@
-KINE - nahrávání velkých videí
-==============================
+KINE - srovnání repa + kontrola, ať se to už neopakuje
+=====================================================
 
-5 souborů. Rozbal do kořene repa a přepiš.
+7 souborů. Rozbal do kořene repa a přepiš.
+Pak spusť (v tom samém adresáři, kde je package.json):
 
-POZOR: tenhle balíček je NAVÍC k tomu předchozímu (hudba + reporty).
-Rozbal nejdřív ten, pokud jsi to ještě neudělal - tests/prelozit.mjs je
-v obou a je stejný.
+    node zkontroluj-soubory.mjs
 
-
-TO NEBYLA CHYBA SÍTĚ
---------------------
-Cloudflare přijme jedním obyčejným požadavkem nejvýš 200 MB. Větší
-soubor odmítne uprostřed nahrávání - a protože odmítnutá odpověď nenese
-hlavičky pro cizí doménu, prohlížeč z ní nepřečte vůbec nic a ohlásí jen
-"network error". Appka to pak převedla na "Chyba sítě při nahrávání",
-což u tebe rovnou lhalo: připojení bylo v pořádku.
-
-To tvoje "vždycky po 20 %" bylo to hlavní vodítko. Výpadek sítě nepadá
-pokaždé na stejném místě - limit velikosti ano. U souboru kolem
-gigabajtu je 200 MB právě pětina, a dvanáctiminutové video v rozumné
-kvalitě takhle velké klidně je.
-
-(Zdroj: dokumentace Cloudflare Stream, "Resumable uploads" - "If you
-need to upload a video that is over 200 MB, you must use the tus
-protocol".)
+Musí napsat "Všechno sedí". Trvá to zlomek vteřiny.
 
 
-CO JSEM UDĚLAL
---------------
-Soubory nad 150 MB se odteď posílají po částech. Server si u Cloudflare
-vyžádá jednorázovou adresu a prohlížeč do ní posílá kus po kuse (po
-20 MB), každý s údajem, kolik bajtů už je nahraných.
+CO SE STALO TENTOKRÁT
+---------------------
+    Type error: Property 'coverUrl' is missing in type '{}'
+    but required in type '{ coverUrl: string | null; }'
 
-Dvě věci navíc, které z toho plynou:
+Stránka videa vykresluje <MusicStage /> bez parametru, ale MusicStage
+v tvém repu jeden parametr vyžaduje. Moje verze ho nemá schválně:
 
-1) Když jeden kus selže, NEZAČÍNÁ se od začátku. Appka se zeptá, kolik
-   toho druhá strana má, a pokračuje odtamtud. Přerušené nahrávání na
-   mobilu tedy nemusí znamenat nahrávat celé video znovu - a při
-   nestabilním připojení se to teď samo zvedne, místo aby to spadlo.
+    // Obal patří skladbě, ne stránce. Dřív se sem posílal náhled videa,
+    // na kterém divák stál - po přeskočení na další skladbu tedy zůstal
+    // viset obrázek té předchozí.
 
-2) Skutečné výpadky sítě se přežijí. Zkouší se to pětkrát s prodlužující
-   se pauzou, teprve pak to appka vzdá.
+Jinými slovy: v repu je starší verze toho souboru. Ta novější tam někdy
+byla (ještě u commitu ee40583 seděla), ale zase zmizela.
 
-Klíč k Cloudflare přitom neopouští server - jednorázová adresa se dá
-použít i bez něj, přesně na tohle je určená.
 
-Menší soubory jedou pořád jednodušší cestou jako dřív. Ta hláška u nich
-zůstala, ale už nelže: místo "Chyba sítě" napíše, že se nahrávání
-přerušilo, že to může být připojením nebo odmítnutím druhou stranou, a
-jak velký ten soubor je.
+A NEJEN TEN JEDEN
+-----------------
+Když už jsem porovnával, prošel jsem to celé. Starších je pět:
+
+app/layout.tsx
+  Chybí načítání písma Inter (next/font). Bez toho appce zůstalo
+  systémové písmo - přesně ta věc, kvůli které vypadala levně.
+
+app/settings/page.tsx
+  Čte stripe_account_id a stripe_onboarding_complete přímo ze sloupců.
+  Po migraci soukromí jsou ty sloupce zavřené, takže by celý dotaz na
+  profil skončil chybou a Nastavení by se nenačetlo.
+
+components/MusicIcons.tsx
+  Ikona reproduktoru se kreslila dvakrát, jinak v přehrávači a jinak
+  v liště.
+
+components/MusicStage.tsx
+  Ten, na kterém padá build.
+
+components/VideoCardMenu.tsx
+  Stahování přes tři tečky - starší verze nezapisuje do historie, takže
+  "Stažené" zůstávají prázdné.
+
+
+PROČ SE TO DĚJE
+---------------
+Nejpravděpodobnější vysvětlení: do složky se rozbalil nějaký starší ZIP
+a přepsal novější soubory. Všech pět je z různých kol, což jinak nedává
+smysl.
+
+Prosba: po rozbalení balíčku ten ZIP smaž. A rozbaluj jen ten poslední,
+nikdy ne zpětně - starší balíčky obsahují starší verze těch samých
+souborů.
+
+
+CO S TÍM DÁL
+------------
+Přibyl skript, který tuhle třídu problémů odhalí za vteřinu místo za pět
+minut čekání na Vercel:
+
+    node zkontroluj-soubory.mjs
+
+Vedle něj je stav-souboru.json s otiskem 37 souborů z téhle dodávky.
+Skript otisky přepočítá a vypíše, co nesedí. Pusť si to vždycky po
+rozbalení a před pushnutím.
+
+Ověřil jsem, že to funguje: na repu ve stavu před touhle opravou vypsal
+přesně těch pět souborů výš, nic víc a nic míň.
+
+(Když nějaký soubor upravíš sám, skript ho taky vypíše - to je v pořádku,
+jen mi to pak napiš, ať tvoji změnu nepřepíšu.)
+
+
+A POŘÁD PLATÍ TO S VĚTVÍ
+------------------------
+Tohle je pošesté, co dodávka po ZIPu skončí mimo. Kdybys mi vygeneroval
+token, nahrál bych větev na GitHub a tenhle celý druh problému zmizí -
+uvidíš přesně, co se mění, a nic se nemůže přepsat starší verzí:
+
+  GitHub → Settings → Developer settings → Personal access tokens
+  → Fine-grained → jen repo Kine → Contents: Read and write
+  → platnost klidně 7 dní
 
 
 CO JSEM OVĚŘIL
 --------------
-Cloudflare se z mého prostředí volat nedá, tak jsem si postavil jeho
-napodobeninu: server, který přijímá kusy, hlídá jejich pořadí a umí
-selhat přesně tam, kde chci. 13 kontrol:
-
-    node tests/tusUpload.test.mjs
-
-Mezi nimi:
-- "výpadek uprostřed: pokračuje se, ne od začátku" (a kontroluje se, že
-  se první kus opravdu neposílá podruhé)
-- ztracené spojení se přežije
-- postup v procentech jde od nuly do sta a nikdy necouvne
-- velikost kusu splňuje podmínky Cloudflare (nejméně 5 MiB, dělitelné
-  256 KiB)
-- chybu, kterou opakování nespraví (413), appka nezkouší donekonečna
-
-Plus typová kontrola celého projektu na TVÉM stromu (ee40583).
-
-Co ověřené není: skutečné nahrání do Cloudflare. Protokol jsem psal
-podle jejich dokumentace, ne podle pokusu. Kdyby to nešlo, pošli mi, co
-je vidět v konzoli prohlížeče na záložce Network u požadavků typu PATCH -
-z toho se to dá dopilovat napoprvé.
-
-
-MIMOCHODEM
-----------
-Nahrávání má ještě jednu chybu, na kterou jsem zatím nesáhl a která
-s tímhle souvisí: když se video úspěšně nahraje a chyba přijde až potom
-(třeba při čekání na zpracování), tlačítko "Nahrát" zase ožije a dalším
-kliknutím se video nahraje celé znovu jako nový záznam - a počítá se do
-denního limitu pěti. Až budeš chtít, je to na jedno kolo.
+Stáhl jsem si tvůj main (c057e05), nasadil do něj těchhle pět souborů a
+pustil typovou kontrolu celého projektu - tedy to samé, na čem build
+spadl. Prošla.

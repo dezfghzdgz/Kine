@@ -68,24 +68,8 @@ export function RepeatIcon({ size = 16, one = false }: IconProps & { one?: boole
   );
 }
 
-export function VolumeIcon({ size = 16, muted = false }: IconProps & { muted?: boolean }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M11 5 6 9H2v6h4l5 4z" fill="currentColor" />
-      {muted ? (
-        <>
-          <path d="M22 9l-6 6" />
-          <path d="M16 9l6 6" />
-        </>
-      ) : (
-        <>
-          <path d="M15.5 8.5a5 5 0 0 1 0 7" />
-          <path d="M18.5 5.5a9 9 0 0 1 0 13" />
-        </>
-      )}
-    </svg>
-  );
-}
+/** Reproduktor. Kreslí ho ReactionIcons, ať vypadá stejně v přehrávači i v liště. */
+export { SpeakerIcon as VolumeIcon } from './ReactionIcons';
 
 export function CloseIcon({ size = 16 }: IconProps) {
   return (
