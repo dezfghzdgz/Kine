@@ -90,9 +90,29 @@ export function useUploadCommands() {
   return useContext(CommandsContext);
 }
 
+/**
+ * Jak dlouho čekat mezi dotazy na stav, v milisekundách.
+ *
+ * Dřív to bylo čtyřicetkrát po třech vteřinách, tedy dvě minuty - a pak
+ * konec. Dvanáctiminutové video Cloudflare za dvě minuty nezpracuje,
+ * takže se video nikdy nepřepnulo na "hotové" a na Kine se neobjevilo,
+ * přestože na Cloudflare bylo v pořádku.
+ *
+ * Zhusta na začátku (krátká videa jsou hotová za pár vteřin), pak čím
+ * dál řidčeji, dohromady asi tři čtvrtě hodiny. Nic to nezdržuje - běží
+ * to na pozadí.
+ */
+function rozvrhDotazu(): number[] {
+  const kroky: number[] = [];
+  for (let i = 0; i < 20; i++) kroky.push(3000); // první minuta
+  for (let i = 0; i < 18; i++) kroky.push(10000); // do čtvrté minuty
+  for (let i = 0; i < 80; i++) kroky.push(30000); // dál až do ~45 minut
+  return kroky;
+}
+
 /** Čeká, až Cloudflare video zpracuje. Vrací, jestli se to stihlo. */
 async function waitUntilReady(videoId: string, token: string | undefined): Promise<boolean> {
-  for (let attempt = 0; attempt < 40; attempt++) {
+  for (const pauza of rozvrhDotazu()) {
     try {
       const res = await fetch('/api/videos/status', {
         method: 'POST',
@@ -105,7 +125,7 @@ async function waitUntilReady(videoId: string, token: string | undefined): Promi
       // Výpadek při dotazu na stav není důvod hlásit chybu - video už je
       // nahrané a zpracovává se dál i bez nás.
     }
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, pauza));
   }
   return false;
 }

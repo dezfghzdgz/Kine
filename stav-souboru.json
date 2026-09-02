@@ -1,5 +1,5 @@
 {
-  "dodavka": "nahravani-na-pozadi-2026-09-02",
+  "dodavka": "zpracovani-videa-2026-09-02",
   "soubory": {
     "app/api/videos/create-upload-url/route.ts": "75270373fcf52931",
     "app/downloaded/page.tsx": "6f000e79c6e57e05",
@@ -38,8 +38,12 @@
     "tests/playerStart.test.mjs": "fb2eb91b49474fa4",
     "tests/prelozit.mjs": "c16589d510f32abf",
     "tests/tusUpload.test.mjs": "776dcf28d3a6187c",
-    "lib/uploadManager.tsx": "aeba341b354503c3",
+    "lib/uploadManager.tsx": "f5e7ec7d7a118b73",
     "components/UploadProgressBar.tsx": "4e377b97d2989203",
-    "components/AppShellChrome.tsx": "14a23ec057157559"
+    "components/AppShellChrome.tsx": "14a23ec057157559",
+    "lib/markVideoReady.ts": "99b8a5ae91863706",
+    "app/api/videos/cloudflare-webhook/route.ts": "350c8c5778c0931c",
+    "app/api/videos/status/route.ts": "91f94a35887345a4",
+    "app/your-videos/page.tsx": "d5f691b35fe5cf9e"
   }
 }

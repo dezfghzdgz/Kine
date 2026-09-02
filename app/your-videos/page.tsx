@@ -38,25 +38,56 @@ function YourVideosPageInner() {
     setVideos(list);
     setLoading(false);
 
-    const stillProcessing = list.filter((v: any) => v.status !== 'ready');
-    if (stillProcessing.length > 0) {
-      await Promise.all(
-        stillProcessing.map((v: any) =>
-          fetch('/api/videos/status', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ videoId: v.id }),
-          })
-        )
-      );
-      const { data: refreshed } = await supabase
-        .from('videos')
-        .select('id, title, thumbnail_url, views, status, width, height, duration_seconds, created_at')
-        .eq('owner_id', authData.user.id)
-        .order('created_at', { ascending: false });
-      setVideos(refreshed ?? list);
-    }
+    await doptejSeNaZpracovavana(list, authData.user.id);
   }
+
+  /**
+   * Doptá se Cloudflare na videa, která se ještě zpracovávají.
+   *
+   * Video se do databáze zapíše jako "processing" a na "ready" ho přepne
+   * teprve někdo, kdo se Cloudflare zeptá. Dřív se to zkusilo jednou při
+   * otevření stránky - když Cloudflare zrovna nebyl hotový (u delšího
+   * videa skoro nikdy), zůstalo video viset a bylo potřeba stránku
+   * obnovovat ručně. Teď se to opakuje samo, dokud je co dodělávat.
+   */
+  async function doptejSeNaZpracovavana(list: any[], ownerId: string) {
+    const zpracovavana = list.filter((v: any) => v.status !== 'ready');
+    if (zpracovavana.length === 0) return;
+
+    await Promise.all(
+      zpracovavana.map((v: any) =>
+        fetch('/api/videos/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId: v.id }),
+        }).catch(() => null)
+      )
+    );
+
+    const { data: refreshed } = await supabase
+      .from('videos')
+      .select('id, title, thumbnail_url, views, status, width, height, duration_seconds, created_at')
+      .eq('owner_id', ownerId)
+      .order('created_at', { ascending: false });
+
+    if (refreshed) setVideos(refreshed);
+  }
+
+  // Dokud se něco zpracovává, ptá se stránka sama dokola - jinak by
+  // tvůrce musel obnovovat, dokud to Cloudflare nedodělá.
+  useEffect(() => {
+    const zpracovavana = videos.filter((v: any) => v.status !== 'ready');
+    if (zpracovavana.length === 0) return;
+
+    const timer = setInterval(async () => {
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user) return;
+      await doptejSeNaZpracovavana(videos, authData.user.id);
+    }, 15000);
+
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videos]);
 
   async function handleDelete(videoId: string) {
 
