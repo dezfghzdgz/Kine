@@ -1,103 +1,85 @@
-KINE - hudba, fronta hlášení, načítání
-======================================
+KINE - nahrávání velkých videí
+==============================
 
-12 souborů. Rozbal do kořene repa a přepiš.
-Žádná migrace k tomu nepatří.
+5 souborů. Rozbal do kořene repa a přepiš.
 
-Seznam souborů jsem tentokrát nesestavil z hlavy - stáhl jsem si tvůj
-main (ee40583) a porovnal ho se svojí kopií soubor po souboru. Pak jsem
-do tvého stromu tyhle změny nasadil a nechal na něm proběhnout tu samou
-kontrolu, na které naposledy spadl build. Prošla.
+POZOR: tenhle balíček je NAVÍC k tomu předchozímu (hudba + reporty).
+Rozbal nejdřív ten, pokud jsi to ještě neudělal - tests/prelozit.mjs je
+v obou a je stejný.
 
 
-1) PŘEPNU NA VIDEO A VIDEO SE NENAČTE
--------------------------------------
-Minule jsem se spletl a tvoje odpověď to odhalila. To, že se tlačítko
-Přehrát objevilo, znamená, že appka přehrávač našla a povely mu posílala
-- jen nedošly. Kdyby byla chyba tam, kde jsem hledal (krátké čekání na
-rozjezd), tlačítko by se neobjevilo vůbec.
+TO NEBYLA CHYBA SÍTĚ
+--------------------
+Cloudflare přijme jedním obyčejným požadavkem nejvýš 200 MB. Větší
+soubor odmítne uprostřed nahrávání - a protože odmítnutá odpověď nenese
+hlavičky pro cizí doménu, prohlížeč z ní nepřečte vůbec nic a ohlásí jen
+"network error". Appka to pak převedla na "Chyba sítě při nahrávání",
+což u tebe rovnou lhalo: připojení bylo v pořádku.
 
-Skutečná příčina: stránka videa si v hudebním režimu zakládala VLASTNÍ
-přehrávač se stejným videem, jaké už hrálo na pozadí. Dva přehrávače
-téhož videa na jedné stránce si lezou do zelí - appka se napojila na ten
-druhý, poslala mu "hraj" a nestalo se nic.
+To tvoje "vždycky po 20 %" bylo to hlavní vodítko. Výpadek sítě nepadá
+pokaždé na stejném místě - limit velikosti ano. U souboru kolem
+gigabajtu je 200 MB právě pětina, a dvanáctiminutové video v rozumné
+kvalitě takhle velké klidně je.
 
-Přehrávač je odteď jeden. Když si u skladby přepneš na Video, jeho obraz
-se prostě promítne přes místo, které mu stránka vyhradí. Nic se nenačítá
-znovu, zvuk nepřeskočí a přepnutí je okamžité - i tam a zpátky, kolikrát
-chceš.
-
-Zmizelo tím i předávání času mezi obalem a videem a celá mašinérie kolem
-zrcadlení, protože není co s čím synchronizovat: je to pořád ten samý
-přehrávač.
+(Zdroj: dokumentace Cloudflare Stream, "Resumable uploads" - "If you
+need to upload a video that is over 200 MB, you must use the tus
+protocol".)
 
 
-2) MEZI SKLADBAMI JE DLOUHÉ TICHO
----------------------------------
-Každá další skladba znamenala nový iframe od úplné nuly: stáhnout skript
-Cloudflare, manifest, první kus zvuku. Odtud ty vteřiny ticha.
+CO JSEM UDĚLAL
+--------------
+Soubory nad 150 MB se odteď posílají po částech. Server si u Cloudflare
+vyžádá jednorázovou adresu a prohlížeč do ní posílá kus po kuse (po
+20 MB), každý s údajem, kolik bajtů už je nahraných.
 
-Přehrávač má teď sloty dva. Zatímco jeden hraje, druhý si potichu
-dopředu načte skladbu, která přijde na řadu. Když ta první dohraje, jen
-se sloty vymění - čekat není na co. Platí to i pro tlačítko "další".
+Dvě věci navíc, které z toho plynou:
 
-Rozhodování ("co pustit dál a kam to načíst") je schválně vytažené do
-lib/musicSlots.ts, aby se dalo otestovat bez prohlížeče:
+1) Když jeden kus selže, NEZAČÍNÁ se od začátku. Appka se zeptá, kolik
+   toho druhá strana má, a pokračuje odtamtud. Přerušené nahrávání na
+   mobilu tedy nemusí znamenat nahrávat celé video znovu - a při
+   nestabilním připojení se to teď samo zvedne, místo aby to spadlo.
 
-    node tests/musicSlots.test.mjs
+2) Skutečné výpadky sítě se přežijí. Zkouší se to pětkrát s prodlužující
+   se pauzou, teprve pak to appka vzdá.
 
-15 kontrol, mezi nimi i "po předehrání musí být přepnutí okamžité"
-a "hrající slot se výměnou nikdy nepřepíše".
+Klíč k Cloudflare přitom neopouští server - jednorázová adresa se dá
+použít i bez něj, přesně na tohle je určená.
 
-
-3) FRONTA HLÁŠENÍ
------------------
-Tvůj nápad byl lepší než moje tři dohromady, tak jsem ho udělal jako
-základ: jedna položka = jeden nahlášený kus obsahu, ne jedno hlášení.
-Video nahlášené stokrát je jeden řádek s číslem, ne sto řádků a sto
-kliknutí "vyřídit" - je to přece jedno rozhodnutí.
-
-U každé položky je:
-- náhled, název, kanál a odkaz na video
-- "Nahlášeno 100×" a kolik z toho bylo různých lidí (sto hlášení od
-  jednoho člověka je něco jiného než od sta)
-- rozpis důvodů: Spam 62×, Násilí 20×, ...
-- kdy poprvé a kdy naposledy
-- upozornění, když má ten samý tvůrce hlášení i u dalších videí
-- poznámky nahlašujících na rozkliknutí (nezabírají místo, dokud je
-  nechceš)
-- Vyřídit všechna jedním kliknutím
-
-Nahoře jsou filtry (nevyřízené / vyřízené / vše, s počty) a řazení podle
-počtu nebo podle času. Výchozí je "nevyřízené, nejvíc nahlášené první" -
-to je fronta, jak ji moderátor potřebuje.
-
-A proč to trvalo: načítalo se to jedním dotazem bez omezení. U stovek
-hlášení se dotaz buď utne na tisíci řádcích, nebo neprojde vůbec. Teď to
-jde po dávkách a když se to nepovede, řekne to - místo aby se tvářilo,
-že fronta je prázdná.
-
-
-4) NAČÍTÁNÍ (ty animace jako na YouTube)
-----------------------------------------
-Místo nápisu "Načítám…" se teď ukáže kostra toho, co za chvíli přijde -
-obrys náhledu, řádky textu, jemný přejezd světla. Není to jen kosmetika:
-stránka se pod rukama nepřeskládá, protože kostra zabírá zhruba stejné
-místo jako hotový obsah, a čekání působí kratší, protože je vidět, že se
-něco děje.
-
-Zatím je to na frontě hlášení. Hlavní stránka to měla už dřív; ostatní
-stránky na to mají teď hotové dílky (components/Skeleton.tsx) a dodělám
-je v dalším kole.
+Menší soubory jedou pořád jednodušší cestou jako dřív. Ta hláška u nich
+zůstala, ale už nelže: místo "Chyba sítě" napíše, že se nahrávání
+přerušilo, že to může být připojením nebo odmítnutím druhou stranou, a
+jak velký ten soubor je.
 
 
 CO JSEM OVĚŘIL
 --------------
-- Typová kontrola celého projektu na TVÉM stromu (ne na mojí kopii).
-- 29 kontrol v testech (15 hudba + 14 rozjezd přehrávače).
-- Všech 12 souborů se přeloží, CSS je uzavřené.
+Cloudflare se z mého prostředí volat nedá, tak jsem si postavil jeho
+napodobeninu: server, který přijímá kusy, hlídá jejich pořadí a umí
+selhat přesně tam, kde chci. 13 kontrol:
 
-Co ověřené není: Cloudflare se z mého prostředí nedá zavolat, takže
-skutečné přehrávání jsem si přehrát nemohl. Ale tahle změna nespoléhá na
-to, že se něco povede naráz - odstraňuje důvod, proč to nefungovalo (dva
-přehrávače), místo aby ho obcházela.
+    node tests/tusUpload.test.mjs
+
+Mezi nimi:
+- "výpadek uprostřed: pokračuje se, ne od začátku" (a kontroluje se, že
+  se první kus opravdu neposílá podruhé)
+- ztracené spojení se přežije
+- postup v procentech jde od nuly do sta a nikdy necouvne
+- velikost kusu splňuje podmínky Cloudflare (nejméně 5 MiB, dělitelné
+  256 KiB)
+- chybu, kterou opakování nespraví (413), appka nezkouší donekonečna
+
+Plus typová kontrola celého projektu na TVÉM stromu (ee40583).
+
+Co ověřené není: skutečné nahrání do Cloudflare. Protokol jsem psal
+podle jejich dokumentace, ne podle pokusu. Kdyby to nešlo, pošli mi, co
+je vidět v konzoli prohlížeče na záložce Network u požadavků typu PATCH -
+z toho se to dá dopilovat napoprvé.
+
+
+MIMOCHODEM
+----------
+Nahrávání má ještě jednu chybu, na kterou jsem zatím nesáhl a která
+s tímhle souvisí: když se video úspěšně nahraje a chyba přijde až potom
+(třeba při čekání na zpracování), tlačítko "Nahrát" zase ožije a dalším
+kliknutím se video nahraje celé znovu jako nový záznam - a počítá se do
+denního limitu pěti. Až budeš chtít, je to na jedno kolo.

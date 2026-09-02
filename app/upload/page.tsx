@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 import FieldHint from '@/components/FieldHint';
 import { useLanguage } from '@/lib/i18n';
 import { CATEGORY_KEYS } from '@/lib/categories';
+import { uploadResumable } from '@/lib/tusUpload';
 
 const LANGUAGE_OPTIONS = [
   { code: 'cs', key: 'langOptCzech' },
@@ -162,12 +163,23 @@ export default function UploadPage() {
       const { data: sessionData } = await supabase.auth.getSession();
       const urlRes = await fetch('/api/videos/create-upload-url', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${sessionData.session?.access_token}` },
+        headers: {
+          Authorization: `Bearer ${sessionData.session?.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        // Podle velikosti se rozhodne, jestli stačí jeden požadavek, nebo
+        // se musí nahrávat po částech - Cloudflare jedním požadavkem
+        // přijme nejvýš 200 MB.
+        body: JSON.stringify({ fileSize: file.size }),
       });
       const urlData = await urlRes.json();
       if (!urlRes.ok) throw new Error(urlData.error || 'Nepodařilo se připravit upload.');
 
-      await uploadWithProgress(urlData.uploadURL, file, setProgress);
+      if (urlData.mode === 'tus') {
+        await uploadResumable({ url: urlData.uploadURL, file, onProgress: setProgress });
+      } else {
+        await uploadWithProgress(urlData.uploadURL, file, setProgress);
+      }
 
       setStatus('saving');
 
@@ -788,7 +800,18 @@ function uploadWithProgress(url: string, file: File, onProgress: (percent: numbe
       if (xhr.status >= 200 && xhr.status < 300) resolve();
       else reject(new Error(`Upload do Cloudflare selhal (kód ${xhr.status}): ${xhr.responseText || 'bez dalších detailů'}`));
     };
-    xhr.onerror = () => reject(new Error('Chyba sítě při nahrávání.'));
+    // Prohlížeč tady nedokáže rozlišit vypadlé připojení od odmítnutí
+    // druhou stranou: odmítnutá odpověď z cizí domény se k nám nedostane
+    // a XHR ohlásí obojí stejně. Dřív tu stálo jen "Chyba sítě při
+    // nahrávání", což u velkých souborů rovnou lhalo - připojení bylo
+    // v pořádku a problém byl ve velikosti.
+    xhr.onerror = () =>
+      reject(
+        new Error(
+          `Nahrávání se přerušilo. Buď vypadlo připojení, nebo soubor odmítla druhá strana ` +
+            `(velikost ${(file.size / 1024 / 1024).toFixed(0)} MB).`
+        )
+      );
     xhr.send(formData);
   });
 }
