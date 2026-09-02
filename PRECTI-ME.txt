@@ -1,97 +1,59 @@
-KINE - srovnání repa + kontrola, ať se to už neopakuje
-=====================================================
+KINE - nahrávání běží na pozadí
+===============================
 
-7 souborů. Rozbal do kořene repa a přepiš.
-Pak spusť (v tom samém adresáři, kde je package.json):
-
-    node zkontroluj-soubory.mjs
-
-Musí napsat "Všechno sedí". Trvá to zlomek vteřiny.
+9 souborů. Rozbal do kořene repa a přepiš.
+Pak spusť: node zkontroluj-soubory.mjs
 
 
-CO SE STALO TENTOKRÁT
----------------------
-    Type error: Property 'coverUrl' is missing in type '{}'
-    but required in type '{ coverUrl: string | null; }'
+ODPOVĚĎ NA TVOJI OTÁZKU
+-----------------------
+Zatím jsi musel čekat. Odchod ze stránky /upload nahrávání zrušil.
 
-Stránka videa vykresluje <MusicStage /> bez parametru, ale MusicStage
-v tvém repu jeden parametr vyžaduje. Moje verze ho nemá schválně:
+Proč: celé nahrávání bydlelo v té stránce. Jakmile jsi odešel jinam,
+Next.js stránku odpojil, běžící požadavek se zrušil a bylo po nahrávání.
+U dvanáctiminutového videa to znamená sedět čtvrt hodiny u jedné stránky
+a nedělat nic.
 
-    // Obal patří skladbě, ne stránce. Dřív se sem posílal náhled videa,
-    // na kterém divák stál - po přeskočení na další skladbu tedy zůstal
-    // viset obrázek té předchozí.
-
-Jinými slovy: v repu je starší verze toho souboru. Ta novější tam někdy
-byla (ještě u commitu ee40583 seděla), ale zase zmizela.
+Hned teď to jde obejít druhou záložkou - nahrávání nech běžet v jedné a
+kouká se ve druhé. Ale to je berlička, ne řešení.
 
 
-A NEJEN TEN JEDEN
------------------
-Když už jsem porovnával, prošel jsem to celé. Starších je pět:
+CO JSEM UDĚLAL
+--------------
+Je to ta samá potíž a to samé řešení jako u hudby: co má přežít
+navigaci, nesmí bydlet ve stránce, ale v kostře appky.
 
-app/layout.tsx
-  Chybí načítání písma Inter (next/font). Bez toho appce zůstalo
-  systémové písmo - přesně ta věc, kvůli které vypadala levně.
+Stránka /upload teď jen posbírá, co máš vyplněné, a předá to správci
+nahrávání. Odsud běží celý zbytek - nahrání souboru, uložení videa,
+náhled, playlisty, pozvánky ke spolupráci i čekání, než to Cloudflare
+zpracuje - bez ohledu na to, kde zrovna jsi.
 
-app/settings/page.tsx
-  Čte stripe_account_id a stripe_onboarding_complete přímo ze sloupců.
-  Po migraci soukromí jsou ty sloupce zavřené, takže by celý dotaz na
-  profil skončil chybou a Nastavení by se nenačetlo.
+Takže: spustíš nahrávání a klidně si jdi koukat na video, do historie,
+kamkoliv. Dole nad lištou přehrávače ti jde s sebou proužek s průběhem a
+až bude hotovo, dá odkaz na to video.
 
-components/MusicIcons.tsx
-  Ikona reproduktoru se kreslila dvakrát, jinak v přehrávači a jinak
-  v liště.
-
-components/MusicStage.tsx
-  Ten, na kterém padá build.
-
-components/VideoCardMenu.tsx
-  Stahování přes tři tečky - starší verze nezapisuje do historie, takže
-  "Stažené" zůstávají prázdné.
+CO TO NEŘEŠÍ
+Obnovení stránky (F5) nebo zavření karty nahrávání pořád ukončí. Nedá se
+s tím nic dělat: po obnovení už prohlížeč ten vybraný soubor nemá a
+znovu si ho sám vzít nesmí. Appka se teď aspoň zeptá, jestli to
+opravdu chceš, než kartu zavřeš.
 
 
-PROČ SE TO DĚJE
----------------
-Nejpravděpodobnější vysvětlení: do složky se rozbalil nějaký starší ZIP
-a přepsal novější soubory. Všech pět je z různých kol, což jinak nedává
-smysl.
-
-Prosba: po rozbalení balíčku ten ZIP smaž. A rozbaluj jen ten poslední,
-nikdy ne zpětně - starší balíčky obsahují starší verze těch samých
-souborů.
-
-
-CO S TÍM DÁL
-------------
-Přibyl skript, který tuhle třídu problémů odhalí za vteřinu místo za pět
-minut čekání na Vercel:
-
-    node zkontroluj-soubory.mjs
-
-Vedle něj je stav-souboru.json s otiskem 37 souborů z téhle dodávky.
-Skript otisky přepočítá a vypíše, co nesedí. Pusť si to vždycky po
-rozbalení a před pushnutím.
-
-Ověřil jsem, že to funguje: na repu ve stavu před touhle opravou vypsal
-přesně těch pět souborů výš, nic víc a nic míň.
-
-(Když nějaký soubor upravíš sám, skript ho taky vypíše - to je v pořádku,
-jen mi to pak napiš, ať tvoji změnu nepřepíšu.)
-
-
-A POŘÁD PLATÍ TO S VĚTVÍ
-------------------------
-Tohle je pošesté, co dodávka po ZIPu skončí mimo. Kdybys mi vygeneroval
-token, nahrál bych větev na GitHub a tenhle celý druh problému zmizí -
-uvidíš přesně, co se mění, a nic se nemůže přepsat starší verzí:
-
-  GitHub → Settings → Developer settings → Personal access tokens
-  → Fine-grained → jen repo Kine → Contents: Read and write
-  → platnost klidně 7 dní
+MIMOCHODEM SE TÍM SPRAVILA JEŠTĚ JEDNA VĚC
+------------------------------------------
+Psal jsem ti minule o chybě, kdy se video po chybě v pozdější fázi dalo
+nahrát podruhé (a počítalo se do denního limitu pěti). Tlačítko se teď
+blokuje podle stavu správce, ne podle stavu stránky, takže odeslat to
+samé video znovu nejde - ani po chybě, ani po přechodu jinam a zpátky.
 
 
 CO JSEM OVĚŘIL
 --------------
-Stáhl jsem si tvůj main (c057e05), nasadil do něj těchhle pět souborů a
-pustil typovou kontrolu celého projektu - tedy to samé, na čem build
-spadl. Prošla.
+- Typová kontrola celého projektu na TVÉM stromu (013b187). Prošla.
+- Všech 9 souborů se přeloží, CSS je uzavřené.
+- Otisky v stav-souboru.json jsou aktualizované (40 souborů), takže
+  zkontroluj-soubory.mjs po rozbalení musí napsat "Všechno sedí".
+
+Co ověřené není: skutečné nahrání s odchodem na jinou stránku. Cloudflare
+se z mého prostředí volat nedá. Logika je ale ta samá, jakou má hudba,
+která ti přechody mezi stránkami přežívá.

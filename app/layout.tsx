@@ -5,6 +5,7 @@ import AppShellChrome from '@/components/AppShellChrome';
 import { LanguageProvider } from '@/lib/i18n';
 import { MobileNavProvider } from '@/lib/mobileNavContext';
 import { MusicPlayerProvider } from '@/lib/musicPlayer';
+import { UploadProvider } from '@/lib/uploadManager';
 import './globals.css';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
@@ -69,7 +70,12 @@ export default function RootLayout({
                 je cizí iframe od Cloudflare a Next.js ho při každém přechodu
                 na jinou stránku odpojí - odsud přechody nevidí a hraje dál. */}
             <MusicPlayerProvider>
-              <AppShellChrome>{children}</AppShellChrome>
+              {/* Nahrávání musí přežít odchod ze stránky /upload, tedy
+                  ze stejného důvodu jako hudba: co bydlí ve stránce,
+                  Next.js při přechodu jinam odpojí. */}
+              <UploadProvider>
+                <AppShellChrome>{children}</AppShellChrome>
+              </UploadProvider>
             </MusicPlayerProvider>
           </MobileNavProvider>
         </LanguageProvider>

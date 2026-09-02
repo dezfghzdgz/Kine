@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 import FieldHint from '@/components/FieldHint';
 import { useLanguage } from '@/lib/i18n';
 import { CATEGORY_KEYS } from '@/lib/categories';
-import { uploadResumable } from '@/lib/tusUpload';
+import { useUploadCommands, useUploadState } from '@/lib/uploadManager';
 
 const LANGUAGE_OPTIONS = [
   { code: 'cs', key: 'langOptCzech' },
@@ -57,9 +57,6 @@ export default function UploadPage() {
   const [collabSearch, setCollabSearch] = useState('');
   const [collabResults, setCollabResults] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
   const [collabError, setCollabError] = useState<string | null>(null);
-  // Video se nahrálo, ale některé pozvánky ke spolupráci neprošly - tady si
-  // appka drží koho a ke kterému videu, ať to jde dokončit v úpravách.
-  const [failedInvites, setFailedInvites] = useState<{ videoId: string; names: string[] } | null>(null);
 
   async function searchCollaborators(query: string) {
     setCollabSearch(query);
@@ -123,9 +120,12 @@ export default function UploadPage() {
   const [scheduleMode, setScheduleMode] = useState<ScheduleMode>('now');
   const [scheduledAt, setScheduledAt] = useState('');
 
-  const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState<'idle' | 'uploading' | 'saving' | 'processing' | 'done'>('idle');
   const [error, setError] = useState<string | null>(null);
+  // Průběh nahrávání drží správce v kostře appky, ne tahle stránka -
+  // jinak by odchod na jinou stránku nahrávání zrušil.
+  const upload = useUploadState();
+  const uploadCommands = useUploadCommands();
+  const failedInvites = upload.failedInvites;
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
@@ -153,188 +153,58 @@ export default function UploadPage() {
     setStep(2);
   }
 
-  async function handleFinalSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!file) return;
-    setError(null);
-    setStatus('uploading');
-
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const urlRes = await fetch('/api/videos/create-upload-url', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${sessionData.session?.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        // Podle velikosti se rozhodne, jestli stačí jeden požadavek, nebo
-        // se musí nahrávat po částech - Cloudflare jedním požadavkem
-        // přijme nejvýš 200 MB.
-        body: JSON.stringify({ fileSize: file.size }),
-      });
-      const urlData = await urlRes.json();
-      if (!urlRes.ok) throw new Error(urlData.error || 'Nepodařilo se připravit upload.');
-
-      if (urlData.mode === 'tus') {
-        await uploadResumable({ url: urlData.uploadURL, file, onProgress: setProgress });
-      } else {
-        await uploadWithProgress(urlData.uploadURL, file, setProgress);
-      }
-
-      setStatus('saving');
-
-      const finalScheduledAt =
-        scheduleMode === 'now' ? null : scheduledAt ? new Date(scheduledAt).toISOString() : null;
-
-      const confirmRes = await fetch('/api/videos/confirm', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionData.session?.access_token}`,
-        },
-        body: JSON.stringify({
-          title,
-          description,
-          cloudflareVideoId: urlData.videoId,
-          madeForKids,
-          hasPaidPromotion,
-          isAiGenerated,
-          language,
-          category,
-          visibility: selectedCollaborators.length > 0 ? 'private' : visibility,
-          isPremiere: scheduleMode === 'premiere',
-          scheduledAt: finalScheduledAt,
-          width: videoWidth,
-          height: videoHeight,
-          chapters: chapters
-            .filter((c) => c.title.trim())
-            .map((c) => ({ time: parseTimeToSeconds(c.time), title: c.title.trim() }))
-            .filter((c) => c.time !== null),
-          captions: captions
-            .filter((c) => c.text.trim())
-            .map((c) => ({ time: parseTimeToSeconds(c.time), text: c.text.trim() }))
-            .filter((c) => c.time !== null),
-          hashtags: hashtagsInput
-            .split(/[\s,]+/)
-            .map((h) => h.trim().replace(/^#/, '').toLowerCase())
-            .filter((h) => h.length > 0),
-        }),
-      });
-
-      if (!confirmRes.ok) {
-        const confirmData = await confirmRes.json();
-        throw new Error(confirmData.error || 'Nepodařilo se uložit video.');
-      }
-
-      const confirmData = await confirmRes.json();
-      const newVideoId = confirmData.video.id;
-
-      if (thumbnailFile) {
-        const { data: sessionForThumb } = await supabase.auth.getSession();
-        const userId = sessionForThumb.session?.user.id;
-        if (userId) {
-          const ext = thumbnailFile.name.split('.').pop();
-          const path = `${userId}/${newVideoId}.${ext}`;
-          const { error: thumbError } = await supabase.storage.from('thumbnails').upload(path, thumbnailFile, { upsert: true });
-          if (!thumbError) {
-            const { data: publicUrlData } = supabase.storage.from('thumbnails').getPublicUrl(path);
-            await supabase
-              .from('videos')
-              .update({ thumbnail_url: `${publicUrlData.publicUrl}?t=${Date.now()}`, custom_thumbnail: true })
-              .eq('id', newVideoId);
-          }
-        }
-      }
-
-      if (selectedPlaylists.length > 0) {
-        await Promise.all(
-          selectedPlaylists.map((playlistId) =>
-            supabase.from('playlist_videos').upsert({ playlist_id: playlistId, video_id: newVideoId })
-          )
-        );
-      }
-
-      if (selectedCollaborators.length > 0) {
-        await supabase.from('videos').update({ pending_collab_visibility: visibility }).eq('id', newVideoId);
-
-        // Chyby při zvaní se dřív potichu ztratily - tvůrci to vypadalo,
-        // že spolupráce prostě "nefunguje". Teď se sebere a ukáže.
-        const failed: string[] = [];
-        setFailedInvites(null);
-
-        await Promise.all(
-          selectedCollaborators.slice(0, MAX_COLLABORATORS).map(async (c) => {
-            const { error: collabError } = await supabase
-              .from('video_collaborators')
-              .insert({ video_id: newVideoId, profile_id: c.id, status: 'pending' });
-
-            if (collabError) {
-              failed.push(c.username);
-              return;
-            }
-
-            const { error: notifyError } = await supabase.from('notifications').insert({
-              user_id: c.id,
-              type: 'collab_invite',
-              message: t('collabInviteMessage').replace('{title}', title),
-              link: `/watch/${newVideoId}`,
-            });
-
-            if (notifyError) failed.push(c.username);
-          })
-        );
-
-        // Video je nahrané, ale někoho se nepodařilo pozvat. Uživatele proto
-        // neposíláme pryč - dřív se hláška nastavila a hned vzápětí zmizela
-        // s přesměrováním na hlavní stránku, takže spolupráce tiše propadla.
-        if (failed.length > 0) {
-          setStatus('processing');
-          await waitUntilReady(newVideoId);
-          setStatus('idle');
-          setFailedInvites({ videoId: newVideoId, names: failed });
-          return;
-        }
-      }
-
-      setStatus('processing');
-      const ready = await waitUntilReady(newVideoId);
-
-      if (!ready) {
-        // Video se nahrálo, jen se zpracovává dýl. Patří tvůrci a najde ho
-        // ve Tvých videích - jen tam bude chvíli psát "Zpracovává se".
-        setStatus('done');
-        router.push('/your-videos');
-        return;
-      }
-
-      setStatus('done');
-      router.push('/');
-    } catch (err: any) {
-      setError(err.message);
-      setStatus('idle');
-    }
-  }
-
   /**
-   * Čeká, až Cloudflare video zpracuje.
+   * Odešle nahrávání ke zpracování.
    *
-   * Vrací, jestli se to stihlo. Dřív se po dvou minutách jen tiše přestalo
-   * čekat, appka označila nahrávání za hotové a přesměrovala na hlavní
-   * stránku - jenže video ještě nebylo připravené, takže tam nebylo a
-   * tvůrce si myslel, že se nahrávání ztratilo.
+   * Stránka posbírá, co má tvůrce vyplněné, a předá to správci
+   * v kostře appky (lib/uploadManager.tsx). Odsud dál běží nahrávání
+   * nezávisle na téhle stránce, takže se dá mezitím normálně chodit po
+   * appce a koukat na videa.
+   *
+   * Dřív celý postup bydlel tady. Jakmile tvůrce odešel jinam, Next.js
+   * stránku odpojil, běžící požadavek se zrušil a nahrávání bylo pryč -
+   * u dvanáctiminutového videa to znamenalo sedět čtvrt hodiny u jedné
+   * stránky a nedělat nic.
    */
-  async function waitUntilReady(videoId: string): Promise<boolean> {
-    for (let attempt = 0; attempt < 40; attempt++) {
-      const res = await fetch('/api/videos/status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId }),
-      });
-      const data = await res.json();
-      if (data.status === 'ready') return true;
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-    }
-    return false;
+  function handleFinalSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!file || upload.busy) return;
+    setError(null);
+
+    const finalScheduledAt =
+      scheduleMode === 'now' ? null : scheduledAt ? new Date(scheduledAt).toISOString() : null;
+
+    uploadCommands.start({
+      file,
+      thumbnailFile,
+      title,
+      description,
+      hashtags: hashtagsInput
+        .split(/[\s,]+/)
+        .map((h) => h.trim().replace(/^#/, '').toLowerCase())
+        .filter((h) => h.length > 0),
+      madeForKids,
+      hasPaidPromotion,
+      isAiGenerated,
+      language,
+      category,
+      visibility: selectedCollaborators.length > 0 ? 'private' : visibility,
+      isPremiere: scheduleMode === 'premiere',
+      scheduledAt: finalScheduledAt,
+      width: videoWidth,
+      height: videoHeight,
+      chapters: chapters
+        .filter((c) => c.title.trim())
+        .map((c) => ({ time: parseTimeToSeconds(c.time), title: c.title.trim() }))
+        .filter((c): c is { time: number; title: string } => c.time !== null),
+      captions: captions
+        .filter((c) => c.text.trim())
+        .map((c) => ({ time: parseTimeToSeconds(c.time), text: c.text.trim() }))
+        .filter((c): c is { time: number; text: string } => c.time !== null),
+      playlistIds: selectedPlaylists,
+      collaborators: selectedCollaborators.slice(0, MAX_COLLABORATORS).map((c) => ({ id: c.id, username: c.username })),
+      collabInviteMessage: t('collabInviteMessage').replace('{title}', title),
+    });
   }
 
   if (checkingAuth) return <p style={{ color: 'var(--text-faint)' }}>{t('loading')}</p>;
@@ -751,16 +621,22 @@ export default function UploadPage() {
             <Link href={`/your-videos/${failedInvites.videoId}/edit`} className="reaction-btn">
               {t('collaboratorsLabel')}
             </Link>
-            <button type="button" onClick={() => { setFailedInvites(null); router.push('/'); }} style={{ background: 'var(--panel-raised)', color: 'var(--text)' }}>
+            <button type="button" onClick={() => { uploadCommands.dismiss(); router.push('/'); }} style={{ background: 'var(--panel-raised)', color: 'var(--text)' }}>
               {t('home')}
             </button>
           </div>
         </div>
       )}
 
-      {status === 'uploading' && <p>{t('uploading')} {progress}%</p>}
-      {status === 'saving' && <p>{t('savingVideoLabel')}</p>}
-      {status === 'processing' && <p>{t('processingVideoNote')}</p>}
+      {upload.phase === 'uploading' && (
+        <>
+          <p>{t('uploading')} {upload.percent}%</p>
+          <p style={{ color: 'var(--text-dim)', fontSize: 13 }}>{t('uploadInBackgroundNote')}</p>
+        </>
+      )}
+      {upload.phase === 'saving' && <p>{t('savingVideoLabel')}</p>}
+      {upload.phase === 'processing' && <p>{t('processingVideoNote')}</p>}
+      {upload.phase === 'error' && upload.error && <p className="error-text">{upload.error}</p>}
 
       <div style={{ display: 'flex', gap: 8 }}>
         <button type="button" onClick={() => setStep(1)} style={{ background: 'var(--panel-raised)', color: 'var(--text)' }}>
@@ -768,8 +644,11 @@ export default function UploadPage() {
         </button>
         {/* Když už je video nahrané (jen se nepovedly pozvánky), nesmí jít
             odeslat formulář znovu - jinak by se nahrálo podruhé. */}
-        <button type="submit" disabled={status !== 'idle' || !!failedInvites} style={{ flex: 1 }}>
-          {status === 'idle' ? t('uploadButton') : t('processing')}
+        {/* Dokud nahrávání běží, nesmí jít odeslat znovu - jinak by se
+            video nahrálo podruhé. Totéž když už je nahrané a nepovedly se
+            jen pozvánky. */}
+        <button type="submit" disabled={upload.busy || upload.phase === 'done' || !!failedInvites} style={{ flex: 1 }}>
+          {upload.busy || upload.phase === 'done' ? t('processing') : t('uploadButton')}
         </button>
       </div>
     </form>
@@ -785,33 +664,4 @@ function parseTimeToSeconds(value: string): number | null {
   }
   const n = Number(value);
   return Number.isNaN(n) ? null : n;
-}
-
-function uploadWithProgress(url: string, file: File, onProgress: (percent: number) => void): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', url);
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error(`Upload do Cloudflare selhal (kód ${xhr.status}): ${xhr.responseText || 'bez dalších detailů'}`));
-    };
-    // Prohlížeč tady nedokáže rozlišit vypadlé připojení od odmítnutí
-    // druhou stranou: odmítnutá odpověď z cizí domény se k nám nedostane
-    // a XHR ohlásí obojí stejně. Dřív tu stálo jen "Chyba sítě při
-    // nahrávání", což u velkých souborů rovnou lhalo - připojení bylo
-    // v pořádku a problém byl ve velikosti.
-    xhr.onerror = () =>
-      reject(
-        new Error(
-          `Nahrávání se přerušilo. Buď vypadlo připojení, nebo soubor odmítla druhá strana ` +
-            `(velikost ${(file.size / 1024 / 1024).toFixed(0)} MB).`
-        )
-      );
-    xhr.send(formData);
-  });
 }

@@ -3818,3 +3818,114 @@ body.has-music-bar .content-area-fullbleed {
     width: 100%;
   }
 }
+
+/* ---------- Proužek nahrávání ----------
+
+   Nahrávání běží v kostře appky (lib/uploadManager.tsx), takže se dá
+   mezitím normálně chodit po appce. Tenhle proužek jde s tvůrcem a
+   ukazuje, jak to jde. Sedí nad lištou přehrávače, ať se nepřekrývají. */
+
+.upload-bar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--sp-4) + env(safe-area-inset-bottom, 0px));
+  z-index: 450;
+  width: min(520px, calc(100vw - 24px));
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel-raised);
+  box-shadow: var(--hairline), var(--shadow-lg);
+  animation: content-fade-in var(--dur-3) var(--ease) both;
+}
+
+body.has-music-bar .upload-bar {
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+}
+
+.upload-bar-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.upload-bar-title {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: var(--track-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-bar-status {
+  margin: 2px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.upload-bar-error .upload-bar-status {
+  color: #ff8b8b;
+}
+
+.upload-bar-track {
+  margin-top: var(--sp-2);
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+  overflow: hidden;
+}
+
+.upload-bar-fill {
+  height: 100%;
+  background: var(--brand);
+  border-radius: var(--radius-pill);
+  transition: width var(--dur-3) var(--ease);
+}
+
+.upload-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+
+.upload-bar-link {
+  padding: 6px var(--sp-3);
+  border-radius: var(--radius-sm);
+  background: var(--text);
+  color: var(--bg);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.upload-bar-close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.upload-bar-close:hover:not(:disabled) {
+  color: var(--text);
+  border-color: #33333c;
+}
+
+@media (max-width: 768px) {
+  .upload-bar {
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+  body.has-music-bar .upload-bar {
+    bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+  }
+}
