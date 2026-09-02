@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
-import { Inter } from 'next/font/google';
 import AppShellChrome from '@/components/AppShellChrome';
 import { LanguageProvider } from '@/lib/i18n';
 import { MobileNavProvider } from '@/lib/mobileNavContext';
@@ -8,28 +7,6 @@ import { MusicPlayerProvider } from '@/lib/musicPlayer';
 import './globals.css';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-
-/**
- * Písmo appky.
- *
- * V globals.css bylo Inter napsané od začátku, ale nikde se nenačítalo -
- * appka tedy celou dobu jela systémovým písmem (Segoe UI na Windows,
- * Roboto na Androidu, San Francisco na Macu). Vypadala proto na každém
- * počítači jinak a nikde jako vlastní produkt.
- *
- * next/font si písmo stáhne při sestavení a naservíruje ho z vlastní
- * domény - prohlížeč tedy nikam nechodí, nic se nenačítá dodatečně a
- * text při načtení nepodskočí.
- *
- * latin-ext je tu kvůli češtině, slovenštině a polštině (ě, ř, ů, ł),
- * cyrillic kvůli ukrajinštině. Bez nich by se háčky a čárky braly
- * z náhradního písma a v jednom slově by se míchala dvě.
- */
-const inter = Inter({
-  subsets: ['latin', 'latin-ext', 'cyrillic'],
-  display: 'swap',
-  variable: '--font-inter',
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -58,10 +35,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    // lang="cs" je výchozí; jakmile si člověk přepne jazyk, LanguageProvider
-    // atribut přepíše. Dřív tu natvrdo stálo "en", takže prohlížeč nabízel
-    // překlad české stránky do češtiny a čtečky ji četly anglickou výslovností.
-    <html lang="cs" className={inter.variable}>
+    <html lang="en">
       <body>
         <LanguageProvider>
           <MobileNavProvider>

@@ -21,7 +21,7 @@ import {
  */
 export default function MusicMiniPlayer() {
   const { t } = useLanguage();
-  const { track, playing, currentTime, duration, volume, stageId, mirroringPageVideo } = useMusicState();
+  const { track, playing, currentTime, duration, volume, stageId, engineVisible } = useMusicState();
   const commands = useMusicCommands();
 
   const visible = !!track && stageId !== track.id;
@@ -69,7 +69,7 @@ export default function MusicMiniPlayer() {
           <span className="music-mini-meta">
             {track.creator ? `${track.creator} · ` : ''}
             {clock(currentTime)} / {clock(total)}
-            {mirroringPageVideo ? ` · ${t('musicPlayingVideo')}` : ''}
+            {engineVisible ? ` · ${t('musicPlayingVideo')}` : ''}
           </span>
         </span>
       </Link>

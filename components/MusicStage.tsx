@@ -14,7 +14,7 @@ import {
  * Samotný zvuk hraje jinde - v trvalém přehrávači v kostře appky (viz
  * lib/musicPlayer.tsx), takže když divák odejde, hudba jde s ním.
  */
-export default function MusicStage() {
+export default function MusicStage({ coverUrl }: { coverUrl: string | null }) {
   const { t } = useLanguage();
   const { track, queue, playing, currentTime, duration, volume, repeat, shuffle } = useMusicState();
   const commands = useMusicCommands();
@@ -22,17 +22,14 @@ export default function MusicStage() {
   if (!track) return null;
 
   const total = duration || track.duration || 0;
-  // Obal patří skladbě, ne stránce. Dřív se sem posílal náhled videa, na
-  // kterém divák stál - po přeskočení na další skladbu tedy zůstal viset
-  // obrázek té předchozí.
-  const cover = track.thumbnail;
+  const cover = coverUrl ?? track.thumbnail;
   const repeatLabel = repeat === 'one' ? t('musicRepeatOne') : repeat === 'all' ? t('musicRepeatAll') : t('musicRepeatOff');
 
   return (
     <div className="music-stage">
       <div className="music-stage-cover">
         {cover ? (
-          <img key={track.id} src={cover} alt={track.title} />
+          <img src={cover} alt={track.title} />
         ) : (
           <span className="music-stage-cover-empty" aria-hidden="true">♪</span>
         )}
@@ -99,15 +96,7 @@ export default function MusicStage() {
       </div>
 
       <div className="music-stage-volume">
-        <button
-          type="button"
-          className="music-btn"
-          onClick={commands.toggleMute}
-          aria-label={volume === 0 ? t('musicUnmute') : t('musicMute')}
-          aria-pressed={volume === 0}
-        >
-          <VolumeIcon volume={volume} />
-        </button>
+        <VolumeIcon muted={volume === 0} />
         <input
           type="range"
           className="music-range music-range-volume"

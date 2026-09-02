@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { chooseNext, choosePrevious, planPreload, planSwap, type Slot, type SlotIndex, type Slots } from './musicSlots';
 
 /**
  * Hudba, která hraje dál i po odchodu ze stránky.
@@ -13,6 +14,34 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
  * Cloudflare. Jakmile ho Next.js při přechodu na jinou stránku odpojí,
  * zvuk utne - a při každé navigaci ho odpojí. Iframe proto žije jednou
  * provždy tady, v kostře appky, a stránky ho jen ovládají.
+ *
+ * ---------------------------------------------------------------------
+ * DVĚ VĚCI, KTERÉ SE TU ZMĚNILY, A PROČ
+ * ---------------------------------------------------------------------
+ *
+ * 1. JEDEN PŘEHRÁVAČ, NE DVA
+ *
+ * Dřív měla stránka videa v hudebním režimu vlastní iframe se stejným
+ * videem, jaké hrálo tady. Dva přehrávače téhož videa na jedné stránce si
+ * ale lezou do zelí: appka se na ten druhý napojila, poslala mu "hraj" -
+ * a nic. Odtud to "přepnu na video a video se nikdy nenačte", i když se
+ * po chvíli objevilo tlačítko Přehrát (tedy appka přehrávač našla a
+ * povely posílala, jen nedošly).
+ *
+ * Odteď je přehrávač jeden, tenhle. Když si divák u skladby přepne na
+ * Video, iframe se prostě přesune přes místo, kde má být obraz
+ * (showEngineOver). Nic se nenačítá znovu, zvuk nepřeskočí a přepnutí je
+ * okamžité.
+ *
+ * 2. DVA SLOTY, ABY MEZI SKLADBAMI NEBYLA DÍRA
+ *
+ * Každá další skladba znamenala nový iframe od nuly: stáhnout skript
+ * Cloudflare, manifest, první kus zvuku. Mezi skladbami proto bylo několik
+ * vteřin ticha. Teď jsou sloty dva - zatímco jeden hraje, druhý si tiše
+ * dopředu načte skladbu, která přijde na řadu. Přepnutí je pak jen výměna
+ * slotů.
+ *
+ * ---------------------------------------------------------------------
  *
  * Stavy jsou schválně dva:
  *   - příkazy (přehrát, další, hlasitost...) se nikdy nemění, takže
@@ -34,6 +63,9 @@ export type MusicTrack = {
 
 export type RepeatMode = 'off' | 'one' | 'all';
 
+/** Kam se má obraz přehrávače promítnout, v souřadnicích okna. */
+export type EngineRect = { top: number; left: number; width: number; height: number };
+
 const REPEAT_KEY = 'kine-music-repeat';
 const SHUFFLE_KEY = 'kine-music-shuffle';
 const VOLUME_KEY = 'kine-music-volume';
@@ -50,22 +82,11 @@ type MusicCommands = {
   /**
    * "Na stránce se právě rozjelo video, hudba drž."
    *
-   * Bez tohohle stačilo přepnout na Video a hrálo obojí naráz, každé v jiném
-   * čase. Zastavit hudbu při přepnutí nestačí - je to jednorázový povel a
-   * kdykoliv se cokoliv rozhodne skladbu zase rozjet, jsme tam, kde jsme byli.
-   * Tohle je stav, ne povel: dokud je zapnutý, hudba hrát nesmí, a lišta dole
-   * se schová, aby ji nešlo pustit ani ručně.
+   * Platí pro OBYČEJNÁ videa, ne pro hudbu. U hudby je totiž tenhle
+   * přehrávač zároveň tím, co je vidět - kdyby se sám pozastavil, přepnutí
+   * na Video by ho umlčelo.
    */
   setVideoTakeover: (active: boolean) => void;
-  /**
-   * Přihlášení přehrávače videa ze stránky.
-   *
-   * Lišta dole je dálkový ovladač toho, co zrovna hraje - ne jen hudby.
-   * Když si divák u skladby přepne na video, ovládá lišta rovnou ten
-   * přehrávač a ukazuje jeho čas. Bez tohohle by ukazovala hudbu, která
-   * mezitím stojí, a čísla v ní by neseděla s obrazem.
-   */
-  registerPageVideo: (entry: { player: any; trackId: string } | null) => void;
   /** Ztlumení. Druhé kliknutí vrátí hlasitost tam, kde byla před ztlumením. */
   toggleMute: () => void;
   next: () => void;
@@ -76,6 +97,14 @@ type MusicCommands = {
   toggleShuffle: () => void;
   /** Stránka videa hlásí "velký obal téhle skladby ukazuju já" - lišta dole se pak schová. */
   attachStage: (videoId: string | null) => void;
+  /**
+   * "Promítni obraz sem."
+   *
+   * Stránka videa předá obdélník, kde má být vidět přehrávač; iframe se
+   * tam přesune. null ho zase schová. Tímhle se z přepnutí obal/video
+   * stala čistě vizuální věc - žádné druhé načítání.
+   */
+  showEngineOver: (rect: EngineRect | null) => void;
 };
 
 type MusicState = {
@@ -89,8 +118,8 @@ type MusicState = {
   shuffle: boolean;
   stageId: string | null;
   videoTakeover: boolean;
-  /** Zvuk drží přehrávač videa na stránce, ne hudba. Lišta ho jen zrcadlí. */
-  mirroringPageVideo: boolean;
+  /** Obraz přehrávače je zrovna vidět na stránce (režim Video u hudby). */
+  engineVisible: boolean;
 };
 
 const EMPTY_STATE: MusicState = {
@@ -104,7 +133,7 @@ const EMPTY_STATE: MusicState = {
   shuffle: false,
   stageId: null,
   videoTakeover: false,
-  mirroringPageVideo: false,
+  engineVisible: false,
 };
 
 const CommandsContext = createContext<MusicCommands | null>(null);
@@ -149,7 +178,12 @@ function store(key: string, value: string) {
 }
 
 export function MusicPlayerProvider({ children }: { children: React.ReactNode }) {
-  const [track, setTrack] = useState<MusicTrack | null>(null);
+  const [slots, setSlots] = useState<Slots>([
+    { key: 'a0', track: null },
+    { key: 'b0', track: null },
+  ]);
+  const [active, setActive] = useState<SlotIndex>(0);
+
   const [queue, setQueue] = useState<MusicTrack[]>([]);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -159,38 +193,43 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const [shuffle, setShuffle] = useState(false);
   const [stageId, setStageId] = useState<string | null>(null);
   const [videoTakeover, setVideoTakeoverState] = useState(false);
-  const [pageVideo, setPageVideo] = useState<{ player: any; trackId: string } | null>(null);
+  const [engineRect, setEngineRect] = useState<EngineRect | null>(null);
 
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const playerRef = useRef<any>(null);
+  const track = slots[active].track;
+
+  const frameRefs = useRef<(HTMLIFrameElement | null)[]>([null, null]);
+  const playersRef = useRef<any[]>([null, null]);
+  const boundKeysRef = useRef<(string | null)[]>([null, null]);
 
   // Zrcadla stavu pro příkazy. Bez nich by se příkazy musely přepisovat
   // pokaždé, když doběhne vteřina, a s nimi by se překreslovalo všechno,
   // co si je vzalo.
-  const trackRef = useRef<MusicTrack | null>(null);
+  const slotsRef = useRef(slots);
+  const activeRef = useRef<SlotIndex>(0);
   const queueRef = useRef<MusicTrack[]>([]);
   const repeatRef = useRef<RepeatMode>('off');
   const shuffleRef = useRef(false);
   const volumeRef = useRef(1);
   const currentTimeRef = useRef(0);
   const takeoverRef = useRef(false);
-  // Přehrávač videa ze stránky, když zvuk drží on. Vedle stavu i v ref,
-  // protože příkazy se schválně nepřepisují a stav by v nich zestárnul.
-  const pageVideoRef = useRef<{ player: any; trackId: string } | null>(null);
   // Hlasitost před ztlumením, ať se dá vrátit přesně tam, kde byla.
   const volumeBeforeMuteRef = useRef(0.7);
+  // Kterou skladbu jsme si vybrali jako další. Drží se, aby náhodné
+  // pořadí nevybralo při každém dotazu něco jiného - jinak by se předem
+  // načetlo jedno a pustilo druhé.
+  const nextChoiceRef = useRef<MusicTrack | null>(null);
+  const slotSeqRef = useRef(0);
 
-  trackRef.current = track;
+  slotsRef.current = slots;
+  activeRef.current = active;
   queueRef.current = queue;
   repeatRef.current = repeat;
   shuffleRef.current = shuffle;
   volumeRef.current = volume;
   currentTimeRef.current = currentTime;
   takeoverRef.current = videoTakeover;
-  pageVideoRef.current = pageVideo;
 
-  // Lišta zrcadlí video jen tehdy, když jde o tu samou skladbu.
-  const mirroringPageVideo = !!pageVideo && pageVideo.trackId === track?.id;
+  const activePlayer = useCallback(() => playersRef.current[activeRef.current], []);
 
   useEffect(() => {
     setRepeat(readStored(REPEAT_KEY, ['off', 'one', 'all'] as const, 'off'));
@@ -199,195 +238,196 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     if (savedVolume !== null) setVolumeState(savedVolume);
   }, []);
 
-  // Druhá pojistka. Kdyby se skladba napojila až po přepnutí na video
-  // (napojení je smyčka, ne okamžik), povel z přepínače by se ztratil.
+  // Druhá pojistka. Kdyby se skladba napojila až po přepnutí na obyčejné
+  // video (napojení je smyčka, ne okamžik), povel by se ztratil.
   useEffect(() => {
-    if (videoTakeover) playerRef.current?.pause?.();
+    if (videoTakeover) playersRef.current.forEach((p) => p?.pause?.());
   }, [videoTakeover, track?.id]);
 
-  /**
-   * Přehrávač videa, který má zrovna zvuk pro sebe.
-   *
-   * Vrací ho jen tehdy, když jde o tu samou skladbu, kterou lišta ukazuje.
-   * U obyčejného videa (jiná skladba, jiný obsah) lišta dál patří hudbě,
-   * jen ta hudba stojí - aby si ji divák mohl kdykoliv pustit zpátky.
-   */
-  const mirroredPlayer = useCallback(() => {
-    const entry = pageVideoRef.current;
-    if (!entry || entry.trackId !== trackRef.current?.id) return null;
-    return entry.player ?? null;
+  /** Která skladba přijde na řadu. Vybere se jednou a drží se. */
+  const pickNext = useCallback((): MusicTrack | null => {
+    return chooseNext(queueRef.current, slotsRef.current[activeRef.current].track?.id ?? null, {
+      shuffle: shuffleRef.current,
+      repeat: repeatRef.current,
+    });
   }, []);
 
   /**
-   * Čísla v liště berou ze správného přehrávače.
+   * Přesune přehrávání do druhého slotu.
    *
-   * Dokud běží video té samé skladby, čte lišta čas z něj. Předtím ukazovala
-   * čas hudby, která mezitím stála - v liště tedy svítilo něco úplně jiného,
-   * než co bylo slyšet.
+   * Když už je v něm ta správná skladba (protože se předem načetla),
+   * je to jen výměna - žádné čekání.
    */
-  useEffect(() => {
-    if (!mirroringPageVideo || !pageVideo?.player) return;
+  const goToTrack = useCallback((next: MusicTrack) => {
+    const from = activeRef.current;
+    const to: 0 | 1 = from === 0 ? 1 : 0;
 
-    const player = pageVideo.player;
-    let lastTick = 0;
+    setCurrentTime(0);
+    setDuration(next.duration ?? 0);
+    nextChoiceRef.current = null;
 
-    const onPlay = () => setPlaying(true);
-    const onPause = () => setPlaying(false);
-    const onMeta = () => setDuration(player.duration ?? 0);
-    const onTime = () => {
-      const now = Date.now();
-      if (now - lastTick < 250) return;
-      lastTick = now;
-      setCurrentTime(player.currentTime ?? 0);
-    };
+    slotSeqRef.current += 1;
+    const plan = planSwap(slotsRef.current, from, next, `s${slotSeqRef.current}`);
 
-    player.addEventListener?.('play', onPlay);
-    player.addEventListener?.('pause', onPause);
-    player.addEventListener?.('loadedmetadata', onMeta);
-    player.addEventListener?.('timeupdate', onTime);
-
-    // Hudba při zrcadlení nikdy nehraje - zvuk má video.
-    playerRef.current?.pause?.();
-    setPlaying(!player.paused);
-    if (player.duration) setDuration(player.duration);
-
-    return () => {
-      player.removeEventListener?.('play', onPlay);
-      player.removeEventListener?.('pause', onPause);
-      player.removeEventListener?.('loadedmetadata', onMeta);
-      player.removeEventListener?.('timeupdate', onTime);
-    };
-  }, [mirroringPageVideo, pageVideo]);
-
-  /**
-   * Vrátí zvuk hudbě.
-   *
-   * Přeskočení na jinou skladbu při běžícím videu je jasný pokyn "chci
-   * poslouchat" - video se proto zastaví a další skladba se rozjede v
-   * hudebním přehrávači. Video na stránce zůstane stát tam, kde bylo.
-   */
-  const releaseVideo = useCallback(() => {
-    pageVideoRef.current?.player?.pause?.();
-    takeoverRef.current = false;
-    setVideoTakeoverState(false);
-  }, []);
-
-  const pickNextIndex = useCallback((): number | null => {
-    const list = queueRef.current;
-    const current = trackRef.current;
-    if (list.length === 0 || !current) return null;
-
-    const index = list.findIndex((item) => item.id === current.id);
-
-    if (shuffleRef.current) {
-      if (list.length === 1) return repeatRef.current === 'all' ? 0 : null;
-      // Náhodně, ale nikdy to samé znovu hned po sobě.
-      let candidate = index;
-      while (candidate === index) candidate = Math.floor(Math.random() * list.length);
-      return candidate;
+    if (!plan.reused) {
+      playersRef.current[to] = null;
+      boundKeysRef.current[to] = null;
+      setSlots(plan.slots);
     }
 
-    if (index === -1) return 0;
-    if (index + 1 < list.length) return index + 1;
-    return repeatRef.current === 'all' ? 0 : null;
+    playersRef.current[from]?.pause?.();
+    setActive(plan.active);
   }, []);
 
   const handleEnded = useCallback(() => {
-    const player = playerRef.current;
-
-    if (repeatRef.current === 'one' && player) {
-      player.currentTime = 0;
-      player.play?.();
+    if (repeatRef.current === 'one') {
+      const player = playersRef.current[activeRef.current];
+      if (player) {
+        player.currentTime = 0;
+        player.play?.();
+      }
       return;
     }
 
-    const nextIndex = pickNextIndex();
-    if (nextIndex === null) {
+    const next = nextChoiceRef.current ?? pickNext();
+    if (!next) {
       setPlaying(false);
       return;
     }
-
-    setCurrentTime(0);
-    setDuration(0);
-    setTrack(queueRef.current[nextIndex]);
-  }, [pickNextIndex]);
+    goToTrack(next);
+  }, [pickNext, goToTrack]);
 
   /**
-   * Napojení na přehrávač Cloudflare.
+   * Napojení na přehrávače Cloudflare.
    *
    * SDK se načítá "až bude čas" (viz app/layout.tsx), takže se na něj chvíli
-   * čeká v krátké smyčce - stejně jako u náhledů na kartách.
+   * čeká v krátké smyčce - stejně jako u náhledů na kartách. Smyčka má
+   * strop: kdyby se skript nenačetl vůbec, běžela by jinak donekonečna.
    */
   useEffect(() => {
-    if (!track) {
-      playerRef.current = null;
-      return;
-    }
-
-    playerRef.current = null;
     let cancelled = false;
-    let lastTick = 0;
+    let pokusy = 0;
+    const lastTick = [0, 0];
 
     const interval = setInterval(() => {
-      if (cancelled || playerRef.current) return;
-      if (!iframeRef.current || !(window as any).Stream) return;
+      if (cancelled) return;
 
-      const player = (window as any).Stream(iframeRef.current);
-      playerRef.current = player;
-      player.volume = volumeRef.current;
-      player.muted = false;
+      pokusy++;
+      if (pokusy > 300) {
+        clearInterval(interval);
+        return;
+      }
 
-      player.addEventListener('play', () => setPlaying(true));
-      player.addEventListener('pause', () => setPlaying(false));
-      player.addEventListener('loadedmetadata', () => setDuration(player.duration ?? 0));
-      player.addEventListener('timeupdate', () => {
-        // Čtyřikrát za vteřinu stačí. Cloudflare hlásí čas mnohem častěji
-        // a každé hlášení by jinak překreslilo lištu i obal.
-        const now = Date.now();
-        if (now - lastTick < 250) return;
-        lastTick = now;
-        setCurrentTime(player.currentTime ?? 0);
-      });
-      player.addEventListener('ended', handleEnded);
+      if (!(window as any).Stream) return;
 
-      // Skladba se rozjede jen tehdy, když zvuk nedrží video na stránce.
-      if (!takeoverRef.current) player.play?.();
-      clearInterval(interval);
+      for (const i of [0, 1] as const) {
+        const slot = slotsRef.current[i];
+        const frame = frameRefs.current[i];
+        if (!slot.track || !frame) continue;
+        if (boundKeysRef.current[i] === slot.key) continue;
+
+        const player = (window as any).Stream(frame);
+        playersRef.current[i] = player;
+        boundKeysRef.current[i] = slot.key;
+
+        player.volume = volumeRef.current;
+        // Slot, který si jen dopředu načítá další skladbu, musí být
+        // potichu - jinak by hrály dvě věci přes sebe.
+        player.muted = i !== activeRef.current;
+
+        player.addEventListener('play', () => {
+          if (activeRef.current === i) setPlaying(true);
+        });
+        player.addEventListener('pause', () => {
+          if (activeRef.current === i) setPlaying(false);
+        });
+        player.addEventListener('loadedmetadata', () => {
+          if (activeRef.current === i) setDuration(player.duration ?? 0);
+        });
+        player.addEventListener('timeupdate', () => {
+          if (activeRef.current !== i) return;
+          // Čtyřikrát za vteřinu stačí. Cloudflare hlásí čas mnohem častěji
+          // a každé hlášení by jinak překreslilo lištu i obal.
+          const now = Date.now();
+          if (now - lastTick[i] < 250) return;
+          lastTick[i] = now;
+          setCurrentTime(player.currentTime ?? 0);
+        });
+        player.addEventListener('ended', () => {
+          if (activeRef.current === i) handleEnded();
+        });
+
+        // Skladba se rozjede jen tehdy, když zvuk nedrží obyčejné video.
+        if (i === activeRef.current && !takeoverRef.current) player.play?.();
+      }
     }, 60);
 
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
+  }, [slots, handleEnded]);
+
+  /**
+   * Rozjezd po výměně slotů.
+   *
+   * Slot, na který se právě přepnulo, dostane zvuk a pustí se od začátku.
+   * Ten druhý mlčí a čeká, až do něj přijde další skladba.
+   */
+  useEffect(() => {
+    const player = playersRef.current[active];
+    const other = playersRef.current[active === 0 ? 1 : 0];
+
+    other?.pause?.();
+    if (other) other.muted = true;
+
+    if (player) {
+      player.muted = false;
+      player.volume = volumeRef.current;
+      // Předem načtený slot mohl kus přehrát ještě potichu; skladba má
+      // začít od začátku.
+      if ((player.currentTime ?? 0) > 0.5) player.currentTime = 0;
+      if (!takeoverRef.current) player.play?.();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [track?.id]);
+  }, [active, slots[active].key]);
+
+  /**
+   * Dopředné načtení další skladby.
+   *
+   * Bez tohohle je mezi skladbami několik vteřin ticha, protože nový
+   * iframe začíná od nuly. Načítá se do slotu, který zrovna nehraje.
+   */
+  useEffect(() => {
+    if (!track) return;
+
+    const choice = pickNext();
+    nextChoiceRef.current = choice;
+
+    slotSeqRef.current += 1;
+    const plan = planPreload(slots, active, choice, `s${slotSeqRef.current}`);
+    if (!plan) return;
+
+    playersRef.current[plan.idle] = null;
+    boundKeysRef.current[plan.idle] = null;
+    setSlots(plan.slots);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [track?.id, queue, repeat, shuffle, active]);
 
   // Příkazy se vytvoří jednou a už se nemění - všechno potřebné čtou z ref.
   const commands = useMemo<MusicCommands>(
     () => ({
       openTrack(nextTrack, nextQueue) {
         if (nextQueue) setQueue(nextQueue);
-        if (trackRef.current?.id === nextTrack.id) return;
-        setCurrentTime(0);
-        setDuration(nextTrack.duration ?? 0);
-        setTrack(nextTrack);
+        if (slotsRef.current[activeRef.current].track?.id === nextTrack.id) return;
+        goToTrack(nextTrack);
       },
       toggle() {
-        // Zrcadlí-li lišta video ze stránky, ovládá se video. Jinak hudba -
-        // a když hudba stojí kvůli běžícímu videu, pustit ji znamená vzít
-        // zvuk videu, ne hrát přes něj.
-        const mirrored = mirroredPlayer();
-        if (mirrored) {
-          if (mirrored.paused) mirrored.play?.();
-          else mirrored.pause?.();
-          return;
-        }
-
-        const player = playerRef.current;
+        const player = activePlayer();
         if (!player) return;
 
         if (player.paused) {
-          pageVideoRef.current?.player?.pause?.();
+          // Pustit hudbu znamená vzít zvuk videu, ne hrát přes něj.
           takeoverRef.current = false;
           setVideoTakeoverState(false);
           player.play?.();
@@ -396,79 +436,73 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         }
       },
       pause() {
-        playerRef.current?.pause?.();
+        activePlayer()?.pause?.();
       },
       resume() {
         if (takeoverRef.current) return;
-        playerRef.current?.play?.();
+        activePlayer()?.play?.();
       },
       getCurrentTime() {
         return currentTimeRef.current;
       },
-      setVideoTakeover(active) {
-        takeoverRef.current = active;
-        setVideoTakeoverState(active);
-        if (active) playerRef.current?.pause?.();
+      setVideoTakeover(activeNow) {
+        takeoverRef.current = activeNow;
+        setVideoTakeoverState(activeNow);
+        if (activeNow) playersRef.current.forEach((p) => p?.pause?.());
       },
       stop() {
-        playerRef.current?.pause?.();
-        playerRef.current = null;
-        setTrack(null);
+        playersRef.current.forEach((p) => p?.pause?.());
+        playersRef.current = [null, null];
+        boundKeysRef.current = [null, null];
+        setSlots([
+          { key: 'a-off', track: null },
+          { key: 'b-off', track: null },
+        ] as Slots);
         setPlaying(false);
         setCurrentTime(0);
         setDuration(0);
+        setEngineRect(null);
       },
       next() {
-        const nextIndex = pickNextIndex();
-        if (nextIndex === null) return;
-        releaseVideo();
-        setCurrentTime(0);
-        setDuration(0);
-        setTrack(queueRef.current[nextIndex]);
+        const choice = nextChoiceRef.current ?? pickNext();
+        if (!choice) return;
+        goToTrack(choice);
       },
       previous() {
         // Do tří vteřin skladby se skáče na začátek, teprve pak na
         // předchozí - tohle chování má každý přehrávač a lidi ho čekají.
+        const player = activePlayer();
         if (currentTimeRef.current > 3) {
-          const target = mirroredPlayer() ?? playerRef.current;
-          if (target) target.currentTime = 0;
+          if (player) player.currentTime = 0;
           setCurrentTime(0);
           return;
         }
 
-        releaseVideo();
-
-        const list = queueRef.current;
-        const current = trackRef.current;
-        if (!current || list.length === 0) return;
-
-        const index = list.findIndex((item) => item.id === current.id);
-        const target = index > 0 ? index - 1 : repeatRef.current === 'all' ? list.length - 1 : -1;
-        if (target < 0) {
-          if (playerRef.current) playerRef.current.currentTime = 0;
+        const target = choosePrevious(
+          queueRef.current,
+          slotsRef.current[activeRef.current].track?.id ?? null,
+          repeatRef.current
+        );
+        if (!target) {
+          if (player) player.currentTime = 0;
           setCurrentTime(0);
           return;
         }
 
-        setCurrentTime(0);
-        setDuration(0);
-        setTrack(list[target]);
+        goToTrack(target);
       },
       seek(seconds) {
-        const target = mirroredPlayer() ?? playerRef.current;
-        if (!target) return;
-        target.currentTime = seconds;
+        const player = activePlayer();
+        if (!player) return;
+        player.currentTime = seconds;
         setCurrentTime(seconds);
       },
       setVolume(value) {
         const clamped = Math.max(0, Math.min(1, value));
         setVolumeState(clamped);
         if (clamped > 0) volumeBeforeMuteRef.current = clamped;
-        // Hlasitost platí pro obojí - divák nerozlišuje, který přehrávač
-        // zrovna hraje, a nechce si ji přenastavovat při každém přepnutí.
-        if (playerRef.current) playerRef.current.volume = clamped;
-        const page = pageVideoRef.current?.player;
-        if (page) page.volume = clamped;
+        const player = activePlayer();
+        if (player) player.volume = clamped;
         store(VOLUME_KEY, String(clamped));
       },
       toggleMute() {
@@ -477,15 +511,9 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         if (current > 0) volumeBeforeMuteRef.current = current;
 
         setVolumeState(next);
-        if (playerRef.current) playerRef.current.volume = next;
-        const page = pageVideoRef.current?.player;
-        if (page) page.volume = next;
+        const player = activePlayer();
+        if (player) player.volume = next;
         store(VOLUME_KEY, String(next));
-      },
-      registerPageVideo(entry) {
-        pageVideoRef.current = entry;
-        setPageVideo(entry);
-        if (entry?.player) entry.player.volume = volumeRef.current;
       },
       cycleRepeat() {
         setRepeat((prev) => {
@@ -504,30 +532,64 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       attachStage(videoId) {
         setStageId(videoId);
       },
+      showEngineOver(rect) {
+        setEngineRect(rect);
+      },
     }),
-    [pickNextIndex, mirroredPlayer, releaseVideo]
+    [activePlayer, pickNext, goToTrack]
   );
 
   const state = useMemo<MusicState>(
-    () => ({ track, queue, playing, currentTime, duration, volume, repeat, shuffle, stageId, videoTakeover, mirroringPageVideo }),
-    [track, queue, playing, currentTime, duration, volume, repeat, shuffle, stageId, videoTakeover, mirroringPageVideo]
+    () => ({
+      track,
+      queue,
+      playing,
+      currentTime,
+      duration,
+      volume,
+      repeat,
+      shuffle,
+      stageId,
+      videoTakeover,
+      engineVisible: engineRect !== null,
+    }),
+    [track, queue, playing, currentTime, duration, volume, repeat, shuffle, stageId, videoTakeover, engineRect]
   );
 
   return (
     <CommandsContext.Provider value={commands}>
       <StateContext.Provider value={state}>
         {children}
-        {track && (
-          <iframe
-            // Nová skladba = nový iframe. Přehodit adresu za běhu jde,
-            // ale napojení SDK by pak ukazovalo na starý přehrávač.
-            key={track.id}
-            ref={iframeRef}
-            className="music-engine-frame"
-            src={`https://iframe.videodelivery.net/${track.cloudflareId}?controls=false&autoplay=true`}
-            allow="autoplay; encrypted-media"
-            title={track.title}
-          />
+        {slots.map((slot, i) =>
+          slot.track ? (
+            <iframe
+              // Nová skladba = nový iframe. Přehodit adresu za běhu jde,
+              // ale napojení SDK by pak ukazovalo na starý přehrávač.
+              key={slot.key}
+              ref={(el) => {
+                frameRefs.current[i] = el;
+              }}
+              className={
+                i === active && engineRect ? 'music-engine-frame music-engine-frame-onscreen' : 'music-engine-frame'
+              }
+              style={
+                i === active && engineRect
+                  ? {
+                      top: engineRect.top,
+                      left: engineRect.left,
+                      width: engineRect.width,
+                      height: engineRect.height,
+                    }
+                  : undefined
+              }
+              // Slot, který se jen předem načítá, se nesmí rozjet sám.
+              src={`https://iframe.videodelivery.net/${slot.track.cloudflareId}?controls=false${
+                i === active ? '&autoplay=true' : '&muted=true'
+              }`}
+              allow="autoplay; encrypted-media; picture-in-picture; fullscreen;"
+              title={slot.track.title}
+            />
+          ) : null
         )}
       </StateContext.Provider>
     </CommandsContext.Provider>

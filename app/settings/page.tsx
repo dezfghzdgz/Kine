@@ -57,7 +57,7 @@ export default function SettingsPage() {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('username, display_name, avatar_url, rating_mode, banner_url, bio, social_links, content_preference, disable_shorts, subscription_price_eur')
+      .select('username, display_name, avatar_url, rating_mode, banner_url, bio, social_links, content_preference, disable_shorts, stripe_account_id, stripe_onboarding_complete, subscription_price_eur')
       .eq('id', authData.user.id)
       .single();
 
@@ -68,12 +68,8 @@ export default function SettingsPage() {
       setRatingMode((profile.rating_mode as 'stars' | 'like_dislike') ?? 'like_dislike');
       setContentPreference((profile.content_preference as 'short' | 'long') ?? 'long');
       setDisableShorts(!!profile.disable_shorts);
-      // Údaje o napojení na Stripe patří jen majiteli účtu, takže se čtou
-      // funkcí, ne přímo ze sloupců.
-      const { data: accountRows } = await supabase.rpc('my_account');
-      const account = Array.isArray(accountRows) ? accountRows[0] : accountRows;
-      setStripeAccountId(account?.stripe_account_id ?? null);
-      setStripeOnboardingComplete(!!account?.stripe_onboarding_complete);
+      setStripeAccountId(profile.stripe_account_id ?? null);
+      setStripeOnboardingComplete(!!profile.stripe_onboarding_complete);
       setSubscriptionPrice(profile.subscription_price_eur ? String(profile.subscription_price_eur) : '');
       setBannerUrl(profile.banner_url ?? null);
       setBio(profile.bio ?? '');

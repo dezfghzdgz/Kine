@@ -6,7 +6,6 @@ import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 import { addToQueue } from '@/lib/videoQueue';
 import { hideVideo, hideChannel } from '@/lib/hiddenContent';
-import { startDownload, recordDownload } from '@/lib/download';
 import ReportModal from './ReportModal';
 import {
   PlaylistIcon, WatchLaterIcon, DownloadIcon, ShareIcon, ReportIcon, QueueIcon, NotInterestedIcon, BlockChannelIcon,
@@ -199,31 +198,45 @@ export default function VideoCardMenu({
     setDownloadUrl(null);
     setNote(t('menuPreparingDownload'));
 
-    // Celý postup je v lib/download.ts, ať se obě místa, odkud se dá
-    // stáhnout, chovají stejně. Tady se navíc dřív vůbec nezapisovalo do
-    // historie stažení - kdo stahoval jen přes tuhle nabídku, měl stránku
-    // "Stažené" trvale prázdnou.
-    const outcome = await startDownload(video.id, video.cloudflare_video_id);
-    setDownloading(false);
+    try {
+      // Cloudflare soubor ke stažení teprve chystá, tak se ho ptáme
+      // opakovaně, dokud nebude hotový.
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const res = await fetch('/api/videos/enable-download', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${sessionData.session.access_token}`,
+          },
+          body: JSON.stringify({ cloudflareVideoId: video.cloudflare_video_id }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
 
-    switch (outcome.kind) {
-      case 'opened':
-        setNote(null);
-        closeMenu();
-        return;
-      case 'link':
-        setDownloadUrl(outcome.url);
-        setNote(null);
-        return;
-      case 'needs-login':
-        router.push('/login');
-        return;
-      case 'not-ready':
-        setNote(t('menuDownloadNotReady'));
-        return;
-      case 'failed':
-        setNote(t('menuActionFailed'));
-        return;
+        if (data.status === 'ready' && data.url) {
+          // Novou kartu prohlížeč pustí jen chvíli po kliknutí. Když se
+          // soubor stihl připravit hned, otevřeme ji rovnou; když to trvalo
+          // dýl, nabídneme odkaz, na který uživatel klikne sám - jinak by
+          // prohlížeč kartu potichu zablokoval a nestalo by se nic.
+          if (attempt === 0) {
+            const opened = window.open(data.url, '_blank');
+            if (opened) {
+              setNote(null);
+              closeMenu();
+              return;
+            }
+          }
+          setDownloadUrl(data.url);
+          setNote(null);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+      }
+      setNote(t('menuDownloadNotReady'));
+    } catch {
+      setNote(t('menuActionFailed'));
+    } finally {
+      setDownloading(false);
     }
   }
 
@@ -297,7 +310,7 @@ export default function VideoCardMenu({
                   target="_blank"
                   rel="noreferrer"
                   className="video-card-menu-item"
-                  onClick={() => { recordDownload(video.id); setDownloadUrl(null); closeMenu(); }}
+                  onClick={() => { setDownloadUrl(null); closeMenu(); }}
                   style={{ color: 'var(--brand)' }}
                 >
                   <DownloadIcon size={16} /> {t('menuDownloadReady')}

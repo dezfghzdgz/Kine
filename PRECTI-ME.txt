@@ -1,74 +1,103 @@
-KINE - dobrání pěti souborů, které v repu chybí
-===============================================
+KINE - hudba, fronta hlášení, načítání
+======================================
 
-5 souborů. Rozbal do kořene repa (tam, kde je package.json) a přepiš.
-Nic jiného dělat nemusíš, žádná migrace k tomu nepatří.
+12 souborů. Rozbal do kořene repa a přepiš.
+Žádná migrace k tomu nepatří.
 
-
-CO TA CHYBA Z VERCELU ZNAMENÁ
------------------------------
-    Type error: Property 'registerPageVideo' does not exist
-    on type 'MusicCommands'.
-
-Překladač kontroluje, že se soubory mezi sebou volají tak, jak se
-opravdu umí. Tady našel, že stránka videa volá funkci registerPageVideo
-u hudebního přehrávače - a ten ji nemá.
-
-Stránka videa ji volá kvůli tomu, aby spodní lišta ukazovala čas videa,
-které zrovna běží na obrazovce, a ne času hudby, která mezitím stojí.
-Ta funkce vznikla v balíčku "lišta synchronizovaná s tím, co hraje".
-Stránka videa z toho balíčku se do repa dostala, hudební přehrávač ne.
-
-Není to chyba, kterou by šlo přejít nebo vypnout - Vercel build záměrně
-zastaví, protože takový kód by v prohlížeči spadl.
+Seznam souborů jsem tentokrát nesestavil z hlavy - stáhl jsem si tvůj
+main (ee40583) a porovnal ho se svojí kopií soubor po souboru. Pak jsem
+do tvého stromu tyhle změny nasadil a nechal na něm proběhnout tu samou
+kontrolu, na které naposledy spadl build. Prošla.
 
 
-PROČ SE TO STALO A CO S TÍM
----------------------------
-Je to moje chyba a je to už počtvrté v podobném duchu. Posílám ti jen
-soubory, které jsem v daném kole upravil - jenže to má smysl jen tehdy,
-když všechno předchozí opravdu dorazilo. Já jsem to celou dobu porovnával
-proti své vlastní kopii, ne proti tomu, co doopravdy máš v repu. Takže
-jsem neměl jak poznat, že jeden starší balíček zůstal cestou ležet.
+1) PŘEPNU NA VIDEO A VIDEO SE NENAČTE
+-------------------------------------
+Minule jsem se spletl a tvoje odpověď to odhalila. To, že se tlačítko
+Přehrát objevilo, znamená, že appka přehrávač našla a povely mu posílala
+- jen nedošly. Kdyby byla chyba tam, kde jsem hledal (krátké čekání na
+rozjezd), tlačítko by se neobjevilo vůbec.
 
-Teď jsem si tvůj repozitář poprvé stáhl a porovnal soubor po souboru.
-Odteď to dělám před každým odesláním: postavím si tvůj strom, nasadím do
-něj svoje změny a nechám na tom proběhnout tu samou kontrolu, jakou dělá
-Vercel. Tahle konkrétní chyba by se tím byla ukázala u mě, ne až u tebe.
+Skutečná příčina: stránka videa si v hudebním režimu zakládala VLASTNÍ
+přehrávač se stejným videem, jaké už hrálo na pozadí. Dva přehrávače
+téhož videa na jedné stránce si lezou do zelí - appka se napojila na ten
+druhý, poslala mu "hraj" a nestalo se nic.
+
+Přehrávač je odteď jeden. Když si u skladby přepneš na Video, jeho obraz
+se prostě promítne přes místo, které mu stránka vyhradí. Nic se nenačítá
+znovu, zvuk nepřeskočí a přepnutí je okamžité - i tam a zpátky, kolikrát
+chceš.
+
+Zmizelo tím i předávání času mezi obalem a videem a celá mašinérie kolem
+zrcadlení, protože není co s čím synchronizovat: je to pořád ten samý
+přehrávač.
 
 
-CO V REPU CHYBĚLO
+2) MEZI SKLADBAMI JE DLOUHÉ TICHO
+---------------------------------
+Každá další skladba znamenala nový iframe od úplné nuly: stáhnout skript
+Cloudflare, manifest, první kus zvuku. Odtud ty vteřiny ticha.
+
+Přehrávač má teď sloty dva. Zatímco jeden hraje, druhý si potichu
+dopředu načte skladbu, která přijde na řadu. Když ta první dohraje, jen
+se sloty vymění - čekat není na co. Platí to i pro tlačítko "další".
+
+Rozhodování ("co pustit dál a kam to načíst") je schválně vytažené do
+lib/musicSlots.ts, aby se dalo otestovat bez prohlížeče:
+
+    node tests/musicSlots.test.mjs
+
+15 kontrol, mezi nimi i "po předehrání musí být přepnutí okamžité"
+a "hrající slot se výměnou nikdy nepřepíše".
+
+
+3) FRONTA HLÁŠENÍ
 -----------------
-Porovnání ukázalo přesně pět souborů. Všechny jsou z jednoho staršího
-balíčku, který se do repa nedostal:
+Tvůj nápad byl lepší než moje tři dohromady, tak jsem ho udělal jako
+základ: jedna položka = jeden nahlášený kus obsahu, ne jedno hlášení.
+Video nahlášené stokrát je jeden řádek s číslem, ne sto řádků a sto
+kliknutí "vyřídit" - je to přece jedno rozhodnutí.
 
-lib/musicPlayer.tsx            <- kvůli tomuhle padá build
-  Chybí mu 150 řádků: napojení lišty na přehrávač videa (registerPageVideo),
-  zrcadlení času, hlasitost platná pro obojí, uvolnění zvuku při přeskočení
-  skladby.
+U každé položky je:
+- náhled, název, kanál a odkaz na video
+- "Nahlášeno 100×" a kolik z toho bylo různých lidí (sto hlášení od
+  jednoho člověka je něco jiného než od sta)
+- rozpis důvodů: Spam 62×, Násilí 20×, ...
+- kdy poprvé a kdy naposledy
+- upozornění, když má ten samý tvůrce hlášení i u dalších videí
+- poznámky nahlašujících na rozkliknutí (nezabírají místo, dokud je
+  nechceš)
+- Vyřídit všechna jedním kliknutím
 
-components/MusicMiniPlayer.tsx
-  Patří k tomu - lišta, která z toho napojení čte.
+Nahoře jsou filtry (nevyřízené / vyřízené / vše, s počty) a řazení podle
+počtu nebo podle času. Výchozí je "nevyřízené, nejvíc nahlášené první" -
+to je fronta, jak ji moderátor potřebuje.
 
-components/Sidebar.tsx
-  Odkaz na moderátorskou frontu mířil na /moderation/reports, jenže ta
-  stránka se jmenuje /reports. Klik na "Nahlášení" v postranním panelu ti
-  tedy teď dává 404, na počítači i na mobilu.
+A proč to trvalo: načítalo se to jedním dotazem bez omezení. U stovek
+hlášení se dotaz buď utne na tisíci řádcích, nebo neprojde vůbec. Teď to
+jde po dávkách a když se to nepovede, řekne to - místo aby se tvářilo,
+že fronta je prázdná.
 
-app/reports/page.tsx
-  Důvod nahlášení se ukládá jako klíč (např. "reasonSpam") a překládá se
-  až při zobrazení. Bez tohohle vidí moderátor ve frontě ty klíče.
 
-app/upload/page.tsx
-  Čekání na zpracování videa: po dvou minutách se tiše přestalo čekat,
-  appka označila nahrávání za hotové a poslala tvůrce na hlavní stránku -
-  kde jeho video pochopitelně nebylo, protože se ještě zpracovávalo.
-  Teď ho pošle do Tvých videí, kde uvidí "Zpracovává se".
+4) NAČÍTÁNÍ (ty animace jako na YouTube)
+----------------------------------------
+Místo nápisu "Načítám…" se teď ukáže kostra toho, co za chvíli přijde -
+obrys náhledu, řádky textu, jemný přejezd světla. Není to jen kosmetika:
+stránka se pod rukama nepřeskládá, protože kostra zabírá zhruba stejné
+místo jako hotový obsah, a čekání působí kratší, protože je vidět, že se
+něco děje.
+
+Zatím je to na frontě hlášení. Hlavní stránka to měla už dřív; ostatní
+stránky na to mají teď hotové dílky (components/Skeleton.tsx) a dodělám
+je v dalším kole.
 
 
 CO JSEM OVĚŘIL
 --------------
-Stáhl jsem si tvůj main (commit 7391513), nakopíroval do něj těchhle pět
-souborů a spustil typovou kontrolu celého projektu - tedy to samé, na čem
-build spadl. Prošla. Chyba s registerPageVideo je pryč a nic jiného se
-nerozbilo.
+- Typová kontrola celého projektu na TVÉM stromu (ne na mojí kopii).
+- 29 kontrol v testech (15 hudba + 14 rozjezd přehrávače).
+- Všech 12 souborů se přeloží, CSS je uzavřené.
+
+Co ověřené není: Cloudflare se z mého prostředí nedá zavolat, takže
+skutečné přehrávání jsem si přehrát nemohl. Ale tahle změna nespoléhá na
+to, že se něco povede naráz - odstraňuje důvod, proč to nefungovalo (dva
+přehrávače), místo aby ho obcházela.
