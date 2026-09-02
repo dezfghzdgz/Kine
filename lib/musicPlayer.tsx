@@ -57,6 +57,17 @@ type MusicCommands = {
    * se schová, aby ji nešlo pustit ani ručně.
    */
   setVideoTakeover: (active: boolean) => void;
+  /**
+   * Přihlášení přehrávače videa ze stránky.
+   *
+   * Lišta dole je dálkový ovladač toho, co zrovna hraje - ne jen hudby.
+   * Když si divák u skladby přepne na video, ovládá lišta rovnou ten
+   * přehrávač a ukazuje jeho čas. Bez tohohle by ukazovala hudbu, která
+   * mezitím stojí, a čísla v ní by neseděla s obrazem.
+   */
+  registerPageVideo: (entry: { player: any; trackId: string } | null) => void;
+  /** Ztlumení. Druhé kliknutí vrátí hlasitost tam, kde byla před ztlumením. */
+  toggleMute: () => void;
   next: () => void;
   previous: () => void;
   seek: (seconds: number) => void;
@@ -78,6 +89,8 @@ type MusicState = {
   shuffle: boolean;
   stageId: string | null;
   videoTakeover: boolean;
+  /** Zvuk drží přehrávač videa na stránce, ne hudba. Lišta ho jen zrcadlí. */
+  mirroringPageVideo: boolean;
 };
 
 const EMPTY_STATE: MusicState = {
@@ -91,6 +104,7 @@ const EMPTY_STATE: MusicState = {
   shuffle: false,
   stageId: null,
   videoTakeover: false,
+  mirroringPageVideo: false,
 };
 
 const CommandsContext = createContext<MusicCommands | null>(null);
@@ -145,6 +159,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const [shuffle, setShuffle] = useState(false);
   const [stageId, setStageId] = useState<string | null>(null);
   const [videoTakeover, setVideoTakeoverState] = useState(false);
+  const [pageVideo, setPageVideo] = useState<{ player: any; trackId: string } | null>(null);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<any>(null);
@@ -159,6 +174,11 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const volumeRef = useRef(1);
   const currentTimeRef = useRef(0);
   const takeoverRef = useRef(false);
+  // Přehrávač videa ze stránky, když zvuk drží on. Vedle stavu i v ref,
+  // protože příkazy se schválně nepřepisují a stav by v nich zestárnul.
+  const pageVideoRef = useRef<{ player: any; trackId: string } | null>(null);
+  // Hlasitost před ztlumením, ať se dá vrátit přesně tam, kde byla.
+  const volumeBeforeMuteRef = useRef(0.7);
 
   trackRef.current = track;
   queueRef.current = queue;
@@ -167,6 +187,10 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   volumeRef.current = volume;
   currentTimeRef.current = currentTime;
   takeoverRef.current = videoTakeover;
+  pageVideoRef.current = pageVideo;
+
+  // Lišta zrcadlí video jen tehdy, když jde o tu samou skladbu.
+  const mirroringPageVideo = !!pageVideo && pageVideo.trackId === track?.id;
 
   useEffect(() => {
     setRepeat(readStored(REPEAT_KEY, ['off', 'one', 'all'] as const, 'off'));
@@ -180,6 +204,73 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (videoTakeover) playerRef.current?.pause?.();
   }, [videoTakeover, track?.id]);
+
+  /**
+   * Přehrávač videa, který má zrovna zvuk pro sebe.
+   *
+   * Vrací ho jen tehdy, když jde o tu samou skladbu, kterou lišta ukazuje.
+   * U obyčejného videa (jiná skladba, jiný obsah) lišta dál patří hudbě,
+   * jen ta hudba stojí - aby si ji divák mohl kdykoliv pustit zpátky.
+   */
+  const mirroredPlayer = useCallback(() => {
+    const entry = pageVideoRef.current;
+    if (!entry || entry.trackId !== trackRef.current?.id) return null;
+    return entry.player ?? null;
+  }, []);
+
+  /**
+   * Čísla v liště berou ze správného přehrávače.
+   *
+   * Dokud běží video té samé skladby, čte lišta čas z něj. Předtím ukazovala
+   * čas hudby, která mezitím stála - v liště tedy svítilo něco úplně jiného,
+   * než co bylo slyšet.
+   */
+  useEffect(() => {
+    if (!mirroringPageVideo || !pageVideo?.player) return;
+
+    const player = pageVideo.player;
+    let lastTick = 0;
+
+    const onPlay = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+    const onMeta = () => setDuration(player.duration ?? 0);
+    const onTime = () => {
+      const now = Date.now();
+      if (now - lastTick < 250) return;
+      lastTick = now;
+      setCurrentTime(player.currentTime ?? 0);
+    };
+
+    player.addEventListener?.('play', onPlay);
+    player.addEventListener?.('pause', onPause);
+    player.addEventListener?.('loadedmetadata', onMeta);
+    player.addEventListener?.('timeupdate', onTime);
+
+    // Hudba při zrcadlení nikdy nehraje - zvuk má video.
+    playerRef.current?.pause?.();
+    setPlaying(!player.paused);
+    if (player.duration) setDuration(player.duration);
+
+    return () => {
+      player.removeEventListener?.('play', onPlay);
+      player.removeEventListener?.('pause', onPause);
+      player.removeEventListener?.('loadedmetadata', onMeta);
+      player.removeEventListener?.('timeupdate', onTime);
+    };
+  }, [mirroringPageVideo, pageVideo]);
+
+  /**
+   * Vrátí zvuk hudbě.
+   *
+   * Přeskočení na jinou skladbu při běžícím videu je jasný pokyn "chci
+   * poslouchat" - video se proto zastaví a další skladba se rozjede v
+   * hudebním přehrávači. Video na stránce zůstane stát tam, kde bylo.
+   */
+  const releaseVideo = useCallback(() => {
+    pageVideoRef.current?.player?.pause?.();
+    takeoverRef.current = false;
+    setVideoTakeoverState(false);
+  }, []);
 
   const pickNextIndex = useCallback((): number | null => {
     const list = queueRef.current;
@@ -282,10 +373,27 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         setTrack(nextTrack);
       },
       toggle() {
+        // Zrcadlí-li lišta video ze stránky, ovládá se video. Jinak hudba -
+        // a když hudba stojí kvůli běžícímu videu, pustit ji znamená vzít
+        // zvuk videu, ne hrát přes něj.
+        const mirrored = mirroredPlayer();
+        if (mirrored) {
+          if (mirrored.paused) mirrored.play?.();
+          else mirrored.pause?.();
+          return;
+        }
+
         const player = playerRef.current;
         if (!player) return;
-        if (player.paused) player.play?.();
-        else player.pause?.();
+
+        if (player.paused) {
+          pageVideoRef.current?.player?.pause?.();
+          takeoverRef.current = false;
+          setVideoTakeoverState(false);
+          player.play?.();
+        } else {
+          player.pause?.();
+        }
       },
       pause() {
         playerRef.current?.pause?.();
@@ -313,6 +421,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       next() {
         const nextIndex = pickNextIndex();
         if (nextIndex === null) return;
+        releaseVideo();
         setCurrentTime(0);
         setDuration(0);
         setTrack(queueRef.current[nextIndex]);
@@ -321,10 +430,13 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         // Do tří vteřin skladby se skáče na začátek, teprve pak na
         // předchozí - tohle chování má každý přehrávač a lidi ho čekají.
         if (currentTimeRef.current > 3) {
-          if (playerRef.current) playerRef.current.currentTime = 0;
+          const target = mirroredPlayer() ?? playerRef.current;
+          if (target) target.currentTime = 0;
           setCurrentTime(0);
           return;
         }
+
+        releaseVideo();
 
         const list = queueRef.current;
         const current = trackRef.current;
@@ -343,15 +455,37 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         setTrack(list[target]);
       },
       seek(seconds) {
-        if (!playerRef.current) return;
-        playerRef.current.currentTime = seconds;
+        const target = mirroredPlayer() ?? playerRef.current;
+        if (!target) return;
+        target.currentTime = seconds;
         setCurrentTime(seconds);
       },
       setVolume(value) {
         const clamped = Math.max(0, Math.min(1, value));
         setVolumeState(clamped);
+        if (clamped > 0) volumeBeforeMuteRef.current = clamped;
+        // Hlasitost platí pro obojí - divák nerozlišuje, který přehrávač
+        // zrovna hraje, a nechce si ji přenastavovat při každém přepnutí.
         if (playerRef.current) playerRef.current.volume = clamped;
+        const page = pageVideoRef.current?.player;
+        if (page) page.volume = clamped;
         store(VOLUME_KEY, String(clamped));
+      },
+      toggleMute() {
+        const current = volumeRef.current;
+        const next = current > 0 ? 0 : volumeBeforeMuteRef.current || 0.7;
+        if (current > 0) volumeBeforeMuteRef.current = current;
+
+        setVolumeState(next);
+        if (playerRef.current) playerRef.current.volume = next;
+        const page = pageVideoRef.current?.player;
+        if (page) page.volume = next;
+        store(VOLUME_KEY, String(next));
+      },
+      registerPageVideo(entry) {
+        pageVideoRef.current = entry;
+        setPageVideo(entry);
+        if (entry?.player) entry.player.volume = volumeRef.current;
       },
       cycleRepeat() {
         setRepeat((prev) => {
@@ -371,12 +505,12 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         setStageId(videoId);
       },
     }),
-    [pickNextIndex]
+    [pickNextIndex, mirroredPlayer, releaseVideo]
   );
 
   const state = useMemo<MusicState>(
-    () => ({ track, queue, playing, currentTime, duration, volume, repeat, shuffle, stageId, videoTakeover }),
-    [track, queue, playing, currentTime, duration, volume, repeat, shuffle, stageId, videoTakeover]
+    () => ({ track, queue, playing, currentTime, duration, volume, repeat, shuffle, stageId, videoTakeover, mirroringPageVideo }),
+    [track, queue, playing, currentTime, duration, volume, repeat, shuffle, stageId, videoTakeover, mirroringPageVideo]
   );
 
   return (

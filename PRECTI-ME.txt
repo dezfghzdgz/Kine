@@ -1,124 +1,74 @@
-KINE - přepnutí na video, stahování a další chyby
-=================================================
+KINE - dobrání pěti souborů, které v repu chybí
+===============================================
 
-15 souborů. Rozbal do kořene repa a přepiš.
-
-POZOR: app/globals.css je tu i z minulého kola (vzhled). Když jsi ten
-minulý balíček ještě nerozbalil, rozbal nejdřív jeho - tenhle na něm
-staví.
+5 souborů. Rozbal do kořene repa (tam, kde je package.json) a přepiš.
+Nic jiného dělat nemusíš, žádná migrace k tomu nepatří.
 
 
-1) PŘEPNU Z HUDBY NA VIDEO A VIDEO SE NENAČTE
----------------------------------------------
-Našel jsem to. Rozjezd přehrávače to zkoušel dvacetkrát po 150 ms, tedy
-tři vteřiny, a pak to vzdal.
+CO TA CHYBA Z VERCELU ZNAMENÁ
+-----------------------------
+    Type error: Property 'registerPageVideo' does not exist
+    on type 'MusicCommands'.
 
-Tři vteřiny na rozjezd cizího iframu nestačí. Přehrávač od Cloudflare si
-po vložení do stránky musí stáhnout vlastní skript, pak manifest a pak
-první kus videa. Když se do těch tří vteřin nevešel - a na pomalejším
-připojení se nevejde skoro nikdy - povel "hraj" se ztratil a už ho
-nikdo nezopakoval. Přehrávač zůstal stát navždy.
+Překladač kontroluje, že se soubory mezi sebou volají tak, jak se
+opravdu umí. Tady našel, že stránka videa volá funkci registerPageVideo
+u hudebního přehrávače - a ten ji nemá.
 
-A protože jede schválně bez vlastního ovládání (?controls=false), nešel
-spustit ani ručně. Zbyl černý obdélník, se kterým se nedalo nic dělat.
-Přesně to, co popisuješ.
+Stránka videa ji volá kvůli tomu, aby spodní lišta ukazovala čas videa,
+které zrovna běží na obrazovce, a ne času hudby, která mezitím stojí.
+Ta funkce vznikla v balíčku "lišta synchronizovaná s tím, co hraje".
+Stránka videa z toho balíčku se do repa dostala, hudební přehrávač ne.
 
-Co je jinak:
-- Řídí se to událostmi přehrávače. Ten sám řekne "jsem připravený" a
-  teprve tehdy se pouští - není to hádání.
-- Pokusy zůstaly jako záloha, ale řídnou a trvají až do 13. vteřiny.
-- Když se to ani tak nerozjede, objeví se po čtyřech vteřinách tlačítko
-  Přehrát. Pokusy na pozadí běží dál, takže když se to mezitím rozjede
-  samo, tlačítko zmizí.
-- Převíjení (předání času z obalu na video) má nově toleranci. Dřív se
-  převíjelo při každém pokusu dokola, což pokaždé zahodilo, co se stihlo
-  načíst - přehrávač se tím sám držel na místě.
-
-Postup je vytažený do lib/playerStart.ts, aby se dal otestovat bez
-prohlížeče. tests/playerStart.test.mjs má 14 kontrol, spustíš je:
-
-    node tests/playerStart.test.mjs
-
-Je mezi nimi i přesně tenhle případ: "iframe se rozjede až po 7
-vteřinách - stará verze to vzdala po 3, tahle ne".
-
-Čím si nejsem jistý: Cloudflare se z mého prostředí nedá zavolat, takže
-jsem to nemohl přehrát naživo. Testuju napodobeninu přehrávače, ne
-skutečný. Jestli to po nasazení nepůjde pořád, napiš mi - a jestli se
-objeví to tlačítko Přehrát, je to důležitá informace: znamená to, že
-appka povely posílá a nedojdou.
+Není to chyba, kterou by šlo přejít nebo vypnout - Vercel build záměrně
+zastaví, protože takový kód by v prohlížeči spadl.
 
 
-2) STAHOVÁNÍ
-------------
-Dvě věci, obě nepříjemné.
+PROČ SE TO STALO A CO S TÍM
+---------------------------
+Je to moje chyba a je to už počtvrté v podobném duchu. Posílám ti jen
+soubory, které jsem v daném kole upravil - jenže to má smysl jen tehdy,
+když všechno předchozí opravdu dorazilo. Já jsem to celou dobu porovnával
+proti své vlastní kopii, ne proti tomu, co doopravdy máš v repu. Takže
+jsem neměl jak poznat, že jeden starší balíček zůstal cestou ležet.
 
-Tlačítko Stáhnout (pod videem): novou kartu prohlížeč pustí jen chvíli
-po kliknutí. Tohle tlačítko ale čekalo, až Cloudflare soubor připraví -
-klidně minutu - a teprve pak volalo window.open. Prohlížeč kartu tiše
-zablokoval. Nestáhlo se nic, žádná chyba se neukázala, tlačítko se
-vrátilo do normálu. Ale do historie stažení se to zapsalo jako stažené.
-
-Nabídka pod třemi tečkami: tuhle past měla ošetřenou správně, zato do
-historie nezapisovala vůbec. Kdo stahoval odtamtud, měl stránku
-"Stažené" trvale prázdnou, ať stáhl kolik chtěl.
-
-Obojí je teď na jednom místě (lib/download.ts) a chová se stejně: když
-se karta otevřít nedá, nabídne se odkaz, na který klikneš sám. Do
-historie se zapisuje až ve chvíli, kdy se soubor opravdu otevřel.
+Teď jsem si tvůj repozitář poprvé stáhl a porovnal soubor po souboru.
+Odteď to dělám před každým odesláním: postavím si tvůj strom, nasadím do
+něj svoje změny a nechám na tom proběhnout tu samou kontrolu, jakou dělá
+Vercel. Tahle konkrétní chyba by se tím byla ukázala u mě, ne až u tebe.
 
 
-3) PĚT MÍST, KDE APPKA TVRDILA NEPRAVDU
----------------------------------------
-Tohle je ta samá třída chyb jako ta domovská stránka minule. Nechal
-jsem to projít celý kód:
+CO V REPU CHYBĚLO
+-----------------
+Porovnání ukázalo přesně pět souborů. Všechny jsou z jednoho staršího
+balíčku, který se do repa nedostal:
 
-- HISTORIE, STAŽENÉ, LÍBÍ SE MI, SLEDOVAT POZDĚJI
-  Načítání dlouhých seznamů při chybě vracelo prázdno. Při výpadku sítě
-  nebo propadlém přihlášení tedy stránka napsala "zatím tu nic není"
-  člověku, který tam má sto položek. Horší varianta: když spadl jen
-  jeden dotaz ze sta, tiše zmizela stovka videí ze seznamu - stránka
-  vypadala v pořádku, jen v ní kus chyběl.
+lib/musicPlayer.tsx            <- kvůli tomuhle padá build
+  Chybí mu 150 řádků: napojení lišty na přehrávač videa (registerPageVideo),
+  zrcadlení času, hlasitost platná pro obojí, uvolnění zvuku při přeskočení
+  skladby.
 
-- KOMENTÁŘE
-  Chyba dotazu se nečetla vůbec. Pod videem se objevilo "Zatím žádné
-  komentáře" i u videa, které jich má padesát. Tvůrce si mohl myslet,
-  že mu je někdo smazal.
+components/MusicMiniPlayer.tsx
+  Patří k tomu - lišta, která z toho napojení čte.
 
-- SPARKS
-  Totéž: "Zatím tu nejsou žádné Sparks."
+components/Sidebar.tsx
+  Odkaz na moderátorskou frontu mířil na /moderation/reports, jenže ta
+  stránka se jmenuje /reports. Klik na "Nahlášení" v postranním panelu ti
+  tedy teď dává 404, na počítači i na mobilu.
 
-- ZHLÉDNOUT POZDĚJI (na stránce videa)
-  Kdo nemá systémový playlist (zakládá ho registrace, taky bez kontroly,
-  jestli se to povedlo), tomu tlačítko nedělalo vůbec nic. Klik a ticho.
-  Chybějící playlist se teď založí. A když zápis selže, tlačítko se už
-  nepřepne na "✓" - dřív se přepnulo vždycky, takže po obnovení stránky
-  bylo video pryč a vypadalo to, že appka maže seznamy.
+app/reports/page.tsx
+  Důvod nahlášení se ukládá jako klíč (např. "reasonSpam") a překládá se
+  až při zobrazení. Bez tohohle vidí moderátor ve frontě ty klíče.
 
-- OBRÁZEK U KOMENTÁŘE
-  Když se nepovedl upload, komentář odešel bez obrázku a mlčky. Navíc
-  červená hláška o neúspěchu zůstávala viset i po úspěšném odeslání.
+app/upload/page.tsx
+  Čekání na zpracování videa: po dvou minutách se tiše přestalo čekat,
+  appka označila nahrávání za hotové a poslala tvůrce na hlavní stránku -
+  kde jeho video pochopitelně nebylo, protože se ještě zpracovávalo.
+  Teď ho pošle do Tvých videí, kde uvidí "Zpracovává se".
 
 
 CO JSEM OVĚŘIL
 --------------
-- Typová kontrola celého projektu prošla.
-- Všech 15 souborů se přeloží.
-- 14 kontrol rozjezdu přehrávače prošlo (dvě z nich jsem si nejdřív
-  napsal špatně - kód byl v právu, ne můj test).
-
-
-CO ZŮSTÁVÁ NA PŘÍŠTĚ
---------------------
-Při procházení vypadly ještě tyhle, na které jsem už nesáhl:
-
-- NAHRÁVÁNÍ: když se video úspěšně nahraje a chyba přijde až potom
-  (třeba při čekání na zpracování), tlačítko "Nahrát" zase ožije a
-  dalším kliknutím se nahraje celé znovu jako nový záznam. Počítá se
-  přitom do denního limitu 5 videí. Tohle bych řešil hned příště.
-- POČET ODBĚRATELŮ: počítá se z neomezeného dotazu, takže větší kanál
-  bude navždy ukazovat 1000.
-- PLAYLIST NA STRÁNCE VIDEA: u playlistu s ~200 položkami spadne dotaz
-  celý a panel zůstane prázdný, včetně automatického přehrávání dál.
-- ZAPOČÍTÁVÁNÍ ZHLÉDNUTÍ: časovač se nezruší při odchodu, takže se
-  zhlédnutí započítá i tomu, kdo video zavřel po vteřině.
+Stáhl jsem si tvůj main (commit 7391513), nakopíroval do něj těchhle pět
+souborů a spustil typovou kontrolu celého projektu - tedy to samé, na čem
+build spadl. Prošla. Chyba s registerPageVideo je pryč a nic jiného se
+nerozbilo.
