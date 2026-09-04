@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import OnboardingChecklist from '@/components/OnboardingChecklist';
+import LoadFailed from '@/components/LoadFailed';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
 import VideoCard from '@/components/VideoCard';
@@ -26,7 +27,6 @@ type FeedContext = {
   preference: 'short' | 'long';
   disableShorts: boolean;
   hidden: HiddenContent;
-  shadowBannedIds: Set<string>;
   subscribedIds: Set<string>;
   watchedIds: Set<string>;
   topCategories: Set<string>;
@@ -69,6 +69,9 @@ export default function HomePage() {
   // se nedalo poznat, jestli je chyba v appce, v nastavení nebo v datech.
   const [sparkNotice, setSparkNotice] = useState<'off' | 'rule' | null>(null);
   const [hiddenCount, setHiddenCount] = useState(0);
+  // Dokud tohle tu nebylo, spadlý dotaz nikdo nezachytil: stav zůstal na
+  // "ještě nemám data" a stránka ukazovala kostru donekonečna.
+  const [loadFailed, setLoadFailed] = useState(false);
 
   // Tyhle věci se mezi dávkami nemění a nesmí spustit překreslení stránky,
   // proto sedí v ref a ne ve state.
@@ -79,8 +82,22 @@ export default function HomePage() {
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    loadInitial();
+    startLoad();
   }, []);
+
+  /** Spustí načtení feedu a pohlídá, že se případný pád projeví na obrazovce. */
+  async function startLoad() {
+    setLoadFailed(false);
+    try {
+      await loadInitial();
+    } catch {
+      // Konkrétní chybu tu nemá cenu ukazovat - divákovi neřekne nic
+      // a bývá to stejně jen "Failed to fetch". Podstatné je, že se dá
+      // zkusit to znovu.
+      setLoadFailed(true);
+      loadingRef.current = false;
+    }
+  }
 
   // Automatické donačítání - jakmile je "cílová značka" dole vidět na
   // obrazovce, appka si řekne databázi o další dávku.
@@ -99,8 +116,6 @@ export default function HomePage() {
   async function loadInitial() {
     const { data: authData } = await supabase.auth.getUser();
     const user = authData.user ?? null;
-
-    const shadowBannedPromise = supabase.from('profiles').select('id').eq('is_shadow_banned', true);
 
     const subscribedIds = new Set<string>();
     const watchedIds = new Set<string>();
@@ -153,14 +168,11 @@ export default function HomePage() {
       Object.entries(hashtagCounts).sort((a, b) => b[1] - a[1]).slice(0, 8).forEach(([h]) => topHashtags.add(h));
     }
 
-    const { data: shadowBanned } = await shadowBannedPromise;
-
     ctxRef.current = {
       userId: user?.id ?? null,
       preference,
       disableShorts,
       hidden,
-      shadowBannedIds: new Set((shadowBanned ?? []).map((p: any) => p.id)),
       subscribedIds,
       watchedIds,
       topCategories,
@@ -189,7 +201,7 @@ export default function HomePage() {
 
       while (emptyBatches < MAX_EMPTY_BATCHES) {
         const from = offsetRef.current;
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('videos')
           .select(VIDEO_COLUMNS)
           .eq('status', 'ready')
@@ -198,6 +210,14 @@ export default function HomePage() {
           .or(`scheduled_at.is.null,scheduled_at.lte.${ctx.cutoff},is_premiere.eq.true`)
           .order('created_at', { ascending: false })
           .range(from, from + FEED_BATCH - 1);
+
+        // Chyba se tu dřív zahazovala a pokračovalo se s prázdným polem.
+        // Supabase u spadlého spojení nevyhodí výjimku, jen vrátí data:
+        // null - z toho appce vyšlo "kratší dávka, než jsem chtěl", tedy
+        // "konec seznamu", a divákovi ukázala hlášku "Zatím tu nejsou
+        // žádná videa" s nabídkou nahrát první. Při vypadlé wifi tedy
+        // appka tvrdila, že je celá platforma prázdná.
+        if (error) throw error;
 
         const rows = data ?? [];
         offsetRef.current = from + rows.length;
@@ -244,10 +264,10 @@ export default function HomePage() {
   function applyFilters(rows: any[], ctx: FeedContext) {
     let batch = rows.filter((v: any) => !seenIdsRef.current.has(v.id));
 
-    // Shadow ban schová videa ostatním, ale ne jejich autorovi - o to
-    // v něm jde. Dřív mizela i jemu samotnému, takže si toho okamžitě
-    // všiml a rovnou bylo poznat, že s účtem něco je.
-    batch = batch.filter((v: any) => !ctx.shadowBannedIds.has(v.owner_id) || v.owner_id === ctx.userId);
+    // Shadow ban tady schválně není. Řeší ho databáze (restriktivní
+    // politika na tabulce videos), takže platí i v Exploreru, hledání a
+    // na hashtazích - dřív se filtrovalo jen tady a seznam
+    // shadow-bannovaných si přitom mohl stáhnout kdokoliv.
 
     // Co si divák schoval přes ⋮ ("Nezajímá mě" / "Nedoporučovat kanál").
     batch = filterHidden(batch, ctx.hidden);
@@ -307,10 +327,36 @@ export default function HomePage() {
   }
 
   async function loadMore() {
-    if (loadingRef.current || !hasMore) return;
+    if (loadingRef.current || !hasMore || loadFailed) return;
     setLoadingMore(true);
-    await fetchBatch(false);
-    setLoadingMore(false);
+    try {
+      await fetchBatch(false);
+    } catch {
+      // Donačítání spadlo. Feed, který už na obrazovce je, zůstává -
+      // jen se pod ním nabídne další pokus místo věčného "Načítám…".
+      setLoadFailed(true);
+      loadingRef.current = false;
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  /** Další pokus po výpadku - dobere jen to, co chybí, feed se nemaže. */
+  async function retryLoad() {
+    setLoadFailed(false);
+    if (!ctxRef.current) {
+      startLoad();
+      return;
+    }
+    setLoadingMore(true);
+    try {
+      await fetchBatch(false);
+    } catch {
+      setLoadFailed(true);
+      loadingRef.current = false;
+    } finally {
+      setLoadingMore(false);
+    }
   }
 
   // "Zobrazit znovu" - vrátí zpátky všechno, co si divák schoval přes ⋮,
@@ -374,6 +420,7 @@ export default function HomePage() {
     return (
       <div>
         <p className="section-title">{t('recommendedForYouHeading')}</p>
+        {loadFailed && <LoadFailed onRetry={startLoad} />}
         <div className="video-grid">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="video-card-skeleton">
@@ -409,10 +456,11 @@ export default function HomePage() {
       ))}
 
       <div ref={sentinelRef} style={{ height: 1 }} />
+      {loadFailed && <LoadFailed onRetry={retryLoad} />}
       {loadingMore && (
         <p style={{ textAlign: 'center', color: 'var(--text-faint)', padding: '20px 0' }}>{t('loadingMore')}</p>
       )}
-      {!hasMore && blocks.length > 0 && (
+      {!loadFailed && !hasMore && blocks.length > 0 && (
         <p style={{ textAlign: 'center', color: 'var(--text-faint)', padding: '20px 0', fontSize: 13 }}>
           {t('thatsAllForNow')}
         </p>

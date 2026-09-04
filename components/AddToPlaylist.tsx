@@ -12,6 +12,7 @@ export default function AddToPlaylist({ videoId }: { videoId: string }) {
   const [open, setOpen] = useState(false);
   const [playlists, setPlaylists] = useState<any[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -42,8 +43,15 @@ export default function AddToPlaylist({ videoId }: { videoId: string }) {
   }
 
   async function addTo(playlistId: string) {
-    await supabase.from('playlist_videos').upsert({ playlist_id: playlistId, video_id: videoId });
+    const { error } = await supabase
+      .from('playlist_videos')
+      .upsert({ playlist_id: playlistId, video_id: videoId });
+
     setOpen(false);
+    // Dřív se nabídka jen zavřela - ať už se video přidalo, nebo ne.
+    // Nedalo se poznat, jestli se něco stalo.
+    setNote(error ? t('addToPlaylistFailed') : t('addToPlaylistDone'));
+    setTimeout(() => setNote(null), 2500);
   }
 
   return (
@@ -51,6 +59,9 @@ export default function AddToPlaylist({ videoId }: { videoId: string }) {
       <button className="reaction-btn" onClick={loadPlaylists} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <PlaylistIcon size={16} /> Playlist
       </button>
+      {/* Krátká zpráva po přidání. Dřív se nabídka jen zavřela a nedalo se
+          poznat, jestli se video do playlistu opravdu dostalo. */}
+      {note && <span className="inline-note">{note}</span>}
       {open && (
         <div className="profile-dropdown" style={{ bottom: 'auto', top: 'calc(100% + 8px)', left: 0 }}>
           {playlists.length === 0 ? (

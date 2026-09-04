@@ -25,6 +25,7 @@ export default function ReportModal({
   const [details, setDetails] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -35,14 +36,24 @@ export default function ReportModal({
     }
 
     setSubmitting(true);
-    await supabase.from('reports').insert({
+    // Důvod se ukládá jako klíč, ne jako přeložený text. Dřív se sem
+    // zapsalo to, co zrovna viděl nahlašující - moderátor pak měl frontu
+    // v pěti jazycích a nešlo v ní filtrovat.
+    const { error } = await supabase.from('reports').insert({
       reporter_id: authData.user.id,
       video_id: videoId ?? null,
       comment_id: commentId ?? null,
-      reason: t(reason),
+      reason,
       details: details.trim() || null,
     });
     setSubmitting(false);
+
+    // Poděkovat za nahlášení, které se neuložilo, je to nejhorší, co může
+    // appka udělat - člověk odejde s pocitem, že se to řeší, a neřeší se nic.
+    if (error) {
+      setFailed(true);
+      return;
+    }
     setDone(true);
   }
 
@@ -58,6 +69,10 @@ export default function ReportModal({
           </p>
           <button onClick={onClose} style={{ background: 'none', color: 'var(--text-faint)', padding: 4 }}>✕</button>
         </div>
+
+        {failed && (
+          <p className="error-text" style={{ fontSize: 13 }}>{t('reportFailed')}</p>
+        )}
 
         {done ? (
           <p style={{ fontSize: 14, color: 'var(--text-dim)' }}>

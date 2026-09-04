@@ -26,8 +26,13 @@ export default function AdminVerificationsPage() {
       return;
     }
 
-    const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', authData.user.id).single();
-    if (!profile?.is_admin) {
+    // is_admin se z prohlížeče nečte přímo - sloupec by byl vidět i o
+    // cizích lidech a byl by to seznam, koho napadnout. Funkce vrací jen
+    // řádek volajícího. Server si stejně ověřuje sám, tohle je jen o tom,
+    // co se má ukázat.
+    const { data: accountRows } = await supabase.rpc('my_account');
+    const account: any = Array.isArray(accountRows) ? accountRows[0] : accountRows;
+    if (!account?.is_admin) {
       setChecking(false);
       return;
     }

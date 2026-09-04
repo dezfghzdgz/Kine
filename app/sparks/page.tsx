@@ -9,6 +9,7 @@ import CommentSection from '@/components/CommentSection';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import { useLanguage } from '@/lib/i18n';
 import { isSpark } from '@/lib/videoBlocks';
+import LoadFailed from '@/components/LoadFailed';
 
 function SparksPageInner() {
   const { t } = useLanguage();
@@ -18,6 +19,8 @@ function SparksPageInner() {
   const [activeIndex, setActiveIndex] = useState(0);
   const wheelLockRef = useRef(false);
   const [loading, setLoading] = useState(true);
+  // Bez tohohle se spadlý dotaz tvářil jako "žádné Sparks tu nejsou".
+  const [loadFailed, setLoadFailed] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -66,8 +69,11 @@ function SparksPageInner() {
   }, []);
 
   async function load() {
+    setLoading(true);
+    setLoadFailed(false);
+
     const nowIso = new Date().toISOString();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('videos')
       .select('id, title, description, cloudflare_video_id, duration_seconds, width, height, created_at, profiles!videos_owner_id_fkey(id, username, display_name, avatar_url, verification_tier)')
       .eq('status', 'ready')
@@ -75,6 +81,14 @@ function SparksPageInner() {
       .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso},is_premiere.eq.true`)
       .order('created_at', { ascending: false })
       .limit(80);
+
+    // Chyba se dřív zahazovala a z prázdného výsledku vyšlo "Zatím tu
+    // nejsou žádné Sparks" i při vypadlém spojení.
+    if (error) {
+      setLoadFailed(true);
+      setLoading(false);
+      return;
+    }
 
     const sparks = (data ?? []).filter(isSpark);
     setVideos(sparks);
@@ -119,6 +133,14 @@ function SparksPageInner() {
 
   if (loading) {
     return <p style={{ color: 'var(--text-faint)', padding: 20 }}>{t('loading')}</p>;
+  }
+
+  if (loadFailed) {
+    return (
+      <div style={{ padding: 20 }}>
+        <LoadFailed onRetry={load} />
+      </div>
+    );
   }
 
   if (videos.length === 0) {

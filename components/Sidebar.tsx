@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
+import { CATEGORY_KEYS } from '@/lib/categories';
 import { useMobileNav } from '@/lib/mobileNavContext';
 import BrandLogo from './BrandLogo';
 import ProfileMenu from './ProfileMenu';
@@ -32,23 +33,28 @@ const EXPLORE_TABS = [
 
 // Každá kategorie má vlastní ikonku, ať jde poznat na první pohled -
 // dřív měly všechny ten samý štítek.
-const EXPLORE_CATEGORIES = [
-  { key: 'catCars', icon: CarIcon },
-  { key: 'catTravel', icon: PlaneIcon },
-  { key: 'catFilm', icon: FilmIcon },
-  { key: 'catGaming', icon: GamepadIcon },
-  { key: 'catMusic', icon: MusicIcon },
-  { key: 'catComedy', icon: ComedyIcon },
-  { key: 'catPeople', icon: BlogIcon },
-  { key: 'catHowTo', icon: HowToIcon },
-  { key: 'catNonprofit', icon: HeartHandIcon },
-  { key: 'catSports', icon: SportsIcon },
-  { key: 'catScience', icon: ScienceIcon },
-  { key: 'catEducation', icon: EducationIcon },
-  { key: 'catEntertainment', icon: EntertainmentIcon },
-  { key: 'catNews', icon: NewsIcon },
-  { key: 'catPets', icon: PetIcon },
-];
+const CATEGORY_ICONS: Record<string, typeof CarIcon> = {
+  catCars: CarIcon,
+  catTravel: PlaneIcon,
+  catFilm: FilmIcon,
+  catGaming: GamepadIcon,
+  catMusic: MusicIcon,
+  catComedy: ComedyIcon,
+  catPeople: BlogIcon,
+  catHowTo: HowToIcon,
+  catNonprofit: HeartHandIcon,
+  catSports: SportsIcon,
+  catScience: ScienceIcon,
+  catEducation: EducationIcon,
+  catEntertainment: EntertainmentIcon,
+  catNews: NewsIcon,
+  catPets: PetIcon,
+};
+
+// Seznam kategorií je jeden pro celou appku (lib/categories). Tady se k němu
+// jen dolepí ikonky - dřív tu byl vlastní seznam a nic nehlídalo, že se
+// nerozejde s tím, co nabízí nahrávání.
+const EXPLORE_CATEGORIES = CATEGORY_KEYS.map((key) => ({ key, icon: CATEGORY_ICONS[key] }));
 
 function loggedInLinksGroup1(t: (key: any) => string) {
   return [
@@ -197,7 +203,7 @@ export default function Sidebar() {
           </Link>
         )}
         {isModerator && (
-          <Link href="/moderation/reports" className={`sidebar-link ${pathname === '/moderation/reports' ? 'active' : ''}`}>
+          <Link href="/reports" className={`sidebar-link ${pathname === '/reports' ? 'active' : ''}`}>
             🚩 {t('reportsPageTitle')}
           </Link>
         )}
@@ -348,7 +354,7 @@ export default function Sidebar() {
             </Link>
           )}
           {isModerator && (
-            <Link href="/moderation/reports" className="sidebar-link" onClick={closeMobileNav}>
+            <Link href="/reports" className="sidebar-link" onClick={closeMobileNav}>
               🚩 {t('reportsPageTitle')}
             </Link>
           )}

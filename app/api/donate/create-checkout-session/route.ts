@@ -6,9 +6,12 @@ import { stripeServer } from '@/lib/stripeServer';
 // systému předplatných).
 export async function POST(req: NextRequest) {
   try {
-    const { amountCzk, userId } = await req.json();
+    const { amountEur, amountCzk, userId } = await req.json();
 
-    const amount = Number(amountCzk);
+    // Dřív se pole jmenovalo amountCzk, ale účtovalo se v eurech - kdo
+    // napsal "200" v domnění, že jde o koruny, zaplatil 200 EUR. Starý název
+    // se tu přijímá dál, aby po nasazení neselhala rozdělaná platba.
+    const amount = Number(amountEur ?? amountCzk);
     if (!amount || amount < 1 || amount > 2000) {
       return NextResponse.json({ error: 'Neplatná částka.' }, { status: 400 });
     }

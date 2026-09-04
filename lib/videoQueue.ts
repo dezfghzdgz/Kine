@@ -21,6 +21,12 @@ export type QueuedVideo = {
   thumbnail_url: string | null;
   duration_seconds?: number | null;
   username?: string | null;
+  /**
+   * Bez tohohle nemá hudební přehrávač co pustit - přehrává se podle id
+   * u Cloudflare, ne podle id videa v naší databázi. U položek přidaných
+   * dřív chybí, takže si ho hudba v takovém případě dohledá sama.
+   */
+  cloudflare_video_id?: string | null;
 };
 
 export function getQueue(): QueuedVideo[] {

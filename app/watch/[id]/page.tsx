@@ -27,6 +27,14 @@ import { ShareIcon, WatchLaterIcon, ReportIcon, TrashIcon } from '@/components/R
 import { detectViewSource } from '@/lib/viewSource';
 import { getQueue, removeFromQueue, clearQueue, subscribeToQueue, type QueuedVideo } from '@/lib/videoQueue';
 import { videoCountLabel } from '@/lib/plural';
+import { playbackMode } from '@/lib/playbackMode';
+import { buildMusicQueue, trackFromVideo } from '@/lib/musicQueue';
+import { useMusicCommands } from '@/lib/musicPlayer';
+import MusicStage from '@/components/MusicStage';
+import MusicVideoSurface from '@/components/MusicVideoSurface';
+import { startPlayback as beginPlayback } from '@/lib/playerStart';
+
+const MUSIC_VIEW_KEY = 'kine-music-view';
 
 function formatChapterTime(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -53,6 +61,9 @@ function WatchPageInner() {
   const [inWatchLater, setInWatchLater] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
+  // Přehrávač se nerozjel a je potřeba do něj kliknout. Bez tohohle
+  // zůstal černý obdélník bez ovládání a nedalo se s ním nic dělat.
+  const [needsPlayTap, setNeedsPlayTap] = useState(false);
   const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const [showAiBadge, setShowAiBadge] = useState(true);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -81,8 +92,16 @@ function WatchPageInner() {
   // se serverová a prohlížečová verze stránky neliší.
   const [queue, setQueue] = useState<QueuedVideo[]>([]);
 
+  // Hudba: obal místo videa. Volba se pamatuje, takže kdo jednou přepne
+  // na Video, má ho příště rovnou.
+  const [musicView, setMusicView] = useState<'cover' | 'video'>('cover');
+  const musicCommands = useMusicCommands();
+
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<any>(null);
+  // Úklid rozjížděcí smyčky. Kdyby zůstala běžet po výměně přehrávače,
+  // posílala by povely do něčeho, co už na obrazovce není.
+  const playbackCleanupRef = useRef<(() => void) | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -136,6 +155,85 @@ function WatchPageInner() {
     syncQueue();
     return subscribeToQueue(syncQueue);
   }, []);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(MUSIC_VIEW_KEY);
+      if (saved === 'cover' || saved === 'video') setMusicView(saved);
+    } catch {
+      // Zakázaný localStorage - zůstane výchozí obal.
+    }
+  }, []);
+
+  /**
+   * Přepnutí mezi obalem a videem.
+   *
+   * Odteď je to čistě vizuální věc. Hraje pořád ten samý přehrávač
+   * (lib/musicPlayer.tsx) - v režimu Video se jeho obraz jen promítne na
+   * stránku, v režimu Obal se schová. Žádné předávání času, žádné druhé
+   * načítání, žádná pauza ve zvuku.
+   *
+   * Dřív si stránka v režimu Video zakládala vlastní přehrávač se stejným
+   * videem, jaké hrálo na pozadí. Dva přehrávače téhož videa si ale lezou
+   * do zelí: appka se na ten druhý napojila, poslala mu "hraj" a nic se
+   * nestalo. Přesně proto se video po přepnutí nikdy nenačetlo.
+   */
+  function changeMusicView(view: 'cover' | 'video') {
+    setMusicView(view);
+    try {
+      localStorage.setItem(MUSIC_VIEW_KEY, view);
+    } catch {
+      // Volba se prostě nezapamatuje.
+    }
+  }
+
+  const mode = playbackMode(video);
+  const showMusicStage = mode === 'music' && musicView === 'cover';
+
+  /**
+   * Předání skladby trvalému přehrávači.
+   *
+   * openTrack nic nedělá, když už ta samá skladba hraje - návrat na stránku
+   * ji tedy nespustí od začátku. attachStage říká liště dole "velký obal
+   * ukazuju já, schovej se".
+   */
+  useEffect(() => {
+    if (!video || !showMusicStage) return;
+
+    const track = trackFromVideo(video);
+    if (!track) return;
+
+    let cancelled = false;
+    buildMusicQueue(video, otherVideos, queue).then((tracks) => {
+      if (!cancelled) musicCommands.openTrack(track, tracks);
+    });
+
+    musicCommands.attachStage(video.id);
+    return () => {
+      cancelled = true;
+      musicCommands.attachStage(null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video?.id, showMusicStage, otherVideos, queue]);
+
+  /**
+   * Kdo má zvuk.
+   *
+   * Dokud je na stránce vidět přehrávač videa, hudba mlčí - a to jako stav,
+   * ne jako jednorázový povel. Předtím tu bylo "jakmile bude přehrávač
+   * připravený, zastav hudbu", jenže to je jeden okamžik: cokoliv, co
+   * skladbu potom zase rozjelo, už nic nezastavilo a hrálo obojí.
+   *
+   * Platí to i pro obyčejná videa, ne jen pro hudební: když si pustíš video,
+   * hudba na pozadí ztichne, stejně jako na YouTube.
+   */
+  useEffect(() => {
+    // Jen u obyčejných videí. U hudby je přehrávač hudby zároveň tím, co
+    // je vidět - kdyby se sám umlčel, přepnutí na Video by ho zastavilo.
+    musicCommands.setVideoTakeover(!!video && mode !== 'music');
+    return () => musicCommands.setVideoTakeover(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video?.id, mode]);
 
   // Klávesové zkratky: mezerník = přehrát/pauza, šipky vlevo/vpravo = posun
   // o 5 s, šipky nahoru/dolů = hlasitost, M = ztlumit, F = celá obrazovka.
@@ -337,31 +435,43 @@ function WatchPageInner() {
     };
   }, []);
 
+  /**
+   * Spustí přehrávání a nevzdá to.
+   *
+   * Vlastní postup je v lib/playerStart.ts - je to tam schválně zvlášť,
+   * aby se dal otestovat bez prohlížeče (tests/playerStart.test.mjs).
+   * Tady zůstává jen napojení na stránku.
+   */
+  function startPlayback(player: any, seekTo?: number | null) {
+    playbackCleanupRef.current?.();
+    playbackCleanupRef.current = beginPlayback({
+      player,
+      seekTo,
+      isCurrent: () => playerRef.current === player,
+      onStarted: () => setNeedsPlayTap(false),
+      onNeedsTap: () => setNeedsPlayTap(true),
+    });
+  }
+
   function handlePlayerSdkReady() {
     if (iframeRef.current && (window as any).Stream) {
       playerRef.current = (window as any).Stream(iframeRef.current);
       playerRef.current.muted = false;
       playerRef.current.volume = 1;
-      playerRef.current.play?.();
       setPlayerReady(true);
 
+      // Tenhle přehrávač je odteď jen pro obyčejná videa. Hudbu hraje
+      // jeden jediný přehrávač v kostře appky a stránka si ho jen
+      // promítne - viz components/MusicVideoSurface.tsx.
       const t = searchParams.get('t');
       if (t) {
         const seconds = Number(t);
-        if (!Number.isNaN(seconds)) {
-          setTimeout(() => {
-            if (playerRef.current) {
-              playerRef.current.currentTime = seconds;
-              playerRef.current.play();
-            }
-          }, 300);
-        }
+        startPlayback(playerRef.current, Number.isNaN(seconds) ? null : seconds);
       } else {
-        // Bez odkazu na konkrétní okamžik appka zkusí appku appku
-        // pokračovat tam, kde appku appku appka appku naposledy
-        // sledoval - klidně i z jiného zařízení, appka appku pozici
-        // appku ukládá do databáze appky, ne jen appku appku appku
-        // appku telefonu appku appku prohlížeči.
+        // Bez odkazu na konkrétní okamžik naváže appka tam, kde divák
+        // naposledy skončil - klidně i z jiného zařízení, protože pozice
+        // se ukládá do databáze, ne jen do prohlížeče.
+        startPlayback(playerRef.current);
         resumeFromSavedProgress();
       }
     }
@@ -389,15 +499,15 @@ function WatchPageInner() {
           playerRef.current.play();
           const mm = Math.floor(history.progress_seconds / 60);
           const ss = String(history.progress_seconds % 60).padStart(2, '0');
-          setToast({ message: `Pokračuješ od ${mm}:${ss}`, type: 'success' });
+          setToast({ message: t('resumingFromLabel').replace('{time}', `${mm}:${ss}`), type: 'success' });
         }
       }, 300);
     }
   }
 
-  // Uloží rozkoukanost videa (appku appku appku appka), aby se dala
-  // najít i z jiného zařízení - jednou za 8 sekund, ne při každém
-  // snímku, ať appka appku appku databázi appku appku zbytečně nezavaluje.
+  // Uloží, kde divák ve videu skončil, aby se dalo navázat i z jiného
+  // zařízení - jednou za 8 sekund, ne při každém snímku, ať to zbytečně
+  // nezavaluje databázi.
   useEffect(() => {
     if (!playerReady) return;
     const interval = setInterval(async () => {
@@ -426,13 +536,28 @@ function WatchPageInner() {
     return () => clearInterval(interval);
   }, [playerReady, video?.id]);
 
-  // Zkoušíme opakovaně (ne jen jednou), dokud se přehrávač skutečně
-  // nepřipojí - řeší to spolehlivě jak první návštěvu, tak přechod
-  // mezi videi, bez ohledu na to, kdy přesně doběhne načtení skriptu.
+  /**
+   * Napojení na přehrávač stránky.
+   *
+   * Zkouší se opakovaně, ne jen jednou - kdy přesně doběhne načtení skriptu
+   * Cloudflare se předem neví.
+   *
+   * Hlídá se i přepnutí obal/video, ne jen změna videa. V režimu obalu žádný
+   * přehrávač stránky není, takže by smyčka běžela naprázdno pořád dokola,
+   * a hlavně: po prvním přepnutí na video se smyčka sama ukončí, takže při
+   * druhém přepnutí by už nebylo co napojit a přehrávač by zůstal mrtvý.
+   */
   useEffect(() => {
-    setPlayerReady(false);
-    setShowUpNext(false);
+    playbackCleanupRef.current?.();
+    playbackCleanupRef.current = null;
     playerRef.current = null;
+    setPlayerReady(false);
+    setNeedsPlayTap(false);
+    setShowUpNext(false);
+
+    // U hudby stránka žádný vlastní přehrávač nemá - hraje ten v kostře
+    // appky a stránka si ho jen promítne.
+    if (mode === 'music') return;
 
     const interval = setInterval(() => {
       if (iframeRef.current && (window as any).Stream && !playerRef.current) {
@@ -441,8 +566,13 @@ function WatchPageInner() {
       }
     }, 150);
 
-    return () => clearInterval(interval);
-  }, [video?.id]);
+    return () => {
+      clearInterval(interval);
+      playbackCleanupRef.current?.();
+      playbackCleanupRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video?.id, mode]);
 
   const playlistIndex = playlistVideos.findIndex((v) => v.id === videoId);
   const playlistNext = playlistIndex >= 0 ? playlistVideos[playlistIndex + 1] : null;
@@ -538,7 +668,7 @@ function WatchPageInner() {
         .eq('status', 'accepted'),
       supabase
         .from('videos')
-        .select('id, title, thumbnail_url, views, width, height, duration_seconds, profiles!videos_owner_id_fkey(username)')
+        .select('id, title, thumbnail_url, views, width, height, duration_seconds, category, cloudflare_video_id, profiles!videos_owner_id_fkey(username)')
         .eq('status', 'ready')
         .eq('visibility', 'public')
         .neq('id', videoId)
@@ -657,20 +787,55 @@ function WatchPageInner() {
       return;
     }
 
-    const { data: systemPlaylist } = await supabase
+    let { data: systemPlaylist } = await supabase
       .from('playlists')
       .select('id')
       .eq('owner_id', userId)
       .eq('is_system', true)
       .maybeSingle();
 
-    if (!systemPlaylist) return;
+    // Systémový playlist "Sledovat později" zakládá registrace - a to bez
+    // kontroly, jestli se to povedlo. Komu tehdy zápis selhal, ten ho nemá
+    // vůbec, a tlačítko tady se dosud jen tiše vrátilo: kliknutí, nic se
+    // nestalo, žádná hláška. Chybějící playlist se proto založí teď.
+    if (!systemPlaylist) {
+      const { data: created, error: createError } = await supabase
+        .from('playlists')
+        .insert({ owner_id: userId, title: t('watchLater'), color: '#3a5a8a', is_system: true })
+        .select('id')
+        .single();
+
+      if (createError || !created) {
+        setToast({ message: t('menuActionFailed'), type: 'error' });
+        return;
+      }
+      systemPlaylist = created;
+    }
 
     if (inWatchLater) {
-      await supabase.from('playlist_videos').delete().eq('playlist_id', systemPlaylist.id).eq('video_id', videoId);
+      const { error } = await supabase
+        .from('playlist_videos')
+        .delete()
+        .eq('playlist_id', systemPlaylist.id)
+        .eq('video_id', videoId);
+
+      if (error) {
+        setToast({ message: t('menuActionFailed'), type: 'error' });
+        return;
+      }
       setInWatchLater(false);
     } else {
-      await supabase.from('playlist_videos').upsert({ playlist_id: systemPlaylist.id, video_id: videoId });
+      // Chyba se tu dřív nečetla, takže se tlačítko přeplo na "✓" i když
+      // se nic neuložilo. Po obnovení stránky bylo video pryč a vypadalo
+      // to, že appka maže seznamy.
+      const { error } = await supabase
+        .from('playlist_videos')
+        .upsert({ playlist_id: systemPlaylist.id, video_id: videoId });
+
+      if (error) {
+        setToast({ message: t('menuActionFailed'), type: 'error' });
+        return;
+      }
       setInWatchLater(true);
     }
   }
@@ -700,95 +865,146 @@ function WatchPageInner() {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <WatchHistoryTracker videoId={video.id} />
       <div className="watch-video-column">
-        <div
-          ref={wrapRef}
-          // tabIndex dělá z rámečku místo, kam se dá vrátit focus, když si
-          // ho vezme iframe přehrávače - bez toho klávesové zkratky umřou.
-          tabIndex={0}
-          onMouseDown={() => wrapRef.current?.focus({ preventScroll: true })}
-          className={`player-wrap ${video.height > video.width ? 'player-wrap-vertical' : ''} ${cssFullscreen ? 'player-wrap-maximized' : ''}`}
-          style={video.height > video.width || isMaximized ? {} : { aspectRatio: '16/9' }}
-        >
-          <iframe
-            ref={iframeRef}
-            src={`https://iframe.videodelivery.net/${video.cloudflare_video_id}?controls=false`}
-            style={{ width: '100%', height: '100%', border: 'none' }}
-            allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen;"
-            allowFullScreen
-            tabIndex={-1}
-          />
+        {/* U hudby si stránka vlastní přehrávač nezakládá vůbec - ani
+            v režimu Video. Hraje jeden jediný přehrávač v kostře appky,
+            takže hudba jde s divákem i po odchodu ze stránky; v režimu
+            Video se jeho obraz jen promítne do krabice níž. Dva
+            přehrávače téhož videa si lezly do zelí a právě proto se
+            video po přepnutí nikdy nenačetlo. */}
+        {mode === 'music' ? (
+          showMusicStage ? (
+            <MusicStage />
+          ) : (
+            <MusicVideoSurface vertical={video.height > video.width} />
+          )
+        ) : (
+                  <div
+                    ref={wrapRef}
+                    // tabIndex dělá z rámečku místo, kam se dá vrátit focus, když si
+                    // ho vezme iframe přehrávače - bez toho klávesové zkratky umřou.
+                    tabIndex={0}
+                    onMouseDown={() => wrapRef.current?.focus({ preventScroll: true })}
+                    className={`player-wrap ${video.height > video.width ? 'player-wrap-vertical' : ''} ${cssFullscreen ? 'player-wrap-maximized' : ''}`}
+                    style={video.height > video.width || isMaximized ? {} : { aspectRatio: '16/9' }}
+                  >
+                    <iframe
+                      ref={iframeRef}
+                      src={`https://iframe.videodelivery.net/${video.cloudflare_video_id}?controls=false`}
+                      style={{ width: '100%', height: '100%', border: 'none' }}
+                      allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen;"
+                      allowFullScreen
+                      tabIndex={-1}
+                    />
 
-          {keyHint && (
-            // key se mění s každým stiskem, takže React prvek nasadí znovu
-            // a animace se rozjede od začátku i při rychlém mačkání.
-            <div key={keyHint.nonce} className="player-key-hint" aria-live="polite">
-              {keyHint.text}
-            </div>
-          )}
-          {!playerReady && video.thumbnail_url && (
-            <div
-              style={{
-                position: 'absolute', inset: 0, zIndex: 5,
-                backgroundImage: `url(${video.thumbnail_url})`,
-                backgroundSize: 'cover', backgroundPosition: 'center',
-              }}
-            />
-          )}
-          {video.is_ai_generated && showAiBadge && (
-            <div
-              style={{
-                position: 'absolute', top: 10, right: 10, zIndex: 6,
-                background: 'rgba(10,10,11,0.75)', color: '#fff', fontSize: 11, fontWeight: 600,
-                padding: '4px 9px', borderRadius: 6, letterSpacing: 0.3,
-              }}
-            >
-              AI obsah
-            </div>
-          )}
-          {playerReady && (
-            <ChapterTimeline
-              chapters={chapters}
-              duration={video.duration_seconds ?? 0}
-              player={playerRef.current}
-              hasCaptions={captions.length > 0}
-              captionsEnabled={captionsEnabled}
-              onToggleCaptions={() => setCaptionsEnabled((v) => !v)}
-              isMaximized={isMaximized}
-              onToggleMaximize={toggleFullscreen}
-            />
-          )}
-          {playerReady && captions.length > 0 && captionsEnabled && (
-            <CaptionsOverlay captions={captions} player={playerRef.current} />
-          )}
-          {showUpNext && upNextQueue[0] && (
-            <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,10,11,0.92)', zIndex: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-              <div style={{ textAlign: 'center', maxWidth: 820, width: '100%' }}>
-                <p style={{ color: 'var(--text-faint)', fontSize: 12, marginBottom: 14 }}>
-                  {t('nextVideoInSecondsNote').replace('{seconds}', String(upNextCountdown))}
-                </p>
-                <div style={{ display: 'flex', gap: 20, justifyContent: 'center', flexWrap: 'wrap' }}>
-                  {upNextQueue.slice(0, 2).map((v: any) => (
-                    <div
-                      key={v.id}
-                      onClick={() => router.push(nextHref(v.id))}
-                      style={{ cursor: 'pointer', width: 'clamp(200px, 38vw, 340px)' }}
-                    >
-                      <div style={{ borderRadius: 8, overflow: 'hidden', marginBottom: 8, aspectRatio: '16 / 9', position: 'relative' }}>
-                        {v.thumbnail_url && (
-                          <Image src={v.thumbnail_url} alt={v.title} fill style={{ objectFit: 'cover' }} />
-                        )}
+                    {keyHint && (
+                      // key se mění s každým stiskem, takže React prvek nasadí znovu
+                      // a animace se rozjede od začátku i při rychlém mačkání.
+                      <div key={keyHint.nonce} className="player-key-hint" aria-live="polite">
+                        {keyHint.text}
                       </div>
-                      <p style={{ color: '#fff', fontSize: 13, fontWeight: 600, margin: 0 }}>{v.title}</p>
-                    </div>
-                  ))}
-                </div>
-                <button onClick={() => setShowUpNext(false)} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', marginTop: 18 }}>
-                  {t('cancel')}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+                    )}
+                    {!playerReady && video.thumbnail_url && (
+                      <div
+                        style={{
+                          position: 'absolute', inset: 0, zIndex: 5,
+                          backgroundImage: `url(${video.thumbnail_url})`,
+                          backgroundSize: 'cover', backgroundPosition: 'center',
+                        }}
+                      />
+                    )}
+                    {/* Záchranná brzda. Přehrávač jede bez vlastního
+                        ovládání, takže když se sám nerozjede, nedalo se
+                        s ním do teď udělat vůbec nic. */}
+                    {needsPlayTap && (
+                      <button
+                        type="button"
+                        className="player-tap-to-play"
+                        onClick={() => {
+                          setNeedsPlayTap(false);
+                          playerRef.current?.play?.();
+                        }}
+                      >
+                        <span className="player-tap-to-play-icon" aria-hidden="true" />
+                        {t('tapToPlay')}
+                      </button>
+                    )}
+                    {video.is_ai_generated && showAiBadge && (
+                      <div
+                        style={{
+                          position: 'absolute', top: 10, right: 10, zIndex: 6,
+                          background: 'rgba(10,10,11,0.75)', color: '#fff', fontSize: 11, fontWeight: 600,
+                          padding: '4px 9px', borderRadius: 6, letterSpacing: 0.3,
+                        }}
+                      >
+                        AI obsah
+                      </div>
+                    )}
+                    {playerReady && (
+                      <ChapterTimeline
+                        chapters={chapters}
+                        duration={video.duration_seconds ?? 0}
+                        player={playerRef.current}
+                        hasCaptions={captions.length > 0}
+                        captionsEnabled={captionsEnabled}
+                        onToggleCaptions={() => setCaptionsEnabled((v) => !v)}
+                        isMaximized={isMaximized}
+                        onToggleMaximize={toggleFullscreen}
+                      />
+                    )}
+                    {playerReady && captions.length > 0 && captionsEnabled && (
+                      <CaptionsOverlay captions={captions} player={playerRef.current} />
+                    )}
+                    {showUpNext && upNextQueue[0] && (
+                      <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,10,11,0.92)', zIndex: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+                        <div style={{ textAlign: 'center', maxWidth: 820, width: '100%' }}>
+                          <p style={{ color: 'var(--text-faint)', fontSize: 12, marginBottom: 14 }}>
+                            {t('nextVideoInSecondsNote').replace('{seconds}', String(upNextCountdown))}
+                          </p>
+                          <div style={{ display: 'flex', gap: 20, justifyContent: 'center', flexWrap: 'wrap' }}>
+                            {upNextQueue.slice(0, 2).map((v: any) => (
+                              <div
+                                key={v.id}
+                                onClick={() => router.push(nextHref(v.id))}
+                                style={{ cursor: 'pointer', width: 'clamp(200px, 38vw, 340px)' }}
+                              >
+                                <div style={{ borderRadius: 8, overflow: 'hidden', marginBottom: 8, aspectRatio: '16 / 9', position: 'relative' }}>
+                                  {v.thumbnail_url && (
+                                    <Image src={v.thumbnail_url} alt={v.title} fill style={{ objectFit: 'cover' }} />
+                                  )}
+                                </div>
+                                <p style={{ color: '#fff', fontSize: 13, fontWeight: 600, margin: 0 }}>{v.title}</p>
+                              </div>
+                            ))}
+                          </div>
+                          <button onClick={() => setShowUpNext(false)} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', marginTop: 18 }}>
+                            {t('cancel')}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+        )}
+
+        {mode === 'music' && (
+          <div className="music-view-switch" role="group" aria-label={t('musicViewSwitch')}>
+            <button
+              type="button"
+              className={musicView === 'cover' ? 'music-view-option music-view-option-active' : 'music-view-option'}
+              onClick={() => changeMusicView('cover')}
+              aria-pressed={musicView === 'cover'}
+            >
+              {t('musicViewCover')}
+            </button>
+            <button
+              type="button"
+              className={musicView === 'video' ? 'music-view-option music-view-option-active' : 'music-view-option'}
+              onClick={() => changeMusicView('video')}
+              aria-pressed={musicView === 'video'}
+            >
+              {t('musicViewVideo')}
+            </button>
+          </div>
+        )}
 
         {/* Fronta - videa přidaná přes ⋮ na kartě. Hraje se přednostně před
             playlistem i doporučenými videy. */}

@@ -63,6 +63,7 @@ export function useUserRole() {
       // čitelné i o cizích lidech (viz supabase-migration-privacy-fixes).
       // Funkce my_account vrací schválně jen řádek volajícího.
       const { data } = await supabase.rpc('my_account');
+<<<<<<< HEAD
       if (moje !== dotaz.current) return;
 
       const account = Array.isArray(data) ? data[0] : data;
@@ -104,6 +105,13 @@ export function useUserRole() {
       dotaz.current++;
       listener.subscription.unsubscribe();
     };
+=======
+      const account = Array.isArray(data) ? data[0] : data;
+
+      setRole((account?.role as 'user' | 'moderator' | 'admin') ?? 'user');
+      setIsAdmin(!!account?.is_admin);
+    })();
+>>>>>>> 26a30e0f432fb8e78c721e4a6b6a283e6e29220c
   }, []);
 
   // is_admin schválně NEdělá z člověka moderátora: mazání videí a komentářů

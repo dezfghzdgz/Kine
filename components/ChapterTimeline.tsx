@@ -310,7 +310,7 @@ export default function ChapterTimeline({
               onClick={(e) => { e.stopPropagation(); if (player) player.muted = !muted; }}
               style={{ background: 'none', border: 'none', color: '#fff', padding: 0, cursor: 'pointer', display: 'flex' }}
             >
-              <SpeakerIcon muted={muted || volume === 0} size={18} />
+              <SpeakerIcon muted={muted} volume={volume} size={18} />
             </button>
 
             <div

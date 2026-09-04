@@ -49,7 +49,7 @@ function ActivityPageInner() {
     setTab(mode === 'stars' ? 'star5' : 'liked');
 
     // Appka natáhne všechny reakce (líbí/nelíbí i všechny úrovně hvězd),
-    // ne jen appku appku filtrovanou verzi - appky si je appka rozdělí
+    // ne jen tu vyfiltrovanou část - appka si je rozdělí sama
     // do jednotlivých skupin sama níž.
     const { data: reactions } = await supabase
       .from('video_reactions')

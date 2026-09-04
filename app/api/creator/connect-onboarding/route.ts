@@ -3,8 +3,8 @@ import { stripeServer } from '@/lib/stripeServer';
 import { supabaseServer } from '@/lib/supabaseServer';
 
 // Zajistí, aby měl tvůrce vlastní Stripe Connect Express účet, a pošle
-// ho na appky Stripem hostovanou stránku onboardingu (appka appky
-// identitu, bankovní účet a appku). Appka appka appky nikdy nevidí
+// ho na stránku onboardingu hostovanou Stripem (ověří si identitu,
+// bankovní účet a doklady). Naše appka tyhle údaje nikdy nevidí
 // citlivé bankovní údaje přímo - to celé řeší appka Stripe.
 export async function POST(req: NextRequest) {
   try {

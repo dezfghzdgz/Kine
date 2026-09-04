@@ -1,11 +1,25 @@
-export function SpeakerIcon({ muted, size = 16 }: { muted?: boolean; size?: number }) {
+/**
+ * Reproduktor.
+ *
+ * Vlnky přibývají s hlasitostí, při ztlumení je přeškrtnutý. Jde tak poznat
+ * nejen jestli je zvuk zapnutý, ale i jak nahlas hraje - a to bez najíždění
+ * myší na posuvník, který je schovaný.
+ *
+ * "volume" je nepovinné kvůli místům, která hlasitost nesledují a znají jen
+ * ztlumeno/nezticha.
+ */
+export function SpeakerIcon({ muted, volume, size = 16 }: { muted?: boolean; volume?: number; size?: number }) {
+  const level = muted ? 0 : volume ?? 1;
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M4 9v6h4l5 4V5L8 9H4z" strokeLinejoin="round" />
-      {!muted ? (
-        <path d="M17 8.5a5 5 0 0 1 0 7" strokeLinecap="round" />
-      ) : (
+      {level <= 0 ? (
         <path d="M17 9l5 6M22 9l-5 6" strokeLinecap="round" />
+      ) : (
+        <>
+          <path d="M17 8.5a5 5 0 0 1 0 7" strokeLinecap="round" />
+          {level > 0.5 && <path d="M20 6a9 9 0 0 1 0 12" strokeLinecap="round" />}
+        </>
       )}
     </svg>
   );

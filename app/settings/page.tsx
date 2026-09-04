@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import Toast, { ToastType } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { validateUsername } from '@/lib/username';
 
 export default function SettingsPage() {
   const { t } = useLanguage();
@@ -56,7 +57,7 @@ export default function SettingsPage() {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('username, display_name, avatar_url, rating_mode, banner_url, bio, social_links, content_preference, disable_shorts, stripe_account_id, stripe_onboarding_complete, subscription_price_eur')
+      .select('username, display_name, avatar_url, rating_mode, banner_url, bio, social_links, content_preference, disable_shorts, subscription_price_eur')
       .eq('id', authData.user.id)
       .single();
 
@@ -67,8 +68,12 @@ export default function SettingsPage() {
       setRatingMode((profile.rating_mode as 'stars' | 'like_dislike') ?? 'like_dislike');
       setContentPreference((profile.content_preference as 'short' | 'long') ?? 'long');
       setDisableShorts(!!profile.disable_shorts);
-      setStripeAccountId(profile.stripe_account_id ?? null);
-      setStripeOnboardingComplete(!!profile.stripe_onboarding_complete);
+      // Údaje o napojení na Stripe patří jen majiteli účtu, takže se čtou
+      // funkcí, ne přímo ze sloupců.
+      const { data: accountRows } = await supabase.rpc('my_account');
+      const account = Array.isArray(accountRows) ? accountRows[0] : accountRows;
+      setStripeAccountId(account?.stripe_account_id ?? null);
+      setStripeOnboardingComplete(!!account?.stripe_onboarding_complete);
       setSubscriptionPrice(profile.subscription_price_eur ? String(profile.subscription_price_eur) : '');
       setBannerUrl(profile.banner_url ?? null);
       setBio(profile.bio ?? '');
@@ -250,12 +255,22 @@ export default function SettingsPage() {
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
     if (!userId) return;
+
+    // Prázdné jméno se sem dostalo právě tudy - pole nemá "required" a
+    // uložit se dalo cokoliv. Databáze to teď odmítne sama, ale hláška
+    // odtamtud je pro čtení dost nepříjemná.
+    const usernameProblem = validateUsername(username);
+    if (usernameProblem) {
+      setToast({ message: t(usernameProblem), type: 'error' });
+      return;
+    }
+
     setSaving(true);
 
     const { error } = await supabase
       .from('profiles')
       .update({
-        username,
+        username: username.trim(),
         display_name: displayName,
         bio,
         social_links: socialLinks.filter((l) => l.label.trim() && l.url.trim()),

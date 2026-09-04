@@ -26,14 +26,30 @@ type Sort = 'count' | 'recent';
  */
 export default function ModerationReportsPage() {
   const { t, lang } = useLanguage();
+<<<<<<< HEAD
   const { isModerator, loading: zjistujeSeRole } = useUserRole();
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+=======
+  const { isModerator } = useUserRole();
+  const [reports, setReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [checked, setChecked] = useState(false);
+>>>>>>> 26a30e0f432fb8e78c721e4a6b6a283e6e29220c
   const [filter, setFilter] = useState<Filter>('open');
   const [sort, setSort] = useState<Sort>('count');
   const [openDetails, setOpenDetails] = useState<Set<string>>(new Set());
   const [working, setWorking] = useState<string | null>(null);
+<<<<<<< HEAD
+=======
+
+  useEffect(() => {
+    const timer = setTimeout(() => setChecked(true), 600);
+    return () => clearTimeout(timer);
+  }, []);
+>>>>>>> 26a30e0f432fb8e78c721e4a6b6a283e6e29220c
 
   useEffect(() => {
     if (isModerator) load();
@@ -143,6 +159,29 @@ export default function ModerationReportsPage() {
     }
     setWorking(null);
     setReports((prev) => prev.map((r) => (ids.includes(r.id) ? { ...r, status: 'reviewed' } : r)));
+<<<<<<< HEAD
+=======
+  }
+
+  function toggleDetails(key: string) {
+    setOpenDetails((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function reasonLabel(reason: string) {
+    // Důvod se ukládá jako klíč, přeloží se až tady - jinak by měl
+    // moderátor frontu v pěti jazycích podle toho, jaký jazyk měl zrovna
+    // nahlašující.
+    return reason?.startsWith('reason') ? t(reason as any) : reason;
+  }
+
+  function den(iso: string) {
+    return new Date(iso).toLocaleDateString(DATE_LOCALES[lang]);
+>>>>>>> 26a30e0f432fb8e78c721e4a6b6a283e6e29220c
   }
 
   function toggleDetails(key: string) {

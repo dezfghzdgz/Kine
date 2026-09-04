@@ -11,7 +11,9 @@ import EmojiPicker from './EmojiPicker';
 import { useUserRole } from '@/lib/useUserRole';
 import SupporterBadge from './SupporterBadge';
 import ReportModal from './ReportModal';
-import { useLanguage } from '@/lib/i18n';
+import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
+import { categoryLabel } from '@/lib/categories';
+import LoadFailed from './LoadFailed';
 
 type Comment = {
   id: string;
@@ -89,7 +91,7 @@ export default function CommentSection({
   onSeek?: (seconds: number) => void;
 }) {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const { isModerator } = useUserRole();
   const LANGUAGE_LABELS: Record<string, string> = {
     cs: t('langOptCzech'), sk: t('langOptSlovak'), en: t('langOptEnglish'), de: t('langOptGerman'),
@@ -107,6 +109,12 @@ export default function CommentSection({
   const [userId, setUserId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [lastPostedAt, setLastPostedAt] = useState(0);
+  // Proč se komentář neodeslal. Dřív se chyba nikam nepsala a komentář
+  // prostě zmizel i s textem, který do něj člověk napsal.
+  const [postError, setPostError] = useState<string | null>(null);
+  // Komentáře se nepodařilo načíst. Bez tohohle se pod videem vykreslilo
+  // "Zatím žádné komentáře" - i u videa, které jich má padesát.
+  const [commentsFailed, setCommentsFailed] = useState(false);
 
   useEffect(() => {
     loadComments();
@@ -114,11 +122,22 @@ export default function CommentSection({
   }, [videoId]);
 
   async function loadComments() {
-    const { data: rawComments } = await supabase
+    setCommentsFailed(false);
+
+    const { data: rawComments, error } = await supabase
       .from('comments')
       .select('id, content, created_at, parent_id, timestamp_seconds, user_id, pinned, image_url, profiles!comments_user_id_fkey(username, is_supporter)')
       .eq('video_id', videoId)
       .order('created_at', { ascending: false });
+
+    // Chyba se tu dřív nečetla vůbec. Při spadlém dotazu vyšlo z databáze
+    // null, komentáře se přepsaly na prázdný seznam a pod videem se
+    // objevilo "Zatím žádné komentáře" - tvůrce tak u svého videa viděl
+    // nulu, i když jich tam byly desítky.
+    if (error) {
+      setCommentsFailed(true);
+      return;
+    }
 
     if (!rawComments) {
       setComments([]);
@@ -151,7 +170,7 @@ export default function CommentSection({
     if (content.length > 2000) return;
 
     if (Date.now() - lastPostedAt < 3000) {
-      alert('Moc rychle za sebou - počkej pár vteřin a zkus to znovu.');
+      setPostError(t('commentTooFast'));
       return;
     }
 
@@ -170,19 +189,39 @@ export default function CommentSection({
       const ext = imageFile.name.split('.').pop();
       const path = `${authData.user.id}/${Date.now()}.${ext}`;
       const { error: uploadError } = await supabase.storage.from('comment-images').upload(path, imageFile);
-      if (!uploadError) {
-        const { data } = supabase.storage.from('comment-images').getPublicUrl(path);
-        imageUrl = data.publicUrl;
+
+      // Neúspěšný upload se dřív jen přeskočil: komentář odešel bez
+      // obrázku, pole se vyprázdnila a nikdo se nedozvěděl, že se obrázek
+      // ztratil. Radši komentář neodešleme, ať se dá zkusit znovu.
+      if (uploadError) {
+        setPosting(false);
+        setPostError(t('commentImageFailed'));
+        return;
       }
+
+      const { data } = supabase.storage.from('comment-images').getPublicUrl(path);
+      imageUrl = data.publicUrl;
     }
 
-    await supabase.from('comments').insert({
+    const { error: commentError } = await supabase.from('comments').insert({
       video_id: videoId,
       user_id: authData.user.id,
       content: content.trim(),
       parent_id: parentId,
       image_url: imageUrl,
     });
+
+    // Když se komentář neuložil, pole se nesmí vyprázdnit - jinak zmizí
+    // i to, co člověk napsal, a on si myslí, že se komentář ztratil.
+    if (commentError) {
+      setPosting(false);
+      setPostError(t('commentFailed'));
+      return;
+    }
+
+    // Povedlo se. Bez tohohle zůstala pod formulářem viset červená hláška
+    // z předchozího neúspěšného pokusu, i když komentář mezitím prošel.
+    setPostError(null);
 
     if (parentId) {
       const parentComment = comments.find((c) => c.id === parentId);
@@ -324,6 +363,7 @@ export default function CommentSection({
               </p>
             )}
             <button type="submit" disabled={posting} style={{ alignSelf: 'flex-start' }}>{t('postComment')}</button>
+            {postError && <p className="error-text" style={{ fontSize: 12.5 }}>{postError}</p>}
           </form>
           )}
 
@@ -410,13 +450,18 @@ export default function CommentSection({
                   />
                   <EmojiPicker onSelect={(emoji) => setReplyText((v) => v + emoji)} />
                   <button type="submit" disabled={posting}>{t('postComment')}</button>
+                  {postError && <p className="error-text" style={{ fontSize: 12.5 }}>{postError}</p>}
                 </form>
               )}
             </div>
           ))}
 
-          {flowComments.length === 0 && (
-            <p style={{ color: 'var(--text-faint)', fontSize: 13 }}>{t('noCommentsYet')}</p>
+          {commentsFailed ? (
+            <LoadFailed onRetry={loadComments} />
+          ) : (
+            flowComments.length === 0 && (
+              <p style={{ color: 'var(--text-faint)', fontSize: 13 }}>{t('noCommentsYet')}</p>
+            )
           )}
         </>
       )}
@@ -425,9 +470,9 @@ export default function CommentSection({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {[
             [t('videoDurationLabel'), formatDuration(video?.duration_seconds ?? null)],
-            [t('categoryLabel'), video?.category ?? '—'],
+            [t('categoryLabel'), categoryLabel(video?.category, t)],
             [t('videoLanguageFieldLabel'), video?.language ? (LANGUAGE_LABELS[video.language] ?? video.language) : '—'],
-            [t('uploadedLabel'), video ? new Date(video.created_at).toLocaleDateString('cs-CZ') : '—'],
+            [t('uploadedLabel'), video ? new Date(video.created_at).toLocaleDateString(DATE_LOCALES[lang]) : '—'],
             [t('madeForKidsFieldLabel'), video?.made_for_kids ? t('yesLabel') : t('noLabel')],
             [t('visibilityLabel'), video?.visibility === 'public' ? t('shortVisibilityPublic') : video?.visibility === 'private' ? t('shortVisibilityPrivate') : t('shortVisibilitySubscribers')],
           ].map(([label, value]) => (

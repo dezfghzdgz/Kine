@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 KINE - práva se projeví hned po přihlášení
 ==========================================
 
@@ -55,10 +56,92 @@ moderátorovi "tohle je jen pro moderátory".
 Odpočet je pryč. Dokud se neví, kdo jsi, ukáže se kostra načítání - a
 teprve když se to ví, řekne se pravda. Je to ta samá třída chyby jako
 u nahrávání: appka tvrdila něco, co si jenom domyslela z času.
+=======
+KINE - video se objeví, i když u toho nikdo nesedí
+==================================================
+
+7 souborů. Rozbal do kořene repa a přepiš.
+Pak spusť: node zkontroluj-soubory.mjs
+
+
+NEJDŘÍV: TO TVOJE VIDEO UŽ JDE ZACHRÁNIT
+----------------------------------------
+Otevři si na Kine "Tvoje videa". Stránka se sama doptá Cloudflare na
+všechno, co se ještě zpracovává - a protože Cloudflare je s tím video
+dávno hotový, přepne se na hotové a objeví se všude. Nic nahrávat znovu
+nemusíš.
+
+
+CO SE STALO
+-----------
+Nahrávání proběhlo v pořádku, to je vidět na Cloudflare. Chyba je až za
+ním.
+
+Video se do naší databáze zapíše se stavem "zpracovává se". Na "hotovo"
+ho přepne teprve někdo, kdo se Cloudflare zeptá - a všechny seznamy na
+Kine (hlavní stránka, kanál, hledání) berou jen videa označená jako
+hotová.
+
+Ptát se přitom chodil jenom prohlížeč, a jen dvě minuty po nahrání
+(čtyřicet pokusů po třech vteřinách). Dvanáctiminutové video Cloudflare
+za dvě minuty nezpracuje. Dotazování tedy skončilo dřív, než byl
+Cloudflare hotový, a od té chvíle už se nikdo nezeptal: video zůstalo
+navždy ve stavu "zpracovává se" a na Kine nebylo nikde.
+
+Je to ta samá třída chyby jako u těch ostatních: appka si myslela, že
+něco platí, protože se to naposledy ptala v nevhodnou chvíli.
+
+
+TŘI VRSTVY, ABY SE TO NEMOHLO OPAKOVAT
+--------------------------------------
+1) CLOUDFLARE SE OZVE SÁM (webhook)
+   Tohle je ta spolehlivá cesta. Nezáleží na tom, jestli máš otevřený
+   prohlížeč, jestli jsi zavřel kartu nebo vypnul počítač - až bude
+   video hotové, Cloudflare zaklepe a Kine ho přepne.
+
+   Vyžaduje jednorázové nastavení, viz dole. Bez něj funguje zbytek.
+
+2) DOPTÁVÁNÍ PO NAHRÁNÍ TRVÁ DÉL
+   Místo dvou minut asi tři čtvrtě hodiny - zhusta na začátku (krátká
+   videa jsou hotová za pár vteřin), pak čím dál řidčeji. Běží to na
+   pozadí, takže tě to nezdržuje.
+
+3) TVOJE VIDEA SE PTAJÍ OPAKOVANĚ
+   Dokud se něco zpracovává, stránka se doptává sama každých patnáct
+   vteřin. Dřív to zkusila jednou při otevření - což u delšího videa
+   skoro nikdy nestačilo a musel jsi obnovovat ručně.
+
+
+NASTAVENÍ WEBHOOKU (jednou, pak už nikdy)
+-----------------------------------------
+Krok 1 - přihlásit se u Cloudflare o zprávy. Spusť v příkazové řádce
+(doplň svoje ACCOUNT_ID a API_TOKEN, ty samé, co máš na Vercelu):
+
+  curl -X PUT \
+    "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/stream/webhook" \
+    -H "Authorization: Bearer API_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{"notificationUrl":"https://kine-lac.vercel.app/api/videos/cloudflare-webhook"}'
+
+V odpovědi přijde "secret" - dlouhý řetězec. Zkopíruj si ho.
+
+Krok 2 - Vercel → Settings → Environment Variables → Add:
+  jméno:   CLOUDFLARE_WEBHOOK_SECRET
+  hodnota: ten secret z kroku 1
+Pak Redeploy.
+
+Kdyby se ti do toho nechtělo, nech to být - body 2 a 3 fungují bez toho.
+Jen se video objeví o něco později a jen když máš appku otevřenou.
+
+Podpis se u příchozích zpráv ověřuje (HMAC-SHA256 nad "čas.tělo").
+Bez toho by kdokoliv mohl poslat "video XY je hotové" a rozeslat tím
+oznámení všem odběratelům cizího kanálu.
+>>>>>>> 26a30e0f432fb8e78c721e4a6b6a283e6e29220c
 
 
 CO JSEM OVĚŘIL
 --------------
+<<<<<<< HEAD
 - Napsal jsem test na ta práva (tests/useUserRole.test.mjs).
   Na NOVÉM kódu:  6 prošlo, 0 spadlo.
   Na STARÉM kódu: 1 prošlo, 5 spadlo - včetně obou tvých chyb.
@@ -77,3 +160,12 @@ CO SE MĚNÍ VEDLE TOHO
 Opravou se spraví i věci, na které sis nestěžoval, protože stály na tom
 samém: moderátorská tlačítka u videí a komentářů se po přihlášení objeví
 hned, a po odhlášení hned zmizí (dřív tam zůstala až do reloadu).
+=======
+- Typová kontrola celého projektu na TVÉM stromu (7a2ed2b). Prošla.
+- Otisky jsou aktualizované (44 souborů).
+
+Co ověřené není: skutečný webhook od Cloudflare. Postup podpisu jsem
+psal podle jejich dokumentace. Kdyby zprávy chodily a nic se nedělo,
+pozná se to snadno - ve Vercelu v Logs bude u toho endpointu 401
+(neplatný podpis) místo 200.
+>>>>>>> 26a30e0f432fb8e78c721e4a6b6a283e6e29220c

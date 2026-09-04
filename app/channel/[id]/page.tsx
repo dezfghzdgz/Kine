@@ -11,6 +11,7 @@ import VerifiedBadge from '@/components/VerifiedBadge';
 import PostComposer from '@/components/PostComposer';
 import PostCard from '@/components/PostCard';
 import { buildVideoBlocks, isSpark } from '@/lib/videoBlocks';
+import { safeExternalUrl } from '@/lib/safeUrl';
 import { useLanguage } from '@/lib/i18n';
 import { computeTrustRatingClient, getTotalReactionCount, RATING_UNLOCK_THRESHOLD } from '@/lib/trustRatingClient';
 import { useUserRole } from '@/lib/useUserRole';
@@ -54,7 +55,7 @@ function ChannelPageInner() {
       supabase.auth.getUser(),
       supabase
         .from('profiles')
-        .select('id, username, display_name, avatar_url, banner_url, bio, social_links, verification_tier, created_at, trailer_video_id, is_banned, is_shadow_banned, payouts_suspended, trailer:videos!profiles_trailer_video_id_fkey(id, title, cloudflare_video_id, thumbnail_url)')
+        .select('id, username, display_name, avatar_url, banner_url, bio, social_links, verification_tier, created_at, trailer_video_id, trailer:videos!profiles_trailer_video_id_fkey(id, title, cloudflare_video_id, thumbnail_url)')
         .eq('id', channelId)
         .single(),
       supabase
@@ -64,7 +65,14 @@ function ChannelPageInner() {
     ]);
 
     setUserId(authData.user?.id ?? null);
-    setProfile(profileData);
+    // Stav moderace (zablokován, shadow ban, pozastavené výplaty) se z
+    // prohlížeče přečíst nedá - byl by vidět i tomu, koho se týká, a
+    // shadow ban tím ztrácí smysl. Funkce ho vydá jen moderátorovi,
+    // ostatním vrátí prázdno.
+    const { data: flagRows } = await supabase.rpc('moderation_flags', { channel_id: channelId });
+    const flags: any = Array.isArray(flagRows) ? flagRows[0] : flagRows;
+
+    setProfile({ ...(profileData as any), ...(flags ?? {}) });
     setSubscriberCount(count ?? 0);
     if (profileData) {
       computeTrustRatingClient(profileData.id, profileData.created_at).then(async (score) => {
@@ -286,10 +294,15 @@ function ChannelPageInner() {
           )}
           {profile.social_links && profile.social_links.length > 0 && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
-              {profile.social_links.map((link: { label: string; url: string }, i: number) => (
+              {profile.social_links.map((link: { label: string; url: string }, i: number) => {
+                // Odkaz si píše majitel kanálu, čte ho kdokoliv. Cokoliv
+                // jiného než http(s) - hlavně "javascript:" - se zahodí.
+                const href = safeExternalUrl(link.url);
+                if (!href) return null;
+                return (
                 <a
                   key={i}
-                  href={link.url}
+                  href={href}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{
@@ -299,7 +312,8 @@ function ChannelPageInner() {
                 >
                   {link.label}
                 </a>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
