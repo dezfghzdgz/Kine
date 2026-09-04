@@ -1,67 +1,79 @@
-OPRAVA BUILDU - KINE
-====================
+KINE - práva se projeví hned po přihlášení
+==========================================
 
-Co se stalo
------------
-Posílal jsem soubory jednotlivě a několik jich má stejný název
-(page.tsx, layout.tsx, route.ts). Při ukládání se pak některé
-dostaly do špatné složky nebo se vůbec nedostaly do repa. Proto
-je tady všechno naráz i se složkami - stačí to rozbalit a nic
-se nemůže splést.
-
-Build teď padá na tom, že app/globals.css skončil v app/reports/.
+4 soubory. Rozbal do kořene repa a přepiš.
+Pak spusť: node zkontroluj-soubory.mjs
 
 
-1) ROZBALIT
------------
-Rozbal tenhle archiv do kořene repa (tam, kde je package.json)
-a nech přepsat existující soubory.
+OBĚ TVOJE CHYBY MĚLY JEDNU PŘÍČINU
+----------------------------------
+Appka se ptala "kdo jsi a co smíš?" jenom jednou - při prvním vykreslení
+levého menu. Pak už nikdy.
 
-Přijde tím 15 souborů:
+Levé menu se přitom po přihlášení znovu nevykresluje. Appka jen přepne
+adresu, menu zůstává to samé. Takže:
 
-  app/globals.css                          <- byl ve špatné složce
-  app/layout.tsx                           <- byla tam stará verze
-  app/page.tsx                             <- byla tam stará verze
-  app/watch/[id]/layout.tsx                <- úplně chyběl (náhledy odkazů)
-  app/watch/[id]/page.tsx                  <- byla tam stará verze
-  app/channel/[id]/layout.tsx              <- úplně chyběl (náhledy odkazů)
-  app/channel/[id]/page.tsx                <- byla tam stará verze
-  app/explore/page.tsx                     <- byla tam stará verze
-  app/sparks/page.tsx                      <- byla tam stará verze
-  app/admin/revenue-share/page.tsx         <- úplně chyběl
-  app/api/admin/revenue-share/route.ts     <- úplně chyběl
-  app/admin/verifications/page.tsx         <- byl přepsaný cizím obsahem
-  app/api/admin/verification-requests/route.ts  <- byl přepsaný cizím obsahem
-  lib/hiddenContent.ts                     <- byla tam stará verze
-  lib/videoBlocks.ts                       <- byla tam stará verze
+1) PŘIHLÁSÍŠ SE JAKO ADMIN A NEVIDÍŠ HLÁŠENÍ
+   Když se menu poprvé vykreslovalo, byl jsi ještě odhlášený. Odpověď
+   zněla "nikdo" a u toho to zůstalo. Odkaz na Hlášení se neobjevil.
+   Ruční obnovení stránky menu vytvoří znovu - a proto to po reloadu
+   funguje.
+
+2) NA CIZÍM ÚČTU VIDÍŠ PODÍL Z VÝDĚLKŮ
+   To samé, jen naopak. Odhlásil ses z admina a přihlásil na běžný účet,
+   ale menu si drželo odpověď z admina. Ta položka tam svítila dál.
+
+Odteď appka změnu přihlášení poslouchá a zeptá se znovu. Odhlášení práva
+sebere okamžitě, ještě než se stihne kohokoliv na cokoliv zeptat.
 
 
-2) SMAZAT DVA SOUBORY
+K TOMU PODÍLU Z VÝDĚLKŮ: DATA TI NEUNIKLA
+-----------------------------------------
+Prošel jsem to, protože to vypadá jako díra. Není.
+
+Svítila jenom položka v menu. Kdyby na ni ten člověk klikl, stránka se
+sama zeptá serveru a ten si ověřuje is_admin z databáze podle tokenu
+(app/api/admin/revenue-share/route.ts, funkce requireAdmin). Neadminovi
+vrátí 403 a nic jiného. Žádný podíl, žádný seznam tvůrců.
+
+Takže to bylo matoucí a vypadalo to zle, ale ven nešlo nic.
+
+Kdyby ta položka po opravě na tom účtu svítila dál, pak ten účet doopravdy
+admina má. Zkontroluješ to v Supabase:
+
+  select username, role, is_admin
+  from profiles
+  where is_admin = true or role <> 'user';
+
+
+JEŠTĚ JEDNA VĚC, KTEROU JSEM PŘI TOM NAŠEL
+------------------------------------------
+Stránka Hlášení měla slepý odpočet: počkej 600 ms a pak se rozhodni.
+Když odpověď dorazila pomaleji (mobil, horší signál), napsala skutečnému
+moderátorovi "tohle je jen pro moderátory".
+
+Odpočet je pryč. Dokud se neví, kdo jsi, ukáže se kostra načítání - a
+teprve když se to ví, řekne se pravda. Je to ta samá třída chyby jako
+u nahrávání: appka tvrdila něco, co si jenom domyslela z času.
+
+
+CO JSEM OVĚŘIL
+--------------
+- Napsal jsem test na ta práva (tests/useUserRole.test.mjs).
+  Na NOVÉM kódu:  6 prošlo, 0 spadlo.
+  Na STARÉM kódu: 1 prošlo, 5 spadlo - včetně obou tvých chyb.
+  To druhé je důležitější: test není k ničemu, když neumí chybu chytit.
+
+  Spustit:  node tests/useUserRole.test.mjs
+
+- Typová kontrola celého projektu na TVÉM stromu (26a30e0), před změnou
+  i po ní. Stejný výsledek - nic nového jsem nerozbil.
+
+- Otisky jsou aktualizované (46 souborů).
+
+
+CO SE MĚNÍ VEDLE TOHO
 ---------------------
-Tohle archiv udělat nemůže, musíš ručně:
-
-  app/reports/globals.css
-      Sem globals.css omylem spadl. Zůstat tam nemá.
-
-  components/HomeClient.tsx
-      Mrtvý kód, nikde se nepoužívá. Odkazuje se na PAGE_SIZE,
-      který už v lib/homeRecommendation.ts není - build by na
-      tom spadl hned po opravě CSS.
-
-Z příkazové řádky:
-
-  git rm app/reports/globals.css components/HomeClient.tsx
-
-
-3) NA VERCELU
--------------
-Zkontroluj, že je nastavená proměnná NEXT_PUBLIC_SITE_URL na
-skutečnou adresu (např. https://kine-lac.vercel.app). Bez ní se
-do náhledů odkazů propíše localhost:3000 a obrázky se nenačtou.
-
-
-Pozn.: app/admin/verifications/page.tsx a
-app/api/admin/verification-requests/route.ts měly v repu obsah
-stránky pro podíl na výdělcích - někdy dřív se do nich uložil
-soubor, který tam nepatřil. Archiv vrací jejich původní obsah
-a revenue-share dává na jeho vlastní cestu.
+Opravou se spraví i věci, na které sis nestěžoval, protože stály na tom
+samém: moderátorská tlačítka u videí a komentářů se po přihlášení objeví
+hned, a po odhlášení hned zmizí (dřív tam zůstala až do reloadu).
