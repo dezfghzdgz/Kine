@@ -53,77 +53,7 @@ export type UsernameProblem =
   | 'usernameTooShort'
   | 'usernameTooLong'
   | 'usernameBadCharacters'
-  | 'usernameReserved'
-  | 'usernameBlocked';
-
-/* ---------- Nadávky ve jménech ----------
-   Ve výpisu účtů se objevilo jméno z rasistické nadávky. Svoboda tvůrce
-   je o obsahu, ne o tom, jaké jméno platforma nese v adrese kanálu.
-
-   Dvě úrovně, obě schválně krátké a jen jednoznačné výrazy:
-   - BLOCKED_ANYWHERE: nesmí být ani uvnitř jiného slova (nic slušného je
-     neobsahuje),
-   - BLOCKED_AS_WORD: jen jako celé slovo, protože se schovávají v běžných
-     slovech (spic - spicy, coon - raccoon, negr - montenegro).
-   Slovo = kus jména mezi tečkou/podtržítkem nebo mezi písmeny a číslicemi.
-
-   Obcházení číslicemi (n1gg3r) řeší převod 0→o 1→i 3→e 4→a 5→s 7→t 8→b.
-
-   Stejné pravidlo musí platit v databázi (username_is_valid v
-   supabase-migration-username-rules.sql) - anon klíč je veřejný a formulář
-   jde obejít. Když měníš seznam tady, změň ho i tam; test
-   tests/username.test.mjs hlídá, že obě strany dávají stejné odpovědi. */
-
-const BLOCKED_ANYWHERE = [
-  'nigger', 'nigga', 'niggr', 'faggot', 'fagot', 'wetback', 'raghead', 'towelhead',
-  'tranny', 'hitler', 'heilhitler', 'buzerant', 'buzna', 'holohoax',
-];
-
-const BLOCKED_AS_WORD = [
-  'negr', 'negri', 'nigr', 'spic', 'chink', 'coon', 'gook', 'dyke', 'cunt', 'retard',
-  'nazi', 'rape', 'rapist', 'cigos', 'cigosi', 'fag', 'fags', '1488',
-];
-
-const LEET: Record<string, string> = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b', '@': 'a', '$': 's', '!': 'i' };
-
-function unleet(text: string): string {
-  return text.replace(/[0134578@$!]/g, (ch) => LEET[ch] ?? ch);
-}
-
-/** Kusy jména: mezi tečkou/podtržítkem a na hranici písmen a číslic. */
-function usernameWords(lower: string): string[] {
-  return lower
-    .split(/[._]+/)
-    .flatMap((part) => part.match(/[a-z]+|[0-9]+/g) ?? [])
-    .filter(Boolean);
-}
-
-/** Obsahuje jméno nadávku (i s číslicemi místo písmen)? */
-export function usernameContainsSlur(raw: string): boolean {
-  const lower = raw.trim().toLowerCase();
-  const joined = lower.replace(/[._]/g, '');
-  const forms = new Set([joined, unleet(joined)]);
-
-  for (const form of forms) {
-    for (const bad of BLOCKED_ANYWHERE) {
-      if (form.includes(bad)) return true;
-    }
-  }
-
-  const words = new Set<string>();
-  for (const w of usernameWords(lower)) {
-    words.add(w);
-    words.add(unleet(w));
-  }
-  // Číslice mezi písmeny (n1gg3r) se převedou až v celku, tak ještě jednou
-  // na kusech jména po převodu.
-  for (const w of usernameWords(unleet(lower))) words.add(w);
-
-  for (const w of words) {
-    if (BLOCKED_AS_WORD.includes(w)) return true;
-  }
-  return false;
-}
+  | 'usernameReserved';
 
 /** Vrátí překladový klíč problému, nebo null když je jméno v pořádku. */
 export function validateUsername(raw: string): UsernameProblem | null {
@@ -133,7 +63,6 @@ export function validateUsername(raw: string): UsernameProblem | null {
   if (name.length > USERNAME_MAX) return 'usernameTooLong';
   if (!USERNAME_PATTERN.test(name) || DOUBLE_SEPARATOR.test(name)) return 'usernameBadCharacters';
   if (RESERVED.has(name.toLowerCase())) return 'usernameReserved';
-  if (usernameContainsSlur(name)) return 'usernameBlocked';
 
   return null;
 }

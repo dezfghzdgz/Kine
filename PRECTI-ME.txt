@@ -1,114 +1,55 @@
-KINE - volná ruka, 2. kolo (televize, záloha, vyhledávání, rychlost)
-=====================================================================
+KINE - oprava buildu (lib/username.ts)
+=======================================
 
-69 souborů. Rozbal do kořene repa a přepiš.
-Pak: node zkontroluj-soubory.mjs
-Pak: Supabase -> SQL Editor, dvě migrace (každá jednou, obě se dají pustit
-     i opakovaně):
-       supabase-migration-zarizeni-a-chyby.sql   (pokud ještě neproběhla)
-       supabase-migration-vyhledavani.sql        (nová)
-Pak: záloha - viz bod 2 (jeden secret na GitHubu).
-
-Balíček obsahuje i všechno z předchozích (kine-prava, kine-mobil,
-kine-volna-ruka), takže stačí rozbalit jen tenhle a ty starší smaž.
+4 soubory. Rozbal do kořene repa a přepiš.
+Pak: node zkontroluj-soubory.mjs --uklid
+     (--uklid smaže dva zbytky ze staršího balíčku, viz níž)
+Pak push. Build projde.
 
 
-CO JE NOVÉ
-----------
-1) TELEVIZE (lib/tvMode.ts, lib/spatialNav.ts, components/TvMode.tsx)
-   Kine v prohlížeči Smart TV, ovládané dálkovým ovladačem:
-   - všechno 1,35× větší (divák sedí tři metry daleko),
-   - šipky přesouvají výrazně zvýrazněný výběr po stránce - doprava skočí
-     na sousední kartu, dolů na kartu pod ní, doleva do menu; karta videa
-     je jeden cíl, ne tři,
-   - OK otevře; v přehrávači OK = přehrát/pauza, doleva/doprava posun o 5 s,
-     nahoru/dolů vedou z přehrávače pryč (hlasitost má ovladač),
-   - tlačítko Zpět na ovladači (Tizen i webOS) = o stránku zpět,
-   - nic se neschovává "po najetí myší".
-   Zapíná se sám, když prohlížeč vypadá jako televize; ručně v nabídce
-   profilu ("Režim televize"); a adresou ?tv=1 - tím si to VYZKOUŠÍŠ NA
-   PC s klávesnicí, ještě než půjdeš k televizi (?tv=0 vypne, volba se
-   pamatuje).
-   4K monitor s myší (ne televize) dostane mírné zvětšení 1,2×.
+CO SE STALO - MOJE CHYBA
+------------------------
+První balíček "volná ruka" měl filtr jmen (bod 6). Řekl jsi, že ho
+nechceš, tak jsem ho z dalšího balíčku vyndal - včetně překladu
+"usernameBlocked" v lib/i18n.tsx. Jenže lib/username.ts, který ten
+překlad používá, jsem z balíčku jen VYNECHAL místo abych poslal jeho
+původní verzi. Balíček přepisuje, ale nemaže ani nevrací, co v něm není.
+Ve tvém repu tak zůstal username.ts s filtrem a bez překladu, na který
+odkazuje -> TypeScript to při buildu odmítl.
 
-2) TÝDENNÍ ZÁLOHA DATABÁZE (.github/workflows/zaloha-databaze.yml)
-   Supabase zdarma nemá zálohy "zpátky v čase". Tohle každou neděli
-   stáhne celou databázi a uloží ji k repozitáři na GitHubu (90 dní
-   zpátky). Nastavení = jeden secret, postup je v komentáři na začátku
-   souboru (Supabase -> connection string "Session pooler" -> GitHub ->
-   Settings -> Secrets -> SUPABASE_DB_URL). Pak Actions -> Run workflow,
-   ať víš, že to jede. Je tam i postup obnovy.
-
-3) VYHLEDÁVÁNÍ (supabase-migration-vyhledavani.sql, app/search/page.tsx)
-   Dosud: "název obsahuje přesně to, co jsi napsal". Teď přímo v databázi:
-   fulltext (víc slov v libovolném pořadí), bez ohledu na háčky
-   ("tutorial" najde "Tutoriál"), překlepy ("tutorail", "highlihts"),
-   hledá v názvu, popisu i hashtagách; tvůrci stejně tolerantně. Řadí
-   podle shody, pak podle zhlédnutí. Soukromá a nehotová videa se
-   nenajdou. Když migrace ještě neproběhla, hledá se postaru.
-   Vedlejší oprava: čárka v hledaném textu dřív rozbíjela dotaz na tvůrce.
-
-4) RYCHLOST (lib/i18n.tsx -> lib/i18n/*.ts, 30× <img>)
-   Všech osm jazyků šlo ke každému návštěvníkovi naráz (~320 kB zdroje),
-   i když čte česky. Teď jsou čeština a angličtina v hlavním balíku a
-   ostatních šest se stáhne až při zvolení. Chování se nemění, jen je
-   první načtení lehčí. Plus 30 obyčejných obrázků se načítá až u okraje
-   obrazovky (loading="lazy").
-
-5) "PROČ TOHLE VIDEO" (lib/homeRecommendation.ts, components/VideoCard.tsx)
-   Pod kartou na Home jedna tichá řádka: "Odebíráš", "Podle toho, co
-   sleduješ", "Podle tvých hashtagů", "Nové", "Oblíbené". Říká pravdu
-   o nejsilnější složce skóre; když žádný důvod za zmínku nestojí, není
-   tam nic. Tohle YouTube nedá.
-
-Z minulého kola beze změny: sdílení, Pokračovat ve sledování, /admin/errors,
-třída zařízení, Media Session, opravy stropu 1000 a playlistu.
+A moje kontrola otisků to nechytila, protože hlídala jen soubory ze
+seznamu - username.ts v něm nebyl. Slepé místo, které se teď zavírá.
 
 
-CO ODKLIKAT
------------
-PC (klávesnice = ovladač)
-  [ ] Otevři Kine s ?tv=1 (např. kine-lac.vercel.app/?tv=1). Vše větší.
-      Zmáčkni šipku dolů -> zvýrazní se první karta. Šipky přeskakují
-      mezi kartami a menu, Enter otevře video.
-  [ ] Na videu: Enter = pauza/přehrát, doleva/doprava = posun, dolů =
-      výběr přeskočí pod video. Backspace = zpět.
-  [ ] Profil -> "Režim televize: Vypnuto" vrátí normální vzhled.
-Televize
-  [ ] To samé ovladačem. Napiš, který prohlížeč / značka TV.
-Hledání
-  [ ] Po migraci: hledej "tutorial" bez háčků, překlep, dvě slova.
-Jazyk
-  [ ] Přepni na němčinu/polštinu -> texty se přepnou (zlomek vteřiny
-      česky, než se slovník stáhne). Přepni zpět.
+CO JE V BALÍČKU
+---------------
+lib/username.ts                        původní verze, bez filtru
+supabase-migration-username-rules.sql  původní verze, bez filtru
+zkontroluj-soubory.mjs                 hlídá i "nesmí existovat" (níž)
+stav-souboru.json                      otisky + seznam zbytků
+
+Zbytky prvního balíčku, které se mají smazat (ručně, nebo --uklid):
+  tests/username.test.mjs                         (test filtru, který už není)
+  supabase-migration-zarizeni-chyby-jmena.sql     (stará migrace S filtrem
+                                                  jmen - kdybys ji omylem
+                                                  spustil, filtr by se ti
+                                                  do databáze dostal)
+
+Správná migrace je supabase-migration-zarizeni-a-chyby.sql (bez jmen)
+a supabase-migration-vyhledavani.sql - ty zůstávají.
+
+
+CO SE MĚNÍ V KONTROLE
+---------------------
+node zkontroluj-soubory.mjs teď kromě "chybí" a "liší se" hlásí i
+"zbytky ze starších balíčků" - soubory, které dřívější balíček přinesl
+a novější už nechce. S --uklid je smaže. Do budoucna: když z balíčku něco
+vyhodím, pošlu původní verzi souboru, ne prázdné místo.
 
 
 CO JSEM OVĚŘIL
 --------------
-- Typová kontrola celého projektu na TVÉM stromu (26a30e0) se všemi
-  69 soubory - stejný výsledek jako před změnou. Kontroluje i to, že
-  všech sedm jazyků má úplně stejné klíče jako čeština.
-- 12 testovacích sad, 107 kontrol. Nové: navigace šipkami a režim TV (9),
-  popisek proč (7).
-- Migrace vyhledávání na skutečném Postgresu: proběhla dvakrát, našla
-  "Tutoriál" na "tutorial" i "tutorail", "highlights" na "highlihts",
-  "večeře" na "vecere", dvě slova v opačném pořadí; soukromé, nehotové a
-  prázdný dotaz vrátily 0; text s čárkou a tečkami je jen text.
-- Záloha: příkaz pg_dump se stejnými přepínači proběhl lokálně, výstup
-  bez OWNER/GRANT (aby šla obnova do cizího projektu), YAML platný.
-  Samotný běh na GitHubu ověřit odsud nejde - proto ten "Run workflow".
-- Režim televize: statický náhled v Chromiu při 1920×1080 - zvětšení,
-  3 sloupce karet místo 5, zvýrazněná vybraná karta.
-- Balíček rozbalený na čistou kopii tvého mainu: otisky sedí.
-
-Co ověřené NENÍ: skutečná televize (ovladač, prohlížeč TV), a jestli
-`zoom` na starých Smart TV prohlížečích nesplete tažení posuvníku myší -
-na TV se posouvá šipkami, takže by to nemělo vadit.
-
-
-CO SCHVÁLNĚ NENÍ
-----------------
-- Dvoufázové ověření - na tvoje přání zatím ne.
-- Filtr jmen - na tvoje přání zatím ne.
-- Podepsané adresy pro soukromá videa - vlastní kolo s návodem.
-- Připnutý komentář a srdíčko tvůrce - příště, je to samostatný kus.
+- Přesně na tvém aktuálním mainu (4bf9720): po rozbalení a --uklid
+  typová kontrola celého projektu prošla stejně jako před všemi změnami.
+- Kontrola otisků na tvém mainu PŘED opravou hlásí přesně ty dva soubory
+  a dva zbytky; PO opravě "Všechno sedí".

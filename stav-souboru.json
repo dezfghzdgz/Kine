@@ -1,5 +1,5 @@
 {
-  "dodavka": "volna-ruka-2-2026-09-05",
+  "dodavka": "oprava-username-2026-09-05",
   "soubory": {
     ".github/workflows/zaloha-databaze.yml": "4543c1c8ed69fb42",
     "app/admin/errors/page.tsx": "991ed85fd1d6961d",
@@ -82,6 +82,8 @@
     "lib/tvMode.ts": "64afdab34b847216",
     "lib/uploadManager.tsx": "f5e7ec7d7a118b73",
     "lib/useUserRole.ts": "13b30b5909d1a90e",
+    "lib/username.ts": "14f7746abb2bd7df",
+    "supabase-migration-username-rules.sql": "30c26ccd7e683609",
     "supabase-migration-vyhledavani.sql": "7a6b8ef5fa165e12",
     "supabase-migration-zarizeni-a-chyby.sql": "644e951be2f0030b",
     "tests/continueWatching.test.mjs": "9a52841a9f5c13df",
@@ -96,6 +98,11 @@
     "tests/share.test.mjs": "b88fae7198757b0d",
     "tests/spatialNav.test.mjs": "2ec5dfff967eee99",
     "tests/tusUpload.test.mjs": "776dcf28d3a6187c",
-    "tests/useUserRole.test.mjs": "54e21293ffc68318"
-  }
+    "tests/useUserRole.test.mjs": "54e21293ffc68318",
+    "zkontroluj-soubory.mjs": "010124871bf6f4fe"
+  },
+  "smazat": [
+    "tests/username.test.mjs",
+    "supabase-migration-zarizeni-chyby-jmena.sql"
+  ]
 }

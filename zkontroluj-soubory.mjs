@@ -21,7 +21,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -45,6 +45,14 @@ function otisk(cesta) {
 const chybi = [];
 const jine = [];
 
+// Soubory, které starší balíček přinesl a novější už nechce. Přepsat je
+// nejde (balíček přepisuje, nemaže), a jeden takový zbytek už rozbil
+// build: lib/username.ts z prvního balíčku odkazoval na překlad, který
+// druhý balíček odstranil. Proto se tu hlídají i "nesmí existovat".
+//   node zkontroluj-soubory.mjs --uklid    je smaže.
+const uklid = process.argv.includes('--uklid');
+const zbytky = (seznam.smazat ?? []).filter((cesta) => existsSync(join(koren, cesta)));
+
 for (const [cesta, ocekavany] of Object.entries(seznam.soubory)) {
   const plna = join(koren, cesta);
   if (!existsSync(plna)) {
@@ -56,9 +64,24 @@ for (const [cesta, ocekavany] of Object.entries(seznam.soubory)) {
 
 console.log(`Kontroluji ${Object.keys(seznam.soubory).length} souborů z dodávky ${seznam.dodavka}.\n`);
 
-if (chybi.length === 0 && jine.length === 0) {
+if (zbytky.length > 0 && uklid) {
+  for (const z of zbytky) {
+    unlinkSync(join(koren, z));
+    console.log('Smazáno: ' + z);
+  }
+  console.log('');
+  zbytky.length = 0;
+}
+
+if (chybi.length === 0 && jine.length === 0 && zbytky.length === 0) {
   console.log('Všechno sedí. Repo je ve stavu, ve kterém jsem ho ověřoval.');
   process.exit(0);
+}
+
+if (zbytky.length > 0) {
+  console.log('ZBYTKY ze starších balíčků - smaž je (nebo spusť s --uklid):');
+  for (const z of zbytky) console.log('  ' + z);
+  console.log('');
 }
 
 if (chybi.length > 0) {
