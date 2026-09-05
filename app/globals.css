@@ -4164,18 +4164,20 @@ html[data-tv="on"] .player-wrap:focus-visible {
   outline-offset: -4px;
 }
 
+/* Obraz hudebního přehrávače se promítá přes stránku jako pevně umístěný
+   iframe s rozměry změřenými z krabice na stránce (getBoundingClientRect).
+   Pod zoomem by se ty rozměry započítaly dvakrát - iframe by byl 1,35×
+   větší a posunutý (přesně tak to dopadlo s dřívějším zvětšením pro 4K
+   monitory). Převrácený zoom na samotném iframu to vyruší: 1,35 × 0,740741 = 1.
+   Ověřeno v Chromiu: bez toho 401/547/1166 px, s tím přesně 297/405/864 px
+   jako krabice. */
+html[data-tv="on"] .music-engine-frame {
+  zoom: 0.740741;
+}
+
 /* Co se ukazuje jen po najetí myší, je na televizi vidět vždy. */
 html[data-tv="on"] .video-card-menu-btn {
   opacity: 1;
-}
-
-/* 4K monitor s myší (ne televize): 100 % zvětšení nechává text drobný,
-   mírné přiblížení. Skutečná televize tuhle šířku většinou nehlásí -
-   ta má režim televize výš. */
-@media (min-width: 2400px) {
-  html:not([data-tv="on"]) {
-    zoom: 1.2;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

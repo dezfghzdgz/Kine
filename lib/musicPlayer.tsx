@@ -332,8 +332,9 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
         player.volume = volumeRef.current;
         // Slot, který si jen dopředu načítá další skladbu, musí být
-        // potichu - jinak by hrály dvě věci přes sebe.
-        player.muted = i !== activeRef.current;
+        // potichu - jinak by hrály dvě věci přes sebe. Aktivní slot mlčí
+        // jen tehdy, když má uživatel hlasitost na nule.
+        player.muted = i !== activeRef.current || volumeRef.current === 0;
 
         player.addEventListener('play', () => {
           if (activeRef.current === i) setPlaying(true);
@@ -382,7 +383,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     if (other) other.muted = true;
 
     if (player) {
-      player.muted = false;
+      // Zvuk dostane jen, když ho uživatel nemá ztlumený (hlasitost 0).
+      player.muted = volumeRef.current === 0;
       player.volume = volumeRef.current;
       // Předem načtený slot mohl kus přehrát ještě potichu; skladba má
       // začít od začátku.
@@ -502,7 +504,13 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         setVolumeState(clamped);
         if (clamped > 0) volumeBeforeMuteRef.current = clamped;
         const player = activePlayer();
-        if (player) player.volume = clamped;
+        if (player) {
+          player.volume = clamped;
+          // Nula = i muted. Samotná hlasitost 0 nechává některé přehrávače
+          // tiše šumět a hlavně: dvě pojistky jsou lepší než jedna, když
+          // jde o "ukazuje ztlumeno, a přitom hraje".
+          player.muted = clamped === 0;
+        }
         store(VOLUME_KEY, String(clamped));
       },
       toggleMute() {
@@ -512,7 +520,10 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
         setVolumeState(next);
         const player = activePlayer();
-        if (player) player.volume = next;
+        if (player) {
+          player.volume = next;
+          player.muted = next === 0;
+        }
         store(VOLUME_KEY, String(next));
       },
       cycleRepeat() {
@@ -651,10 +662,15 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
                     }
                   : undefined
               }
-              // Slot, který se jen předem načítá, se nesmí rozjet sám.
-              src={`https://iframe.videodelivery.net/${slot.track.cloudflareId}?controls=false${
-                i === active ? '&autoplay=true' : '&muted=true'
-              }`}
+              // Parametry adresy se berou ze slotu, ne z toho, který je
+              // aktivní: adresa se nesmí měnit za běhu. Změna src iframe
+              // celý načte znovu jako nový přehrávač, o kterém napojení
+              // nic neví - zvuk pak hrál dál a pauza ani ztlumení na něj
+              // nedosáhly. preload=auto: další skladba je připravená a
+              // rozjede se hned.
+              src={`https://iframe.videodelivery.net/${slot.track.cloudflareId}?controls=false&preload=auto${
+                slot.autoplay ? '&autoplay=true' : ''
+              }${slot.muted ? '&muted=true' : ''}`}
               allow="autoplay; encrypted-media; picture-in-picture; fullscreen;"
               title={slot.track.title}
             />

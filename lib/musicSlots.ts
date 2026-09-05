@@ -12,7 +12,18 @@ import type { MusicTrack, RepeatMode } from './musicPlayer';
  * přehrávání zůstává v lib/musicPlayer.tsx.
  */
 
-export type Slot = { key: string; track: MusicTrack | null };
+/**
+ * Slot přehrávače.
+ *
+ * `autoplay` a `muted` jsou parametry adresy iframu a rozhodují se JEDNOU,
+ * při vzniku slotu - podle toho, jestli vzniká jako hrající, nebo jako
+ * dopředu načtený. Nesmí se odvozovat od toho, který slot je zrovna
+ * aktivní: adresa iframu by se pak při přepnutí změnila a iframe by se
+ * celý načetl znovu - jako nový přehrávač, o kterém naše napojení nic
+ * neví. Přesně tak vznikal "duch": zvuk hrál, ale pauza ani ztlumení na
+ * něj nedosáhly.
+ */
+export type Slot = { key: string; track: MusicTrack | null; autoplay?: boolean; muted?: boolean };
 export type Slots = [Slot, Slot];
 export type SlotIndex = 0 | 1;
 
@@ -81,7 +92,8 @@ export function planSwap(slots: Slots, active: SlotIndex, next: MusicTrack, newK
   const reused = slots[to].track?.id === next.id;
 
   const updated: Slots = [slots[0], slots[1]];
-  if (!reused) updated[to] = { key: newKey, track: next };
+  // Nový slot vzniká jako hrající: rozjede se sám, se zvukem.
+  if (!reused) updated[to] = { key: newKey, track: next, autoplay: true, muted: false };
 
   return { slots: updated, active: to, reused };
 }
@@ -105,6 +117,8 @@ export function planPreload(
   if (slots[idle].track?.id === upcoming.id) return null;
 
   const updated: Slots = [slots[0], slots[1]];
-  updated[idle] = { key: newKey, track: upcoming };
+  // Dopředu načtený slot vzniká potichu a stojí; zvuk a start mu dá až
+  // přepnutí přes SDK, které na něj v tu chvíli už dávno dosáhne.
+  updated[idle] = { key: newKey, track: upcoming, autoplay: false, muted: true };
   return { slots: updated, idle };
 }

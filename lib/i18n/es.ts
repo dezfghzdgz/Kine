@@ -381,6 +381,7 @@ export const es: Record<DictKey, string> = {
   accountLockedNote: 'Cuenta bloqueada temporalmente por intentos repetidos con contraseña incorrecta. Vuelve a intentarlo en',
   recommendedForYouHeading: 'Recomendado para ti',
   continueWatchingHeading: 'Seguir viendo',
+  otherVideosHeading: 'Más vídeos',
   reasonSubscribed: 'Estás suscrito',
   reasonInterests: 'Según lo que ves',
   reasonHashtags: 'Según tus hashtags',

@@ -1,55 +1,78 @@
-KINE - oprava buildu (lib/username.ts)
-=======================================
+KINE - opravy: hudba, promítání videa, další videa, BETA0.092
+==============================================================
 
-4 soubory. Rozbal do kořene repa a přepiš.
+17 souborů. Rozbal do kořene repa a přepiš.
 Pak: node zkontroluj-soubory.mjs --uklid
-     (--uklid smaže dva zbytky ze staršího balíčku, viz níž)
-Pak push. Build projde.
+Pak push. Žádná nová migrace.
+
+Je tu i oprava buildu z předchozího mini-balíčku (lib/username.ts a
+supabase-migration-username-rules.sql v původní verzi) - kdybys ho ještě
+nerozbalil, tenhle to zařídí. --uklid smaže dva zbytky, které build
+neshodí, ale nemají v repu být (starý test filtru jmen a stará migrace
+S filtrem jmen).
 
 
-CO SE STALO - MOJE CHYBA
-------------------------
-První balíček "volná ruka" měl filtr jmen (bod 6). Řekl jsi, že ho
-nechceš, tak jsem ho z dalšího balíčku vyndal - včetně překladu
-"usernameBlocked" v lib/i18n.tsx. Jenže lib/username.ts, který ten
-překlad používá, jsem z balíčku jen VYNECHAL místo abych poslal jeho
-původní verzi. Balíček přepisuje, ale nemaže ani nevrací, co v něm není.
-Ve tvém repu tak zůstal username.ts s filtrem a bez překladu, na který
-odkazuje -> TypeScript to při buildu odmítl.
+1) HUDBA NEJDE ZASTAVIT / UKAZUJE ZTLUMENO, ALE HRAJE   (lib/musicSlots.ts, lib/musicPlayer.tsx)
+   Obě jedna příčina, a byla moje. Hudba běží ve dvou slotech (jeden
+   hraje, druhý si dopředu načítá další skladbu). Adresa iframu se
+   skládala podle toho, který slot je zrovna aktivní: aktivní dostal
+   "&autoplay=true", druhý "&muted=true". Při přepnutí skladby se adresa
+   OBOU iframů změnila - a změna adresy iframe načte celý znovu, jako
+   nový přehrávač. Naše napojení ale drželo ten starý. Nový přehrávač
+   hrál dál sám od sebe a pauza, ztlumení ani zavření na něj nedosáhly.
+   Proto "duch": lišta ukazuje ztlumeno, zvuk jede, pomohl jen reload.
 
-A moje kontrola otisků to nechytila, protože hlídala jen soubory ze
-seznamu - username.ts v něm nebyl. Slepé místo, které se teď zavírá.
+   Teď se parametry adresy rozhodnou jednou, při vzniku slotu, a už se
+   nemění. Zvuk a start dostává slot přes SDK, které na něj dosáhne.
+   Ztlumení navíc nastavuje i příznak muted, ne jen hlasitost 0.
+   Test hlídá, že se slot při přepnutí nemění (tests/musicSlots.test.mjs).
+
+2) VIDEO U HUDBY V NĚKTERÝCH ROZLIŠENÍCH VĚTŠÍ A POSUNUTÉ   (app/globals.css)
+   Taky moje: v minulém kole jsem přidal mírné zvětšení (zoom 1,2×) pro
+   monitory širší než 2400 px. Obraz hudebního přehrávače se ale promítá
+   jako pevně umístěný iframe s rozměry změřenými z krabice na stránce -
+   a pod zoomem se rozměry započítaly dvakrát: 1,2× větší a posunutý.
+   Přesně tvůj druhý screenshot (2560 px široký monitor).
+
+   Zvětšení pro 4K monitory je pryč - přineslo víc škody než užitku.
+   Režim televize (zoom 1,35) zůstává, ale promítaný iframe má převrácený
+   zoom (0,740741), takže sedí přesně. Ověřeno v Chromiu: bez korekce
+   401/547/1166 px, s korekcí 297/405/864 px = stejně jako krabice.
+
+3) DLOUHÉ VIDEO SE PO KLIKNUTÍ NA PŘEHRÁT DLOUHO NAČÍTÁ   (app/watch/[id]/page.tsx)
+   Přehrávač měl preload vypnutý: manifest a první kousky videa se
+   stahovaly až po kliknutí. Teď "preload=auto" - stáhnou se hned při
+   otevření stránky, takže Přehrát je okamžité (u hudby to samé, další
+   skladba je připravená).
+   Tohle je pravděpodobná příčina, ne ověřená - odsud video nespustím.
+   Kdyby to bylo dál pomalé, napiš: které video, jak dlouho to trvá
+   (5 s? 30 s?), a jestli se něco objevilo v /admin/errors.
+
+4) TŘI TEČKY POD "DALŠÍ VIDEA"   (app/watch/[id]/page.tsx)
+   Seznam pod videem měl vlastní zjednodušené karty bez nabídky. Teď
+   používá stejné karty jako hlavní stránka - s nabídkou ⋮ (fronta,
+   uložit, playlist, stáhnout, nezajímá mě, nahlásit) i náhledem po
+   najetí. Nadpis "Další videa" je přeložený do všech 8 jazyků.
+
+5) BETA0.092   (components/Sidebar.tsx)
 
 
-CO JE V BALÍČKU
----------------
-lib/username.ts                        původní verze, bez filtru
-supabase-migration-username-rules.sql  původní verze, bez filtru
-zkontroluj-soubory.mjs                 hlídá i "nesmí existovat" (níž)
-stav-souboru.json                      otisky + seznam zbytků
-
-Zbytky prvního balíčku, které se mají smazat (ručně, nebo --uklid):
-  tests/username.test.mjs                         (test filtru, který už není)
-  supabase-migration-zarizeni-chyby-jmena.sql     (stará migrace S filtrem
-                                                  jmen - kdybys ji omylem
-                                                  spustil, filtr by se ti
-                                                  do databáze dostal)
-
-Správná migrace je supabase-migration-zarizeni-a-chyby.sql (bez jmen)
-a supabase-migration-vyhledavani.sql - ty zůstávají.
-
-
-CO SE MĚNÍ V KONTROLE
----------------------
-node zkontroluj-soubory.mjs teď kromě "chybí" a "liší se" hlásí i
-"zbytky ze starších balíčků" - soubory, které dřívější balíček přinesl
-a novější už nechce. S --uklid je smaže. Do budoucna: když z balíčku něco
-vyhodím, pošlu původní verzi souboru, ne prázdné místo.
+CO ODKLIKAT
+-----------
+  [ ] Hudba: pusť skladbu, přepni na další (šipka v liště), pak pauza ->
+      ticho. Ztlumit -> ticho. Zavřít (×) -> ticho. Bez reloadu.
+  [ ] Hudba -> Video: obraz sedí v krabici, na tvém velkém monitoru
+      i v menším okně.
+  [ ] Dlouhé video: Přehrát -> rozjede se rychle. Když ne, viz bod 3.
+  [ ] Pod videem "Další videa" mají ⋮.
+  [ ] Menu vlevo dole: BETA0.092.
 
 
 CO JSEM OVĚŘIL
 --------------
-- Přesně na tvém aktuálním mainu (4bf9720): po rozbalení a --uklid
-  typová kontrola celého projektu prošla stejně jako před všemi změnami.
-- Kontrola otisků na tvém mainu PŘED opravou hlásí přesně ty dva soubory
-  a dva zbytky; PO opravě "Všechno sedí".
+- Na TVÉM aktuálním mainu (4bf9720) + tenhle balíček: kontrola otisků
+  čistá, typová kontrola celého projektu shodná s výchozím stavem,
+  108 kontrol ve 13 testech prošlo.
+- Zoom a promítání: měřeno v Chromiu (viz bod 2).
+- Hudba: příčina je jistá (změna src iframe = nový přehrávač), oprava
+  odstraňuje tu změnu; skutečný poslech odsud ověřit nejde.

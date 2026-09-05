@@ -387,6 +387,7 @@ export const cs = {
   accountLockedNote: 'Účet je dočasně uzamčený kvůli opakovaně špatnému heslu. Zkus to znovu za',
   recommendedForYouHeading: 'Doporučeno pro tebe',
   continueWatchingHeading: 'Pokračovat ve sledování',
+  otherVideosHeading: 'Další videa',
   reasonSubscribed: 'Odebíráš',
   reasonInterests: 'Podle toho, co sleduješ',
   reasonHashtags: 'Podle tvých hashtagů',

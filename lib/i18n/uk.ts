@@ -381,6 +381,7 @@ export const uk: Record<DictKey, string> = {
   accountLockedNote: 'Акаунт тимчасово заблоковано через повторні неправильні паролі. Спробуй знову через',
   recommendedForYouHeading: 'Рекомендовано для тебе',
   continueWatchingHeading: 'Продовжити перегляд',
+  otherVideosHeading: 'Ще відео',
   reasonSubscribed: 'Ти підписаний',
   reasonInterests: 'На основі того, що дивишся',
   reasonHashtags: 'На основі твоїх хештегів',

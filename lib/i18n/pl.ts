@@ -381,6 +381,7 @@ export const pl: Record<DictKey, string> = {
   accountLockedNote: 'Konto tymczasowo zablokowane z powodu powtarzających się błędnych haseł. Spróbuj ponownie za',
   recommendedForYouHeading: 'Polecane dla Ciebie',
   continueWatchingHeading: 'Kontynuuj oglądanie',
+  otherVideosHeading: 'Więcej filmów',
   reasonSubscribed: 'Subskrybujesz',
   reasonInterests: 'Na podstawie tego, co oglądasz',
   reasonHashtags: 'Na podstawie twoich hashtagów',

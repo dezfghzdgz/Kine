@@ -125,7 +125,7 @@ export default function Sidebar() {
     <aside className="sidebar">
       <div className="sidebar-logo-row">
         <BrandLogo className="sidebar-logo" />
-        <span style={{ fontSize: 10, color: 'var(--text-faint)', marginLeft: 6, fontWeight: 600 }}>BETA0.088</span>
+        <span style={{ fontSize: 10, color: 'var(--text-faint)', marginLeft: 6, fontWeight: 600 }}>BETA0.092</span>
       </div>
       <nav className="sidebar-nav" style={{ flex: 1 }}>
         {baseLinks(t).map(({ href, label, icon: Icon }) => {

@@ -381,6 +381,7 @@ export const sk: Record<DictKey, string> = {
   accountLockedNote: 'Účet je dočasne uzamknutý kvôli opakovane zlému heslu. Skús to znova o',
   recommendedForYouHeading: 'Odporúčané pre teba',
   continueWatchingHeading: 'Pokračovať v pozeraní',
+  otherVideosHeading: 'Ďalšie videá',
   reasonSubscribed: 'Odoberáš',
   reasonInterests: 'Podľa toho, čo pozeráš',
   reasonHashtags: 'Podľa tvojich hashtagov',

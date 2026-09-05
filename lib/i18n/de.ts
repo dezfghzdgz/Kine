@@ -381,6 +381,7 @@ export const de: Record<DictKey, string> = {
   accountLockedNote: 'Konto wegen wiederholt falschem Passwort vorübergehend gesperrt. Versuch es erneut in',
   recommendedForYouHeading: 'Für dich empfohlen',
   continueWatchingHeading: 'Weiterschauen',
+  otherVideosHeading: 'Weitere Videos',
   reasonSubscribed: 'Du bist abonniert',
   reasonInterests: 'Passend zu dem, was du schaust',
   reasonHashtags: 'Passend zu deinen Hashtags',

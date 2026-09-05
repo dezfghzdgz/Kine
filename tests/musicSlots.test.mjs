@@ -163,4 +163,28 @@ test('předehrává se vždy do slotu, který nehraje', () => {
   assert.equal(plan.slots[1].track.id, 'x', 'hrající slot zůstane nedotčený');
 });
 
+
+/* ---------- parametry adresy iframu se rozhodují jednou, při vzniku slotu ---------- */
+// Adresa iframu se nesmí měnit podle toho, který slot je aktivní - změna
+// src iframe načte znovu jako nový přehrávač, kterému pauza ani ztlumení
+// neporučí ("duch", který hrál dál). Proto nese slot své parametry sám.
+{
+  const zacatek = [{ key: 'a0', track: null }, { key: 'b0', track: null }];
+  const hrajici = planSwap(zacatek, 0, t('a'), 's1');
+  assert.equal(hrajici.slots[1].autoplay, true, 'nový hrající slot se rozjede sám');
+  assert.equal(hrajici.slots[1].muted, false, 'a se zvukem');
+
+  const predehrani = planPreload(hrajici.slots, 1, t('b'), 's2');
+  assert.equal(predehrani.slots[0].autoplay, false, 'dopředu načtený slot stojí');
+  assert.equal(predehrani.slots[0].muted, true, 'a mlčí');
+
+  // Po přepnutí na předehraný slot zůstává jeho záznam beze změny -
+  // tedy i adresa iframu. Zvuk mu dá SDK, ne nová adresa.
+  const prepnuti = planSwap(predehrani.slots, 1, t('b'), 's3');
+  assert.equal(prepnuti.reused, true);
+  assert.deepEqual(prepnuti.slots[0], predehrani.slots[0], 'slot se při přepnutí nemění');
+  console.log('OK    parametry adresy iframu jsou dané při vzniku slotu a přepnutím se nemění');
+  prosly = (typeof prosly === 'number') ? prosly + 1 : prosly;
+}
+
 console.log('\n' + prosly + ' kontrol prošlo');

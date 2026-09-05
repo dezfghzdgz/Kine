@@ -381,6 +381,7 @@ export const en: Record<DictKey, string> = {
   accountLockedNote: 'Account temporarily locked due to repeated wrong password attempts. Try again in',
   recommendedForYouHeading: 'Recommended for you',
   continueWatchingHeading: 'Continue watching',
+  otherVideosHeading: 'More videos',
   reasonSubscribed: 'You\'re subscribed',
   reasonInterests: 'Based on what you watch',
   reasonHashtags: 'Based on your hashtags',

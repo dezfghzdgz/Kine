@@ -38,6 +38,8 @@ import { shareLink, browserShareDeps } from '@/lib/share';
 import { isTvMode } from '@/lib/tvMode';
 import { detectDeviceClass } from '@/lib/deviceClass';
 import { fetchAllRows, fetchByIds } from '@/lib/loadAll';
+import VideoCard from '@/components/VideoCard';
+import { formatDuration } from '@/lib/homeRecommendation';
 
 const MUSIC_VIEW_KEY = 'kine-music-view';
 
@@ -749,7 +751,7 @@ function WatchPageInner() {
         .eq('status', 'accepted'),
       supabase
         .from('videos')
-        .select('id, title, thumbnail_url, views, width, height, duration_seconds, category, cloudflare_video_id, profiles!videos_owner_id_fkey(username)')
+        .select('id, title, thumbnail_url, views, width, height, duration_seconds, category, owner_id, cloudflare_video_id, profiles!videos_owner_id_fkey(username)')
         .eq('status', 'ready')
         .eq('visibility', 'public')
         .neq('id', videoId)
@@ -982,7 +984,10 @@ function WatchPageInner() {
                   >
                     <iframe
                       ref={iframeRef}
-                      src={`https://iframe.videodelivery.net/${video.cloudflare_video_id}?controls=false`}
+                      // preload=auto: manifest a první kousky videa se stáhnou hned
+                      // při otevření stránky, ne až po kliknutí na Přehrát - u delších
+                      // videí se jinak po kliknutí dlouho čekalo.
+                      src={`https://iframe.videodelivery.net/${video.cloudflare_video_id}?controls=false&preload=auto`}
                       style={{ width: '100%', height: '100%', border: 'none' }}
                       allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen;"
                       allowFullScreen
@@ -1325,26 +1330,20 @@ function WatchPageInner() {
 
       {otherVideos.length > 0 && (
         <div className="watch-recommendations">
-          <p className="section-title">Další videa</p>
+          <p className="section-title">{t('otherVideosHeading')}</p>
+          {/* Stejné karty jako na hlavní stránce - včetně nabídky ⋮ (fronta,
+              uložit, playlist, nezajímá mě, nahlásit) a náhledu po najetí.
+              Dřív tu byl vlastní zjednodušený odkaz bez nabídky. */}
           {buildVideoBlocks(otherVideos).map((block, bi) => (
             <div key={bi} className={block.type === 'sparks' ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 20 }}>
               {block.items.map((v: any) => (
-                <Link
-                  href={block.type === 'sparks' ? `/sparks?start=${v.id}` : `/watch/${v.id}`}
+                <VideoCard
                   key={v.id}
-                  className="video-card"
-                >
-                  <div className={block.type === 'sparks' ? 'video-thumb video-thumb-vertical' : 'video-thumb'}>
-                    {v.thumbnail_url ? (
-                      <Image src={v.thumbnail_url} alt={v.title} width={320} height={180} />
-                    ) : null}
-                    <div className="play-badge">▶</div>
-                  </div>
-                  <p className="video-card-title">{v.title}</p>
-                  <p className="video-card-meta">
-                    {v.profiles?.username ?? t('unknownCreator')} · {v.views} {t('views')}
-                  </p>
-                </Link>
+                  video={v}
+                  href={block.type === 'sparks' ? `/sparks?start=${v.id}` : `/watch/${v.id}`}
+                  isSparks={block.type === 'sparks'}
+                  formatDuration={formatDuration}
+                />
               ))}
             </div>
           ))}
