@@ -1,9 +1,14 @@
 import { supabaseServer } from '@/lib/supabaseServer';
 import { computeTrustRating } from '@/lib/trustRating';
-import Link from 'next/link';
-import Image from 'next/image';
+import SearchResults from '@/components/SearchResults';
 
 export const dynamic = 'force-dynamic';
+
+/** Co karta videa potřebuje (components/VideoCard.tsx): náhled po najetí,
+ *  tvar, délku, tvůrce. */
+const CARD_FIELDS =
+  'id, title, thumbnail_url, views, width, height, duration_seconds, category, owner_id, cloudflare_video_id, ' +
+  'profiles!videos_owner_id_fkey(id, username, created_at)';
 
 /**
  * Hledání.
@@ -18,24 +23,22 @@ async function searchVideos(query: string): Promise<any[]> {
   const { data, error } = await supabaseServer.rpc('search_videos', { q: query, max_rows: 48 });
 
   if (!error && Array.isArray(data)) {
-    // Funkce vrací owner_id; jména a založení účtu tvůrců se doplní jedním
-    // dotazem, ať zbytek stránky zůstává stejný.
-    const ownerIds = Array.from(new Set(data.map((v: any) => v.owner_id).filter(Boolean)));
-    const owners = new Map<string, any>();
-    if (ownerIds.length > 0) {
-      const { data: profiles } = await supabaseServer
-        .from('profiles')
-        .select('id, username, created_at')
-        .in('id', ownerIds);
-      (profiles ?? []).forEach((p: any) => owners.set(p.id, p));
+    // Funkce vrací jen to nejnutnější (id, název, náhled, zhlédnutí, tvůrce)
+    // a řadí podle shody. Zbytek pro kartu - tvar, délku, jméno tvůrce -
+    // doplní jeden dotaz podle id; pořadí z funkce zůstává.
+    const ids = data.map((v: any) => v.id).filter(Boolean);
+    const details = new Map<string, any>();
+    if (ids.length > 0) {
+      const { data: rows } = await supabaseServer.from('videos').select(CARD_FIELDS).in('id', ids);
+      (rows ?? []).forEach((v: any) => details.set(v.id, v));
     }
-    return data.map((v: any) => ({ ...v, profiles: owners.get(v.owner_id) ?? null }));
+    return data.map((v: any) => ({ ...v, ...(details.get(v.id) ?? { profiles: null }) }));
   }
 
   // Záloha: staré hledání.
   const { data: videosRaw } = await supabaseServer
     .from('videos')
-    .select('id, title, thumbnail_url, views, profiles!videos_owner_id_fkey(id, username, created_at)')
+    .select(CARD_FIELDS)
     .eq('status', 'ready')
     .eq('visibility', 'public')
     .ilike('title', `%${query}%`)
@@ -79,7 +82,7 @@ async function searchAll(query: string, minRating: number | null) {
   if (videos.length === 0) {
     const { data: rec } = await supabaseServer
       .from('videos')
-      .select('id, title, thumbnail_url, views, profiles!videos_owner_id_fkey(username)')
+      .select(CARD_FIELDS)
       .eq('status', 'ready')
       .eq('visibility', 'public')
       .order('views', { ascending: false })
@@ -95,72 +98,12 @@ export default async function SearchPage({ searchParams }: { searchParams: { q?:
   const minRating = searchParams.minRating ? Number(searchParams.minRating) : null;
 
   if (!query) {
-    return <p style={{ color: 'var(--text-faint)' }}>Type something to search for.</p>;
+    return <SearchResults query="" videos={[]} creators={[]} recommended={[]} />;
   }
 
   const { videos, creators, recommended } = await searchAll(query, minRating);
 
-  return (
-    <div>
-      <p className="section-title">Výsledky pro "{query}"</p>
-
-      {creators.length > 0 && (
-        <div style={{ marginBottom: 32 }}>
-          <p className="panel-heading">Tvůrci</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 420 }}>
-            {creators.map((c: any) => (
-              <Link key={c.id} href={`/channel/${c.id}`} className="sidebar-link" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span className="profile-avatar-small">
-                  {c.avatar_url ? <img loading="lazy" decoding="async" src={c.avatar_url} alt="" /> : null}
-                </span>
-                {c.display_name ?? c.username}
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <p className="panel-heading">Videa</p>
-      {videos.length === 0 ? (
-        <>
-          <p style={{ color: 'var(--text-dim)', fontSize: 16, marginBottom: 28 }}>
-            Žádná videa neodpovídají hledání "{query}". Ale možná by se ti mohla líbit tahle:
-          </p>
-          <div className="video-grid">
-            {recommended.map((v: any) => (
-              <Link href={`/watch/${v.id}`} key={v.id} className="video-card">
-                <div className="video-thumb">
-                  {v.thumbnail_url ? (
-                    <Image src={v.thumbnail_url} alt={v.title} width={320} height={180} />
-                  ) : null}
-                  <div className="play-badge">▶</div>
-                </div>
-                <p className="video-card-title">{v.title}</p>
-                <p className="video-card-meta">
-                  {v.profiles?.username ?? 'unknown creator'} · {v.views} views
-                </p>
-              </Link>
-            ))}
-          </div>
-        </>
-      ) : (
-        <div className="video-grid">
-          {videos.map((v: any) => (
-            <Link href={`/watch/${v.id}`} key={v.id} className="video-card">
-              <div className="video-thumb">
-                {v.thumbnail_url ? (
-                  <Image src={v.thumbnail_url} alt={v.title} width={320} height={180} />
-                ) : null}
-                <div className="play-badge">▶</div>
-              </div>
-              <p className="video-card-title">{v.title}</p>
-              <p className="video-card-meta">
-                {v.profiles?.username ?? 'unknown creator'} · {v.views} views
-              </p>
-            </Link>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  // Kreslí se až v prohlížeči (components/SearchResults.tsx) - jazyk si
+  // divák volí tam a server o něm neví.
+  return <SearchResults query={query} videos={videos} creators={creators} recommended={recommended} />;
 }

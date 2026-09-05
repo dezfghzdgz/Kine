@@ -4185,3 +4185,158 @@ html[data-tv="on"] .video-card-menu-btn {
     transition: none;
   }
 }
+
+/* Srdíčko od tvůrce u komentáře - jako na YouTube: malé, v barvě Kine,
+   hned za jménem. Říká "tohle si tvůrce přečetl a líbí se mu". */
+.creator-heart {
+  margin-left: 6px;
+  color: var(--brand);
+  font-weight: 400;
+  font-size: 13px;
+  vertical-align: 1px;
+}
+
+/* ---------- Mini přehrávač (app/watch/[id]/page.tsx, lib/miniPlayer.ts) ----------
+   Když divák odroluje pod video, rámeček s iframem se odpojí do pravého
+   dolního rohu a hraje dál. Krabice (.player-dock) zůstává ve stránce a
+   drží změřenou výšku, takže se pod ní nic neposune. Iframe se v DOMu
+   nepřesazuje - jen mění polohu, napojení na přehrávač přežije. */
+.player-dock {
+  position: relative;
+}
+
+.player-wrap.player-wrap-mini {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: min(400px, 36vw);
+  max-width: none;
+  margin: 0;
+  /* Nad lištou s hudbou a spodní navigací (150), pod okny a nabídkami (500). */
+  z-index: 400;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  animation: player-mini-in var(--dur-3, 0.25s) var(--ease) both;
+}
+
+/* Svislé video: užší okno, výška plyne z poměru stran (9:16). */
+.player-wrap.player-wrap-mini.player-wrap-vertical {
+  width: min(180px, 30vw);
+}
+
+/* Lišta s hudbou dole: mini okno si sedne nad ni (stejná čísla jako .upload-bar). */
+body.has-music-bar .player-wrap.player-wrap-mini {
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+}
+
+@keyframes player-mini-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Tlačítka mini okna: zpátky k videu a zavřít. Vždy vidět, ať se
+   nemusí hledat - jsou to jediné dvě věci, které mini okno navíc umí. */
+.player-mini-bar {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 7;
+  display: flex;
+  gap: 4px;
+}
+
+.player-mini-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: rgba(10, 10, 11, 0.7);
+  color: #fff;
+  cursor: pointer;
+  transition: background var(--dur-1, 0.12s) var(--ease);
+}
+
+.player-mini-btn:hover,
+.player-mini-btn:focus-visible {
+  background: rgba(10, 10, 11, 0.95);
+}
+
+/* Štítek "AI obsah" sedí vpravo nahoře - v mini okně tam jsou tlačítka. */
+.player-wrap-mini .player-ai-badge {
+  display: none;
+}
+
+/* Konec videa v mini okně: karty "další video" musí být menší než okno. */
+.player-wrap-mini .player-upnext {
+  padding: 10px !important;
+}
+
+.player-wrap-mini .player-upnext-card {
+  width: 44% !important;
+}
+
+.player-wrap-mini .player-upnext-card p {
+  font-size: 11px !important;
+}
+
+@media (max-width: 768px) {
+  /* Nad spodní navigací; na telefonu zabere okno půlku šířky. */
+  .watch-video-column .player-wrap.player-wrap-mini {
+    right: 12px;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    width: min(320px, 56vw);
+    margin: 0;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+  }
+
+  .watch-video-column .player-wrap.player-wrap-mini.player-wrap-vertical {
+    width: min(160px, 32vw);
+  }
+
+  body.has-music-bar .watch-video-column .player-wrap.player-wrap-mini {
+    bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .player-mini-btn {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* Prst potřebuje větší cíl než myš - i na iPadu, který je širší než 768 px. */
+@media (pointer: coarse) {
+  .player-mini-btn {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* Přehled zkratek: na stránce videa je delší, ať se na malé obrazovce
+   dá odrolovat a zavřít i bez klávesy Esc. */
+.shortcuts-panel {
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+}
+
+.shortcuts-close {
+  margin-top: 18px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.shortcuts-close:hover {
+  background: var(--panel-raised);
+  border-color: var(--text-faint);
+}

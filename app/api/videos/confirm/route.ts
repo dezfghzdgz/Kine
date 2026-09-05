@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
+import { shouldBeProtected, syncVideoProtection } from '@/lib/streamProtection';
 
 // Poté, co prohlížeč dokončí upload videa přímo do Cloudflare,
 // zavolá tenhle endpoint, aby se video zapsalo do naší databáze.
@@ -78,6 +79,14 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Neveřejné video dostane u Cloudflare podepsané adresy hned, ať se
+  // nedá pustit podle id ani chvíli (lib/streamProtection.ts; bez
+  // nastaveného klíče nic nedělá). Kdyby to teď nevyšlo, srovná se to
+  // znovu po zpracování videa a po každém uložení úprav.
+  if (shouldBeProtected(visibility)) {
+    await syncVideoProtection(data.id);
   }
 
   // Pokud je video hned veřejně publikované (ne naplánované na později),

@@ -40,6 +40,8 @@ import { detectDeviceClass } from '@/lib/deviceClass';
 import { fetchAllRows, fetchByIds } from '@/lib/loadAll';
 import VideoCard from '@/components/VideoCard';
 import { formatDuration } from '@/lib/homeRecommendation';
+import { decideMiniPlayer, digitSeekTarget } from '@/lib/miniPlayer';
+import { resolvePlaybackId } from '@/lib/playbackToken';
 
 const MUSIC_VIEW_KEY = 'kine-music-view';
 
@@ -110,6 +112,14 @@ function WatchPageInner() {
   // posílala by povely do něčeho, co už na obrazovce není.
   const playbackCleanupRef = useRef<(() => void) | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  // Mini přehrávač: krabice (dock) zůstává ve stránce a drží místo, rámeček
+  // s iframem se z ní odpojí do rohu. Iframe se nesmí přesadit v DOMu -
+  // znovu by se načetl a napojení na přehrávač by shořelo (viz hudba).
+  const dockRef = useRef<HTMLDivElement>(null);
+  const [mini, setMini] = useState<{ height: number } | null>(null);
+  const miniDismissedRef = useRef(false);
+  // Pro klávesu C: handler kláves žije v efektu a viděl by staré video.
+  const hasCaptionsRef = useRef(false);
   // Odložené započítání zhlédnutí - viz load().
   const viewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -280,6 +290,8 @@ function WatchPageInner() {
       if (e.key === 'Escape') {
         setFallbackFullscreen(false);
       }
+      // Přehled zkratek na "?" má components/KeyboardShortcuts.tsx (visí
+      // nad celou appkou); na stránce videa v něm jsou i zkratky přehrávače.
 
       // Režim televize: přehrávač poslouchá klávesy jen když je vybraný -
       // jinak šipky přesouvají výběr po stránce (lib/spatialNav.ts).
@@ -319,6 +331,26 @@ function WatchPageInner() {
       } else if (e.key.toLowerCase() === 'f') {
         e.preventDefault();
         toggleFullscreen();
+      } else if (e.code === 'KeyJ') {
+        // J/L = o 10 s, jako na YouTube; šipky zůstávají na 5 s.
+        e.preventDefault();
+        seekBy(-10);
+      } else if (e.code === 'KeyL') {
+        e.preventDefault();
+        seekBy(10);
+      } else if (e.code === 'KeyC') {
+        if (!hasCaptionsRef.current) return;
+        e.preventDefault();
+        setCaptionsEnabled((v) => !v);
+      } else if (/^[0-9]$/.test(e.key)) {
+        // 0-9 = skok na desetinu videa (5 = polovina). Podle znaku, ne podle
+        // klávesy: na české klávesnici se číslice píšou přes Shift a e.code
+        // by řekl "Digit1" i pro "+" - takhle platí, co se opravdu napsalo.
+        const target = digitSeekTarget(Number(e.key), player.duration ?? 0);
+        if (target === null) return;
+        e.preventDefault();
+        player.currentTime = target;
+        flashHint(formatChapterTime(target));
       }
     }
     // Zachytáváme v "capture" fázi na okně - stihneme to dřív, než se do
@@ -474,6 +506,61 @@ function WatchPageInner() {
       document.removeEventListener('webkitfullscreenchange', syncFullscreenState);
     };
   }, []);
+
+  /**
+   * Mini přehrávač: když divák odroluje pod video, rámeček se zmenší do
+   * rohu a hraje dál. Sleduje se KRABICE (dock), která zůstává ve stránce
+   * a drží místo - rámeček sám je v mini režimu pevně v rohu a o jeho
+   * viditelnosti by pozorovatel nic neřekl. Rozhodnutí je v
+   * lib/miniPlayer.ts (a má test), tady jen měření.
+   */
+  useEffect(() => {
+    setMini(null);
+    miniDismissedRef.current = false;
+    const dock = dockRef.current;
+    if (!dock || mode === 'music' || typeof IntersectionObserver === 'undefined') return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[entries.length - 1];
+        if (!entry) return;
+        const decision = decideMiniPlayer({
+          ratio: entry.intersectionRatio,
+          top: entry.boundingClientRect.top,
+          dismissed: miniDismissedRef.current,
+          tv: isTvMode(),
+          musicMode: false,
+        });
+        if (decision.boxVisible) miniDismissedRef.current = false;
+        if (!decision.mini) {
+          setMini(null);
+          return;
+        }
+        // Výška se změří teď, dokud je rámeček ještě v krabici - po
+        // odpojení do rohu by krabice spadla na nulu a stránka poskočila.
+        const height = wrapRef.current?.offsetHeight ?? 0;
+        setMini((current) => current ?? { height });
+      },
+      { threshold: [0, 0.15, 0.3, 0.5, 0.75, 1] }
+    );
+    observer.observe(dock);
+    return () => observer.disconnect();
+    // video?.id: krabice existuje až po načtení videa, do té doby není co
+    // pozorovat - efekt se musí pustit znovu, jakmile se vykreslí.
+  }, [videoId, mode, video?.id]);
+
+  function leaveMini(scrollBack: boolean) {
+    if (scrollBack) {
+      // Zpátky do krabice: krabice se dostane do okna a pozorovatel
+      // mini režim sám ukončí.
+      dockRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    // Křížek = zavřít: pauza a pryč, dokud divák krabici zase neuvidí.
+    playerRef.current?.pause?.();
+    miniDismissedRef.current = true;
+    setMini(null);
+  }
 
   /**
    * Otočení telefonu na šířku = celá obrazovka, zpátky na výšku = zpátky
@@ -739,6 +826,12 @@ function WatchPageInner() {
       return;
     }
 
+    // Neveřejné video hraje přes podepsaný token, ne přes holé id
+    // (lib/playbackToken.ts). Zjistí se DŘÍV, než se přehrávač vykreslí -
+    // změna adresy iframu by ho načetla znovu a napojení by shořelo.
+    // U veřejného videa je to id samo, bez dotazu.
+    data.playback_id = await resolvePlaybackId(data);
+
     setVideo(data);
     document.title = `${data.title} - Kine`;
 
@@ -943,7 +1036,7 @@ function WatchPageInner() {
         <p>{t('videoNotFoundOrNoAccessNote')}</p>
         {notFoundDetail && (
           <p style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8 }}>
-            (Technický detail pro appka podporu: {notFoundDetail})
+            {t('technicalDetailNote').replace('{detail}', notFoundDetail)}
           </p>
         )}
       </div>
@@ -953,6 +1046,8 @@ function WatchPageInner() {
   const creatorName = video.profiles?.display_name ?? video.profiles?.username ?? t('unknownCreator');
   const chapters: { time: number; title: string }[] = video.chapters ?? [];
   const captions: { time: number; text: string }[] = video.captions ?? [];
+  hasCaptionsRef.current = captions.length > 0;
+  const miniActive = !!mini && !isMaximized;
 
   return (
     <div className="watch-layout">
@@ -973,21 +1068,56 @@ function WatchPageInner() {
             <MusicVideoSurface vertical={video.height > video.width} />
           )
         ) : (
+                <div
+                  ref={dockRef}
+                  className={mini ? 'player-dock player-dock-mini' : 'player-dock'}
+                  // V mini režimu krabice drží změřenou výšku, aby stránka pod ní
+                  // neposkočila, když se z ní rámeček odpojí do rohu.
+                  style={mini ? { height: mini.height } : undefined}
+                >
                   <div
                     ref={wrapRef}
                     // tabIndex dělá z rámečku místo, kam se dá vrátit focus, když si
                     // ho vezme iframe přehrávače - bez toho klávesové zkratky umřou.
                     tabIndex={0}
                     onMouseDown={() => wrapRef.current?.focus({ preventScroll: true })}
-                    className={`player-wrap ${video.height > video.width ? 'player-wrap-vertical' : ''} ${cssFullscreen ? 'player-wrap-maximized' : ''}`}
+                    className={`player-wrap ${video.height > video.width ? 'player-wrap-vertical' : ''} ${cssFullscreen ? 'player-wrap-maximized' : ''} ${miniActive ? 'player-wrap-mini' : ''}`}
                     style={video.height > video.width || isMaximized ? {} : { aspectRatio: '16/9' }}
                   >
+                    {miniActive && (
+                      <div className="player-mini-bar">
+                        <button
+                          type="button"
+                          className="player-mini-btn"
+                          onClick={(e) => { e.stopPropagation(); leaveMini(true); }}
+                          aria-label={t('miniPlayerExpand')}
+                          title={t('miniPlayerExpand')}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M15 3h6v6" />
+                            <path d="M10 14 21 3" />
+                            <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          className="player-mini-btn"
+                          onClick={(e) => { e.stopPropagation(); leaveMini(false); }}
+                          aria-label={t('miniPlayerClose')}
+                          title={t('miniPlayerClose')}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                            <path d="M6 6l12 12M18 6 6 18" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
                     <iframe
                       ref={iframeRef}
                       // preload=auto: manifest a první kousky videa se stáhnou hned
                       // při otevření stránky, ne až po kliknutí na Přehrát - u delších
                       // videí se jinak po kliknutí dlouho čekalo.
-                      src={`https://iframe.videodelivery.net/${video.cloudflare_video_id}?controls=false&preload=auto`}
+                      src={`https://iframe.videodelivery.net/${video.playback_id ?? video.cloudflare_video_id}?controls=false&preload=auto`}
                       style={{ width: '100%', height: '100%', border: 'none' }}
                       allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen;"
                       allowFullScreen
@@ -1028,13 +1158,14 @@ function WatchPageInner() {
                     )}
                     {video.is_ai_generated && showAiBadge && (
                       <div
+                        className="player-ai-badge"
                         style={{
                           position: 'absolute', top: 10, right: 10, zIndex: 6,
                           background: 'rgba(10,10,11,0.75)', color: '#fff', fontSize: 11, fontWeight: 600,
                           padding: '4px 9px', borderRadius: 6, letterSpacing: 0.3,
                         }}
                       >
-                        AI obsah
+                        {t('aiContentBadge')}
                       </div>
                     )}
                     {playerReady && (
@@ -1047,13 +1178,14 @@ function WatchPageInner() {
                         onToggleCaptions={() => setCaptionsEnabled((v) => !v)}
                         isMaximized={isMaximized}
                         onToggleMaximize={toggleFullscreen}
+                        compact={miniActive}
                       />
                     )}
                     {playerReady && captions.length > 0 && captionsEnabled && (
                       <CaptionsOverlay captions={captions} player={playerRef.current} />
                     )}
                     {showUpNext && upNextQueue[0] && (
-                      <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,10,11,0.92)', zIndex: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+                      <div className="player-upnext" style={{ position: 'absolute', inset: 0, background: 'rgba(10,10,11,0.92)', zIndex: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
                         <div style={{ textAlign: 'center', maxWidth: 820, width: '100%' }}>
                           <p style={{ color: 'var(--text-faint)', fontSize: 12, marginBottom: 14 }}>
                             {t('nextVideoInSecondsNote').replace('{seconds}', String(upNextCountdown))}
@@ -1062,6 +1194,7 @@ function WatchPageInner() {
                             {upNextQueue.slice(0, 2).map((v: any) => (
                               <div
                                 key={v.id}
+                                className="player-upnext-card"
                                 onClick={() => router.push(nextHref(v.id))}
                                 style={{ cursor: 'pointer', width: 'clamp(200px, 38vw, 340px)' }}
                               >
@@ -1081,6 +1214,7 @@ function WatchPageInner() {
                       </div>
                     )}
                   </div>
+                </div>
         )}
 
         {mode === 'music' && (
@@ -1169,7 +1303,7 @@ function WatchPageInner() {
               <button
                 onClick={() => setPlaylistPanelOpen((v) => !v)}
                 className="playlist-panel-toggle"
-                aria-label={playlistPanelOpen ? 'Sbalit seznam' : 'Rozbalit seznam'}
+                aria-label={playlistPanelOpen ? t('playlistCollapse') : t('playlistExpand')}
               >
                 {playlistPanelOpen ? '▴' : '▾'}
               </button>
@@ -1231,7 +1365,7 @@ function WatchPageInner() {
             </span>
             <span>{creatorName}</span>
             <VerifiedBadge tier={video.profiles?.verification_tier} />
-                {trustRating !== null && trustRating >= 90 && <span title={`Vysoký rating (${trustRating}%)`} style={{ marginLeft: 5, fontSize: 13 }}>⭐</span>}
+                {trustRating !== null && trustRating >= 90 && <span title={t('highRatingTitle').replace('{rating}', String(trustRating))} style={{ marginLeft: 5, fontSize: 13 }}>⭐</span>}
           </Link>
           <span>{video.views} {t('views')}</span>
         </div>
@@ -1351,10 +1485,10 @@ function WatchPageInner() {
       )}
 
       <div className="watch-comments-column">
-        <p className="section-title">Interaction Panel</p>
+        <p className="section-title">{t('interactionPanelTitle')}</p>
 
         <div className="panel">
-          <p className="panel-heading">Creator Profile</p>
+          <p className="panel-heading">{t('creatorProfileHeading')}</p>
           <div className="creator-row">
             <div className="creator-avatar" style={{ overflow: 'hidden' }}>
               {video.profiles?.avatar_url ? (
@@ -1365,9 +1499,11 @@ function WatchPageInner() {
               <Link href={`/channel/${video.profiles?.id}`} className="creator-name" style={{ display: 'block' }}>
                 {creatorName}
                 <VerifiedBadge tier={video.profiles?.verification_tier} />
-                {trustRating !== null && trustRating >= 90 && <span title={`Vysoký rating (${trustRating}%)`} style={{ marginLeft: 5, fontSize: 13 }}>⭐</span>}
+                {trustRating !== null && trustRating >= 90 && <span title={t('highRatingTitle').replace('{rating}', String(trustRating))} style={{ marginLeft: 5, fontSize: 13 }}>⭐</span>}
               </Link>
-              {trustRating !== null && <p className="creator-trust">Rating: {trustRating}%</p>}
+              {trustRating !== null && (
+                <p className="creator-trust">{t('creatorRatingLabel').replace('{rating}', String(trustRating))}</p>
+              )}
             </div>
           </div>
         </div>

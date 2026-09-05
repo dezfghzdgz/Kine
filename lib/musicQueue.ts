@@ -23,7 +23,9 @@ export function trackFromVideo(video: any): MusicTrack | null {
   if (!video?.id || !video?.cloudflare_video_id) return null;
   return {
     id: video.id,
-    cloudflareId: video.cloudflare_video_id,
+    // playback_id doplňuje stránka videa u neveřejných videí: podepsaný
+    // token místo holého id (lib/playbackToken.ts). Ostatní videa ho nemají.
+    cloudflareId: video.playback_id ?? video.cloudflare_video_id,
     title: video.title ?? '',
     creator: creatorOf(video),
     thumbnail: video.thumbnail_url ?? null,

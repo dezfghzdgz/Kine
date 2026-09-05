@@ -12,6 +12,11 @@ import { useLanguage } from '@/lib/i18n';
  *   Esc      zruší výběr, případně zavře tenhle přehled
  *   ?        ukáže/schová přehled zkratek
  *
+ * Zkratky přehrávače (mezerník, šipky, J/L, M, F, C, 0-9) obsluhuje sama
+ * stránka videa (app/watch/[id]/page.tsx); tady jsou jen vypsané v
+ * přehledu, ať je kde je najít. Nabídka ⋮ v přehrávači přehled otevře
+ * událostí OPEN_SHORTCUTS_EVENT - pro toho, kdo "?" nezná.
+ *
  * Výběr se schválně drží přímo v DOMu (třídou na kartě), ne ve state.
  * Karty rozdává několik různých stránek a žádná z nich by o výběru
  * nemusela vědět - takhle zkratky fungují všude a nikde se kvůli nim
@@ -19,6 +24,7 @@ import { useLanguage } from '@/lib/i18n';
  */
 
 export const OPEN_SEARCH_EVENT = 'kine-open-search';
+export const OPEN_SHORTCUTS_EVENT = 'kine-open-shortcuts';
 
 const CARD_SELECTOR = '.video-card-interactive';
 const FOCUS_CLASS = 'video-card-keyboard-focus';
@@ -64,9 +70,22 @@ function openFocused() {
   link?.click();
 }
 
-export default function KeyboardShortcuts({ cardNavigation = true }: { cardNavigation?: boolean }) {
+export default function KeyboardShortcuts({
+  cardNavigation = true,
+  playerShortcuts = false,
+}: {
+  cardNavigation?: boolean;
+  /** Stránka videa: do přehledu přibydou zkratky přehrávače. */
+  playerShortcuts?: boolean;
+}) {
   const { t } = useLanguage();
   const [helpOpen, setHelpOpen] = useState(false);
+
+  useEffect(() => {
+    const open = () => setHelpOpen(true);
+    window.addEventListener(OPEN_SHORTCUTS_EVENT, open);
+    return () => window.removeEventListener(OPEN_SHORTCUTS_EVENT, open);
+  }, []);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -131,13 +150,31 @@ export default function KeyboardShortcuts({ cardNavigation = true }: { cardNavig
           ['Enter', t('shortcutsOpen')],
         ] as [string, string][])
       : []),
-    ['Esc', t('shortcutsClose')],
+    ...(playerShortcuts
+      ? ([
+          [t('shortcutsSpaceKey') + '  ·  K', t('shortcutsPlayPause')],
+          ['←  →', t('shortcutsSeek5')],
+          ['J  ·  L', t('shortcutsSeek10')],
+          ['↑  ↓', t('shortcutsVolume')],
+          ['M', t('shortcutsMute')],
+          ['F', t('shortcutsFullscreen')],
+          ['C', t('shortcutsCaptions')],
+          ['0 – 9', t('shortcutsDigits')],
+        ] as [string, string][])
+      : []),
+    ['Esc', playerShortcuts ? t('shortcutsEscPlayer') : t('shortcutsClose')],
     ['?', t('shortcutsToggle')],
   ];
 
   return (
     <div className="shortcuts-backdrop" onClick={() => setHelpOpen(false)} role="presentation">
-      <div className="shortcuts-panel" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="shortcuts-panel"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('shortcutsTitle')}
+      >
         <p className="shortcuts-title">{t('shortcutsTitle')}</p>
         <ul className="shortcuts-list">
           {rows.map(([key, label]) => (
@@ -147,6 +184,9 @@ export default function KeyboardShortcuts({ cardNavigation = true }: { cardNavig
             </li>
           ))}
         </ul>
+        <button type="button" className="shortcuts-close" onClick={() => setHelpOpen(false)}>
+          {t('close')}
+        </button>
       </div>
     </div>
   );

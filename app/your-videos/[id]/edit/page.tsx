@@ -100,6 +100,7 @@ export default function EditVideoPage() {
         .update({ visibility: 'private', pending_collab_visibility: currentVideo.visibility })
         .eq('id', videoId);
       setVisibility('private');
+      await syncProtection(videoId);
     }
 
     // Chyby se dřív spolkly a tvůrci to vypadalo, že se nestalo vůbec nic.
@@ -197,6 +198,25 @@ export default function EditVideoPage() {
     setChecking(false);
   }
 
+  /** Srovná ochranu videa podepsanými adresami s jeho viditelností (server). */
+  async function syncProtection(id: string): Promise<'ok' | 'failed' | 'skipped'> {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) return 'skipped';
+      const res = await fetch('/api/videos/protect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ videoId: id }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return 'failed';
+      return body.outcome === 'failed' ? 'failed' : 'ok';
+    } catch {
+      return 'failed';
+    }
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -238,6 +258,15 @@ export default function EditVideoPage() {
 
     if (error) {
       setToast({ message: 'Uložení se nepovedlo: ' + error.message, type: 'error' });
+      return;
+    }
+
+    // Soukromé video a video pro odběratele dostanou podepsané adresy,
+    // veřejné se zase otevře (lib/streamProtection.ts). Bez nastaveného
+    // klíče server nic nedělá. Když to nevyjde, tvůrce to má vědět.
+    const protection = await syncProtection(videoId);
+    if (protection === 'failed') {
+      setToast({ message: t('videoProtectionFailedNote'), type: 'error' });
       return;
     }
 

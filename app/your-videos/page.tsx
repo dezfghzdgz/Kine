@@ -39,6 +39,36 @@ function YourVideosPageInner() {
     setLoading(false);
 
     await doptejSeNaZpracovavana(list, authData.user.id);
+    await dorovnejOchranu();
+  }
+
+  /**
+   * Podepsané adresy pro neveřejná videa (lib/streamProtection.ts): ochrana
+   * se zapíná při uložení videa - videa, která byla soukromá dřív, než
+   * ochrana vznikla, by na ni čekala, dokud je někdo neupraví. Tady se
+   * dorovnají všechna naráz, jednou za otevření appky. Bez nastaveného
+   * klíče server odpoví "not-configured" a nic se neděje.
+   */
+  async function dorovnejOchranu() {
+    const KLIC = 'kine-ochrana-dorovnana';
+    try {
+      if (sessionStorage.getItem(KLIC)) return;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) return;
+      const res = await fetch('/api/videos/protect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ all: true }),
+      });
+      const body = await res.json().catch(() => ({}));
+      // Po neúspěchu se to příště zkusí znovu; jinak stačí jednou.
+      if (res.ok && body.outcome !== 'failed') sessionStorage.setItem(KLIC, '1');
+      // Když se přenesl náhled, ať je hned vidět.
+      if (body.changed > 0) load();
+    } catch {
+      // Ochrana není důvod, aby seznam videí nešel.
+    }
   }
 
   /**

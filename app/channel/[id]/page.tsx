@@ -270,7 +270,7 @@ function ChannelPageInner() {
             {profile.display_name ?? profile.username}
             <VerifiedBadge tier={profile.verification_tier} />
             {trustRating !== null && trustRating >= 90 && (
-              <span title={`Vysoký rating (${trustRating}%)`} style={{ marginLeft: 5, fontSize: 15 }}>⭐</span>
+              <span title={t('highRatingTitle').replace('{rating}', String(trustRating))} style={{ marginLeft: 5, fontSize: 15 }}>⭐</span>
             )}
             {(trustRating === null || trustRating < 90) && isNewCreator && (
               <span

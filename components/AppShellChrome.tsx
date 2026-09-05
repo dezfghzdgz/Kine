@@ -18,7 +18,7 @@ export default function AppShellChrome({ children }: { children: React.ReactNode
           vypínají úplně (mají vlastní ovládání šipkami) a u přehrávače se
           vypíná jen posun mezi kartami - tam "K" znamená přehrát/pauza,
           stejně jako na YouTube. */}
-      {!isSparks && <KeyboardShortcuts cardNavigation={!isWatch} />}
+      {!isSparks && <KeyboardShortcuts cardNavigation={!isWatch} playerShortcuts={isWatch} />}
 
       {/* Lišta s hudbou. Sama se schová, když nic nehraje nebo když
           stránka videa ukazuje velký obal té samé skladby. */}

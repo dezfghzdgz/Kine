@@ -1,78 +1,161 @@
-KINE - opravy: hudba, promítání videa, další videa, BETA0.092
-==============================================================
+KINE - mini přehrávač, zkratky, překlady, srdíčko, ochrana neveřejných videí
+============================================================================
 
-17 souborů. Rozbal do kořene repa a přepiš.
+41 souborů (jen ty, co se změnily). Rozbal do kořene repa a přepiš.
 Pak: node zkontroluj-soubory.mjs --uklid
-Pak push. Žádná nová migrace.
+     (--uklid smaže tři zbytky ze starších balíčků - dva, které jsi
+      minule nesmazal, a jeden starý duplikát testu v app/tests/)
+Pak: Supabase -> SQL Editor, dvě migrace (každá jednou, obě jdou pustit
+     i opakovaně):
+       supabase-migration-srdicko.sql            (srdíčko od tvůrce)
+       supabase-migration-podepsane-adresy.sql   (ochrana neveřejných videí)
+Pak push.
 
-Je tu i oprava buildu z předchozího mini-balíčku (lib/username.ts a
-supabase-migration-username-rules.sql v původní verzi) - kdybys ho ještě
-nerozbalil, tenhle to zařídí. --uklid smaže dva zbytky, které build
-neshodí, ale nemají v repu být (starý test filtru jmen a stará migrace
-S filtrem jmen).
+Ochrana neveřejných videí (bod 5) potřebuje ještě jednorázové nastavení
+na Cloudflare a Vercelu - je dole. Dokud ho neuděláš, appka se v tomhle
+chová jako dřív, nic se nerozbije.
 
 
-1) HUDBA NEJDE ZASTAVIT / UKAZUJE ZTLUMENO, ALE HRAJE   (lib/musicSlots.ts, lib/musicPlayer.tsx)
-   Obě jedna příčina, a byla moje. Hudba běží ve dvou slotech (jeden
-   hraje, druhý si dopředu načítá další skladbu). Adresa iframu se
-   skládala podle toho, který slot je zrovna aktivní: aktivní dostal
-   "&autoplay=true", druhý "&muted=true". Při přepnutí skladby se adresa
-   OBOU iframů změnila - a změna adresy iframe načte celý znovu, jako
-   nový přehrávač. Naše napojení ale drželo ten starý. Nový přehrávač
-   hrál dál sám od sebe a pauza, ztlumení ani zavření na něj nedosáhly.
-   Proto "duch": lišta ukazuje ztlumeno, zvuk jede, pomohl jen reload.
+CO JE NOVÉ
+----------
+1) MINI PŘEHRÁVAČ   (app/watch/[id]/page.tsx, lib/miniPlayer.ts, app/globals.css)
+   Odroluješ pod video - ke komentářům, k dalším videím - a video se
+   zmenší do pravého dolního rohu a hraje dál. Vrátí se samo, jakmile
+   zase odroluješ nahoru; nebo tlačítkem "Zpět k videu"; křížek ho
+   zavře (pauza) a nevrací se, dokud krabici nahoře zase neuvidíš.
+   V mini okně je posuvník, přehrát/pauza, zvuk a celá obrazovka.
+   Stránka pod tím neposkočí (krabice drží místo). Na telefonu sedí nad
+   spodní navigací, s hudební lištou nad ní. V režimu televize a u hudby
+   (ta má vlastní lištu) se mini okno nezapíná.
+   Přehrávač se při tom NEPŘESAZUJE - jen mění polohu. Přesazení by ho
+   načetlo znovu, přesně jako se minule stalo hudbě.
 
-   Teď se parametry adresy rozhodnou jednou, při vzniku slotu, a už se
-   nemění. Zvuk a start dostává slot přes SDK, které na něj dosáhne.
-   Ztlumení navíc nastavuje i příznak muted, ne jen hlasitost 0.
-   Test hlídá, že se slot při přepnutí nemění (tests/musicSlots.test.mjs).
+2) KLÁVESOVÉ ZKRATKY   (components/KeyboardShortcuts.tsx, ChapterTimeline.tsx)
+   Nové na stránce videa: J/L = o 10 s zpět/vpřed, C = titulky (když
+   je video má), 0-9 = skok na desetinu videa (5 = polovina; funguje
+   i na české klávesnici přes Shift). Mezerník/K, šipky, M, F, Esc
+   zůstávají.
+   "?" ukáže přehled všech zkratek - to už appka měla, ale na stránce
+   videa vypisoval jen hledání. Teď vypisuje i zkratky přehrávače, má
+   tlačítko Zavřít a je i v nabídce ⋮ přehrávače ("Klávesové zkratky")
+   pro toho, kdo "?" nezná. 8 jazyků.
 
-2) VIDEO U HUDBY V NĚKTERÝCH ROZLIŠENÍCH VĚTŠÍ A POSUNUTÉ   (app/globals.css)
-   Taky moje: v minulém kole jsem přidal mírné zvětšení (zoom 1,2×) pro
-   monitory širší než 2400 px. Obraz hudebního přehrávače se ale promítá
-   jako pevně umístěný iframe s rozměry změřenými z krabice na stránce -
-   a pod zoomem se rozměry započítaly dvakrát: 1,2× větší a posunutý.
-   Přesně tvůj druhý screenshot (2560 px široký monitor).
+3) PŘEKLADY   (app/watch/[id]/page.tsx, app/search/page.tsx, components/SearchResults.tsx)
+   Na stránce videa bylo natvrdo anglicky "Interaction Panel", "Creator
+   Profile", "Rating: 90%", a natvrdo česky "AI obsah", "Sbalit seznam".
+   Hledání mělo půlku česky ("Výsledky pro") a půlku anglicky ("Type
+   something to search for.", "unknown creator", "views") - ať měl
+   divák zvolený jazyk jakýkoliv. Všechno teď jde přes překlad, 8 jazyků.
+   Hledání navíc používá stejné karty videí jako hlavní stránka: náhled
+   po najetí, délka, nabídka ⋮. Dřív mělo vlastní ořezané karty.
 
-   Zvětšení pro 4K monitory je pryč - přineslo víc škody než užitku.
-   Režim televize (zoom 1,35) zůstává, ale promítaný iframe má převrácený
-   zoom (0,740741), takže sedí přesně. Ověřeno v Chromiu: bez korekce
-   401/547/1166 px, s korekcí 297/405/864 px = stejně jako krabice.
+4) SRDÍČKO OD TVŮRCE   (components/CommentSection.tsx, supabase-migration-srdicko.sql)
+   Jako na YouTube: u komentáře na svém videu klikneš ♡ a všem se u
+   jména autora ukáže ♥ "Srdíčko od tvůrce". Připnutí komentáře jsi už
+   měl, tohle je ta druhá půlka. Dokud migrace neproběhne, komentáře se
+   načtou normálně, jen bez srdíček (hlídá to záloha v kódu).
 
-3) DLOUHÉ VIDEO SE PO KLIKNUTÍ NA PŘEHRÁT DLOUHO NAČÍTÁ   (app/watch/[id]/page.tsx)
-   Přehrávač měl preload vypnutý: manifest a první kousky videa se
-   stahovaly až po kliknutí. Teď "preload=auto" - stáhnou se hned při
-   otevření stránky, takže Přehrát je okamžité (u hudby to samé, další
-   skladba je připravená).
-   Tohle je pravděpodobná příčina, ne ověřená - odsud video nespustím.
-   Kdyby to bylo dál pomalé, napiš: které video, jak dlouho to trvá
-   (5 s? 30 s?), a jestli se něco objevilo v /admin/errors.
+5) OCHRANA NEVEŘEJNÝCH VIDEÍ   (lib/streamProtection.ts, lib/streamToken.ts,
+   app/api/videos/playback-token, app/api/videos/protect, enable-download)
+   Soukromé video a video jen pro odběratele hlídala jen databáze: kdo
+   nemá právo, nedostane řádek. Jenže samotné video hraje z Cloudflare a
+   stačí mu id - kdo ho jednou viděl (odběratel, který pak odběr zrušil,
+   kamarád s odkazem na iframe), mohl ho pouštět dál a poslat komukoliv.
+   Ochrana končila u seznamu, ne u videa.
 
-4) TŘI TEČKY POD "DALŠÍ VIDEA"   (app/watch/[id]/page.tsx)
-   Seznam pod videem měl vlastní zjednodušené karty bez nabídky. Teď
-   používá stejné karty jako hlavní stránka - s nabídkou ⋮ (fronta,
-   uložit, playlist, stáhnout, nezajímá mě, nahlásit) i náhledem po
-   najetí. Nadpis "Další videa" je přeložený do všech 8 jazyků.
+   Teď (po nastavení níž): neveřejné video dostane u Cloudflare
+   "podepsané adresy" - bez platného tokenu ho Cloudflare nevydá nikomu.
+   Token vystavuje jen Kine, na 4 hodiny, a jen tomu, komu databáze
+   video ukáže (stejná pravidla jako všude: majitel, odběratel u videa
+   pro odběratele, spolutvůrce). Veřejná videa se hrají jako dřív.
+   Náhledový obrázek chráněného videa se jednou přenese do úložiště Kine
+   (kam se dávají i vlastní náhledy), ať nezávisí na tokenu.
+   Stahování: opravená díra - dřív si kdokoliv přihlášený mohl stáhnout
+   jakékoliv video, i cizí soukromé, když znal id. Teď jen ten, kdo ho
+   vidí; u chráněného videa s tokenem na stažení.
 
-5) BETA0.092   (components/Sidebar.tsx)
+   Kdy se ochrana zapíná: při nahrání neveřejného videa, po jeho
+   zpracování, při uložení úprav (Upravit -> Uložit) a po potvrzení
+   spolutvůrce. A ještě: když otevřeš "Moje videa", dorovnají se všechna
+   tvoje neveřejná videa naráz (jednou za otevření appky) - takže videa,
+   která byla soukromá dřív, než ochrana vznikla, nemusíš klikat jedno
+   po druhém.
+
+   NASTAVENÍ (~10 minut, jednorázově; celý postup i vypnutí je
+   v komentáři na začátku lib/streamProtection.ts):
+     a) Vytvoř podpisový klíč - jen přes API, v dashboardu není:
+          curl -X POST "https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/stream/keys" \
+               -H "Authorization: Bearer <CLOUDFLARE_STREAM_API_TOKEN>"
+        V odpovědi je "id" a "pem" (dlouhý řetězec). Cloudflare ho ukáže
+        JEN TEĎ - ulož si ho.
+     b) Vercel -> Settings -> Environment Variables:
+          CLOUDFLARE_STREAM_KEY_ID  = to "id"
+          CLOUDFLARE_STREAM_KEY_PEM = to "pem" (celý, tak jak je)
+        Redeploy.
+     c) Migrace supabase-migration-podepsane-adresy.sql (viz nahoře).
+     d) Otevři Moje videa (dorovná se ochrana) a zkus bod "Ochrana" níž.
+   Bez a)+b) se nic nepodepisuje a všechno funguje jako dřív.
+
+   VYPNUTÍ: napřed přepni chráněná videa na veřejná a ulož (tím se
+   ochrana u Cloudflare vypne), teprve potom smaž proměnné. Kdyby ses
+   proměnných zbavil dřív, chráněná videa by zůstala chráněná a bez
+   tokenu by nešla - ruční vypnutí je v lib/streamProtection.ts.
 
 
 CO ODKLIKAT
 -----------
-  [ ] Hudba: pusť skladbu, přepni na další (šipka v liště), pak pauza ->
-      ticho. Ztlumit -> ticho. Zavřít (×) -> ticho. Bez reloadu.
-  [ ] Hudba -> Video: obraz sedí v krabici, na tvém velkém monitoru
-      i v menším okně.
-  [ ] Dlouhé video: Přehrát -> rozjede se rychle. Když ne, viz bod 3.
-  [ ] Pod videem "Další videa" mají ⋮.
-  [ ] Menu vlevo dole: BETA0.092.
+PC
+  [ ] Pusť video, odroluj ke komentářům -> mini okno vpravo dole hraje.
+      Odroluj nahoru -> vrátí se do krabice. Zase dolů -> mini. Tlačítko
+      "Zpět k videu" -> odroluje nahoru. Křížek -> pauza, okno pryč.
+  [ ] V mini okně: klik do videa = pauza/přehrát, posuvník, zvuk, celá
+      obrazovka (a zpět Esc).
+  [ ] Zmáčkni ? -> přehled zkratek, Zavřít. Zkus J, L, 5, C.
+  [ ] ⋮ v přehrávači -> "Klávesové zkratky".
+  [ ] Hledej něco -> karty s ⋮ a náhledem po najetí. Přepni jazyk na
+      angličtinu -> nadpisy hledání anglicky. Prázdné hledání -> hláška
+      ve zvoleném jazyce.
+  [ ] Stránka videa: vpravo "Tvůrce a diskuze", "Profil tvůrce" (a
+      v jiném jazyce přeložené).
+  [ ] Po migraci srdíčka: na svém videu u komentáře ♡ -> ♥ u jména.
+Telefon
+  [ ] Mini okno nad spodní navigací; s hudbou puštěnou v liště nad ní.
+  [ ] Tlačítka v mini okně se dají trefit prstem.
+Ochrana (až po nastavení a)-c))
+  [ ] Soukromé video hraje tobě. V anonymním okně
+      https://iframe.videodelivery.net/<cloudflare_video_id> hlásí chybu.
+  [ ] Náhled soukromého videa v Moje videa je vidět (přenesený).
+  [ ] Video pro odběratele: hraje odběrateli, neodběrateli ne.
+  [ ] Stáhnout u soukromého videa funguje tobě.
+  [ ] Přepni soukromé na veřejné a ulož -> hraje v anonymním okně i podle id.
 
 
 CO JSEM OVĚŘIL
 --------------
-- Na TVÉM aktuálním mainu (4bf9720) + tenhle balíček: kontrola otisků
-  čistá, typová kontrola celého projektu shodná s výchozím stavem,
-  108 kontrol ve 13 testech prošlo.
-- Zoom a promítání: měřeno v Chromiu (viz bod 2).
-- Hudba: příčina je jistá (změna src iframe = nový přehrávač), oprava
-  odstraňuje tu změnu; skutečný poslech odsud ověřit nejde.
+- Na TVÉM aktuálním mainu (a57448a) + tenhle balíček: kontrola otisků
+  čistá (119 souborů), typová kontrola celého projektu shodná s výchozím
+  stavem, 15 testovacích sad / 132 kontrol prošlo. Nové testy: mini
+  přehrávač (8), adresa přehrávače (6), podepsané tokeny (10) - token se
+  podepíše a ověří skutečným RSA klíčem, přesně jak to dělá Cloudflare.
+- Obě migrace na skutečném Postgresu, každá dvakrát.
+- Mini okno měřeno v Chromiu: 1440 px -> 400×225 vpravo dole (s hudební
+  lištou 84 px nad okrajem), 390 px telefon -> 218×123 nad spodní
+  navigací; stránka pod ním se ani o pixel neposunula; po odrolování
+  nahoru zpět v krabici.
+
+Co ověřené NENÍ (odsud se nedá):
+- Skutečné přehrávání v mini okně a přes token - Cloudflare odsud
+  nezavolám. Tvar tokenu odpovídá dokumentaci Cloudflare (RS256, sub,
+  kid, exp, nbf, downloadable). Kdyby po nastavení soukromé video
+  nehrálo, napiš, co přesně přehrávač ukáže, a jestli se v /admin/errors
+  něco objevilo - a hlavně NEMAŽ proměnné dřív, než videa přepneš na
+  veřejná (viz VYPNUTÍ).
+- Přenesení náhledu čeká na první chráněné video; když se náhled
+  nepřenese (Cloudflare ho ještě nemá), zkusí se to znovu při dalším
+  uložení nebo otevření Moje videa.
+
+
+CO SCHVÁLNĚ NENÍ
+----------------
+- Dvoufázové ověření a filtr jmen - na tvoje přání ne.
+- Žádná cenzura: srdíčko je jen kladné označení, nic se neschovává.

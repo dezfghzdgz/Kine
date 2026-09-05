@@ -23,6 +23,8 @@ type Comment = {
   timestamp_seconds: number | null;
   user_id: string;
   pinned: boolean;
+  /** Srdíčko od tvůrce videa - "tohle se mi líbí", viditelné všem. */
+  hearted_by_creator?: boolean | null;
   image_url: string | null;
   profiles: { username: string; is_supporter?: boolean } | null;
   likeCount: number;
@@ -124,11 +126,28 @@ export default function CommentSection({
   async function loadComments() {
     setCommentsFailed(false);
 
-    const { data: rawComments, error } = await supabase
-      .from('comments')
-      .select('id, content, created_at, parent_id, timestamp_seconds, user_id, pinned, image_url, profiles!comments_user_id_fkey(username, is_supporter)')
-      .eq('video_id', videoId)
-      .order('created_at', { ascending: false });
+    const nacti = (seSrdickem: boolean) =>
+      supabase
+        .from('comments')
+        .select(
+          'id, content, created_at, parent_id, timestamp_seconds, user_id, pinned, ' +
+            (seSrdickem ? 'hearted_by_creator, ' : '') +
+            'image_url, profiles!comments_user_id_fkey(username, is_supporter)'
+        )
+        .eq('video_id', videoId)
+        .order('created_at', { ascending: false });
+
+    let vysledek = await nacti(true);
+
+    // Sloupec srdíčka přidává migrace supabase-migration-srdicko.sql. Dokud
+    // neproběhla, dotaz s ním spadne (42703 = neznámý sloupec) - komentáře
+    // se pak načtou bez něj a jen se neukazují srdíčka. Bez téhle zálohy by
+    // migrace, která ještě neproběhla, sebrala všem všechny komentáře.
+    const chybiSloupec =
+      vysledek.error && (vysledek.error.code === '42703' || /hearted_by_creator/.test(vysledek.error.message ?? ''));
+    if (chybiSloupec) vysledek = await nacti(false);
+
+    const { data: rawComments, error } = vysledek;
 
     // Chyba se tu dřív nečetla vůbec. Při spadlém dotazu vyšlo z databáze
     // null, komentáře se přepsaly na prázdný seznam a pod videem se
@@ -273,6 +292,19 @@ export default function CommentSection({
     loadComments();
   }
 
+  /**
+   * Srdíčko od tvůrce. Jen majitel videa (hlídá to i databáze - pravidlo
+   * "vlastník videa může upravit komentář na svém videu"). Když sloupec
+   * v databázi ještě není (migrace neproběhla), akce tiše nic neudělá.
+   */
+  async function heartComment(commentId: string, currently: boolean) {
+    if (!ownerId || ownerId !== userId) return;
+    const { error } = await supabase.from('comments').update({ hearted_by_creator: !currently }).eq('id', commentId);
+    if (!error) {
+      setComments((prev) => prev.map((c) => (c.id === commentId ? { ...c, hearted_by_creator: !currently } : c)));
+    }
+  }
+
   async function toggleReaction(commentId: string, type: 'like' | 'dislike', currentReaction: 'like' | 'dislike' | null) {
     if (!userId) {
       router.push('/login');
@@ -376,6 +408,9 @@ export default function CommentSection({
                     {c.profiles?.username ?? t('unknownUserFallback')}
                     <SupporterBadge isSupporter={c.profiles?.is_supporter} />
                     {c.pinned && <span style={{ color: 'var(--text-faint)', fontWeight: 400 }}> · 📌 {t('pinnedLabel')}</span>}
+                    {c.hearted_by_creator && (
+                      <span className="creator-heart" title={t('creatorHeartLabel')} aria-label={t('creatorHeartLabel')}>♥</span>
+                    )}
                   </p>
                   <p className="comment-text">{renderCommentContent(c.content, onSeek)}</p>
                   {c.image_url && (
@@ -402,6 +437,15 @@ export default function CommentSection({
                         {c.pinned ? t('unpinButton') : t('pinButton')}
                       </span>
                     )}
+                    {ownerId && ownerId === userId && (
+                      <span
+                        style={{ cursor: 'pointer', color: c.hearted_by_creator ? 'var(--brand)' : undefined }}
+                        onClick={() => heartComment(c.id, !!c.hearted_by_creator)}
+                        title={c.hearted_by_creator ? t('creatorUnheartButton') : t('creatorHeartButton')}
+                      >
+                        {c.hearted_by_creator ? '♥' : '♡'}
+                      </span>
+                    )}
                     {(userId === c.user_id || userId === ownerId || isModerator) && (
                       <span style={{ cursor: 'pointer' }} onClick={() => setConfirmDeleteId(c.id)}>
                         {t('delete')}
@@ -415,7 +459,12 @@ export default function CommentSection({
                 <div key={r.id} className="comment-row" style={{ marginLeft: 40, marginBottom: 6 }}>
                   <div className="comment-avatar" style={{ width: 24, height: 24 }} />
                   <div style={{ flex: 1 }}>
-                    <p className="comment-author">{r.profiles?.username ?? t('unknownUserFallback')}</p>
+                    <p className="comment-author">
+                      {r.profiles?.username ?? t('unknownUserFallback')}
+                      {r.hearted_by_creator && (
+                        <span className="creator-heart" title={t('creatorHeartLabel')} aria-label={t('creatorHeartLabel')}>♥</span>
+                      )}
+                    </p>
                     <p className="comment-text">{renderCommentContent(r.content, onSeek)}</p>
                     <div className="comment-actions">
                       <span
@@ -430,6 +479,15 @@ export default function CommentSection({
                       >
                         👎 {r.dislikeCount > 0 ? r.dislikeCount : ''}
                       </span>
+                      {ownerId && ownerId === userId && (
+                        <span
+                          style={{ cursor: 'pointer', color: r.hearted_by_creator ? 'var(--brand)' : undefined }}
+                          onClick={() => heartComment(r.id, !!r.hearted_by_creator)}
+                          title={r.hearted_by_creator ? t('creatorUnheartButton') : t('creatorHeartButton')}
+                        >
+                          {r.hearted_by_creator ? '♥' : '♡'}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

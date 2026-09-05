@@ -1,4 +1,5 @@
 import { supabaseServer } from './supabaseServer';
+import { shouldBeProtected, syncVideoProtection } from './streamProtection';
 
 /**
  * "Video je zpracované" - jedno místo pro obě cesty, kterými se to appka
@@ -51,6 +52,13 @@ export async function markVideoReady(
   if (payload.input?.height) updates.height = payload.input.height;
 
   await supabaseServer.from('videos').update(updates).eq('id', videoId);
+
+  // Neveřejné video: podepsané adresy u Cloudflare a náhled přenesený do
+  // úložiště Kine - náhled přímo z Cloudflare by pod ochranou nešel
+  // (lib/streamProtection.ts; bez nastaveného klíče nic nedělá).
+  if (shouldBeProtected(video.visibility)) {
+    await syncVideoProtection(videoId);
+  }
 
   // Video se právě stalo "ready" a je veřejné - vhodná chvíle poslat
   // oznámení odběratelům, kteří si to u tohohle kanálu přejí (zvoneček

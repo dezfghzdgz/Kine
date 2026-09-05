@@ -5,6 +5,7 @@ import { SpeakerIcon, MaximizeIcon, MinimizeIcon } from './ReactionIcons';
 import { useLanguage } from '@/lib/i18n';
 import { PlayIcon, PauseIcon } from './MusicIcons';
 import { AUTO_HIDE_MS, clampSeek, decideTap, formatTime, tapSide, type Tap, type TapSide } from '@/lib/playerControls';
+import { OPEN_SHORTCUTS_EVENT } from './KeyboardShortcuts';
 
 type Chapter = { time: number; title: string };
 
@@ -39,6 +40,7 @@ export default function ChapterTimeline({
   onToggleCaptions,
   isMaximized,
   onToggleMaximize,
+  compact = false,
 }: {
   chapters: Chapter[];
   duration: number;
@@ -48,6 +50,9 @@ export default function ChapterTimeline({
   onToggleCaptions?: () => void;
   isMaximized: boolean;
   onToggleMaximize: () => void;
+  /** Mini přehrávač (rámeček ~300 px): jen posuvník, přehrát, zvuk a celá
+   *  obrazovka. Čas, posuvník hlasitosti a nabídka ⋮ se do něj nevejdou. */
+  compact?: boolean;
 }) {
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(true);
@@ -368,7 +373,9 @@ export default function ChapterTimeline({
           // Na iPhonu v celé obrazovce sedí dole ukazatel domů a po stranách
           // výřez - lišta se jim vyhne. Bez viewport-fit=cover v layoutu jsou
           // ty hodnoty nula (viz app/layout.tsx).
-          padding: '20px calc(14px + env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) calc(14px + env(safe-area-inset-left, 0px))',
+          padding: compact
+            ? '14px 8px 6px'
+            : '20px calc(14px + env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) calc(14px + env(safe-area-inset-left, 0px))',
           opacity: controlsVisible ? 1 : 0,
           pointerEvents: controlsVisible ? 'auto' : 'none',
           transition: 'opacity 0.25s ease',
@@ -453,9 +460,11 @@ export default function ChapterTimeline({
             >
               {paused ? <PlayIcon size={20} /> : <PauseIcon size={20} />}
             </button>
-            <span style={{ fontSize: 12, opacity: 0.85, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-              {total > 0 ? `${formatTime(current)} / ${formatTime(total)}` : formatTime(current)}
-            </span>
+            {!compact && (
+              <span style={{ fontSize: 12, opacity: 0.85, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                {total > 0 ? `${formatTime(current)} / ${formatTime(total)}` : formatTime(current)}
+              </span>
+            )}
           </div>
 
           <div
@@ -473,6 +482,7 @@ export default function ChapterTimeline({
               <SpeakerIcon muted={muted} volume={volume} size={18} />
             </button>
 
+            {!compact && (
             <div
               ref={volumeTrackRef}
               className="volume-slider-track"
@@ -496,9 +506,11 @@ export default function ChapterTimeline({
               <div className="volume-slider-fill" style={{ width: `${(muted ? 0 : volume) * 100}%` }} />
               <div className="volume-slider-thumb" style={{ left: `${(muted ? 0 : volume) * 100}%` }} />
             </div>
+            )}
           </div>
 
           <div ref={settingsRef} style={{ justifySelf: 'end', display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
+            {!compact && (
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setSettingsOpen((v) => { if (v) setSettingsView('main'); return !v; }); }}
@@ -508,8 +520,9 @@ export default function ChapterTimeline({
             >
               ⋮
             </button>
+            )}
 
-            {settingsOpen && (
+            {settingsOpen && !compact && (
               <div
                 onClick={(e) => e.stopPropagation()}
                 style={{
@@ -552,6 +565,23 @@ export default function ChapterTimeline({
                       <span>{t('playbackSpeedLabel')}</span>
                       <span style={{ color: 'rgba(255,255,255,0.6)' }}>{speed}x</span>
                     </button>
+                    {/* Přehled zkratek (components/KeyboardShortcuts.tsx) - pro
+                        toho, kdo "?" nezná. Na dotyku klávesnice není. */}
+                    {!touchUi && (
+                      <button
+                        onClick={() => {
+                          setSettingsOpen(false);
+                          window.dispatchEvent(new CustomEvent(OPEN_SHORTCUTS_EVENT));
+                        }}
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
+                          color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
+                        }}
+                      >
+                        <span>{t('shortcutsTitle')}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>?</span>
+                      </button>
+                    )}
                   </div>
                 )}
 

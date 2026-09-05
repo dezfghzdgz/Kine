@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
+import { syncVideoProtection } from '@/lib/streamProtection';
 
 /**
  * Odpověď na pozvánku ke spolupráci na videu.
@@ -72,5 +73,8 @@ async function releaseVisibilityIfEveryoneAnswered(videoId: string) {
       .from('videos')
       .update({ visibility: videoRow.pending_collab_visibility, pending_collab_visibility: null })
       .eq('id', videoId);
+    // Viditelnost se změnila -> ochrana podepsanými adresami se srovná
+    // (lib/streamProtection.ts; bez nastaveného klíče nic nedělá).
+    await syncVideoProtection(videoId);
   }
 }

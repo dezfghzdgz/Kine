@@ -84,6 +84,10 @@ function VideoCard({
 
   function startHover() {
     if (!video.cloudflare_video_id) return;
+    // Neveřejné video (soukromé, pro odběratele) hraje jen s podepsaným
+    // tokenem (lib/streamProtection.ts) - náhled po najetí by skončil
+    // chybou Cloudflare. Bez viditelnosti v datech se bere jako veřejné.
+    if (video.visibility && video.visibility !== 'public') return;
     hoverTimerRef.current = setTimeout(() => setPreviewing(true), HOVER_DELAY_MS);
   }
 
