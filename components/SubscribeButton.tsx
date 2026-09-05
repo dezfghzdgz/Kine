@@ -24,13 +24,24 @@ export default function SubscribeButton({ channelId }: { channelId: string }) {
     const { data: authData } = await supabase.auth.getUser();
     setUserId(authData.user?.id ?? null);
 
-    const { data: subs } = await supabase
-      .from('subscriptions')
-      .select('subscriber_id, notify_new_videos')
-      .eq('channel_id', channelId);
+    // Počet přes count, ne přes délku seznamu: databáze vrací nejvíc 1000
+    // řádků, takže kanál s 1200 odběrateli ukazoval "1000" - a k tomu se
+    // do prohlížeče stahoval celý seznam odběratelů jen kvůli jednomu
+    // řádku (tomu mému).
+    const [{ count }, mineResult] = await Promise.all([
+      supabase.from('subscriptions').select('*', { count: 'exact', head: true }).eq('channel_id', channelId),
+      authData.user
+        ? supabase
+            .from('subscriptions')
+            .select('notify_new_videos')
+            .eq('channel_id', channelId)
+            .eq('subscriber_id', authData.user.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
 
-    setCount(subs?.length ?? 0);
-    const mine = subs?.find((s) => s.subscriber_id === authData.user?.id);
+    setCount(count ?? 0);
+    const mine = (mineResult as any)?.data;
     setSubscribed(!!mine);
     setNotifyNewVideos(mine?.notify_new_videos ?? true);
   }

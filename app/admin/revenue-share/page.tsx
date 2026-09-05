@@ -216,7 +216,9 @@ export default function AdminRevenueSharePage() {
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
-                      {c.display_name || c.username}
+                      {/* Účet bez jména (výjimka username_exempt) by tu byl prázdný
+                          řádek - aspoň kousek id, aby šlo poznat, o koho jde. */}
+                      {c.display_name || c.username || `(bez jména · ${String(c.id).slice(0, 8)})`}
                     </p>
                     <p style={{ margin: 0, fontSize: 12, color: 'var(--text-faint)' }}>
                       {c.subscriberCount} odběratelů · podle stupně {earned} % ·

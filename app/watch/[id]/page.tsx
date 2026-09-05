@@ -34,6 +34,9 @@ import MusicStage from '@/components/MusicStage';
 import MusicVideoSurface from '@/components/MusicVideoSurface';
 import { startPlayback as beginPlayback } from '@/lib/playerStart';
 import { decideOrientationFullscreen } from '@/lib/playerControls';
+import { shareLink, browserShareDeps } from '@/lib/share';
+import { detectDeviceClass } from '@/lib/deviceClass';
+import { fetchAllRows, fetchByIds } from '@/lib/loadAll';
 
 const MUSIC_VIEW_KEY = 'kine-music-view';
 
@@ -104,6 +107,17 @@ function WatchPageInner() {
   // posílala by povely do něčeho, co už na obrazovce není.
   const playbackCleanupRef = useRef<(() => void) | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  // Odložené započítání zhlédnutí - viz load().
+  const viewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (viewTimerRef.current) {
+        clearTimeout(viewTimerRef.current);
+        viewTimerRef.current = null;
+      }
+    };
+  }, [videoId]);
 
   useEffect(() => {
     load();
@@ -120,25 +134,33 @@ function WatchPageInner() {
       const { data: pl } = await supabase.from('playlists').select('title').eq('id', playlistId).maybeSingle();
       setPlaylistInfo(pl ? { title: pl.title } : null);
 
-      const { data: items } = await supabase
-        .from('playlist_videos')
-        .select('video_id, position')
-        .eq('playlist_id', playlistId)
-        .order('position', { ascending: true });
+      // Po dávkách a po kusech: playlist s pár sty videi dřív rozbil panel
+      // úplně - seznam id se posílal v adrese jedním dotazem, ta u ~200
+      // položek přerostla a dotaz se neprovedl vůbec. fetchByIds posílá id
+      // po dávkách a drží pořadí.
+      const items = await fetchAllRows((from, to) =>
+        supabase
+          .from('playlist_videos')
+          .select('video_id, position')
+          .eq('playlist_id', playlistId)
+          .order('position', { ascending: true })
+          .range(from, to)
+      );
 
-      const videoIds = (items ?? []).map((i: any) => i.video_id);
+      const videoIds = items.map((i: any) => i.video_id);
       if (videoIds.length === 0) return;
 
-      const { data: videoData } = await supabase
-        .from('videos')
-        .select('id, title, thumbnail_url, duration_seconds, profiles!videos_owner_id_fkey(username)')
-        .in('id', videoIds);
-
-      const ordered = videoIds
-        .map((id: string) => videoData?.find((v: any) => v.id === id))
-        .filter(Boolean) as any[];
+      const ordered = await fetchByIds<any>(
+        'videos',
+        'id, title, thumbnail_url, duration_seconds, profiles!videos_owner_id_fkey(username)',
+        videoIds
+      );
       setPlaylistVideos(ordered);
-    })();
+    })().catch(() => {
+      // Panel se raději neukáže vůbec, než poloprázdný. Video hraje dál.
+      setPlaylistInfo(null);
+      setPlaylistVideos([]);
+    });
   }, [playlistId]);
 
   useEffect(() => {
@@ -750,13 +772,20 @@ function WatchPageInner() {
     const cooldownMs = 30 * 60 * 1000; // 30 minut
 
     if (Date.now() - lastViewedAt > cooldownMs) {
-      setTimeout(() => {
+      // Časovač se drží v ref a ruší se při odchodu ze stránky nebo změně
+      // videa. Dřív doběhl vždycky: kdo video zavřel po dvou vteřinách,
+      // stejně mu za tři vteřiny přičetl zhlédnutí - přesně to, čemu má
+      // těch pět vteřin bránit.
+      if (viewTimerRef.current) clearTimeout(viewTimerRef.current);
+      viewTimerRef.current = setTimeout(() => {
+        viewTimerRef.current = null;
         fetch('/api/videos/increment-view', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          // Posíláme i to, odkud divák přišel - ve statistikách je pak vidět,
-          // co kanálu skutečně vozí diváky.
-          body: JSON.stringify({ videoId, source: detectViewSource() }),
+          // Posíláme i to, odkud divák přišel a na čem se dívá - ve
+          // statistikách je pak vidět, co kanálu vozí diváky a na jakém
+          // zařízení se Kine používá.
+          body: JSON.stringify({ videoId, source: detectViewSource(), device: detectDeviceClass() }),
         });
         localStorage.setItem(lastViewKey, String(Date.now()));
       }, 5000);
@@ -809,17 +838,22 @@ function WatchPageInner() {
     }
   }
 
-  async function shareVideo() {
-    await navigator.clipboard.writeText(`${window.location.origin}/watch/${videoId}`);
-    setToast({ message: 'Odkaz na video zkopírován', type: 'success' });
+  // Sdílení: na telefonu systémové okno, na počítači schránka (lib/share.ts).
+  // Zavření okna bez výběru nic nehlásí - není to chyba.
+  async function shareUrl(url: string) {
     setShareMenuOpen(false);
+    const outcome = await shareLink({ url, title: video?.title ?? 'Kine' }, browserShareDeps());
+    if (outcome === 'copied') setToast({ message: t('menuLinkCopied'), type: 'success' });
+    if (outcome === 'failed') setToast({ message: url, type: 'error' });
+  }
+
+  async function shareVideo() {
+    await shareUrl(`${window.location.origin}/watch/${videoId}`);
   }
 
   async function shareMoment() {
     const seconds = Math.floor(playerRef.current?.currentTime ?? 0);
-    await navigator.clipboard.writeText(`${window.location.origin}/watch/${videoId}?t=${seconds}`);
-    setToast({ message: 'Odkaz na tento okamžik zkopírován', type: 'success' });
-    setShareMenuOpen(false);
+    await shareUrl(`${window.location.origin}/watch/${videoId}?t=${seconds}`);
   }
 
   async function toggleWatchLater() {

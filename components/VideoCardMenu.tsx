@@ -11,6 +11,7 @@ import ReportModal from './ReportModal';
 import {
   PlaylistIcon, WatchLaterIcon, DownloadIcon, ShareIcon, ReportIcon, QueueIcon, NotInterestedIcon, BlockChannelIcon,
 } from './ReactionIcons';
+import { shareLink, browserShareDeps } from '@/lib/share';
 
 /**
  * Nabídka pod třemi tečkami na kartě videa.
@@ -177,12 +178,12 @@ export default function VideoCardMenu({
   async function handleShare(e: React.MouseEvent) {
     stop(e);
     const url = `${window.location.origin}/watch/${video.id}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setNote(t('menuLinkCopied'));
-    } catch {
-      setNote(url);
-    }
+    // Telefon: systémové okno sdílení. Počítač: schránka. Zavření okna bez
+    // výběru se nehlásí (lib/share.ts).
+    const outcome = await shareLink({ url, title: video.title }, browserShareDeps());
+    if (outcome === 'copied') setNote(t('menuLinkCopied'));
+    else if (outcome === 'failed') setNote(url);
+    else if (outcome === 'shared') setOpen(false);
   }
 
   async function handleDownload(e: React.MouseEvent) {

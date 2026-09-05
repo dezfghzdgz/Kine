@@ -4085,3 +4085,40 @@ a,
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
+
+/* ---------- Pokračovat ve sledování (components/ContinueWatching.tsx) ----------
+   Jedna vodorovná řada karet s proužkem průběhu, posouvá se do strany
+   (prstem i kolečkem), karty se zarovnávají na hranu. Na telefonu je karta
+   široká přes většinu displeje, ať je vidět, že za ní je další. */
+
+.continue-section {
+  margin-bottom: 28px;
+}
+
+.continue-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(260px, 300px);
+  gap: 20px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.continue-row > * {
+  scroll-snap-align: start;
+}
+
+@media (max-width: 768px) {
+  .continue-row {
+    grid-auto-columns: 78vw;
+    gap: 12px;
+    /* Řada může sáhnout až k okrajům displeje, obsah kolem má 16 px. */
+    margin: 0 -16px;
+    padding: 0 16px 8px;
+    scroll-padding: 0 16px;
+  }
+}

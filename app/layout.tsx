@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import { Inter } from 'next/font/google';
 import AppShellChrome from '@/components/AppShellChrome';
+import ErrorReporter from '@/components/ErrorReporter';
 import { LanguageProvider } from '@/lib/i18n';
 import { MobileNavProvider } from '@/lib/mobileNavContext';
 import { MusicPlayerProvider } from '@/lib/musicPlayer';
@@ -95,6 +96,9 @@ export default function RootLayout({
                   ze stejného důvodu jako hudba: co bydlí ve stránce,
                   Next.js při přechodu jinam odpojí. */}
               <UploadProvider>
+                {/* Hlášení chyb z prohlížeče na /admin/errors - viz
+                    lib/errorReporter.ts. Nic nevykresluje. */}
+                <ErrorReporter />
                 <AppShellChrome>{children}</AppShellChrome>
               </UploadProvider>
             </MusicPlayerProvider>

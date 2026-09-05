@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
+import { sanitizeDeviceClass } from '@/lib/deviceClass';
 
 const COOLDOWN_MS = 30 * 60 * 1000; // 30 minut
 
@@ -38,7 +39,7 @@ function isViewMilestone(views: number): boolean {
 }
 
 export async function POST(req: NextRequest) {
-  const { videoId, source } = await req.json();
+  const { videoId, source, device } = await req.json();
   if (!videoId) return NextResponse.json({ error: 'Chybí videoId.' }, { status: 400 });
 
   const { data: video } = await supabaseServer
@@ -90,14 +91,21 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // Zařízení (telefon / tablet / počítač / TV) - jen jedna ze čtyř hodnot,
+  // cokoliv jiného se zahodí (lib/deviceClass.ts).
   const { error: logError } = await supabaseServer
     .from('views_log')
-    .insert({ video_id: videoId, ip_address: ip, source: sanitizeSource(source) });
+    .insert({ video_id: videoId, ip_address: ip, source: sanitizeSource(source), device: sanitizeDeviceClass(device) });
 
-  // Sloupec "source" přidává samostatná migrace. Když ještě neproběhla,
-  // zhlédnutí se nesmí ztratit - appka ho zapíše aspoň bez zdroje.
+  // Sloupce "source" a "device" přidávají samostatné migrace. Když ještě
+  // neproběhly, zhlédnutí se nesmí ztratit - appka ho zapíše aspoň bez nich.
   if (logError) {
-    await supabaseServer.from('views_log').insert({ video_id: videoId, ip_address: ip });
+    const { error: bezZarizeni } = await supabaseServer
+      .from('views_log')
+      .insert({ video_id: videoId, ip_address: ip, source: sanitizeSource(source) });
+    if (bezZarizeni) {
+      await supabaseServer.from('views_log').insert({ video_id: videoId, ip_address: ip });
+    }
   }
 
   return NextResponse.json({ success: true, counted: true });

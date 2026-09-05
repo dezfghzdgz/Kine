@@ -42,6 +42,61 @@ comment on column profiles.username_exempt is
 -- 2. Kontrola jména
 -- ---------------------------------------------------------------------
 
+-- ---------------------------------------------------------------------------
+-- Nadávky ve jménech - stejný seznam jako v lib/username.ts (viz tam).
+-- Totéž je i v supabase-migration-zarizeni-chyby-jmena.sql; obě verze musí
+-- zůstat stejné.
+-- ---------------------------------------------------------------------------
+
+-- Kusy jména: souvislá písmena nebo souvislé číslice (tečka a podtržítko
+-- rozdělují).
+create or replace function username_words(s text)
+returns text[] as $$
+  select coalesce(array_agg(m[1]), '{}'::text[])
+  from regexp_matches(coalesce(s, ''), '([a-z]+|[0-9]+)', 'g') as m;
+$$ language sql immutable;
+
+create or replace function username_contains_slur(name text)
+returns boolean as $$
+declare
+  lower_name text := lower(coalesce(name, ''));
+  joined text;
+  bad text;
+  w text;
+  -- 0→o 1→i 3→e 4→a 5→s 7→t 8→b @→a $→s !→i
+  leet_from constant text := '0134578@$!';
+  leet_to   constant text := 'oieastbasi';
+  -- Nesmí být ani uvnitř jiného slova.
+  anywhere constant text[] := array[
+    'nigger', 'nigga', 'niggr', 'faggot', 'fagot', 'wetback', 'raghead', 'towelhead',
+    'tranny', 'hitler', 'heilhitler', 'buzerant', 'buzna', 'holohoax'
+  ];
+  -- Jen jako celé slovo (schovávají se v běžných slovech: spicy, raccoon,
+  -- montenegro).
+  as_word constant text[] := array[
+    'negr', 'negri', 'nigr', 'spic', 'chink', 'coon', 'gook', 'dyke', 'cunt', 'retard',
+    'nazi', 'rape', 'rapist', 'cigos', 'cigosi', 'fag', 'fags', '1488'
+  ];
+begin
+  joined := regexp_replace(lower_name, '[._]', '', 'g');
+
+  foreach bad in array anywhere loop
+    if position(bad in joined) > 0
+       or position(bad in translate(joined, leet_from, leet_to)) > 0 then
+      return true;
+    end if;
+  end loop;
+
+  foreach w in array username_words(lower_name) || username_words(translate(lower_name, leet_from, leet_to)) loop
+    if w = any (as_word) or translate(w, leet_from, leet_to) = any (as_word) then
+      return true;
+    end if;
+  end loop;
+
+  return false;
+end;
+$$ language plpgsql immutable;
+
 create or replace function username_is_valid(name text)
 returns boolean as $$
 begin
@@ -74,6 +129,11 @@ begin
     'me', 'you', 'null', 'undefined', 'anonymous', 'deleted',
     'everyone', 'here', 'all'
   ]) then
+    return false;
+  end if;
+
+  -- Nadávky (i s číslicemi místo písmen) - stejné pravidlo jako v prohlížeči.
+  if username_contains_slur(name) then
     return false;
   end if;
 

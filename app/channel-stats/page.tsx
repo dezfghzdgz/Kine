@@ -5,6 +5,7 @@ import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
+import { fetchAllRows } from '@/lib/loadAll';
 import StatChartModal from '@/components/StatChartModal';
 import RatingChartModal from '@/components/RatingChartModal';
 import StarDistribution from '@/components/StarDistribution';
@@ -321,7 +322,11 @@ export default function ChannelStatsPage() {
       setRatingTotals(totals);
     }
 
-    const { data: subs } = await supabase.from('subscriptions').select('created_at').eq('channel_id', authData.user.id);
+    // Po dávkách - jeden dotaz vrátí nejvíc 1000 řádků a graf růstu by
+    // kanálu nad tisíc odběratelů lhal.
+    const subs = await fetchAllRows((from, to) =>
+      supabase.from('subscriptions').select('created_at').eq('channel_id', authData.user!.id).order('created_at', { ascending: true }).range(from, to)
+    );
 
     // Úroveň ověření a datum založení jsou veřejné, podíl z výdělků a
     // pozastavení výplat ne - ty vrací funkce my_account, a to jen

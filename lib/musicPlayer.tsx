@@ -539,6 +539,75 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     [activePlayer, pickNext, goToTrack]
   );
 
+  /* ---------- Media Session: zamčená obrazovka, oznámení, sluchátka ----------
+     Telefon ukáže název skladby a ovládání na zamčené obrazovce a v
+     oznámení, tlačítka na sluchátkách přepínají skladby. Přesně to, co má
+     každá hudební appka a co člověk na mobilu postrádá první.
+
+     Napsané defenzivně: kde prohlížeč Media Session nemá, nestane se nic.
+     Zvuk hraje z cizího iframu (Cloudflare) - jestli prohlížeč napojí
+     ovládání z naší stránky na zvuk z iframu, se musí ověřit na telefonu;
+     v horším případě se nic nezobrazí, nic se nerozbije. */
+
+  useEffect(() => {
+    const ms = typeof navigator !== 'undefined' ? (navigator as any).mediaSession : null;
+    if (!ms) return;
+    try {
+      if (!track) {
+        ms.metadata = null;
+        ms.playbackState = 'none';
+        return;
+      }
+      const MediaMetadataCtor = (window as any).MediaMetadata;
+      if (MediaMetadataCtor) {
+        ms.metadata = new MediaMetadataCtor({
+          title: track.title,
+          artist: track.creator ?? 'Kine',
+          album: 'Kine',
+          artwork: track.thumbnail ? [{ src: track.thumbnail, sizes: '512x512', type: 'image/jpeg' }] : [],
+        });
+      }
+      ms.playbackState = playing ? 'playing' : 'paused';
+    } catch {
+      // Media Session je bonus - bez něj hudba hraje dál.
+    }
+  }, [track?.id, track?.title, track?.creator, track?.thumbnail, track, playing]);
+
+  useEffect(() => {
+    const ms = typeof navigator !== 'undefined' ? (navigator as any).mediaSession : null;
+    if (!ms || typeof ms.setActionHandler !== 'function') return;
+
+    const handlers: [string, (details?: any) => void][] = [
+      ['play', () => commands.resume()],
+      ['pause', () => commands.pause()],
+      ['previoustrack', () => commands.previous()],
+      ['nexttrack', () => commands.next()],
+      ['seekto', (d) => { if (typeof d?.seekTime === 'number') commands.seek(d.seekTime); }],
+      ['seekbackward', (d) => commands.seek(Math.max(0, currentTimeRef.current - (d?.seekOffset ?? 10)))],
+      ['seekforward', (d) => commands.seek(currentTimeRef.current + (d?.seekOffset ?? 10))],
+    ];
+
+    for (const [action, handler] of handlers) {
+      try { ms.setActionHandler(action, handler); } catch { /* akci prohlížeč nezná */ }
+    }
+    return () => {
+      for (const [action] of handlers) {
+        try { ms.setActionHandler(action, null); } catch { /* viz výše */ }
+      }
+    };
+  }, [commands]);
+
+  useEffect(() => {
+    const ms = typeof navigator !== 'undefined' ? (navigator as any).mediaSession : null;
+    if (!ms || typeof ms.setPositionState !== 'function') return;
+    if (!track || !(duration > 0)) return;
+    try {
+      ms.setPositionState({ duration, playbackRate: 1, position: Math.min(Math.max(0, currentTime), duration) });
+    } catch {
+      // Neplatná pozice (např. delší než skladba) - prohlížeč ji odmítne, nic víc.
+    }
+  }, [track, duration, currentTime]);
+
   const state = useMemo<MusicState>(
     () => ({
       track,

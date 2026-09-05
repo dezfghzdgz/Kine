@@ -1,121 +1,130 @@
-KINE - mobil a iPad, 1. kolo
-============================
+KINE - volná ruka, 1. kolo
+==========================
 
-11 souborů. Rozbal do kořene repa a přepiš.
-Pak spusť: node zkontroluj-soubory.mjs
+40 souborů. Rozbal do kořene repa a přepiš.
+Pak: node zkontroluj-soubory.mjs
+Pak: Supabase -> SQL Editor -> supabase-migration-zarizeni-chyby-jmena.sql
+     (jeden soubor, jednou; dá se pustit i opakovaně)
 
-Jsou tu i tři soubory z minulého balíčku (kine-prava.zip: useUserRole,
-reports, jeho test). Vím, že chceš jen to, co se měnilo v daném kole -
-tady jsem udělal výjimku schválně: když se dva balíčky rozbalí v opačném
-pořadí, starší přepíše seznam otisků a kontrola pak hlásí nesmysly.
-Zkusil jsem to a stalo se to. S tímhle balíčkem stačí rozbalit jen jeden
-a kine-prava.zip můžeš smazat.
-
-
-NEJDŘÍV OPRAVA MÉHO TVRZENÍ
----------------------------
-V chatu jsem napsal, že přehrávač nemá žádné ovládání na obrazovce.
-Nemá to pravdu. Ovládací lišta existuje (components/ChapterTimeline.tsx -
-jméno má z dob, kdy ukazovala jen kapitoly, a podle jména jsem ji
-přehlédl). Vlastní lištu, kterou jsem mezitím napsal, jsem zahodil;
-místo toho je upravená ta tvoje, protože umí víc (rychlost, časovač
-spánku, titulky, kapitoly).
+Balíček obsahuje i všechno z předchozích dvou (kine-prava.zip,
+kine-mobil.zip), takže stačí rozbalit jen tenhle a ty dva smaž. Důvod je
+stejný jako minule: rozbalení dvou balíčků v opačném pořadí rozbije
+seznam otisků.
 
 
-CO SE MĚNÍ
+CO JE NOVÉ
 ----------
-1) OVLÁDÁNÍ PŘEHRÁVAČE NA DOTYKU (components/ChapterTimeline.tsx)
-   - Klepnutí prstem na video lištu jen ukáže nebo schová. Dřív zároveň
-     zastavilo přehrávání - kdo se chtěl jen podívat, kde je, video tím
-     pauznul. Myš se chová jako dřív (klik = přehrát/pauza).
-   - Velké přehrát/pauza uprostřed videa, jen na dotyku.
-   - Dvojité klepnutí na pravý/levý kraj posune o 10 s, s odezvou
-     "+10 s" / "-10 s". Jako YouTube. Uprostřed dvojité klepnutí nic
-     neposouvá - tam se zastavuje.
-   - Tlačítka mají na dotyku 44 px (dřív 16-20), posuvník se dá trefit
-     do 30 px místo 6.
-   - Když video nemá v databázi délku, lišta se dřív nevykreslila VŮBEC
-     (ani pauza, ani zvuk). Teď si délku vezme z přehrávače, a když ani
-     tam není, ukáže aspoň tlačítka bez posuvníku.
-   - Čas nad hodinu se píše 1:02:03, ne 62:03.
-   - Přehrát/pauza je ikonka místo znaků ▶ / ❚❚, tlačítka mají popisky
-     pro čtečky (8 jazyků, lib/i18n.tsx).
-   - Puštění myši nad videem po tažení posuvníku už nepřepíná přehrávání.
+1) SDÍLENÍ PŘES SYSTÉMOVÉ OKNO (lib/share.ts)
+   Na telefonu a iPadu otevře Sdílet systémové okno (Zprávy, WhatsApp,
+   AirDrop...), na počítači dál kopíruje odkaz. Zavření okna bez výběru
+   nic nehlásí. Tři místa: video, okamžik ve videu, nabídka ⋮ na kartě.
 
-2) OTOČENÍ TELEFONU (app/watch/[id]/page.tsx)
-   Na šířku = video přes celý displej, zpátky na výšku = zpátky do
-   stránky. Jen telefon; iPad na šířku je normální rozložení. Když si
-   dáš celou obrazovku sám tlačítkem, otočení ti ji nesebere.
+2) POKRAČOVAT VE SLEDOVÁNÍ (components/ContinueWatching.tsx)
+   Řádek na Home nad "Doporučeno": rozkoukaná videa s proužkem, kliknutí
+   naváže o 3 s před místem, kde jsi skončil. Jen pro přihlášené, jen když
+   je co dokoukat - jinak se nevykreslí ani nadpis. Dokoukané (přes 95 %
+   nebo pod 20 s do konce) a sotva načaté (pod 10 s) se nenabízí.
 
-3) VÝŘEZ IPHONU (app/layout.tsx)
-   Jeden řádek - viewportFit: 'cover'. CSS s výřezem počítalo na pěti
-   místech už dlouho, ale bez tohohle byly ty hodnoty vždy nula. Spodní
-   lišta teď o výřez vyroste (dřív by se o něj zmenšila na 26 px) a
-   obsah na šířku se vyhne výřezu po straně. Lišta prohlížeče má barvu
-   pozadí appky.
+3) HLÁŠENÍ CHYB Z PROHLÍŽEČE (lib/errorReporter.ts, /admin/errors)
+   Každou chybu v appce jsi do teď našel ty. Odteď se neodchycené chyby
+   JavaScriptu posílají na server a jsou na /admin/errors (odkaz 🐞 Chyby
+   v menu): co, kolikrát, kdy naposled, na jakých stránkách a zařízeních,
+   zásobník volání. Sto stejných chyb = jeden řádek s číslem 100.
+   "Vyřešeno" skupinu smaže; když se vrátí, objeví se znovu.
 
-4) PŘIBLIŽOVÁNÍ NA IOS (app/globals.css)
-   Safari přiblíží celou stránku, když klepneš do pole s písmem menším
-   než 16 px. Pole měla 14 px - dělo se to u vyhledávání, přihlášení i
-   komentářů. Na dotyku mají teď 16 px; na počítači se nic nemění.
+   Co se posílá: text chyby, zásobník, adresa stránky BEZ parametrů,
+   prohlížeč, třída zařízení. Ne kdo byl přihlášený, ne nic, co napsal.
+   Stejná chyba max. jednou za načtení, max. 10 na stránku, max. 30 za
+   minutu z jednoho prohlížeče na serveru. Tabulka client_errors má RLS
+   bez pravidel - z prohlížeče ji nikdo nepřečte.
 
-5) DOTYKOVÉ CÍLE (app/globals.css)
-   Reakce, odkazy v menu a spodní lišta mají na dotyku aspoň 44 px.
-   Malé ikonky (⋮ na kartě, šipky v playlistu) zůstávají na pohled malé,
-   jen mají neviditelný okraj, takže se dá trefit do 44 px.
-   Klepnutí bez šedého záblesku.
+   Vyzkoušej: otevři Kine, v konzoli prohlížeče napiš
+     setTimeout(() => { throw new Error('zkouska hlaseni') })
+   a za chvíli se to objeví na /admin/errors.
 
-6) IPAD NA VÝŠKU (app/globals.css)
-   Dva sloupce karet místo jednoho obřího přes celou šířku.
+4) NA ČEM SE KINE SLEDUJE (lib/deviceClass.ts)
+   Ke každému zhlédnutí se ukládá telefon / tablet / počítač / TV (sloupec
+   views_log.device). Za měsíc budeš vědět, kam dát přednost:
+     select coalesce(device,'neznámé'), count(*) from views_log
+     where viewed_at > now() - interval '30 days' group by 1 order by 2 desc;
 
-7) SKUTEČNÁ VÝŠKA OBRAZOVKY (app/globals.css)
-   100vh -> 100dvh u kostry appky, bočního menu a panelu Sparks. 100vh je
-   na mobilu vyšší než to, co je vidět, takže spodek utíkal pod lištu
-   prohlížeče.
+5) MEDIA SESSION PRO HUDBU (lib/musicPlayer.tsx)
+   Název skladby a ovládání na zamčené obrazovce, v oznámení na Androidu,
+   tlačítka na sluchátkách (další/předchozí, play/pauza). Napsáno
+   defenzivně: kde to prohlížeč nemá, nestane se nic.
+   OVĚŘIT NA TELEFONU: zvuk hraje z cizího iframu (Cloudflare) a nejsem si
+   jistý, jestli ho prohlížeč napojí na ovládání z naší stránky. Když se
+   na zamčené obrazovce nic neukáže, napiš - je to známé riziko, ne pád.
+
+6) FILTR NADÁVEK VE JMÉNECH (lib/username.ts + SQL)
+   Jméno účtu s rasistickou nebo homofobní nadávkou nejde založit ani
+   přejmenovat, ani s číslicemi místo písmen (n1gg3r). Dvě úrovně: pár
+   výrazů nesmí být ani uvnitř slova, ostatní jen jako celé slovo, aby
+   prošlo "montenegro", "spicy_food", "raccoon_fan", "kike_lopez".
+   Kontrola je v prohlížeči (hezká hláška, 8 jazyků) i v databázi (anon
+   klíč je veřejný, formulář jde obejít). Migrace při spuštění sama ověří,
+   že databáze odpovídá na 46 případů stejně jako prohlížeč, a vypíše to.
+
+   Kdo už takové jméno má:
+     select id, username from profiles
+     where username is not null and username_contains_slur(username);
+   Přejmenování je v komentáři na konci migrace. Rozhodnutí je tvoje.
+
+   Tohle není omezení tvůrců - obsah nesahám. Je to jméno, které Kine
+   nese v adrese kanálu.
+
+7) DROBNÉ ZNÁMÉ CHYBY
+   - Počet odběratelů se zastavil na 1000 (databáze vrací nejvíc 1000
+     řádků a appka počítala délku seznamu). Teď se počítá na serveru.
+     Navíc se do prohlížeče už nestahuje celý seznam odběratelů kvůli
+     jednomu řádku. Stejná oprava u stupňů podílu z výdělků (/admin) a
+     u grafu růstu ve statistikách kanálu.
+   - Panel playlistu u videa se u ~200 položek rozbil úplně (seznam id
+     v adrese přerostl, dotaz se neprovedl). Teď po dávkách.
+   - Započítání zhlédnutí čekalo 5 s, ale doběhlo i po odchodu ze
+     stránky - kdo video zavřel po dvou vteřinách, stejně dostal
+     zhlédnutí. Časovač se teď ruší.
+   - Účet bez jména ve výpisu podílů má aspoň kousek id.
+   - Čas v přehrávači nad hodinu: 1:02:03 místo 62:03 (z minulého kola).
 
 
-CO ODKLIKAT NA ZAŘÍZENÍCH
--------------------------
-Odsud to na skutečném telefonu ověřit nejde, tak prosím tohle:
-
-iPhone
-  [ ] Pusť video. Klepni jednou -> objeví se ovládání a video HRAJE DÁL.
-      Klepni znovu -> ovládání zmizí.
-  [ ] Velké tlačítko uprostřed pauzne a zase pustí.
-  [ ] Dvojité klepnutí na pravý kraj -> skočí o 10 s, ukáže "+10 s".
-      Na levý kraj -> zpět o 10 s.
-  [ ] Otoč na šířku -> video přes celý displej. Otoč zpět -> stránka.
-  [ ] Klepni do vyhledávání nebo do pole komentáře -> stránka se
-      NEPŘIBLÍŽÍ.
-  [ ] Spodní lišta sedí nad ukazatelem domů, ne pod ním.
-  [ ] Na šířku v celé obrazovce není ovládací lišta pod výřezem.
-
-iPad na výšku
-  [ ] Domů ukazuje dva sloupce karet.
-
+CO ODKLIKAT
+-----------
+iPhone / iPad
+  [ ] Sdílet u videa -> systémové okno. Zavřít bez výběru -> žádná hláška.
+  [ ] Pusť hudbu, zamkni telefon -> na zamčené obrazovce název a ovládání?
+      (Když ne, napiš - viz bod 5.)
+  [ ] Home: rozkoukané video se ukáže v řádku "Pokračovat ve sledování",
+      kliknutí naváže o pár vteřin před koncem sledování.
 PC
-  [ ] Klik do videa = přehrát/pauza, jako dřív. Dvojklik = nic nového.
-  [ ] Posuvník se dá chytit i kousek nad/pod čárou.
-  [ ] Nic jiného by se měnit nemělo.
-
-Cokoliv z toho nesedí, napiš mi co a na čem - podle toho doladím.
+  [ ] Sdílet -> "Odkaz zkopírován", jako dřív.
+  [ ] /admin/errors po tom zkušebním throw ukáže řádek.
+  [ ] Registrace se jménem "n1gg3r" -> hláška "Tohle jméno nelze použít".
+      Se jménem "montenegro" -> projde.
 
 
 CO JSEM OVĚŘIL
 --------------
-- Typová kontrola celého projektu na TVÉM stromu (26a30e0), před změnou
-  i po ní - stejný výsledek, nic nového nerozbito.
-- Testy: tests/playerControls.test.mjs (12) - dvojité klepnutí, strany,
-  zápis času, otočení. Ostatní testy (48) beze změny prošly.
-- Otisky aktualizované (49 souborů).
+- Typová kontrola celého projektu na TVÉM stromu (26a30e0) se všemi 40
+  soubory - stejný výsledek jako před změnou.
+- 11 testovacích sad, 94 kontrol, vše prošlo. Nové: sdílení (5), řádek
+  Pokračovat (6), zařízení (7), hlášení chyb (8), seskupení chyb (5),
+  filtr jmen (3).
+- Migrace na skutečném Postgresu: proběhla, proběhla i podruhé
+  (nic nerozbila), filtr v databázi odpovídá prohlížeči na všech 46
+  případech, spouštěč odmítl "nigga_king" a pustil "montenegro", omezení
+  hodnot zařízení odmítlo "toaster", tabulka chyb má RLS bez pravidel.
+- Balíček rozbalený na čistou kopii tvého mainu: otisky sedí.
 
-Co ověřené NENÍ: chování na skutečném iPhonu a iPadu. Proto ten seznam
-nahoře.
+Co ověřené NENÍ: telefon a iPad v ruce, a Media Session přes iframe.
 
 
-PŘÍŠTÍ KOLO
------------
-Televize: velké breakpointy (1600+, 2500+), ovládání šipkami s viditelným
-rámečkem, větší písmo a karty, Enter = přehrát. A Media Session
-(ovládání hudby na zamčené obrazovce) - nejdřív ověřit, jestli to přes
-cizí iframe projde.
+CO SCHVÁLNĚ NENÍ A PROČ
+-----------------------
+- Podepsané adresy pro soukromá videa: správná věc, ale sahá do každého
+  přehrávače a chce jednorázový klíč od Cloudflare. Dostane vlastní kolo
+  s návodem krok za krokem, ne poslepu.
+- Instalace jako appka: až budeš chtít.
+
+DALŠÍ KOLO: televize (velké breakpointy, ovládání šipkami s fokusem,
+větší písmo a karty, Enter = přehrát).

@@ -212,6 +212,11 @@ export default function Sidebar() {
             💰 {t('revenueShareLabel')}
           </Link>
         )}
+        {isAdmin && (
+          <Link href="/admin/errors" className={`sidebar-link ${pathname === '/admin/errors' ? 'active' : ''}`}>
+            🐞 {t('clientErrorsLabel')}
+          </Link>
+        )}
       </nav>
 
       {!loading && (
@@ -361,6 +366,11 @@ export default function Sidebar() {
           {isAdmin && (
             <Link href="/admin/revenue-share" className="sidebar-link" onClick={closeMobileNav}>
               💰 {t('revenueShareLabel')}
+            </Link>
+          )}
+          {isAdmin && (
+            <Link href="/admin/errors" className="sidebar-link" onClick={closeMobileNav}>
+              🐞 {t('clientErrorsLabel')}
             </Link>
           )}
 

@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { ThumbsUpIcon, ThumbsDownIcon, SpeakerIcon, CommentIcon, ShareIcon } from './ReactionIcons';
 import { shouldNotifyLikeMilestone } from '@/lib/likeMilestones';
 import { useLanguage } from '@/lib/i18n';
+import { detectDeviceClass } from '@/lib/deviceClass';
 
 export default function SparksCard({
   video, active, commentsOpen, onToggleComments, soundEnabledRef, preload,
@@ -53,7 +54,7 @@ export default function SparksCard({
       fetch('/api/videos/increment-view', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: video.id }),
+        body: JSON.stringify({ videoId: video.id, device: detectDeviceClass() }),
       });
       localStorage.setItem(lastViewKey, String(Date.now()));
     }, 5000);

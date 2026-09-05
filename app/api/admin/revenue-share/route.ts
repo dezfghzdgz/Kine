@@ -48,19 +48,21 @@ export async function GET(req: NextRequest) {
 
   // Počty odběratelů k jednotlivým tvůrcům - podle nich se pozná, jestli
   // už mají nárok na vyšší stupeň.
+  // Počet přes count pro každého tvůrce zvlášť. Dřív se stahovaly řádky
+  // odběrů pro všechny najednou a počítaly v paměti - databáze ale vrátí
+  // nejvíc 1000 řádků, takže od tisíce odběrů dohromady byly stupně špatně.
   const ids = (creators ?? []).map((c: any) => c.id);
   const subscriberCounts: Record<string, number> = {};
 
-  if (ids.length > 0) {
-    const { data: subs } = await supabaseServer
-      .from('subscriptions')
-      .select('channel_id')
-      .in('channel_id', ids);
-
-    (subs ?? []).forEach((s: any) => {
-      subscriberCounts[s.channel_id] = (subscriberCounts[s.channel_id] ?? 0) + 1;
-    });
-  }
+  await Promise.all(
+    ids.map(async (id: string) => {
+      const { count } = await supabaseServer
+        .from('subscriptions')
+        .select('*', { count: 'exact', head: true })
+        .eq('channel_id', id);
+      subscriberCounts[id] = count ?? 0;
+    })
+  );
 
   return NextResponse.json({
     creators: (creators ?? []).map((c: any) => ({

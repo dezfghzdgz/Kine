@@ -7,6 +7,7 @@ import LoadFailed from '@/components/LoadFailed';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
 import VideoCard from '@/components/VideoCard';
+import ContinueWatching from '@/components/ContinueWatching';
 import { scoreVideo, buildBlocks, formatDuration, FEED_BATCH, WATCHED_HISTORY_LIMIT } from '@/lib/homeRecommendation';
 import type { Block } from '@/lib/homeRecommendation';
 import { loadHiddenContent, filterHidden, clearHiddenContent, NOTHING_HIDDEN } from '@/lib/hiddenContent';
@@ -437,6 +438,9 @@ export default function HomePage() {
   return (
     <div>
       <OnboardingChecklist />
+      {/* "Tady jsi skončil" - jen pro přihlášené a jen když je co dokoukat;
+          jinak se nevykreslí nic. */}
+      <ContinueWatching />
       <p className="section-title">{t('recommendedForYouHeading')}</p>
       {notices}
 
