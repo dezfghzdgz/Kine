@@ -2,6 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { chooseNext, choosePrevious, planPreload, planSwap, type Slot, type SlotIndex, type Slots } from './musicSlots';
+import { attachHls, preloadHls, supportsNativeHls, type Detach } from './hlsAttach';
+import { chooseEngineKind, companionCorrection, customerCodeFromUrl, manifestUrl, type EngineKind } from './streamSource';
 
 /**
  * Hudba, která hraje dál i po odchodu ze stránky.
@@ -10,36 +12,40 @@ import { chooseNext, choosePrevious, planPreload, planSwap, type Slot, type Slot
  * odejdeš prohlížet a hudba jede. Bez ní je "hudební režim" jenom jiný
  * vzhled.
  *
- * Proč to musí být tady a ne na stránce videa: přehrávač je cizí iframe od
- * Cloudflare. Jakmile ho Next.js při přechodu na jinou stránku odpojí,
- * zvuk utne - a při každé navigaci ho odpojí. Iframe proto žije jednou
- * provždy tady, v kostře appky, a stránky ho jen ovládají.
+ * Proč to musí být tady a ne na stránce videa: jakmile Next.js při
+ * přechodu na jinou stránku přehrávač odpojí, zvuk utne - a při každé
+ * navigaci ho odpojí. Přehrávač proto žije jednou provždy tady, v kostře
+ * appky, a stránky ho jen ovládají.
  *
  * ---------------------------------------------------------------------
- * DVĚ VĚCI, KTERÉ SE TU ZMĚNILY, A PROČ
+ * VLASTNÍ PŘEHRÁVAČ MÍSTO IFRAMU CLOUDFLARE
  * ---------------------------------------------------------------------
  *
- * 1. JEDEN PŘEHRÁVAČ, NE DVA
+ * Hudba dřív hrála v iframu Cloudflare (jejich přehrávač, ovládaný přes
+ * SDK). Na telefonu to mělo dvě vady, které se nedaly obejít: zamčená
+ * obrazovka ukazovala "Stream" a prázdný čtverec (název a obal si telefon
+ * bere od dokumentu, kterému zvuk patří - a to byl cizí iframe), a iPhone
+ * po zamknutí video v iframu zastavil.
  *
- * Dřív měla stránka videa v hudebním režimu vlastní iframe se stejným
- * videem, jaké hrálo tady. Dva přehrávače téhož videa na jedné stránce si
- * ale lezou do zelí: appka se na ten druhý napojila, poslala mu "hraj" -
- * a nic. Odtud to "přepnu na video a video se nikdy nenačte", i když se
- * po chvíli objevilo tlačítko Přehrát (tedy appka přehrávač našla a
- * povely posílala, jen nedošly).
+ * Teď hraje hudba v našem vlastním <audio>/<video> z HLS manifestu, který
+ * Cloudflare ke každému videu má (lib/streamSource.ts, lib/hlsAttach.ts):
+ * Safari ho umí nativně, ostatní přes hls.js. Zvuk tak patří Kine -
+ * zamčená obrazovka ukáže název, tvůrce i obal a ovládání z ní funguje
+ * (Media Session níž), a v Safari hraje <audio> dál i při zamčeném
+ * telefonu, jako každá hudební appka.
  *
- * Odteď je přehrávač jeden, tenhle. Když si divák u skladby přepne na
- * Video, iframe se prostě přesune přes místo, kde má být obraz
- * (showEngineOver). Nic se nenačítá znovu, zvuk nepřeskočí a přepnutí je
- * okamžité.
+ * JEDEN PŘEHRÁVAČ, NE DVA
  *
- * 2. DVA SLOTY, ABY MEZI SKLADBAMI NEBYLA DÍRA
+ * Stránka videa si v hudebním režimu vlastní přehrávač nezakládá. Když si
+ * divák u skladby přepne na Video, obraz se promítne přes místo, kde má
+ * být (showEngineOver): mimo Safari se tam přesune samo <video>
+ * přehrávače; v Safari, kde hraje <audio>, se tam pustí tichý <video>
+ * společník srovnaný podle zvuku. Zvuk ani v jednom případě nepřeskočí.
  *
- * Každá další skladba znamenala nový iframe od nuly: stáhnout skript
- * Cloudflare, manifest, první kus zvuku. Mezi skladbami proto bylo několik
- * vteřin ticha. Teď jsou sloty dva - zatímco jeden hraje, druhý si tiše
- * dopředu načte skladbu, která přijde na řadu. Přepnutí je pak jen výměna
- * slotů.
+ * DVA SLOTY, ABY MEZI SKLADBAMI NEBYLA DÍRA
+ *
+ * Zatímco jeden slot hraje, druhý si tiše dopředu načte skladbu, která
+ * přijde na řadu. Přepnutí je pak jen výměna slotů, bez ticha.
  *
  * ---------------------------------------------------------------------
  *
@@ -100,8 +106,8 @@ type MusicCommands = {
   /**
    * "Promítni obraz sem."
    *
-   * Stránka videa předá obdélník, kde má být vidět přehrávač; iframe se
-   * tam přesune. null ho zase schová. Tímhle se z přepnutí obal/video
+   * Stránka videa předá obdélník, kde má být vidět přehrávač; obraz se
+   * tam promítne. null ho zase schová. Tímhle se z přepnutí obal/video
    * stala čistě vizuální věc - žádné druhé načítání.
    */
   showEngineOver: (rect: EngineRect | null) => void;
@@ -162,11 +168,22 @@ function readStored<T extends string>(key: string, allowed: readonly T[], fallba
 function readStoredVolume(): number | null {
   if (typeof window === 'undefined') return null;
   try {
-    const value = Number(localStorage.getItem(VOLUME_KEY));
+    const raw = localStorage.getItem(VOLUME_KEY);
+    // Chybějící hodnota je null a Number(null) je 0 - dřív tak každý, kdo
+    // si hlasitost nikdy nenastavil, začínal s hudbou na nule (a potichu).
+    if (raw === null || raw === '') return null;
+    const value = Number(raw);
     return Number.isFinite(value) && value >= 0 && value <= 1 ? value : null;
   } catch {
     return null;
   }
+}
+
+/** play() vrací slib; bez svolení prohlížeče (žádné kliknutí) padá - to není chyba appky. */
+function safePlay(el: HTMLMediaElement | null | undefined) {
+  if (!el) return;
+  const result = el.play();
+  if (result && typeof result.catch === 'function') result.catch(() => {});
 }
 
 function store(key: string, value: string) {
@@ -197,9 +214,20 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
   const track = slots[active].track;
 
-  const frameRefs = useRef<(HTMLIFrameElement | null)[]>([null, null]);
-  const playersRef = useRef<any[]>([null, null]);
+  // Přehrávače = samotné <audio>/<video> prvky slotů. Mají stejné API,
+  // jaké mělo SDK Cloudflare (play, pause, currentTime, volume, muted...),
+  // takže příkazy níž zůstaly, jak byly.
+  const playersRef = useRef<(HTMLMediaElement | null)[]>([null, null]);
+  const detachRefs = useRef<(Detach | null)[]>([null, null]);
   const boundKeysRef = useRef<(string | null)[]>([null, null]);
+  // Rozhodne se jednou: Safari -> audio (+ tichý obraz), jinak video + hls.js.
+  const [kind, setKind] = useState<EngineKind>('video');
+  const kindRef = useRef<EngineKind>('video');
+  // Zákaznická doména Cloudflare - appka ji pozná z adresy náhledu skladby.
+  const customerCodeRef = useRef<string | null>(process.env.NEXT_PUBLIC_STREAM_CUSTOMER_CODE || null);
+  // Tichý obraz k <audio> v Safari (režim Video u hudby).
+  const companionRef = useRef<HTMLVideoElement | null>(null);
+  const companionDetachRef = useRef<Detach | null>(null);
 
   // Zrcadla stavu pro příkazy. Bez nich by se příkazy musely přepisovat
   // pokaždé, když doběhne vteřina, a s nimi by se překreslovalo všechno,
@@ -229,19 +257,27 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   currentTimeRef.current = currentTime;
   takeoverRef.current = videoTakeover;
 
-  const activePlayer = useCallback(() => playersRef.current[activeRef.current], []);
+  const activePlayer = useCallback((): HTMLMediaElement | null => playersRef.current[activeRef.current], []);
 
   useEffect(() => {
     setRepeat(readStored(REPEAT_KEY, ['off', 'one', 'all'] as const, 'off'));
     setShuffle(readStored(SHUFFLE_KEY, ['true', 'false'] as const, 'false') === 'true');
     const savedVolume = readStoredVolume();
     if (savedVolume !== null) setVolumeState(savedVolume);
+
+    const chosen = chooseEngineKind(supportsNativeHls());
+    kindRef.current = chosen;
+    setKind(chosen);
+    // Mimo Safari se hls.js stáhne hned, ať je při prvním kliknutí na
+    // skladbu v ruce - napojení pak stihne to samé kliknutí, které
+    // prohlížeč bere jako svolení pustit zvuk.
+    preloadHls();
   }, []);
 
   // Druhá pojistka. Kdyby se skladba napojila až po přepnutí na obyčejné
   // video (napojení je smyčka, ne okamžik), povel by se ztratil.
   useEffect(() => {
-    if (videoTakeover) playersRef.current.forEach((p) => p?.pause?.());
+    if (videoTakeover) playersRef.current.forEach((p) => p?.pause());
   }, [videoTakeover, track?.id]);
 
   /** Která skladba přijde na řadu. Vybere se jednou a drží se. */
@@ -269,13 +305,10 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     slotSeqRef.current += 1;
     const plan = planSwap(slotsRef.current, from, next, `s${slotSeqRef.current}`);
 
-    if (!plan.reused) {
-      playersRef.current[to] = null;
-      boundKeysRef.current[to] = null;
-      setSlots(plan.slots);
-    }
+    // Nový slot = nový prvek; starý React odpojí sám (bindSlot s null).
+    if (!plan.reused) setSlots(plan.slots);
 
-    playersRef.current[from]?.pause?.();
+    playersRef.current[from]?.pause();
     setActive(plan.active);
   }, []);
 
@@ -284,7 +317,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       const player = playersRef.current[activeRef.current];
       if (player) {
         player.currentTime = 0;
-        player.play?.();
+        safePlay(player);
       }
       return;
     }
@@ -298,76 +331,139 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   }, [pickNext, goToTrack]);
 
   /**
-   * Napojení na přehrávače Cloudflare.
+   * Napojení slotu na jeho <audio>/<video>.
    *
-   * SDK se načítá "až bude čas" (viz app/layout.tsx), takže se na něj chvíli
-   * čeká v krátké smyčce - stejně jako u náhledů na kartách. Smyčka má
-   * strop: kdyby se skript nenačetl vůbec, běžela by jinak donekonečna.
+   * Volá React, jakmile prvek slotu vznikne (a s null, když zmizí). Žádné
+   * čekání na cizí SDK: prvek je náš, události má hned. Zdroj (HLS
+   * manifest) dodá lib/hlsAttach.ts - v Safari nativně, jinak přes hls.js.
    */
+  const bindSlot = useCallback(
+    (i: SlotIndex, el: HTMLMediaElement | null) => {
+      const previous = playersRef.current[i];
+      if (el === previous) return;
+
+      if (previous) {
+        detachRefs.current[i]?.();
+        detachRefs.current[i] = null;
+        boundKeysRef.current[i] = null;
+      }
+      playersRef.current[i] = el;
+      if (!el) return;
+
+      const slot = slotsRef.current[i];
+      if (!slot.track) return;
+      boundKeysRef.current[i] = slot.key;
+
+      if (!customerCodeRef.current) customerCodeRef.current = customerCodeFromUrl(slot.track.thumbnail);
+
+      el.volume = volumeRef.current;
+      // Slot, který si jen dopředu načítá další skladbu, musí být potichu -
+      // jinak by hrály dvě věci přes sebe. Aktivní slot mlčí jen tehdy,
+      // když má uživatel hlasitost na nule.
+      el.muted = i !== activeRef.current || volumeRef.current === 0;
+
+      let lastTick = 0;
+      el.addEventListener('play', () => {
+        if (activeRef.current === i) setPlaying(true);
+      });
+      el.addEventListener('pause', () => {
+        if (activeRef.current === i) setPlaying(false);
+      });
+      el.addEventListener('loadedmetadata', () => {
+        if (activeRef.current === i && Number.isFinite(el.duration)) setDuration(el.duration);
+      });
+      el.addEventListener('durationchange', () => {
+        if (activeRef.current === i && Number.isFinite(el.duration)) setDuration(el.duration);
+      });
+      el.addEventListener('timeupdate', () => {
+        if (activeRef.current !== i) return;
+        // Čtyřikrát za vteřinu stačí - každé hlášení překreslí lištu i obal.
+        const now = Date.now();
+        if (now - lastTick < 250) return;
+        lastTick = now;
+        setCurrentTime(el.currentTime || 0);
+      });
+      el.addEventListener('ended', () => {
+        if (activeRef.current === i) handleEnded();
+      });
+      el.addEventListener('error', () => {
+        // Pojistka pro Safari: kdyby <audio> manifest s obrazem odmítlo,
+        // přehrávač se jednou přepne na <video> (React prvky vymění a
+        // napojí znovu). Zvuk v <video> při zamčeném telefonu Safari
+        // zastaví, ale lepší hrát než mlčet.
+        if (kindRef.current === 'audio' && activeRef.current === i) {
+          console.warn('Kine hudba: <audio> zdroj nejde přehrát, přepínám na <video>', el.error?.code);
+          kindRef.current = 'video';
+          setKind('video');
+        }
+      });
+
+      const url = manifestUrl(slot.track.cloudflareId, customerCodeRef.current);
+      detachRefs.current[i] = attachHls(el, url, {
+        onReady: () => {
+          // Skladba se rozjede jen tehdy, když zvuk nedrží obyčejné video.
+          // play() až po napojení zdroje: dřív by ho výměna zdroje přerušila.
+          if (i === activeRef.current && !takeoverRef.current && playersRef.current[i] === el) {
+            el.play().catch(() => {
+              // Prohlížeč bez svolení (žádné kliknutí) - divák to pustí ručně.
+            });
+          }
+        },
+        onFatal: (why) => {
+          console.warn('Kine hudba: zdroj nejde přehrát', why, slot.track?.id);
+          if (activeRef.current === i) setPlaying(false);
+        },
+      });
+    },
+    [handleEnded]
+  );
+
+  // Stálé odkazy pro React: kdyby se předávala nová funkce při každém
+  // překreslení, React by prvek "odpojil a připojil" pokaždé - a s ním
+  // by shořelo i napojení zdroje.
+  const bindSlot0 = useCallback((el: HTMLMediaElement | null) => bindSlot(0, el), [bindSlot]);
+  const bindSlot1 = useCallback((el: HTMLMediaElement | null) => bindSlot(1, el), [bindSlot]);
+
+  /**
+   * Tichý obraz k <audio> (Safari, režim Video u hudby).
+   *
+   * Zvuk hraje dál z <audio>; společník si stejný manifest pustí bez
+   * zvuku a drží se podle něj: malý rozdíl dorovná rychlostí, velký
+   * skokem (lib/streamSource.ts). Když zvuk stojí, stojí i on.
+   */
+  const bindCompanion = useCallback((el: HTMLVideoElement | null) => {
+    if (el === companionRef.current) return;
+    companionDetachRef.current?.();
+    companionDetachRef.current = null;
+    companionRef.current = el;
+    if (!el) return;
+
+    const current = slotsRef.current[activeRef.current].track;
+    if (!current) return;
+    el.muted = true;
+    el.playsInline = true;
+    companionDetachRef.current = attachHls(el, manifestUrl(current.cloudflareId, customerCodeRef.current));
+  }, []);
+
   useEffect(() => {
-    let cancelled = false;
-    let pokusy = 0;
-    const lastTick = [0, 0];
-
+    if (kind !== 'audio' || !engineRect) return;
     const interval = setInterval(() => {
-      if (cancelled) return;
+      const companion = companionRef.current;
+      const audio = playersRef.current[activeRef.current];
+      if (!companion || !audio) return;
 
-      pokusy++;
-      if (pokusy > 300) {
-        clearInterval(interval);
+      if (audio.paused) {
+        if (!companion.paused) companion.pause();
         return;
       }
+      if (companion.paused) companion.play().catch(() => { /* bez obrazu, zvuk hraje dál */ });
 
-      if (!(window as any).Stream) return;
-
-      for (const i of [0, 1] as const) {
-        const slot = slotsRef.current[i];
-        const frame = frameRefs.current[i];
-        if (!slot.track || !frame) continue;
-        if (boundKeysRef.current[i] === slot.key) continue;
-
-        const player = (window as any).Stream(frame);
-        playersRef.current[i] = player;
-        boundKeysRef.current[i] = slot.key;
-
-        player.volume = volumeRef.current;
-        // Slot, který si jen dopředu načítá další skladbu, musí být
-        // potichu - jinak by hrály dvě věci přes sebe. Aktivní slot mlčí
-        // jen tehdy, když má uživatel hlasitost na nule.
-        player.muted = i !== activeRef.current || volumeRef.current === 0;
-
-        player.addEventListener('play', () => {
-          if (activeRef.current === i) setPlaying(true);
-        });
-        player.addEventListener('pause', () => {
-          if (activeRef.current === i) setPlaying(false);
-        });
-        player.addEventListener('loadedmetadata', () => {
-          if (activeRef.current === i) setDuration(player.duration ?? 0);
-        });
-        player.addEventListener('timeupdate', () => {
-          if (activeRef.current !== i) return;
-          // Čtyřikrát za vteřinu stačí. Cloudflare hlásí čas mnohem častěji
-          // a každé hlášení by jinak překreslilo lištu i obal.
-          const now = Date.now();
-          if (now - lastTick[i] < 250) return;
-          lastTick[i] = now;
-          setCurrentTime(player.currentTime ?? 0);
-        });
-        player.addEventListener('ended', () => {
-          if (activeRef.current === i) handleEnded();
-        });
-
-        // Skladba se rozjede jen tehdy, když zvuk nedrží obyčejné video.
-        if (i === activeRef.current && !takeoverRef.current) player.play?.();
-      }
-    }, 60);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [slots, handleEnded]);
+      const fix = companionCorrection(audio.currentTime, companion.currentTime);
+      if (fix.seekTo !== null) companion.currentTime = fix.seekTo;
+      if (companion.playbackRate !== fix.rate) companion.playbackRate = fix.rate;
+    }, 250);
+    return () => clearInterval(interval);
+  }, [kind, engineRect]);
 
   /**
    * Rozjezd po výměně slotů.
@@ -379,7 +475,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     const player = playersRef.current[active];
     const other = playersRef.current[active === 0 ? 1 : 0];
 
-    other?.pause?.();
+    other?.pause();
     if (other) other.muted = true;
 
     if (player) {
@@ -389,7 +485,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       // Předem načtený slot mohl kus přehrát ještě potichu; skladba má
       // začít od začátku.
       if ((player.currentTime ?? 0) > 0.5) player.currentTime = 0;
-      if (!takeoverRef.current) player.play?.();
+      if (!takeoverRef.current) safePlay(player);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, slots[active].key]);
@@ -398,7 +494,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
    * Dopředné načtení další skladby.
    *
    * Bez tohohle je mezi skladbami několik vteřin ticha, protože nový
-   * iframe začíná od nuly. Načítá se do slotu, který zrovna nehraje.
+   * prvek začíná od nuly. Načítá se do slotu, který zrovna nehraje.
    */
   useEffect(() => {
     if (!track) return;
@@ -410,8 +506,6 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     const plan = planPreload(slots, active, choice, `s${slotSeqRef.current}`);
     if (!plan) return;
 
-    playersRef.current[plan.idle] = null;
-    boundKeysRef.current[plan.idle] = null;
     setSlots(plan.slots);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [track?.id, queue, repeat, shuffle, active]);
@@ -432,17 +526,17 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
           // Pustit hudbu znamená vzít zvuk videu, ne hrát přes něj.
           takeoverRef.current = false;
           setVideoTakeoverState(false);
-          player.play?.();
+          safePlay(player);
         } else {
-          player.pause?.();
+          player.pause();
         }
       },
       pause() {
-        activePlayer()?.pause?.();
+        activePlayer()?.pause();
       },
       resume() {
         if (takeoverRef.current) return;
-        activePlayer()?.play?.();
+        safePlay(activePlayer());
       },
       getCurrentTime() {
         return currentTimeRef.current;
@@ -450,12 +544,13 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       setVideoTakeover(activeNow) {
         takeoverRef.current = activeNow;
         setVideoTakeoverState(activeNow);
-        if (activeNow) playersRef.current.forEach((p) => p?.pause?.());
+        if (activeNow) playersRef.current.forEach((p) => p?.pause());
       },
       stop() {
-        playersRef.current.forEach((p) => p?.pause?.());
-        playersRef.current = [null, null];
-        boundKeysRef.current = [null, null];
+        playersRef.current.forEach((p) => p?.pause());
+        // Prvky zmizí s prázdnými sloty a React zavolá bindSlot s null,
+        // který zdroje odpojí. Odkazy se tu nenulují ručně - jinak by
+        // úklid neměl co uklidit.
         setSlots([
           { key: 'a-off', track: null },
           { key: 'b-off', track: null },
@@ -556,9 +651,9 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
      každá hudební appka a co člověk na mobilu postrádá první.
 
      Napsané defenzivně: kde prohlížeč Media Session nemá, nestane se nic.
-     Zvuk hraje z cizího iframu (Cloudflare) - jestli prohlížeč napojí
-     ovládání z naší stránky na zvuk z iframu, se musí ověřit na telefonu;
-     v horším případě se nic nezobrazí, nic se nerozbije. */
+     Funguje to právě proto, že zvuk hraje z NAŠEHO <audio>/<video> - u
+     dřívějšího iframu Cloudflare si telefon bral název a obal od cizího
+     dokumentu, a tak ukazoval "Stream" a prázdný čtverec. */
 
   useEffect(() => {
     const ms = typeof navigator !== 'undefined' ? (navigator as any).mediaSession : null;
@@ -575,7 +670,14 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
           title: track.title,
           artist: track.creator ?? 'Kine',
           album: 'Kine',
-          artwork: track.thumbnail ? [{ src: track.thumbnail, sizes: '512x512', type: 'image/jpeg' }] : [],
+          // Bez "type": náhledy jsou jpg z Cloudflare i cokoliv z úložiště
+          // (vlastní náhled tvůrce). Prohlížeč si typ zjistí sám.
+          artwork: track.thumbnail
+            ? [
+                { src: track.thumbnail, sizes: '512x512' },
+                { src: track.thumbnail, sizes: '256x256' },
+              ]
+            : [],
         });
       }
       ms.playbackState = playing ? 'playing' : 'paused';
@@ -640,41 +742,38 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     <CommandsContext.Provider value={commands}>
       <StateContext.Provider value={state}>
         {children}
-        {slots.map((slot, i) =>
-          slot.track ? (
-            <iframe
-              // Nová skladba = nový iframe. Přehodit adresu za běhu jde,
-              // ale napojení SDK by pak ukazovalo na starý přehrávač.
-              key={slot.key}
-              ref={(el) => {
-                frameRefs.current[i] = el;
-              }}
-              className={
-                i === active && engineRect ? 'music-engine-frame music-engine-frame-onscreen' : 'music-engine-frame'
-              }
-              style={
-                i === active && engineRect
-                  ? {
-                      top: engineRect.top,
-                      left: engineRect.left,
-                      width: engineRect.width,
-                      height: engineRect.height,
-                    }
-                  : undefined
-              }
-              // Parametry adresy se berou ze slotu, ne z toho, který je
-              // aktivní: adresa se nesmí měnit za běhu. Změna src iframe
-              // celý načte znovu jako nový přehrávač, o kterém napojení
-              // nic neví - zvuk pak hrál dál a pauza ani ztlumení na něj
-              // nedosáhly. preload=auto: další skladba je připravená a
-              // rozjede se hned.
-              src={`https://iframe.videodelivery.net/${slot.track.cloudflareId}?controls=false&preload=auto${
-                slot.autoplay ? '&autoplay=true' : ''
-              }${slot.muted ? '&muted=true' : ''}`}
-              allow="autoplay; encrypted-media; picture-in-picture; fullscreen;"
-              title={slot.track.title}
-            />
-          ) : null
+        {slots.map((slot, i) => {
+          if (!slot.track) return null;
+          const onscreen = i === active && engineRect !== null && kind === 'video';
+          const props = {
+            // Nová skladba = nový prvek. Klíč slotu se mění s každou skladbou,
+            // takže React nikdy nepřepisuje zdroj běžícímu prvku.
+            key: slot.key,
+            ref: i === 0 ? bindSlot0 : bindSlot1,
+            className: onscreen ? 'music-engine-frame music-engine-frame-onscreen' : 'music-engine-frame',
+            style: onscreen && engineRect
+              ? { top: engineRect.top, left: engineRect.left, width: engineRect.width, height: engineRect.height }
+              : undefined,
+            preload: 'auto' as const,
+            // Zvuk a start řídí napojení (bindSlot), ne atributy - ty jen
+            // říkají, jak prvek vzniká: hrající, nebo tichý dopředu načtený.
+            muted: slot.muted ?? false,
+            title: slot.track.title,
+          };
+          return kind === 'audio' ? <audio {...props} /> : <video {...props} playsInline />;
+        })}
+        {/* Safari: <audio> hraje, obraz promítá tichý společník (viz bindCompanion). */}
+        {kind === 'audio' && engineRect && track && (
+          <video
+            key={`companion-${track.id}`}
+            ref={bindCompanion}
+            className="music-engine-frame music-engine-frame-onscreen"
+            style={{ top: engineRect.top, left: engineRect.left, width: engineRect.width, height: engineRect.height }}
+            muted
+            playsInline
+            preload="auto"
+            aria-hidden="true"
+          />
         )}
       </StateContext.Provider>
     </CommandsContext.Provider>

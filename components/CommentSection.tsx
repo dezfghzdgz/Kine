@@ -126,16 +126,23 @@ export default function CommentSection({
   async function loadComments() {
     setCommentsFailed(false);
 
-    const nacti = (seSrdickem: boolean) =>
-      supabase
+    // Dva doslovné výběry, ne jeden skládaný: Supabase odvozuje typ
+    // výsledku z textu výběru, a ze skládaného textu odvodí "chybu" -
+    // build pak spadl na tom, že řádek nemá .id.
+    const nacti = async (seSrdickem: boolean): Promise<{ data: any[] | null; error: { code?: string; message?: string } | null }> => {
+      if (seSrdickem) {
+        return supabase
+          .from('comments')
+          .select('id, content, created_at, parent_id, timestamp_seconds, user_id, pinned, hearted_by_creator, image_url, profiles!comments_user_id_fkey(username, is_supporter)')
+          .eq('video_id', videoId)
+          .order('created_at', { ascending: false });
+      }
+      return supabase
         .from('comments')
-        .select(
-          'id, content, created_at, parent_id, timestamp_seconds, user_id, pinned, ' +
-            (seSrdickem ? 'hearted_by_creator, ' : '') +
-            'image_url, profiles!comments_user_id_fkey(username, is_supporter)'
-        )
+        .select('id, content, created_at, parent_id, timestamp_seconds, user_id, pinned, image_url, profiles!comments_user_id_fkey(username, is_supporter)')
         .eq('video_id', videoId)
         .order('created_at', { ascending: false });
+    };
 
     let vysledek = await nacti(true);
 

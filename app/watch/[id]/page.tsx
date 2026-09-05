@@ -118,6 +118,9 @@ function WatchPageInner() {
   const dockRef = useRef<HTMLDivElement>(null);
   const [mini, setMini] = useState<{ height: number } | null>(null);
   const miniDismissedRef = useRef(false);
+  // Celou obrazovku zapnulo otočení telefonu (ne divák) - jen tu pak
+  // otočení zpátky zase vypne. V ref, ať to přežije přepnutí na další video.
+  const autoEnteredRef = useRef(false);
   // Pro klávesu C: handler kláves žije v efektu a viděl by staré video.
   const hasCaptionsRef = useRef(false);
   // Odložené započítání zhlédnutí - viz load().
@@ -575,7 +578,6 @@ function WatchPageInner() {
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
     const phoneLandscape = window.matchMedia('(orientation: landscape) and (max-height: 500px) and (pointer: coarse)');
-    let autoEntered = false;
 
     function onOrientation() {
       // U hudby stránka vlastní přehrávač nemá (rámeček se nevykresluje).
@@ -586,21 +588,40 @@ function WatchPageInner() {
       const decision = decideOrientationFullscreen({
         landscapePhone: phoneLandscape.matches,
         isFullscreen,
-        autoEntered,
+        autoEntered: autoEnteredRef.current,
       });
 
       if (decision === 'enter') {
         setFallbackFullscreen(true);
-        autoEntered = true;
+        autoEnteredRef.current = true;
       } else if (decision === 'exit') {
         setFallbackFullscreen(false);
-        autoEntered = false;
+        autoEnteredRef.current = false;
       }
     }
 
+    // I hned po načtení: kdo otevře video s telefonem už otočeným na šířku,
+    // žádnou změnu orientace nevyvolá - a zůstal by v rozložení pro PC
+    // s bočním menu vedle videa. (Rámeček existuje až s načteným videem,
+    // proto závislost na video?.id.)
+    onOrientation();
+
     phoneLandscape.addEventListener('change', onOrientation);
     return () => phoneLandscape.removeEventListener('change', onOrientation);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video?.id, mode]);
+
+  /**
+   * Náhradní celá obrazovka schová všechno ostatní. Rámeček je sice
+   * position: fixed přes celé okno, ale na iPhonu na šířku přes něj
+   * zůstalo vidět boční menu (sticky, vlastní vrstva). Třída na <body>
+   * nechá zmizet menu, horní lištu, spodní navigaci i lištu hudby -
+   * zůstane jen video, tak jak má celá obrazovka vypadat.
+   */
+  useEffect(() => {
+    document.body.classList.toggle('player-css-fullscreen', cssFullscreen);
+    return () => document.body.classList.remove('player-css-fullscreen');
+  }, [cssFullscreen]);
 
   /**
    * Spustí přehrávání a nevzdá to.

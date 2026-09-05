@@ -2020,9 +2020,15 @@ html[data-theme="gray"] {
   }
 
   .mobile-bottom-nav {
-    display: flex;
+    /* Pět stejně širokých sloupců, ne "rozhodit rovnoměrně": s různě
+       dlouhými popisky (Home vs. Download history) space-around posouval
+       prostřední + mimo střed obrazovky. V mřížce je 3. sloupec z pěti
+       vždycky přesně uprostřed. Nepřihlášený má místo zvonečku prázdný
+       slot, ať zůstane pět sloupců (components/Sidebar.tsx). */
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    justify-items: center;
     align-items: center;
-    justify-content: space-around;
     position: fixed;
     left: 0;
     right: 0;
@@ -2050,6 +2056,16 @@ html[data-theme="gray"] {
     border: none;
     padding: 4px 8px;
     cursor: pointer;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  /* Dlouhý popisek se zkrátí, ať nerozšíří svůj sloupec. */
+  .mobile-nav-item > span:not(.mobile-nav-avatar):not(.notif-badge) {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .mobile-nav-item.active {
@@ -2942,10 +2958,15 @@ html[data-theme="gray"] {
   border: 0;
   opacity: 0;
   pointer-events: none;
+  /* Vlastní <video>/<audio> přehrávače (lib/musicPlayer.tsx): obraz sedí
+     v krabici celý, s černými pruhy, jako v každém přehrávači. */
+  display: block;
+  object-fit: contain;
+  background: #000;
 }
 
 /* Přehrávač promítnutý na stránku videa (režim Video u hudby).
-   Iframe zůstává tam, kde je - jen se posune přes místo, které mu
+   Prvek zůstává tam, kde je - jen se posune přes místo, které mu
    stránka vyhradila. Nic se nenačítá znovu a zvuk nepřeskočí.
    Souřadnice dosazuje lib/musicPlayer.tsx. */
 .music-engine-frame-onscreen {
@@ -4339,4 +4360,22 @@ body.has-music-bar .player-wrap.player-wrap-mini {
 .shortcuts-close:hover {
   background: var(--panel-raised);
   border-color: var(--text-faint);
+}
+
+/* ---------- Náhradní celá obrazovka (app/watch/[id]/page.tsx) ----------
+   iPhone skutečnou celou obrazovku pro cizí prvek nedá, tak ji dělá CSS:
+   rámeček přehrávače je position: fixed přes celé okno. Jenže na telefonu
+   na šířku (844 px = rozložení pro PC) přes něj zůstalo vidět boční menu.
+   Dokud je náhradní celá obrazovka zapnutá, nesmí být vidět nic než video. */
+body.player-css-fullscreen {
+  overflow: hidden;
+}
+
+body.player-css-fullscreen .sidebar,
+body.player-css-fullscreen .top-bar,
+body.player-css-fullscreen .mobile-bottom-nav,
+body.player-css-fullscreen .music-mini,
+body.player-css-fullscreen .upload-bar,
+body.player-css-fullscreen .video-card-menu-btn {
+  display: none !important;
 }

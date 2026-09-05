@@ -246,7 +246,9 @@ export default function Sidebar() {
       <button className="mobile-nav-item mobile-nav-create" onClick={() => setCreateMenuOpen(true)}>
         <CreateIcon />
       </button>
-      {user && <NotificationBell mobileTrigger />}
+      {/* Nepřihlášený nemá zvoneček - prázdný slot drží pět sloupců, ať je
+          + pořád přesně uprostřed. */}
+      {user ? <NotificationBell mobileTrigger /> : <span className="mobile-nav-item" aria-hidden="true" />}
       {user ? (
         <Link href="/channel/me" className="mobile-nav-item">
           <span className="mobile-nav-avatar">
