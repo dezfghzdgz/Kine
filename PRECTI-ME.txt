@@ -1,111 +1,114 @@
-KINE - volná ruka, 1. kolo
-==========================
+KINE - volná ruka, 2. kolo (televize, záloha, vyhledávání, rychlost)
+=====================================================================
 
-37 souborů. Rozbal do kořene repa a přepiš.
+69 souborů. Rozbal do kořene repa a přepiš.
 Pak: node zkontroluj-soubory.mjs
-Pak: Supabase -> SQL Editor -> supabase-migration-zarizeni-a-chyby.sql
-     (jeden soubor, jednou; dá se pustit i opakovaně)
+Pak: Supabase -> SQL Editor, dvě migrace (každá jednou, obě se dají pustit
+     i opakovaně):
+       supabase-migration-zarizeni-a-chyby.sql   (pokud ještě neproběhla)
+       supabase-migration-vyhledavani.sql        (nová)
+Pak: záloha - viz bod 2 (jeden secret na GitHubu).
 
-Balíček obsahuje i všechno z předchozích dvou (kine-prava.zip,
-kine-mobil.zip), takže stačí rozbalit jen tenhle a ty dva smaž. Důvod je
-stejný jako minule: rozbalení dvou balíčků v opačném pořadí rozbije
-seznam otisků.
+Balíček obsahuje i všechno z předchozích (kine-prava, kine-mobil,
+kine-volna-ruka), takže stačí rozbalit jen tenhle a ty starší smaž.
 
 
 CO JE NOVÉ
 ----------
-1) SDÍLENÍ PŘES SYSTÉMOVÉ OKNO (lib/share.ts)
-   Na telefonu a iPadu otevře Sdílet systémové okno (Zprávy, WhatsApp,
-   AirDrop...), na počítači dál kopíruje odkaz. Zavření okna bez výběru
-   nic nehlásí. Tři místa: video, okamžik ve videu, nabídka ⋮ na kartě.
+1) TELEVIZE (lib/tvMode.ts, lib/spatialNav.ts, components/TvMode.tsx)
+   Kine v prohlížeči Smart TV, ovládané dálkovým ovladačem:
+   - všechno 1,35× větší (divák sedí tři metry daleko),
+   - šipky přesouvají výrazně zvýrazněný výběr po stránce - doprava skočí
+     na sousední kartu, dolů na kartu pod ní, doleva do menu; karta videa
+     je jeden cíl, ne tři,
+   - OK otevře; v přehrávači OK = přehrát/pauza, doleva/doprava posun o 5 s,
+     nahoru/dolů vedou z přehrávače pryč (hlasitost má ovladač),
+   - tlačítko Zpět na ovladači (Tizen i webOS) = o stránku zpět,
+   - nic se neschovává "po najetí myší".
+   Zapíná se sám, když prohlížeč vypadá jako televize; ručně v nabídce
+   profilu ("Režim televize"); a adresou ?tv=1 - tím si to VYZKOUŠÍŠ NA
+   PC s klávesnicí, ještě než půjdeš k televizi (?tv=0 vypne, volba se
+   pamatuje).
+   4K monitor s myší (ne televize) dostane mírné zvětšení 1,2×.
 
-2) POKRAČOVAT VE SLEDOVÁNÍ (components/ContinueWatching.tsx)
-   Řádek na Home nad "Doporučeno": rozkoukaná videa s proužkem, kliknutí
-   naváže o 3 s před místem, kde jsi skončil. Jen pro přihlášené, jen když
-   je co dokoukat - jinak se nevykreslí ani nadpis. Dokoukané (přes 95 %
-   nebo pod 20 s do konce) a sotva načaté (pod 10 s) se nenabízí.
+2) TÝDENNÍ ZÁLOHA DATABÁZE (.github/workflows/zaloha-databaze.yml)
+   Supabase zdarma nemá zálohy "zpátky v čase". Tohle každou neděli
+   stáhne celou databázi a uloží ji k repozitáři na GitHubu (90 dní
+   zpátky). Nastavení = jeden secret, postup je v komentáři na začátku
+   souboru (Supabase -> connection string "Session pooler" -> GitHub ->
+   Settings -> Secrets -> SUPABASE_DB_URL). Pak Actions -> Run workflow,
+   ať víš, že to jede. Je tam i postup obnovy.
 
-3) HLÁŠENÍ CHYB Z PROHLÍŽEČE (lib/errorReporter.ts, /admin/errors)
-   Každou chybu v appce jsi do teď našel ty. Odteď se neodchycené chyby
-   JavaScriptu posílají na server a jsou na /admin/errors (odkaz 🐞 Chyby
-   v menu): co, kolikrát, kdy naposled, na jakých stránkách a zařízeních,
-   zásobník volání. Sto stejných chyb = jeden řádek s číslem 100.
-   "Vyřešeno" skupinu smaže; když se vrátí, objeví se znovu.
+3) VYHLEDÁVÁNÍ (supabase-migration-vyhledavani.sql, app/search/page.tsx)
+   Dosud: "název obsahuje přesně to, co jsi napsal". Teď přímo v databázi:
+   fulltext (víc slov v libovolném pořadí), bez ohledu na háčky
+   ("tutorial" najde "Tutoriál"), překlepy ("tutorail", "highlihts"),
+   hledá v názvu, popisu i hashtagách; tvůrci stejně tolerantně. Řadí
+   podle shody, pak podle zhlédnutí. Soukromá a nehotová videa se
+   nenajdou. Když migrace ještě neproběhla, hledá se postaru.
+   Vedlejší oprava: čárka v hledaném textu dřív rozbíjela dotaz na tvůrce.
 
-   Co se posílá: text chyby, zásobník, adresa stránky BEZ parametrů,
-   prohlížeč, třída zařízení. Ne kdo byl přihlášený, ne nic, co napsal.
-   Stejná chyba max. jednou za načtení, max. 10 na stránku, max. 30 za
-   minutu z jednoho prohlížeče na serveru. Tabulka client_errors má RLS
-   bez pravidel - z prohlížeče ji nikdo nepřečte.
+4) RYCHLOST (lib/i18n.tsx -> lib/i18n/*.ts, 30× <img>)
+   Všech osm jazyků šlo ke každému návštěvníkovi naráz (~320 kB zdroje),
+   i když čte česky. Teď jsou čeština a angličtina v hlavním balíku a
+   ostatních šest se stáhne až při zvolení. Chování se nemění, jen je
+   první načtení lehčí. Plus 30 obyčejných obrázků se načítá až u okraje
+   obrazovky (loading="lazy").
 
-   Vyzkoušej: otevři Kine, v konzoli prohlížeče napiš
-     setTimeout(() => { throw new Error('zkouska hlaseni') })
-   a za chvíli se to objeví na /admin/errors.
+5) "PROČ TOHLE VIDEO" (lib/homeRecommendation.ts, components/VideoCard.tsx)
+   Pod kartou na Home jedna tichá řádka: "Odebíráš", "Podle toho, co
+   sleduješ", "Podle tvých hashtagů", "Nové", "Oblíbené". Říká pravdu
+   o nejsilnější složce skóre; když žádný důvod za zmínku nestojí, není
+   tam nic. Tohle YouTube nedá.
 
-4) NA ČEM SE KINE SLEDUJE (lib/deviceClass.ts)
-   Ke každému zhlédnutí se ukládá telefon / tablet / počítač / TV (sloupec
-   views_log.device). Za měsíc budeš vědět, kam dát přednost:
-     select coalesce(device,'neznámé'), count(*) from views_log
-     where viewed_at > now() - interval '30 days' group by 1 order by 2 desc;
-
-5) MEDIA SESSION PRO HUDBU (lib/musicPlayer.tsx)
-   Název skladby a ovládání na zamčené obrazovce, v oznámení na Androidu,
-   tlačítka na sluchátkách (další/předchozí, play/pauza). Napsáno
-   defenzivně: kde to prohlížeč nemá, nestane se nic.
-   OVĚŘIT NA TELEFONU: zvuk hraje z cizího iframu (Cloudflare) a nejsem si
-   jistý, jestli ho prohlížeč napojí na ovládání z naší stránky. Když se
-   na zamčené obrazovce nic neukáže, napiš - je to známé riziko, ne pád.
-
-6) (filtr jmen - na tvoje přání zatím ne, nic z něj v balíčku není)
-
-7) DROBNÉ ZNÁMÉ CHYBY
-   - Počet odběratelů se zastavil na 1000 (databáze vrací nejvíc 1000
-     řádků a appka počítala délku seznamu). Teď se počítá na serveru.
-     Navíc se do prohlížeče už nestahuje celý seznam odběratelů kvůli
-     jednomu řádku. Stejná oprava u stupňů podílu z výdělků (/admin) a
-     u grafu růstu ve statistikách kanálu.
-   - Panel playlistu u videa se u ~200 položek rozbil úplně (seznam id
-     v adrese přerostl, dotaz se neprovedl). Teď po dávkách.
-   - Započítání zhlédnutí čekalo 5 s, ale doběhlo i po odchodu ze
-     stránky - kdo video zavřel po dvou vteřinách, stejně dostal
-     zhlédnutí. Časovač se teď ruší.
-   - Účet bez jména ve výpisu podílů má aspoň kousek id.
-   - Čas v přehrávači nad hodinu: 1:02:03 místo 62:03 (z minulého kola).
+Z minulého kola beze změny: sdílení, Pokračovat ve sledování, /admin/errors,
+třída zařízení, Media Session, opravy stropu 1000 a playlistu.
 
 
 CO ODKLIKAT
 -----------
-iPhone / iPad
-  [ ] Sdílet u videa -> systémové okno. Zavřít bez výběru -> žádná hláška.
-  [ ] Pusť hudbu, zamkni telefon -> na zamčené obrazovce název a ovládání?
-      (Když ne, napiš - viz bod 5.)
-  [ ] Home: rozkoukané video se ukáže v řádku "Pokračovat ve sledování",
-      kliknutí naváže o pár vteřin před koncem sledování.
-PC
-  [ ] Sdílet -> "Odkaz zkopírován", jako dřív.
-  [ ] /admin/errors po tom zkušebním throw ukáže řádek.
+PC (klávesnice = ovladač)
+  [ ] Otevři Kine s ?tv=1 (např. kine-lac.vercel.app/?tv=1). Vše větší.
+      Zmáčkni šipku dolů -> zvýrazní se první karta. Šipky přeskakují
+      mezi kartami a menu, Enter otevře video.
+  [ ] Na videu: Enter = pauza/přehrát, doleva/doprava = posun, dolů =
+      výběr přeskočí pod video. Backspace = zpět.
+  [ ] Profil -> "Režim televize: Vypnuto" vrátí normální vzhled.
+Televize
+  [ ] To samé ovladačem. Napiš, který prohlížeč / značka TV.
+Hledání
+  [ ] Po migraci: hledej "tutorial" bez háčků, překlep, dvě slova.
+Jazyk
+  [ ] Přepni na němčinu/polštinu -> texty se přepnou (zlomek vteřiny
+      česky, než se slovník stáhne). Přepni zpět.
 
 
 CO JSEM OVĚŘIL
 --------------
-- Typová kontrola celého projektu na TVÉM stromu (26a30e0) se všemi 37
-  soubory - stejný výsledek jako před změnou.
-- 10 testovacích sad, 91 kontrol, vše prošlo. Nové: sdílení (5), řádek
-  Pokračovat (6), zařízení (7), hlášení chyb (8), seskupení chyb (5).
-- Migrace na skutečném Postgresu: proběhla, proběhla i podruhé (nic
-  nerozbila), omezení hodnot zařízení odmítlo "toaster", tabulka chyb má
-  RLS bez pravidel.
+- Typová kontrola celého projektu na TVÉM stromu (26a30e0) se všemi
+  69 soubory - stejný výsledek jako před změnou. Kontroluje i to, že
+  všech sedm jazyků má úplně stejné klíče jako čeština.
+- 12 testovacích sad, 107 kontrol. Nové: navigace šipkami a režim TV (9),
+  popisek proč (7).
+- Migrace vyhledávání na skutečném Postgresu: proběhla dvakrát, našla
+  "Tutoriál" na "tutorial" i "tutorail", "highlights" na "highlihts",
+  "večeře" na "vecere", dvě slova v opačném pořadí; soukromé, nehotové a
+  prázdný dotaz vrátily 0; text s čárkou a tečkami je jen text.
+- Záloha: příkaz pg_dump se stejnými přepínači proběhl lokálně, výstup
+  bez OWNER/GRANT (aby šla obnova do cizího projektu), YAML platný.
+  Samotný běh na GitHubu ověřit odsud nejde - proto ten "Run workflow".
+- Režim televize: statický náhled v Chromiu při 1920×1080 - zvětšení,
+  3 sloupce karet místo 5, zvýrazněná vybraná karta.
 - Balíček rozbalený na čistou kopii tvého mainu: otisky sedí.
 
-Co ověřené NENÍ: telefon a iPad v ruce, a Media Session přes iframe.
+Co ověřené NENÍ: skutečná televize (ovladač, prohlížeč TV), a jestli
+`zoom` na starých Smart TV prohlížečích nesplete tažení posuvníku myší -
+na TV se posouvá šipkami, takže by to nemělo vadit.
 
 
-CO SCHVÁLNĚ NENÍ A PROČ
------------------------
-- Podepsané adresy pro soukromá videa: správná věc, ale sahá do každého
-  přehrávače a chce jednorázový klíč od Cloudflare. Dostane vlastní kolo
-  s návodem krok za krokem, ne poslepu.
-- Instalace jako appka: až budeš chtít.
-
-DALŠÍ KOLO: televize (velké breakpointy, ovládání šipkami s fokusem,
-větší písmo a karty, Enter = přehrát).
+CO SCHVÁLNĚ NENÍ
+----------------
+- Dvoufázové ověření - na tvoje přání zatím ne.
+- Filtr jmen - na tvoje přání zatím ne.
+- Podepsané adresy pro soukromá videa - vlastní kolo s návodem.
+- Připnutý komentář a srdíčko tvůrce - příště, je to samostatný kus.

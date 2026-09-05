@@ -32,7 +32,7 @@ export default function MusicStage() {
     <div className="music-stage">
       <div className="music-stage-cover">
         {cover ? (
-          <img key={track.id} src={cover} alt={track.title} />
+          <img loading="lazy" decoding="async" key={track.id} src={cover} alt={track.title} />
         ) : (
           <span className="music-stage-cover-empty" aria-hidden="true">♪</span>
         )}

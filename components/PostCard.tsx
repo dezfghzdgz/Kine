@@ -78,7 +78,7 @@ export default function PostCard({ post, userId }: { post: any; userId: string |
 
       {post.type === 'photo' && post.image_url && (
         <div style={{ marginTop: post.content ? 10 : 0, maxHeight: 300, overflow: 'hidden', borderRadius: 8, background: 'var(--panel-raised)' }}>
-          <img
+          <img loading="lazy" decoding="async"
             src={post.image_url}
             alt=""
             style={{ width: '100%', maxHeight: 300, objectFit: 'contain', display: 'block', margin: '0 auto' }}

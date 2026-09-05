@@ -250,7 +250,7 @@ export default function Sidebar() {
       {user ? (
         <Link href="/channel/me" className="mobile-nav-item">
           <span className="mobile-nav-avatar">
-            {user.avatar_url ? <img src={user.avatar_url} alt="" /> : <ProfileIcon />}
+            {user.avatar_url ? <img loading="lazy" decoding="async" src={user.avatar_url} alt="" /> : <ProfileIcon />}
           </span>
         </Link>
       ) : (

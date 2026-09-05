@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
 import VideoCard from '@/components/VideoCard';
 import ContinueWatching from '@/components/ContinueWatching';
-import { scoreVideo, buildBlocks, formatDuration, FEED_BATCH, WATCHED_HISTORY_LIMIT } from '@/lib/homeRecommendation';
+import { scoreVideo, explainVideo, buildBlocks, formatDuration, FEED_BATCH, WATCHED_HISTORY_LIMIT } from '@/lib/homeRecommendation';
 import type { Block } from '@/lib/homeRecommendation';
 import { loadHiddenContent, filterHidden, clearHiddenContent, NOTHING_HIDDEN } from '@/lib/hiddenContent';
 import type { HiddenContent } from '@/lib/hiddenContent';
@@ -405,6 +405,14 @@ export default function HomePage() {
     </>
   );
 
+  /** Popisek "proč tohle video" - viz explainVideo. Bez kontextu nic. */
+  function reasonFor(video: any): string | null {
+    const ctx = ctxRef.current;
+    if (!ctx) return null;
+    const key = explainVideo(video, ctx);
+    return key ? t(key) : null;
+  }
+
   if (empty) {
     return (
       <div>
@@ -454,6 +462,7 @@ export default function HomePage() {
               isSparks={block.type === 'sparks'}
               progressPercent={progressMap[video.id]}
               formatDuration={formatDuration}
+              reason={reasonFor(video)}
             />
           ))}
         </div>

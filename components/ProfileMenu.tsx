@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useLanguage, Lang } from '@/lib/i18n';
 import ThemeSlider from './ThemeSlider';
 import ConfirmDialog from './ConfirmDialog';
+import { isTvMode, setTvPreference } from '@/lib/tvMode';
 
 const LANG_NAMES: Record<Lang, string> = {
   cs: 'Čeština',
@@ -58,6 +59,12 @@ export default function ProfileMenu({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Stav přepínače televize - čte se z <html> při otevření nabídky.
+  const [tvOn, setTvOn] = useState(false);
+  useEffect(() => {
+    if (open) setTvOn(isTvMode());
+  }, [open]);
+
   function applyTheme(next: Theme) {
     setTheme(next);
     document.documentElement.setAttribute('data-theme', next);
@@ -76,7 +83,7 @@ export default function ProfileMenu({
     <div className="profile-menu" ref={menuRef}>
       <button className="sidebar-link profile-trigger" onClick={() => { setOpen((v) => !v); setLangMenuOpen(false); }}>
         <span className="profile-avatar-small">
-          {avatarUrl ? <img src={avatarUrl} alt={username} /> : null}
+          {avatarUrl ? <img loading="lazy" decoding="async" src={avatarUrl} alt={username} /> : null}
         </span>
         {username}
       </button>
@@ -85,7 +92,7 @@ export default function ProfileMenu({
         <div className="profile-dropdown">
           <div className="profile-dropdown-header">
             <span className="profile-avatar-small">
-              {avatarUrl ? <img src={avatarUrl} alt={username} /> : null}
+              {avatarUrl ? <img loading="lazy" decoding="async" src={avatarUrl} alt={username} /> : null}
             </span>
             <div>
               <p className="profile-dropdown-name">{username}</p>
@@ -136,6 +143,20 @@ export default function ProfileMenu({
               </div>
             )}
           </div>
+
+          {/* Režim televize: zvětšení a ovládání šipkami. Na Smart TV se
+              zapne sám, tady se dá přepnout ručně (lib/tvMode.ts). */}
+          <button
+            className="profile-dropdown-item"
+            onClick={() => {
+              const next = isTvMode() ? 'off' : 'on';
+              setTvPreference(next);
+              setTvOn(next === 'on');
+            }}
+          >
+            <span>{t('tvModeLabel')}</span>
+            <span className="profile-dropdown-value">{tvOn ? t('onLabel') : t('offLabel')}</span>
+          </button>
 
           <div className="profile-dropdown-divider" style={{ marginTop: 10 }} />
 

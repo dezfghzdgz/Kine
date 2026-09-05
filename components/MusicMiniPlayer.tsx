@@ -60,7 +60,7 @@ export default function MusicMiniPlayer() {
         {track.thumbnail ? (
           // key donutí prohlížeč obrázek skutečně vyměnit, když se přeskočí
           // na jinou skladbu.
-          <img key={track.id} src={track.thumbnail} alt="" className="music-mini-cover" />
+          <img loading="lazy" decoding="async" key={track.id} src={track.thumbnail} alt="" className="music-mini-cover" />
         ) : (
           <span className="music-mini-cover music-mini-cover-empty" aria-hidden="true">♪</span>
         )}

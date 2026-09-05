@@ -117,7 +117,7 @@ export default function GifPickerModal({
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
               {gifs.map((g) => (
-                <img
+                <img loading="lazy" decoding="async"
                   key={g.id}
                   src={g.preview}
                   alt=""

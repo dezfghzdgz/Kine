@@ -35,6 +35,7 @@ import MusicVideoSurface from '@/components/MusicVideoSurface';
 import { startPlayback as beginPlayback } from '@/lib/playerStart';
 import { decideOrientationFullscreen } from '@/lib/playerControls';
 import { shareLink, browserShareDeps } from '@/lib/share';
+import { isTvMode } from '@/lib/tvMode';
 import { detectDeviceClass } from '@/lib/deviceClass';
 import { fetchAllRows, fetchByIds } from '@/lib/loadAll';
 
@@ -276,6 +277,20 @@ function WatchPageInner() {
       // celé obrazovky si Esc odbaví sám prohlížeč).
       if (e.key === 'Escape') {
         setFallbackFullscreen(false);
+      }
+
+      // Režim televize: přehrávač poslouchá klávesy jen když je vybraný -
+      // jinak šipky přesouvají výběr po stránce (lib/spatialNav.ts).
+      // Nahoru/dolů z něj vedou pryč (hlasitost má ovladač), OK přehrává.
+      if (isTvMode()) {
+        const inPlayer = !!wrapRef.current?.contains(document.activeElement);
+        if (!inPlayer) return;
+        if (e.code === 'ArrowUp' || e.code === 'ArrowDown') return;
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          togglePlayPause();
+          return;
+        }
       }
 
       const player = playerRef.current;
@@ -522,6 +537,9 @@ function WatchPageInner() {
       playerRef.current.muted = false;
       playerRef.current.volume = 1;
       setPlayerReady(true);
+      // Na televizi je po otevření vybraný přehrávač: OK hraje, šipky
+      // posouvají, dolů vede k názvu a komentářům.
+      if (isTvMode()) wrapRef.current?.focus({ preventScroll: true });
 
       // Tenhle přehrávač je odteď jen pro obyčejná videa. Hudbu hraje
       // jeden jediný přehrávač v kostře appky a stránka si ho jen
@@ -1204,7 +1222,7 @@ function WatchPageInner() {
         <div className="video-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <Link href={`/channel/${video.profiles?.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="profile-avatar-small" style={{ width: 28, height: 28 }}>
-              {video.profiles?.avatar_url ? <img src={video.profiles.avatar_url} alt={creatorName} /> : null}
+              {video.profiles?.avatar_url ? <img loading="lazy" decoding="async" src={video.profiles.avatar_url} alt={creatorName} /> : null}
             </span>
             <span>{creatorName}</span>
             <VerifiedBadge tier={video.profiles?.verification_tier} />
@@ -1223,7 +1241,7 @@ function WatchPageInner() {
             <Link href={`/channel/${video.profiles?.id}`} className="collab-chip">
               <span className="profile-avatar-small" style={{ width: 26, height: 26 }}>
                 {video.profiles?.avatar_url ? (
-                  <img src={video.profiles.avatar_url} alt={creatorName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img loading="lazy" decoding="async" src={video.profiles.avatar_url} alt={creatorName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : null}
               </span>
               <span className="collab-chip-name">{creatorName}</span>
@@ -1234,7 +1252,7 @@ function WatchPageInner() {
               <Link key={c.id} href={`/channel/${c.id}`} className="collab-chip">
                 <span className="profile-avatar-small" style={{ width: 26, height: 26 }}>
                   {c.avatar_url ? (
-                    <img src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img loading="lazy" decoding="async" src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : null}
                 </span>
                 <span className="collab-chip-name">{c.username}</span>
@@ -1341,7 +1359,7 @@ function WatchPageInner() {
           <div className="creator-row">
             <div className="creator-avatar" style={{ overflow: 'hidden' }}>
               {video.profiles?.avatar_url ? (
-                <img src={video.profiles.avatar_url} alt={creatorName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img loading="lazy" decoding="async" src={video.profiles.avatar_url} alt={creatorName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : null}
             </div>
             <div>

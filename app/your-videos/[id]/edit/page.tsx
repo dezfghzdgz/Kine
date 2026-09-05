@@ -270,7 +270,7 @@ export default function EditVideoPage() {
       <div className="panel">
         <p className="panel-heading">{t('thumbnailImageLabel')}</p>
         {thumbnailUrl && (
-          <img src={thumbnailUrl} alt={t('thumbnailImageLabel')} style={{ width: '100%', borderRadius: 8, marginBottom: 10 }} />
+          <img loading="lazy" decoding="async" src={thumbnailUrl} alt={t('thumbnailImageLabel')} style={{ width: '100%', borderRadius: 8, marginBottom: 10 }} />
         )}
         <input type="file" accept="image/*" onChange={(e) => setNewThumbnailFile(e.target.files?.[0] ?? null)} />
       </div>
@@ -322,7 +322,7 @@ export default function EditVideoPage() {
             {collaborators.map((c) => (
               <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span className="profile-avatar-small" style={{ width: 26, height: 26, overflow: 'hidden' }}>
-                  {c.avatar_url ? <img src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                  {c.avatar_url ? <img loading="lazy" decoding="async" src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
                 </span>
                 <span style={{ fontSize: 13, flex: 1 }}>
                   {c.username}
@@ -367,7 +367,7 @@ export default function EditVideoPage() {
                 }}
               >
                 <span className="profile-avatar-small" style={{ width: 22, height: 22, overflow: 'hidden', flexShrink: 0 }}>
-                  {r.avatar_url ? <img src={r.avatar_url} alt={r.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                  {r.avatar_url ? <img loading="lazy" decoding="async" src={r.avatar_url} alt={r.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
                 </span>
                 <span style={{ fontSize: 13, color: 'var(--text)' }}>{r.username}</span>
               </button>

@@ -3,6 +3,7 @@ import Script from 'next/script';
 import { Inter } from 'next/font/google';
 import AppShellChrome from '@/components/AppShellChrome';
 import ErrorReporter from '@/components/ErrorReporter';
+import TvMode from '@/components/TvMode';
 import { LanguageProvider } from '@/lib/i18n';
 import { MobileNavProvider } from '@/lib/mobileNavContext';
 import { MusicPlayerProvider } from '@/lib/musicPlayer';
@@ -99,6 +100,8 @@ export default function RootLayout({
                 {/* Hlášení chyb z prohlížeče na /admin/errors - viz
                     lib/errorReporter.ts. Nic nevykresluje. */}
                 <ErrorReporter />
+                {/* Režim televize: zvětšení a ovládání šipkami (lib/tvMode.ts). */}
+                <TvMode />
                 <AppShellChrome>{children}</AppShellChrome>
               </UploadProvider>
             </MusicPlayerProvider>

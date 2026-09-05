@@ -227,7 +227,7 @@ function SparksPageInner() {
             <div className="creator-row">
               <div className="creator-avatar" style={{ overflow: 'hidden' }}>
                 {videos[activeIndex].profiles?.avatar_url ? (
-                  <img
+                  <img loading="lazy" decoding="async"
                     src={videos[activeIndex].profiles.avatar_url}
                     alt=""
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}

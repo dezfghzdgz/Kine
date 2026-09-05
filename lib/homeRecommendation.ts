@@ -66,6 +66,45 @@ export function scoreVideo(
   return recencyScore + popularityScore + subscriptionBonus + categoryBonus + hashtagBonus + watchedPenalty + jitter;
 }
 
+/**
+ * Proč se video nabízí - jedním slovem, pro popisek na kartě.
+ *
+ * YouTube doporučuje z černé skříňky. Kine řekne důvod: "odebíráš",
+ * "podle toho, co sleduješ", "nové", "oblíbené". Vrací klíč překladu,
+ * nebo null, když žádný důvod za zmínku nestojí - prázdné karty jsou
+ * lepší než vymyšlený důvod.
+ *
+ * Bere se nejsilnější složka skóre ze scoreVideo (bez náhody a bez
+ * penalizace za zhlédnuté), takže popisek říká pravdu o tom, proč je
+ * video tak vysoko.
+ */
+export type RecommendReason = 'reasonSubscribed' | 'reasonInterests' | 'reasonHashtags' | 'reasonNew' | 'reasonPopular';
+
+export function explainVideo(
+  video: any,
+  ctx: {
+    subscribedIds: Set<string>;
+    topCategories: Set<string>;
+    topHashtags: Set<string>;
+  },
+  now: number = Date.now()
+): RecommendReason | null {
+  if (video.owner_id && ctx.subscribedIds.has(video.owner_id)) return 'reasonSubscribed';
+
+  const category = video.category && ctx.topCategories.has(video.category) ? 20 : 0;
+  const hashtagMatches = (video.hashtags ?? []).filter((h: string) => ctx.topHashtags.has(h)).length;
+  const hashtags = Math.min(hashtagMatches * 6, 18);
+  if (category > 0 && category >= hashtags) return 'reasonInterests';
+  if (hashtags > 0) return 'reasonHashtags';
+
+  const ageDays = (now - new Date(video.created_at).getTime()) / (1000 * 60 * 60 * 24);
+  if (Number.isFinite(ageDays) && ageDays >= 0 && ageDays < 3) return 'reasonNew';
+
+  if ((video.views ?? 0) >= 1000) return 'reasonPopular';
+
+  return null;
+}
+
 export function buildBlocks(longVideos: any[], sparksVideos: any[], preference: 'short' | 'long'): Block[] {
   // Střídání dlouhých videí a Sparks. Dřív tu byly dvě dávky dlouhých za
   // sebou - jenže od chvíle, co má dávka dvanáct videí místo čtyř, by

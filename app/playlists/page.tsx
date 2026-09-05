@@ -163,7 +163,7 @@ function PlaylistsPageInner() {
                   }}
                 >
                   {p.thumbnail_url ? (
-                    <img src={p.thumbnail_url} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img loading="lazy" decoding="async" src={p.thumbnail_url} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : null}
                   <span style={{
                     color: '#fff', fontSize: 13, fontWeight: 600, textShadow: '0 1px 3px rgba(0,0,0,0.6)',

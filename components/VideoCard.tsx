@@ -23,6 +23,7 @@ function VideoCard({
   isSparks,
   progressPercent,
   formatDuration,
+  reason,
   hideCreator,
 }: {
   video: any;
@@ -30,6 +31,8 @@ function VideoCard({
   isSparks?: boolean;
   progressPercent?: number;
   formatDuration?: (seconds: number) => string;
+  /** Proč se video nabízí - krátký popisek pod názvem (lib/homeRecommendation.ts). */
+  reason?: string | null;
   hideCreator?: boolean;
 }) {
   const { t } = useLanguage();
@@ -190,6 +193,7 @@ function VideoCard({
             {!hideCreator && <>{video.profiles?.username ?? t('unknownCreator')} · </>}
             {video.views} {t('views')}
           </p>
+          {reason && <p className="video-card-reason">{reason}</p>}
         </Link>
 
         <VideoCardMenu

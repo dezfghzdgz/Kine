@@ -4122,3 +4122,64 @@ a,
     scroll-padding: 0 16px;
   }
 }
+
+/* Proč se video nabízí - jedna tichá řádka pod názvem karty (Home). */
+.video-card-reason {
+  margin: 2px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Televize (lib/tvMode.ts, lib/spatialNav.ts) ----------
+   Divák sedí tři metry od obrazovky a drží ovladač. Všechno větší, výběr
+   výrazně vidět, nic se neschovává "po najetí myší". Zapíná se samo na
+   Smart TV, ručně v nabídce profilu, nebo adresou ?tv=1 (na zkoušku). */
+
+html[data-tv="on"] {
+  /* Jedno číslo, které zvětší celou appku; písmo je v px na 85 místech,
+     takže přes proměnné by to nešlo. 1.35 při 1080p dává 10-foot UI. */
+  zoom: 1.35;
+}
+
+/* Vybraný prvek musí být vidět z gauče. */
+html[data-tv="on"] :focus-visible {
+  outline: 4px solid var(--brand);
+  outline-offset: 3px;
+}
+
+html[data-tv="on"] .video-card:focus-within {
+  transform: translateY(-2px) scale(1.03);
+  transition: transform var(--dur-2) var(--ease);
+}
+
+html[data-tv="on"] .video-card:focus-within .video-thumb {
+  box-shadow: 0 0 0 4px var(--brand);
+}
+
+html[data-tv="on"] .player-wrap:focus-visible {
+  outline: 4px solid var(--brand);
+  outline-offset: -4px;
+}
+
+/* Co se ukazuje jen po najetí myší, je na televizi vidět vždy. */
+html[data-tv="on"] .video-card-menu-btn {
+  opacity: 1;
+}
+
+/* 4K monitor s myší (ne televize): 100 % zvětšení nechává text drobný,
+   mírné přiblížení. Skutečná televize tuhle šířku většinou nehlásí -
+   ta má režim televize výš. */
+@media (min-width: 2400px) {
+  html:not([data-tv="on"]) {
+    zoom: 1.2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-tv="on"] .video-card:focus-within {
+    transition: none;
+  }
+}

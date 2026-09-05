@@ -379,7 +379,7 @@ export default function CommentSection({
                   </p>
                   <p className="comment-text">{renderCommentContent(c.content, onSeek)}</p>
                   {c.image_url && (
-                    <img src={c.image_url} alt="" style={{ maxWidth: 200, borderRadius: 8, marginTop: 6, display: 'block' }} />
+                    <img loading="lazy" decoding="async" src={c.image_url} alt="" style={{ maxWidth: 200, borderRadius: 8, marginTop: 6, display: 'block' }} />
                   )}
                   <div className="comment-actions">
                     <span

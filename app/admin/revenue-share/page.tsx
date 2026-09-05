@@ -211,7 +211,7 @@ export default function AdminRevenueSharePage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                   <span className="profile-avatar-small" style={{ width: 32, height: 32, overflow: 'hidden' }}>
                     {c.avatar_url ? (
-                      <img src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img loading="lazy" decoding="async" src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : null}
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>

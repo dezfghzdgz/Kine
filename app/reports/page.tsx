@@ -238,7 +238,7 @@ export default function ModerationReportsPage() {
                 <div key={g.key} className={g.openCount === 0 ? 'report-group report-group-done' : 'report-group'}>
                   <div className="report-group-thumb">
                     {g.video?.thumbnail_url ? (
-                      // Náhled schválně obyčejným <img>: je jich na stránce
+                      // Náhled schválně obyčejným <img loading="lazy" decoding="async">: je jich na stránce
                       // hodně a všechny jsou malé.
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={g.video.thumbnail_url} alt="" loading="lazy" />

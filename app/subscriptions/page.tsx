@@ -114,7 +114,7 @@ function SubscriptionsPageInner() {
             style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0, width: 84 }}
           >
             <span className="creator-avatar" style={{ width: 64, height: 64, overflow: 'hidden' }}>
-              {c.avatar_url ? <img src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+              {c.avatar_url ? <img loading="lazy" decoding="async" src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
             </span>
             <span
               style={{
@@ -156,7 +156,7 @@ function SubscriptionsPageInner() {
                   {author && (
                     <Link href={`/channel/${author.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                       <span className="profile-avatar-small" style={{ width: 24, height: 24, overflow: 'hidden' }}>
-                        {author.avatar_url ? <img src={author.avatar_url} alt={author.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                        {author.avatar_url ? <img loading="lazy" decoding="async" src={author.avatar_url} alt={author.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
                       </span>
                       <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
                         {author.display_name ?? author.username}

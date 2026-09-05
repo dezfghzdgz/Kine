@@ -251,7 +251,7 @@ function ChannelPageInner() {
         }}
       >
         {profile.banner_url && (
-          <img src={profile.banner_url} alt="banner" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img loading="lazy" decoding="async" src={profile.banner_url} alt="banner" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         )}
       </div>
 
@@ -261,7 +261,7 @@ function ChannelPageInner() {
           style={{ width: 96, height: 96, overflow: 'hidden', border: '4px solid var(--bg)', flexShrink: 0 }}
         >
           {profile.avatar_url ? (
-            <img src={profile.avatar_url} alt={profile.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img loading="lazy" decoding="async" src={profile.avatar_url} alt={profile.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : null}
         </div>
 
@@ -459,7 +459,7 @@ function ChannelPageInner() {
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.thumbnail_url ? undefined : (p.color ?? '#3a3a40'), overflow: 'hidden' }}
                   >
                     {p.thumbnail_url ? (
-                      <img src={p.thumbnail_url} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img loading="lazy" decoding="async" src={p.thumbnail_url} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
                       <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: 600 }}>
                         {p.playlist_videos?.length ?? 0} videí

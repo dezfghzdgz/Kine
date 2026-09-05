@@ -367,7 +367,7 @@ export default function SettingsPage() {
             }}
           >
             {bannerUrl ? (
-              <img src={bannerUrl} alt="banner" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img loading="lazy" decoding="async" src={bannerUrl} alt="banner" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : null}
           </div>
           <label htmlFor="banner-upload" style={{ cursor: 'pointer' }}>
@@ -393,7 +393,7 @@ export default function SettingsPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
             <div className="creator-avatar" style={{ width: 72, height: 72, overflow: 'hidden' }}>
               {avatarUrl ? (
-                <img src={avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img loading="lazy" decoding="async" src={avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : null}
             </div>
             <label htmlFor="avatar-upload" style={{ cursor: 'pointer' }}>

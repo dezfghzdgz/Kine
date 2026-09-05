@@ -107,7 +107,7 @@ export default function PostComments({ postId, onCommentAdded }: { postId: strin
             <p className="comment-author">{c.profiles?.username ?? t('unknownUserFallback')}</p>
             {c.content && <p className="comment-text">{renderWithMentions(c.content)}</p>}
             {c.image_url && (
-              <img src={c.image_url} alt="" style={{ maxWidth: 200, borderRadius: 8, marginTop: 4 }} />
+              <img loading="lazy" decoding="async" src={c.image_url} alt="" style={{ maxWidth: 200, borderRadius: 8, marginTop: 4 }} />
             )}
           </div>
         </div>

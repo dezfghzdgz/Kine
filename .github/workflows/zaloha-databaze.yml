@@ -1,0 +1,80 @@
+# Týdenní záloha databáze Kine.
+#
+# PROČ
+#   Supabase zdarma nemá zálohy "zpátky v čase". Jeden překlep v SQL editoru
+#   (update bez where) a data jsou pryč bez možnosti návratu. Tohle jednou
+#   týdně stáhne celou databázi (schéma i data) a uloží ji jako artefakt
+#   tohohle repozitáře - 90 dní zpátky, tedy ~13 záloh.
+#
+# NASTAVENÍ (jednou)
+#   1. Supabase -> Project Settings -> Database -> Connection string
+#      -> záložka "Session pooler" (funguje i z IPv4 sítě GitHubu)
+#      -> zkopíruj URI a doplň heslo databáze.
+#      Vypadá jako: postgresql://postgres.xxxx:HESLO@aws-0-eu-central-1.pooler.supabase.com:5432/postgres
+#   2. GitHub -> repo Kine -> Settings -> Secrets and variables -> Actions
+#      -> New repository secret:  jméno SUPABASE_DB_URL, hodnota ta adresa.
+#   3. Záložka Actions -> "Záloha databáze" -> Run workflow (první spuštění
+#      ručně, ať víš, že to jde). Pak už jede každou neděli ve 3:15 UTC.
+#
+# OBNOVA (kdyby bylo potřeba)
+#   Stáhni artefakt (zaloha-YYYY-MM-DD.sql.gz), rozbal a:
+#     psql "$SUPABASE_DB_URL" -f zaloha-YYYY-MM-DD.sql
+#   Do PRÁZDNÉ databáze (nový projekt), ne přes běžící - jinak se
+#   pomíchají řádky. Nejdřív si to zkus na novém projektu, ne až v krizi.
+#
+# CO NENÍ V ZÁLOZE
+#   Uživatelé z auth schématu (hesla) - Supabase je drží mimo public schéma
+#   a pooler k nim nemá právo. Videa jsou na Cloudflare, ne v databázi.
+#   Záloha kryje: profily, videa (metadata), komentáře, playlisty,
+#   odběry, historii, hlášení, podíly - všechno, co appka sama vytváří.
+
+name: Záloha databáze
+
+on:
+  schedule:
+    - cron: '15 3 * * 0'   # každou neděli 3:15 UTC
+  workflow_dispatch:       # a kdykoliv ručně ze záložky Actions
+
+jobs:
+  zaloha:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Nainstalovat klienta Postgres
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Stáhnout databázi
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "Chybí secret SUPABASE_DB_URL - viz komentář v tomhle souboru."
+            exit 1
+          fi
+          DEN=$(date -u +%F)
+          echo "DEN=$DEN" >> "$GITHUB_ENV"
+          # --no-owner --no-privileges: role Supabase v cizím projektu neexistují,
+          # bez toho by obnova padala na GRANT/OWNER.
+          # --schema=public: jen naše tabulky; auth/storage spravuje Supabase.
+          pg_dump "$SUPABASE_DB_URL" \
+            --schema=public \
+            --no-owner --no-privileges \
+            --format=plain \
+            | gzip -9 > "zaloha-$DEN.sql.gz"
+          ls -la "zaloha-$DEN.sql.gz"
+          # Prázdná záloha = něco se pokazilo, i když pg_dump neskončil chybou.
+          if [ "$(stat -c %s "zaloha-$DEN.sql.gz")" -lt 1000 ]; then
+            echo "Záloha je podezřele malá."
+            exit 1
+          fi
+
+      - name: Uložit jako artefakt (90 dní)
+        uses: actions/upload-artifact@v4
+        with:
+          name: zaloha-${{ env.DEN }}
+          path: zaloha-${{ env.DEN }}.sql.gz
+          retention-days: 90
+          if-no-files-found: error
