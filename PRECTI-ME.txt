@@ -1,9 +1,9 @@
 KINE - volná ruka, 1. kolo
 ==========================
 
-40 souborů. Rozbal do kořene repa a přepiš.
+37 souborů. Rozbal do kořene repa a přepiš.
 Pak: node zkontroluj-soubory.mjs
-Pak: Supabase -> SQL Editor -> supabase-migration-zarizeni-chyby-jmena.sql
+Pak: Supabase -> SQL Editor -> supabase-migration-zarizeni-a-chyby.sql
      (jeden soubor, jednou; dá se pustit i opakovaně)
 
 Balíček obsahuje i všechno z předchozích dvou (kine-prava.zip,
@@ -56,22 +56,7 @@ CO JE NOVÉ
    jistý, jestli ho prohlížeč napojí na ovládání z naší stránky. Když se
    na zamčené obrazovce nic neukáže, napiš - je to známé riziko, ne pád.
 
-6) FILTR NADÁVEK VE JMÉNECH (lib/username.ts + SQL)
-   Jméno účtu s rasistickou nebo homofobní nadávkou nejde založit ani
-   přejmenovat, ani s číslicemi místo písmen (n1gg3r). Dvě úrovně: pár
-   výrazů nesmí být ani uvnitř slova, ostatní jen jako celé slovo, aby
-   prošlo "montenegro", "spicy_food", "raccoon_fan", "kike_lopez".
-   Kontrola je v prohlížeči (hezká hláška, 8 jazyků) i v databázi (anon
-   klíč je veřejný, formulář jde obejít). Migrace při spuštění sama ověří,
-   že databáze odpovídá na 46 případů stejně jako prohlížeč, a vypíše to.
-
-   Kdo už takové jméno má:
-     select id, username from profiles
-     where username is not null and username_contains_slur(username);
-   Přejmenování je v komentáři na konci migrace. Rozhodnutí je tvoje.
-
-   Tohle není omezení tvůrců - obsah nesahám. Je to jméno, které Kine
-   nese v adrese kanálu.
+6) (filtr jmen - na tvoje přání zatím ne, nic z něj v balíčku není)
 
 7) DROBNÉ ZNÁMÉ CHYBY
    - Počet odběratelů se zastavil na 1000 (databáze vrací nejvíc 1000
@@ -99,21 +84,17 @@ iPhone / iPad
 PC
   [ ] Sdílet -> "Odkaz zkopírován", jako dřív.
   [ ] /admin/errors po tom zkušebním throw ukáže řádek.
-  [ ] Registrace se jménem "n1gg3r" -> hláška "Tohle jméno nelze použít".
-      Se jménem "montenegro" -> projde.
 
 
 CO JSEM OVĚŘIL
 --------------
-- Typová kontrola celého projektu na TVÉM stromu (26a30e0) se všemi 40
+- Typová kontrola celého projektu na TVÉM stromu (26a30e0) se všemi 37
   soubory - stejný výsledek jako před změnou.
-- 11 testovacích sad, 94 kontrol, vše prošlo. Nové: sdílení (5), řádek
-  Pokračovat (6), zařízení (7), hlášení chyb (8), seskupení chyb (5),
-  filtr jmen (3).
-- Migrace na skutečném Postgresu: proběhla, proběhla i podruhé
-  (nic nerozbila), filtr v databázi odpovídá prohlížeči na všech 46
-  případech, spouštěč odmítl "nigga_king" a pustil "montenegro", omezení
-  hodnot zařízení odmítlo "toaster", tabulka chyb má RLS bez pravidel.
+- 10 testovacích sad, 91 kontrol, vše prošlo. Nové: sdílení (5), řádek
+  Pokračovat (6), zařízení (7), hlášení chyb (8), seskupení chyb (5).
+- Migrace na skutečném Postgresu: proběhla, proběhla i podruhé (nic
+  nerozbila), omezení hodnot zařízení odmítlo "toaster", tabulka chyb má
+  RLS bez pravidel.
 - Balíček rozbalený na čistou kopii tvého mainu: otisky sedí.
 
 Co ověřené NENÍ: telefon a iPad v ruce, a Media Session přes iframe.

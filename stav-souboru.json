@@ -49,7 +49,7 @@
     "lib/download.ts": "a4ae47c7a70eb687",
     "lib/errorGroups.ts": "9f19f6a8af6f8f5d",
     "lib/errorReporter.ts": "fc3ea4eaff0be031",
-    "lib/i18n.tsx": "520a38cb8562766a",
+    "lib/i18n.tsx": "7a49360a090ed180",
     "lib/loadAll.ts": "9e8bf8e0583fe969",
     "lib/markVideoReady.ts": "99b8a5ae91863706",
     "lib/musicPlayer.tsx": "703312cd17dbe6ef",
@@ -60,9 +60,7 @@
     "lib/tusUpload.ts": "3a669baba902e5c6",
     "lib/uploadManager.tsx": "f5e7ec7d7a118b73",
     "lib/useUserRole.ts": "13b30b5909d1a90e",
-    "lib/username.ts": "89082896568e9898",
-    "supabase-migration-username-rules.sql": "04625a218a7c5381",
-    "supabase-migration-zarizeni-chyby-jmena.sql": "32161b810a73e220",
+    "supabase-migration-zarizeni-a-chyby.sql": "644e951be2f0030b",
     "tests/continueWatching.test.mjs": "9a52841a9f5c13df",
     "tests/deviceClass.test.mjs": "ad16524bb9226d02",
     "tests/errorGroups.test.mjs": "2086bb98017445a9",
@@ -73,7 +71,6 @@
     "tests/prelozit.mjs": "c16589d510f32abf",
     "tests/share.test.mjs": "b88fae7198757b0d",
     "tests/tusUpload.test.mjs": "776dcf28d3a6187c",
-    "tests/useUserRole.test.mjs": "54e21293ffc68318",
-    "tests/username.test.mjs": "5ea8b5b2b78da042"
+    "tests/useUserRole.test.mjs": "54e21293ffc68318"
   }
 }
