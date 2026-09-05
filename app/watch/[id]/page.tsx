@@ -33,6 +33,7 @@ import { useMusicCommands } from '@/lib/musicPlayer';
 import MusicStage from '@/components/MusicStage';
 import MusicVideoSurface from '@/components/MusicVideoSurface';
 import { startPlayback as beginPlayback } from '@/lib/playerStart';
+import { decideOrientationFullscreen } from '@/lib/playerControls';
 
 const MUSIC_VIEW_KEY = 'kine-music-view';
 
@@ -433,6 +434,46 @@ function WatchPageInner() {
       document.removeEventListener('fullscreenchange', syncFullscreenState);
       document.removeEventListener('webkitfullscreenchange', syncFullscreenState);
     };
+  }, []);
+
+  /**
+   * Otočení telefonu na šířku = celá obrazovka, zpátky na výšku = zpátky
+   * do stránky. Jako YouTube.
+   *
+   * Jen telefon (dotyk + nízká obrazovka na šířku); iPad na šířku je
+   * normální rozložení. Prohlížeč skutečnou celou obrazovku bez klepnutí
+   * nepovolí, takže tady vždycky skončí náhradní CSS varianta - přes celý
+   * viditelný displej, což je přesně to, co člověk otočením chtěl.
+   * Rozhodování je v lib/playerControls.ts (decideOrientationFullscreen).
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const phoneLandscape = window.matchMedia('(orientation: landscape) and (max-height: 500px) and (pointer: coarse)');
+    let autoEntered = false;
+
+    function onOrientation() {
+      // U hudby stránka vlastní přehrávač nemá (rámeček se nevykresluje).
+      if (!wrapRef.current) return;
+
+      const doc = document as any;
+      const isFullscreen = !!(doc.fullscreenElement ?? doc.webkitFullscreenElement) || cssFullscreenRef.current;
+      const decision = decideOrientationFullscreen({
+        landscapePhone: phoneLandscape.matches,
+        isFullscreen,
+        autoEntered,
+      });
+
+      if (decision === 'enter') {
+        setFallbackFullscreen(true);
+        autoEntered = true;
+      } else if (decision === 'exit') {
+        setFallbackFullscreen(false);
+        autoEntered = false;
+      }
+    }
+
+    phoneLandscape.addEventListener('change', onOrientation);
+    return () => phoneLandscape.removeEventListener('change', onOrientation);
   }, []);
 
   /**

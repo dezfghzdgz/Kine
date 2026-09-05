@@ -3,15 +3,33 @@
 import { useEffect, useRef, useState } from 'react';
 import { SpeakerIcon, MaximizeIcon, MinimizeIcon } from './ReactionIcons';
 import { useLanguage } from '@/lib/i18n';
+import { PlayIcon, PauseIcon } from './MusicIcons';
+import { AUTO_HIDE_MS, clampSeek, decideTap, formatTime, tapSide, type Tap, type TapSide } from '@/lib/playerControls';
 
 type Chapter = { time: number; title: string };
 
-function formatTime(seconds: number) {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
+/**
+ * Ovládací lišta přehrávače (jméno má z dob, kdy ukazovala jen kapitoly).
+ *
+ * Posuvník s kapitolami, přehrát/pauza, čas, zvuk, nabídka ⋮ (titulky,
+ * časovač spánku, rychlost) a celá obrazovka. Myš ji vidí při pohybu,
+ * po třech vteřinách klidu zmizí, dokud video hraje.
+ *
+ * DOTYK (telefon, iPad, televize bez klávesnice)
+ *
+ * Prst není myš a lišta to dlouho nerozlišovala:
+ *  - klepnutí na video ukázalo ovládání a ZÁROVEŇ zastavilo přehrávání,
+ *    takže kdo se chtěl jen podívat, kde je, video tím pauznul;
+ *  - tlačítka měla 16 px, prst potřebuje aspoň 44;
+ *  - bez délky videa v databázi se lišta nevykreslila vůbec - a to
+ *    vypadalo přesně jako "žádné ovládání".
+ *
+ * Teď: klepnutí prstem lištu jen ukáže/schová, přehrávání má velké
+ * tlačítko uprostřed, dvojité klepnutí na kraj posune o 10 s jako na
+ * YouTube, cíle jsou 44 px a délka se vezme z přehrávače, když v databázi
+ * chybí. Co se dá spočítat bez prohlížeče (kam se klepnulo, dvojité
+ * klepnutí, čas), je v lib/playerControls.ts a má test.
+ */
 export default function ChapterTimeline({
   chapters,
   duration,
@@ -33,6 +51,14 @@ export default function ChapterTimeline({
 }) {
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(true);
+  // Délka podle přehrávače - záloha pro videa, která ji nemají v databázi.
+  const [playerDuration, setPlayerDuration] = useState(0);
+  // Dotyková podoba: velké tlačítko uprostřed, větší cíle. Zapne se podle
+  // zařízení hned a natrvalo při prvním klepnutí prstem (tablet s myší).
+  const [touchUi, setTouchUi] = useState(false);
+  const [ripple, setRipple] = useState<{ side: TapSide; label: string; nonce: number } | null>(null);
+  const lastTapRef = useRef<Tap | null>(null);
+  const surfaceDownRef = useRef<number | null>(null);
   const [settingsView, setSettingsView] = useState<'main' | 'speed' | 'sleep'>('main');
   const [sleepMinutes, setSleepMinutes] = useState<number | null>(null);
   const sleepTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -81,6 +107,8 @@ export default function ChapterTimeline({
 
   const trackRef = useRef<HTMLDivElement>(null);
   const volumeTrackRef = useRef<HTMLDivElement>(null);
+  // Délka pro handlery tažení, které žijí v efektu a viděly by starou hodnotu.
+  const totalRef = useRef(0);
   const wrapRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draggingRef = useRef<'seek' | 'volume' | null>(null);
@@ -93,9 +121,17 @@ export default function ChapterTimeline({
       if (typeof player.paused === 'boolean') setPaused(player.paused);
       if (typeof player.muted === 'boolean') setMuted(player.muted);
       if (typeof player.volume === 'number' && draggingRef.current !== 'volume') setVolume(player.volume);
+      if (typeof player.duration === 'number' && Number.isFinite(player.duration) && player.duration > 0) {
+        setPlayerDuration(player.duration);
+      }
     }, 400);
     return () => clearInterval(interval);
   }, [player]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    if (window.matchMedia('(hover: none) and (pointer: coarse)').matches) setTouchUi(true);
+  }, []);
 
   useEffect(() => {
     function getClientX(e: MouseEvent | TouchEvent): number {
@@ -107,7 +143,7 @@ export default function ChapterTimeline({
       if (draggingRef.current === 'seek' && trackRef.current) {
         const rect = trackRef.current.getBoundingClientRect();
         const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
-        setCurrent(ratio * duration);
+        setCurrent(ratio * totalRef.current);
       } else if (draggingRef.current === 'volume' && volumeTrackRef.current) {
         const rect = volumeTrackRef.current.getBoundingClientRect();
         const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
@@ -121,7 +157,7 @@ export default function ChapterTimeline({
       if (draggingRef.current === 'seek' && trackRef.current && player) {
         const rect = trackRef.current.getBoundingClientRect();
         const ratio = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
-        player.currentTime = ratio * duration;
+        player.currentTime = ratio * totalRef.current;
         player.play();
       }
       draggingRef.current = null;
@@ -138,7 +174,7 @@ export default function ChapterTimeline({
       window.removeEventListener('touchmove', handleMove);
       window.removeEventListener('touchend', handleUp);
     };
-  }, [duration, player]);
+  }, [player]);
 
   function showControlsTemporarily() {
     setControlsVisible(true);
@@ -147,7 +183,7 @@ export default function ChapterTimeline({
       // Na celou obrazovku se ovládání schovává úplně stejně jako v okně -
       // dřív tam zůstávalo natrvalo viset přes video.
       if (player && !player.paused) setControlsVisible(false);
-    }, 3000);
+    }, AUTO_HIDE_MS);
   }
 
   useEffect(() => {
@@ -156,10 +192,14 @@ export default function ChapterTimeline({
     };
   }, []);
 
-  if (!duration) return null;
+  // Délka: z databáze, a když tam není, tak od přehrávače. Dřív se bez ní
+  // lišta nevykreslila vůbec - u starších videí bez uložené délky pak
+  // nešlo video ani pozastavit.
+  const total = duration > 0 ? duration : playerDuration;
+  totalRef.current = total;
 
   const sorted = [...chapters].sort((a, b) => a.time - b.time);
-  const progressPercent = Math.min((current / duration) * 100, 100);
+  const progressPercent = total > 0 ? Math.min((current / total) * 100, 100) : 0;
 
   function segmentTitleAt(seconds: number): string | null {
     if (sorted.length === 0) return null;
@@ -175,7 +215,7 @@ export default function ChapterTimeline({
     e.stopPropagation();
     const rect = trackRef.current.getBoundingClientRect();
     const ratio = (e.clientX - rect.left) / rect.width;
-    const seconds = Math.max(0, Math.min(ratio * duration, duration));
+    const seconds = clampSeek(ratio * total, total);
     player.currentTime = seconds;
     player.play();
   }
@@ -184,7 +224,7 @@ export default function ChapterTimeline({
     if (!trackRef.current) return;
     const rect = trackRef.current.getBoundingClientRect();
     const ratio = (e.clientX - rect.left) / rect.width;
-    const seconds = Math.max(0, Math.min(ratio * duration, duration));
+    const seconds = clampSeek(ratio * total, total);
     setHoverX(e.clientX - rect.left);
     setHoverTitle(segmentTitleAt(seconds));
   }
@@ -193,6 +233,73 @@ export default function ChapterTimeline({
     if (!player) return;
     paused ? player.play() : player.pause();
   }
+
+  /**
+   * Klepnutí do videa.
+   *
+   * Myš: ukázat ovládání a přepnout přehrávání - jako dřív.
+   *
+   * Prst: klepnutí lištu jen ukáže, nebo schová, když už je vidět a video
+   * hraje. Přehrávání má vlastní velké tlačítko uprostřed. Dvojité klepnutí
+   * na levý/pravý kraj posune o 10 s (lib/playerControls.ts rozhoduje,
+   * co je dvojité a která strana).
+   */
+  function handleSurfaceTap(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
+    // Jen klepnutí, které na vrstvě i začalo. Puštění myši nad videem po
+    // tažení posuvníku (hlasitost, čas) není kliknutí do videa - dřív by
+    // každé takové puštění zároveň zastavilo přehrávání.
+    const startedHere = surfaceDownRef.current === e.pointerId;
+    surfaceDownRef.current = null;
+    if (!startedHere || draggingRef.current) return;
+
+    const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
+
+    if (!isTouch) {
+      showControlsTemporarily();
+      togglePlay();
+      return;
+    }
+
+    setTouchUi(true);
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const side = tapSide(e.clientX - rect.left, rect.width);
+    const now = Date.now();
+    const decision = decideTap(lastTapRef.current, { time: now, side });
+    lastTapRef.current = decision.kind === 'double' ? null : { time: now, side };
+
+    if (decision.kind === 'double') {
+      if (player) {
+        player.currentTime = clampSeek((player.currentTime ?? 0) + decision.seekBy, total);
+        setCurrent(player.currentTime ?? 0);
+      }
+      setRipple({
+        side: decision.side,
+        label: decision.seekBy > 0 ? `+${decision.seekBy} s` : `${decision.seekBy} s`,
+        nonce: now,
+      });
+      showControlsTemporarily();
+      return;
+    }
+
+    if (controlsVisible && !paused) {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+      setControlsVisible(false);
+    } else {
+      showControlsTemporarily();
+    }
+  }
+
+  // Tlačítka lišty: na dotyku aspoň 44 px, myši stačí 36. Ikony zůstávají
+  // stejné, roste jen plocha, na kterou se dá trefit.
+  const hit = touchUi ? 44 : 36;
+  const iconBtn: React.CSSProperties = {
+    background: 'none', border: 'none', color: '#fff', padding: 0, cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    minWidth: hit, minHeight: hit, borderRadius: 8, fontSize: 16,
+    WebkitTapHighlightColor: 'transparent',
+  };
 
   function handleVolumeSet(ratio: number) {
     if (!player) return;
@@ -216,12 +323,41 @@ export default function ChapterTimeline({
       )}
 
       {/* Neviditelná vrstva přes celé video - zachytává pohyb myši (kvůli
-          automatickému schování ovládání) a klik (přehrát/pauza). */}
+          automatickému schování ovládání) a klepnutí. Co klepnutí udělá,
+          rozhoduje handleSurfaceTap podle toho, jestli je od myši nebo od
+          prstu. Pointer události místo onClick proto, že jen ony říkají,
+          čím se klepnulo. */}
       <div
         onMouseMove={showControlsTemporarily}
-        onClick={() => { showControlsTemporarily(); togglePlay(); }}
-        style={{ position: 'absolute', inset: 0, zIndex: 3, cursor: 'pointer' }}
+        onPointerDown={(e) => { if (e.button === 0) surfaceDownRef.current = e.pointerId; }}
+        onPointerUp={handleSurfaceTap}
+        style={{
+          position: 'absolute', inset: 0, zIndex: 3, cursor: 'pointer',
+          // Dvojité klepnutí nesmí přiblížit stránku ani vybrat text.
+          touchAction: 'manipulation', userSelect: 'none', WebkitUserSelect: 'none',
+          WebkitTapHighlightColor: 'transparent',
+        }}
       />
+
+      {/* Odezva na dvojité klepnutí na kraj: "+10 s" / "-10 s" se rozplyne. */}
+      {ripple && (
+        <div key={ripple.nonce} className={`player-tap-ripple player-tap-ripple-${ripple.side}`} aria-hidden="true">
+          {ripple.label}
+        </div>
+      )}
+
+      {/* Velké přehrát/pauza uprostřed - jen na dotyku. Myš přepíná
+          kliknutím do videa, tam by tlačítko jen překáželo. */}
+      {touchUi && (
+        <button
+          type="button"
+          className={`player-center-toggle ${controlsVisible ? '' : 'player-center-toggle-hidden'}`}
+          aria-label={paused ? t('playerPlay') : t('playerPause')}
+          onClick={(e) => { e.stopPropagation(); togglePlay(); showControlsTemporarily(); }}
+        >
+          {paused ? <PlayIcon size={34} /> : <PauseIcon size={34} />}
+        </button>
+      )}
 
       <div
         ref={wrapRef}
@@ -229,7 +365,10 @@ export default function ChapterTimeline({
         style={{
           position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 5,
           background: 'linear-gradient(to top, rgba(0,0,0,0.75), rgba(0,0,0,0))',
-          padding: '20px 14px 10px',
+          // Na iPhonu v celé obrazovce sedí dole ukazatel domů a po stranách
+          // výřez - lišta se jim vyhne. Bez viewport-fit=cover v layoutu jsou
+          // ty hodnoty nula (viz app/layout.tsx).
+          padding: '20px calc(14px + env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) calc(14px + env(safe-area-inset-left, 0px))',
           opacity: controlsVisible ? 1 : 0,
           pointerEvents: controlsVisible ? 'auto' : 'none',
           transition: 'opacity 0.25s ease',
@@ -247,8 +386,12 @@ export default function ChapterTimeline({
           </div>
         )}
 
+        {/* Obal posuvníku dává prstu vyšší plochu (dráha je na pohled 6 px,
+            trefit se dá do 22 px, na dotyku 30 px). Výpočty berou rozměr
+            samotné dráhy (trackRef), takže se nic neposune. Bez známé délky
+            posuvník nemá co ukazovat, ostatní tlačítka ale zůstávají. */}
+        {total > 0 && (
         <div
-          ref={trackRef}
           onMouseDown={(e) => { draggingRef.current = 'seek'; setIsDragging(true); handleTrackClick(e); }}
           onTouchStart={(e) => {
             draggingRef.current = 'seek';
@@ -256,13 +399,20 @@ export default function ChapterTimeline({
             if (!trackRef.current || !player) return;
             const rect = trackRef.current.getBoundingClientRect();
             const ratio = (e.touches[0].clientX - rect.left) / rect.width;
-            player.currentTime = Math.max(0, Math.min(ratio * duration, duration));
+            player.currentTime = clampSeek(ratio * total, total);
           }}
           onMouseMove={handleTrackHover}
           onMouseLeave={() => setHoverTitle(null)}
           style={{
+            padding: touchUi ? '12px 0' : '8px 0', margin: touchUi ? '-12px 0 -2px' : '-8px 0 2px',
+            cursor: 'pointer', touchAction: 'none',
+          }}
+        >
+        <div
+          ref={trackRef}
+          style={{
             position: 'relative', height: 6, background: 'rgba(255,255,255,0.25)',
-            borderRadius: 999, cursor: 'pointer', marginBottom: 10,
+            borderRadius: 999, pointerEvents: 'none',
           }}
         >
           <div
@@ -282,23 +432,30 @@ export default function ChapterTimeline({
             <div
               key={i}
               style={{
-                position: 'absolute', top: -4, left: `${(ch.time / duration) * 100}%`,
+                position: 'absolute', top: -4, left: `${(ch.time / total) * 100}%`,
                 width: 3, height: 14, background: 'rgba(10,10,11,0.9)', transform: 'translateX(-1.5px)',
                 borderRadius: 2, pointerEvents: 'none',
               }}
             />
           ))}
         </div>
+        </div>
+        )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', color: '#fff' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', color: '#fff', marginTop: total > 0 ? 8 : 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-              style={{ background: 'none', border: 'none', color: '#fff', padding: 0, cursor: 'pointer', fontSize: 16 }}
+              aria-label={paused ? t('playerPlay') : t('playerPause')}
+              title={paused ? t('playerPlay') : t('playerPause')}
+              style={iconBtn}
             >
-              {paused ? '▶' : '❚❚'}
+              {paused ? <PlayIcon size={20} /> : <PauseIcon size={20} />}
             </button>
-            <span style={{ fontSize: 12, opacity: 0.85 }}>{formatTime(current)} / {formatTime(duration)}</span>
+            <span style={{ fontSize: 12, opacity: 0.85, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+              {total > 0 ? `${formatTime(current)} / ${formatTime(total)}` : formatTime(current)}
+            </span>
           </div>
 
           <div
@@ -307,8 +464,11 @@ export default function ChapterTimeline({
             onMouseLeave={() => setVolumeHover(false)}
           >
             <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); if (player) player.muted = !muted; }}
-              style={{ background: 'none', border: 'none', color: '#fff', padding: 0, cursor: 'pointer', display: 'flex' }}
+              aria-label={muted ? t('playerUnmute') : t('playerMute')}
+              title={muted ? t('playerUnmute') : t('playerMute')}
+              style={iconBtn}
             >
               <SpeakerIcon muted={muted} volume={volume} size={18} />
             </button>
@@ -338,10 +498,13 @@ export default function ChapterTimeline({
             </div>
           </div>
 
-          <div ref={settingsRef} style={{ justifySelf: 'end', display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
+          <div ref={settingsRef} style={{ justifySelf: 'end', display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
             <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); setSettingsOpen((v) => { if (v) setSettingsView('main'); return !v; }); }}
-              style={{ background: 'none', border: 'none', color: '#fff', padding: 0, cursor: 'pointer', fontSize: 16 }}
+              aria-haspopup="menu"
+              aria-expanded={settingsOpen}
+              style={{ ...iconBtn, fontSize: 18 }}
             >
               ⋮
             </button>
@@ -448,11 +611,12 @@ export default function ChapterTimeline({
 
             <button
               onClick={(e) => { e.stopPropagation(); onToggleMaximize(); }}
+              type="button"
               title={isMaximized ? t('playerFullscreenOff') : t('playerFullscreenOn')}
               aria-label={isMaximized ? t('playerFullscreenOff') : t('playerFullscreenOn')}
-              style={{ background: 'none', border: 'none', color: '#fff', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+              style={iconBtn}
             >
-              {isMaximized ? <MinimizeIcon size={16} /> : <MaximizeIcon size={16} />}
+              {isMaximized ? <MinimizeIcon size={18} /> : <MaximizeIcon size={18} />}
             </button>
           </div>
         </div>

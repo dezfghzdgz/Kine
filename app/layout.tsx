@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import { Inter } from 'next/font/google';
 import AppShellChrome from '@/components/AppShellChrome';
@@ -31,6 +31,27 @@ const inter = Inter({
   display: 'swap',
   variable: '--font-inter',
 });
+
+/**
+ * Viewport.
+ *
+ * viewportFit: 'cover' je ten jeden řádek, bez kterého na iPhonu s výřezem
+ * nefunguje nic z env(safe-area-inset-*) v globals.css - spodní lišta,
+ * Sparks, hlášky i ovládání přehrávače s ním počítají už dlouho, ale bez
+ * tohohle byly ty hodnoty vždy nula. Appka pak sahala pod ukazatel domů.
+ *
+ * themeColor obarví lištu prohlížeče na mobilu do barvy pozadí appky,
+ * aby nad Kine nesvítil bílý nebo cizí pruh.
+ */
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f5f5f7' },
+    { media: '(prefers-color-scheme: dark)', color: '#050506' },
+  ],
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
