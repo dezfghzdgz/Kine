@@ -76,8 +76,8 @@ export default function StatChartModal({
       onClick={onClose}
     >
       <div
-        className="panel"
-        style={{ width: '100%', maxWidth: 640, background: 'var(--panel)' }}
+        className="panel modal-glass"
+        style={{ width: '100%', maxWidth: 640 }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>

@@ -62,7 +62,7 @@ export default function ReportModal({
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
       onClick={onClose}
     >
-      <div className="panel" style={{ width: '100%', maxWidth: 420, background: 'var(--panel)' }} onClick={(e) => e.stopPropagation()}>
+      <div className="panel modal-glass" style={{ width: '100%', maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <p className="panel-heading" style={{ margin: 0 }}>
             {commentId ? t('reportComment') : t('reportVideo')}

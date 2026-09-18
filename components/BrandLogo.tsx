@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { supabase } from '@/lib/supabaseClient';
+import { applyBrandToDocument } from '@/lib/brandColor';
 
 const PRESET_COLORS = ['#00c9a7', '#4f8ef7', '#f7484f', '#f7b84f', '#a34ff7', '#f74fd6', '#4ff77c', '#ffffff'];
 const STORAGE_KEY = 'kine-brand-color';
@@ -15,7 +16,7 @@ const STORAGE_KEY = 'kine-brand-color';
 export function applySavedBrandColor() {
   if (typeof window === 'undefined') return;
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved) document.documentElement.style.setProperty('--brand', saved);
+  if (saved) applyBrandToDocument(saved);
 }
 
 async function applySavedBrandColorFromAccount() {
@@ -29,7 +30,7 @@ async function applySavedBrandColorFromAccount() {
     .maybeSingle();
 
   if (profile?.brand_color) {
-    document.documentElement.style.setProperty('--brand', profile.brand_color);
+    applyBrandToDocument(profile.brand_color);
     localStorage.setItem(STORAGE_KEY, profile.brand_color);
   }
 }
@@ -92,7 +93,8 @@ export default function BrandLogo({ className, onNavigate }: { className?: strin
   }
 
   async function applyColor(color: string) {
-    document.documentElement.style.setProperty('--brand', color);
+    // --brand i --brand-rgb (sklo potřebuje barvu s průhledností, viz lib/brandColor.ts).
+    applyBrandToDocument(color);
     localStorage.setItem(STORAGE_KEY, color);
 
     const { data: authData } = await supabase.auth.getUser();

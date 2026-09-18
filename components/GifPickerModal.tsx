@@ -84,7 +84,7 @@ export default function GifPickerModal({
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
       onClick={onClose}
     >
-      <div className="panel" style={{ width: '100%', maxWidth: 480, background: 'var(--panel)' }} onClick={(e) => e.stopPropagation()}>
+      <div className="panel modal-glass" style={{ width: '100%', maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <p className="panel-heading" style={{ margin: 0 }}>GIFs</p>
           <button onClick={onClose} style={{ background: 'none', color: 'var(--text-faint)', padding: 4 }}>✕</button>

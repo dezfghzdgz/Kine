@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
@@ -11,6 +12,14 @@ export default function AppShellChrome({ children }: { children: React.ReactNode
   const pathname = usePathname();
   const isSparks = pathname === '/sparks';
   const isWatch = pathname.startsWith('/watch/');
+
+  // iOS Safari zapíná stav :active (barva stisku ve skle, app/globals.css)
+  // jen tehdy, když stránka poslouchá dotyk. Prázdný posluchač stačí.
+  useEffect(() => {
+    const nic = () => {};
+    document.addEventListener('touchstart', nic, { passive: true });
+    return () => document.removeEventListener('touchstart', nic);
+  }, []);
 
   return (
     <div className="app-shell">

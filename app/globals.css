@@ -4379,3 +4379,358 @@ body.player-css-fullscreen .upload-bar,
 body.player-css-fullscreen .video-card-menu-btn {
   display: none !important;
 }
+
+/* =====================================================================
+   KINE GLASS - sklo
+   =====================================================================
+   Plochy jako sklo: čisté, bez barvy, s vlasem světla po horní hraně a
+   lehkým prosvítáním toho, co je pod nimi (rozostření). Barva appky
+   (--brand, tu si každý volí u loga) se objeví JEN ve chvíli stisku -
+   tlačítko se na okamžik zabarví a rozsvítí, po puštění zase zhasne.
+   Klid = čistota, dotyk = barva.
+
+   Rozostření pozadí (backdrop-filter) je drahé, proto ho mají jen věci,
+   které plují NAD obsahem (spodní navigace, lišta hudby, nabídky,
+   dialogy). Karty a rámečky v toku stránky ho nemají - nic pod nimi
+   neprosvítá a jen by brzdily telefon.
+
+   Barva stisku: rgba(var(--brand-rgb), ...) - --brand-rgb nastavuje
+   components/BrandLogo.tsx spolu s --brand, ať tint sedí i s vlastní
+   barvou. Funguje i tam, kde prohlížeč nezná color-mix (starší televize).
+   ===================================================================== */
+
+:root {
+  --brand-rgb: 0, 201, 167;
+  --glass-blur: 18px;
+  --glass-sat: 160%;
+  /* Plující plochy: lišty, nabídky, dialogy. */
+  --glass-bg: rgba(18, 18, 24, 0.66);
+  --glass-bg-strong: rgba(15, 15, 21, 0.84);
+  /* Ovládací prvky. "strong" je výchozí tlačítko, obyčejné jsou vedlejší. */
+  --glass-fill: rgba(255, 255, 255, 0.06);
+  --glass-fill-hover: rgba(255, 255, 255, 0.10);
+  --glass-fill-strong: rgba(255, 255, 255, 0.13);
+  --glass-fill-strong-hover: rgba(255, 255, 255, 0.18);
+  --glass-line: rgba(255, 255, 255, 0.10);
+  --glass-line-strong: rgba(255, 255, 255, 0.16);
+  /* Vlas světla po horní hraně - to, co dělá ze šedé plochy sklo. */
+  --glass-highlight: rgba(255, 255, 255, 0.18);
+  --glass-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.025) 45%, rgba(255, 255, 255, 0) 100%);
+  --glass-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
+  --glass-shadow-up: 0 -8px 30px rgba(0, 0, 0, 0.3);
+  /* Stisk: barva appky se objeví a rozsvítí. */
+  --press-tint: rgba(var(--brand-rgb), 0.28);
+  --press-line: rgba(var(--brand-rgb), 0.7);
+  --press-ring: rgba(var(--brand-rgb), 0.18);
+  --press-glow: 0 0 0 1px rgba(var(--brand-rgb), 0.55), 0 6px 22px rgba(var(--brand-rgb), 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+html[data-theme="light"] {
+  --brand-rgb: 0, 158, 131;
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-bg-strong: rgba(255, 255, 255, 0.86);
+  --glass-fill: rgba(20, 20, 30, 0.05);
+  --glass-fill-hover: rgba(20, 20, 30, 0.09);
+  --glass-fill-strong: rgba(20, 20, 30, 0.08);
+  --glass-fill-strong-hover: rgba(20, 20, 30, 0.13);
+  --glass-line: rgba(20, 20, 30, 0.10);
+  --glass-line-strong: rgba(20, 20, 30, 0.14);
+  --glass-highlight: rgba(255, 255, 255, 0.9);
+  --glass-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0.25) 45%, rgba(255, 255, 255, 0) 100%);
+  --glass-shadow: 0 12px 32px rgba(20, 20, 30, 0.14);
+  --glass-shadow-up: 0 -8px 30px rgba(20, 20, 30, 0.10);
+  --press-tint: rgba(var(--brand-rgb), 0.22);
+  --press-glow: 0 0 0 1px rgba(var(--brand-rgb), 0.5), 0 6px 22px rgba(var(--brand-rgb), 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+html[data-theme="gray"] {
+  --glass-bg: rgba(50, 50, 56, 0.66);
+  --glass-bg-strong: rgba(46, 46, 52, 0.86);
+  --glass-fill: rgba(255, 255, 255, 0.07);
+  --glass-fill-hover: rgba(255, 255, 255, 0.11);
+  --glass-fill-strong: rgba(255, 255, 255, 0.14);
+  --glass-fill-strong-hover: rgba(255, 255, 255, 0.19);
+}
+
+/* iOS při klepnutí bliká šedou přes prvek - to by se pralo s barvou stisku. */
+button, a, .sidebar-link, .mobile-nav-item, .video-card, .reaction-btn {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ---------- Tlačítka: sklo, barva jen při stisku ---------- */
+
+button {
+  /* Vedlejší tlačítka mají v kódu pozadí "var(--panel-raised)" napsané
+     přímo na prvku. Tady se ta proměnná pro tlačítka přepíše na sklo,
+     takže i ona zesklovatí bez zásahu do každého souboru. Rámečky
+     (.panel) to neovlivní - proměnná se mění jen na tlačítkách. */
+  --panel-raised: var(--glass-fill);
+  transition: transform var(--dur-1) var(--ease), background-color var(--dur-2) var(--ease),
+              box-shadow var(--dur-2) var(--ease), color var(--dur-2) var(--ease), opacity var(--dur-2) var(--ease);
+}
+
+/* Výchozí tlačítko (bez třídy): světlejší sklo místo plné bílé. Tlačítka
+   s vlastní třídou si vzhled řídí sama - ta hlavní jsou vyjmenovaná níž. */
+button:not([class]) {
+  color: var(--text);
+  background-color: var(--glass-fill-strong);
+  background-image: var(--glass-sheen);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 0 0 1px var(--glass-line);
+}
+
+button:not([class]):hover:not(:disabled) {
+  background-color: var(--glass-fill-strong-hover);
+}
+
+button:not([class]):disabled {
+  box-shadow: inset 0 0 0 1px var(--glass-line);
+}
+
+/* Stisk = barva. Rychle se objeví (60 ms), po puštění pomalu zhasne.
+   !important kvůli tlačítkům s pozadím napsaným přímo na prvku. */
+button:active:not(:disabled),
+.reaction-btn:active,
+.sidebar-link:active,
+.mobile-nav-item:active,
+.music-btn:active,
+.music-view-option:active,
+.reports-filter:active,
+.downloaded-filter:active,
+.tab-btn:active,
+.profile-dropdown-item:active,
+.video-card-menu-item:active,
+.player-mini-btn:active,
+.playlist-panel-toggle:active,
+.shortcuts-close:active {
+  background-color: var(--press-tint) !important;
+  background-image: none !important;
+  box-shadow: var(--press-glow) !important;
+  transition-duration: 60ms;
+}
+
+/* Vedlejší tlačítka (reakce, filtry, hudba) - tišší sklo. */
+.reaction-btn,
+.reports-filter,
+.music-view-option,
+.playlist-panel-toggle,
+.player-mini-btn,
+.shortcuts-close,
+.load-failed-retry {
+  background: var(--glass-fill);
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 0 0 1px var(--glass-line);
+  transition: background-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease),
+              color var(--dur-2) var(--ease), transform var(--dur-1) var(--ease);
+}
+
+.reaction-btn:hover,
+.reports-filter:hover,
+.music-view-option:hover,
+.player-mini-btn:hover,
+.shortcuts-close:hover {
+  background: var(--glass-fill-hover);
+  color: var(--text);
+  border-color: transparent;
+}
+
+.reaction-btn.active,
+.reports-filter-active,
+.reports-filter-active:hover,
+.downloaded-filter-active,
+.downloaded-filter-active:hover,
+.music-view-option-active,
+.music-view-option-active:hover {
+  background: var(--glass-fill-strong);
+  color: var(--text);
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 0 0 1px var(--glass-line-strong);
+}
+
+/* Hudba: ikony v liště jsou bez plochy - plochu dostanou při stisku. */
+.music-btn {
+  border-radius: var(--radius-pill);
+  transition: background-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease),
+              color var(--dur-2) var(--ease), transform var(--dur-1) var(--ease);
+}
+
+.music-btn:active {
+  transform: scale(0.94);
+}
+
+/* Prvky, které mají zůstat bez plochy, i když jsou to <button>y. */
+.sidebar-link,
+.mobile-nav-item,
+.tab-btn,
+.video-card-menu-btn,
+.profile-trigger,
+.mobile-menu-toggle-btn {
+  box-shadow: none;
+  background-image: none;
+}
+
+/* ---------- Menu vlevo a spodní navigace ---------- */
+
+.sidebar {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0) 32%);
+}
+
+.sidebar-link {
+  transition: background-color var(--dur-2) var(--ease), color var(--dur-2) var(--ease),
+              box-shadow var(--dur-2) var(--ease), transform var(--dur-1) var(--ease);
+}
+
+.sidebar-link:hover {
+  background: var(--glass-fill);
+}
+
+.sidebar-link.active {
+  background: var(--glass-fill-strong);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 0 0 1px var(--glass-line);
+}
+
+.sidebar-link:active {
+  transform: scale(0.98);
+}
+
+.mobile-nav-item {
+  border-radius: var(--radius-md);
+  transition: background-color var(--dur-2) var(--ease), color var(--dur-2) var(--ease),
+              box-shadow var(--dur-2) var(--ease), transform var(--dur-1) var(--ease);
+}
+
+.mobile-nav-item:active {
+  transform: scale(0.94);
+}
+
+/* Tlačítko + zůstává plné (je to hlavní akce); při stisku zabarví i ono. */
+.mobile-nav-create:active {
+  color: var(--text);
+}
+
+.mobile-nav-create:active svg {
+  stroke: var(--text);
+}
+
+/* ---------- Pole ---------- */
+
+input, textarea, select {
+  background: var(--glass-fill);
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 0 0 1px var(--glass-line);
+}
+
+input:hover, textarea:hover {
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 0 0 1px var(--glass-line-strong);
+}
+
+/* Kliknutí do pole = barva, jako u tlačítka: tenký prstenec v barvě appky. */
+input:focus, textarea:focus, select:focus {
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 0 0 1px var(--press-line), 0 0 0 3px var(--press-ring);
+}
+
+.top-bar-search-form {
+  background: var(--glass-fill);
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 0 0 1px var(--glass-line);
+  transition: box-shadow var(--dur-2) var(--ease);
+}
+
+.top-bar-search-form:focus-within {
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 0 0 1px var(--press-line), 0 0 0 3px var(--press-ring);
+}
+
+/* ---------- Plující plochy: rozostřené sklo ---------- */
+
+.music-mini,
+.upload-bar,
+.profile-dropdown,
+.video-card-menu-panel,
+.shortcuts-panel,
+.brand-color-picker,
+.modal-glass {
+  background-color: var(--glass-bg-strong);
+  background-image: var(--glass-sheen);
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 0 0 1px var(--glass-line), var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+}
+
+/* Dialogy mají pozadí "var(--panel)" napsané přímo na prvku - tady se ta
+   proměnná pro ně přepíše na sklo (viz components/ConfirmDialog.tsx). */
+.modal-glass {
+  --panel: var(--glass-bg-strong);
+}
+
+/* Lišta dole vrhá stín nahoru, ne dolů. */
+.music-mini {
+  border-top-color: transparent;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow-up);
+}
+
+@media (max-width: 768px) {
+  .mobile-bottom-nav {
+    background-color: var(--glass-bg);
+    background-image: var(--glass-sheen);
+    border-top-color: transparent;
+    box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow-up);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  }
+
+  .mobile-drawer,
+  .mobile-drawer-bottom,
+  .mobile-drawer-side {
+    background-color: var(--glass-bg-strong);
+    background-image: var(--glass-sheen);
+    box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  }
+}
+
+/* Mini přehrávač: sklo jen na okraji (rám), obraz zůstává. */
+.player-wrap.player-wrap-mini {
+  box-shadow: var(--glass-shadow), 0 0 0 1px var(--glass-line);
+}
+
+/* Rámečky v toku stránky: čisté, jen vlas světla nahoře. */
+.panel {
+  background-image: var(--glass-sheen);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+/* ---------- Kde sklo nechceme ---------- */
+
+/* Kdo má v systému vypnutou průhlednost, dostane plné plochy. */
+@media (prefers-reduced-transparency: reduce) {
+  :root, html[data-theme="light"], html[data-theme="gray"] {
+    --glass-bg: var(--panel);
+    --glass-bg-strong: var(--panel-raised);
+  }
+  .music-mini, .upload-bar, .profile-dropdown, .video-card-menu-panel, .shortcuts-panel,
+  .brand-color-picker, .modal-glass, .mobile-bottom-nav, .mobile-drawer, .mobile-drawer-bottom, .mobile-drawer-side {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* Prohlížeč bez rozostření (staré televize): plochy o něco plnější, ať
+   je pod nimi text čitelný. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --glass-bg: rgba(18, 18, 24, 0.94);
+    --glass-bg-strong: rgba(15, 15, 21, 0.97);
+  }
+  html[data-theme="light"] {
+    --glass-bg: rgba(255, 255, 255, 0.94);
+    --glass-bg-strong: rgba(255, 255, 255, 0.97);
+  }
+  html[data-theme="gray"] {
+    --glass-bg: rgba(50, 50, 56, 0.94);
+    --glass-bg-strong: rgba(46, 46, 52, 0.97);
+  }
+}
