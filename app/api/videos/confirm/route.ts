@@ -36,18 +36,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Popis je příliš dlouhý (max 5000 znaků).' }, { status: 400 });
   }
 
-  // Denní limit nahrávání (zatím 5/den, ať se appka nedá zahltit) -
-  // časem to jde uvolnit, jakmile appka pozná i jiné signály důvěry.
+  // Denní limit nahrávání, ať se appka nedá zahltit. Dřív natvrdo 5 - to
+  // je málo pro tvůrce, který si přenáší kanál (viz hromadné nahrání).
+  // Nastavuje se proměnnou UPLOAD_DAILY_LIMIT na Vercelu, výchozí 20.
+  // Klipy (videos.clipped_from_video_id) se do limitu nepočítají - vlastní
+  // je tvůrce původního videa, ale vystřihují je diváci.
+  const dailyLimit = Math.max(1, Number(process.env.UPLOAD_DAILY_LIMIT) || 20);
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { count: recentUploadCount } = await supabaseServer
-    .from('videos')
-    .select('*', { count: 'exact', head: true })
-    .eq('owner_id', userData.user.id)
-    .gte('created_at', since24h);
+  let recentUploadCount = 0;
+  {
+    const withoutClips = await supabaseServer
+      .from('videos')
+      .select('*', { count: 'exact', head: true })
+      .eq('owner_id', userData.user.id)
+      .is('clipped_from_video_id', null)
+      .gte('created_at', since24h);
+    if (!withoutClips.error) {
+      recentUploadCount = withoutClips.count ?? 0;
+    } else {
+      // Sloupec klipů ještě není (migrace neproběhla) - počítá se všechno.
+      const all = await supabaseServer
+        .from('videos')
+        .select('*', { count: 'exact', head: true })
+        .eq('owner_id', userData.user.id)
+        .gte('created_at', since24h);
+      recentUploadCount = all.count ?? 0;
+    }
+  }
 
-  if ((recentUploadCount ?? 0) >= 5) {
+  if (recentUploadCount >= dailyLimit) {
     return NextResponse.json(
-      { error: 'Dosáhl/a jsi denního limitu 5 nahraných videí. Zkus to prosím zítra.' },
+      { error: `Dosáhl/a jsi denního limitu ${dailyLimit} nahraných videí. Zkus to prosím zítra.` },
       { status: 429 }
     );
   }

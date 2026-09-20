@@ -18,6 +18,7 @@ import {
 } from '@/lib/revenueShare';
 import { computeTrustRatingClient, recordTrustRatingSnapshot, getTotalReactionCount, RATING_UNLOCK_THRESHOLD } from '@/lib/trustRatingClient';
 import FieldHint from '@/components/FieldHint';
+import StatsRetention from '@/components/StatsRetention';
 
 /** Prázdná mřížka 7 dní x 24 hodin pro graf "kdy se lidi dívají". */
 function emptyHeatmap(): number[][] {
@@ -624,6 +625,16 @@ export default function ChannelStatsPage() {
           <FieldHint text={t('statsCompareHint')} />
         </p>
         <StatsVideoTable rows={videoTable} />
+      </div>
+
+      {/* Kam se diváci ve videu dostali (lib/retention.ts). Ukáže se až po
+          migraci supabase-migration-udrzeni.sql; do té doby se nevykreslí. */}
+      <div className="panel" style={{ marginBottom: 20 }}>
+        <p className="panel-heading">
+          {t('retentionTitle')}
+          <FieldHint text={t('retentionHint')} />
+        </p>
+        <StatsRetention videos={allVideos} />
       </div>
 
       <div

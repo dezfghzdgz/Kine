@@ -176,6 +176,7 @@ export default function ProfileMenu({
             <Link href="/terms">{t('termsLink')}</Link>
             <Link href="/privacy">{t('privacyLink')}</Link>
             <Link href="/rules">{t('rulesLink')}</Link>
+            <Link href="/copyright">{t('copyrightLink')}</Link>
             <a href="mailto:kinesupport@gmail.com">{t('supportLink')}</a>
           </div>
         </div>

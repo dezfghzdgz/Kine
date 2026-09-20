@@ -12,6 +12,9 @@ export default function AppShellChrome({ children }: { children: React.ReactNode
   const pathname = usePathname();
   const isSparks = pathname === '/sparks';
   const isWatch = pathname.startsWith('/watch/');
+  // Vložitelný přehrávač (/embed/<id>) žije v cizím rámu: žádné menu, lišty
+  // ani zkratky - jen to, co stránka sama vykreslí.
+  const isEmbed = pathname.startsWith('/embed/');
 
   // iOS Safari zapíná stav :active (barva stisku ve skle, app/globals.css)
   // jen tehdy, když stránka poslouchá dotyk. Prázdný posluchač stačí.
@@ -20,6 +23,8 @@ export default function AppShellChrome({ children }: { children: React.ReactNode
     document.addEventListener('touchstart', nic, { passive: true });
     return () => document.removeEventListener('touchstart', nic);
   }, []);
+
+  if (isEmbed) return <>{children}</>;
 
   return (
     <div className="app-shell">

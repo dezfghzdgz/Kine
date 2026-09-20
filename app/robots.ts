@@ -9,8 +9,11 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: '*',
       allow: '/',
+      // /embed se neindexuje sám (má noindex), ale procházet se smí - vede
+      // z něj odkaz na stránku videa.
       disallow: ['/settings', '/admin', '/api/'],
     },
-    sitemap: `${baseUrl}/sitemap.xml`,
+    // Druhá sitemap říká, že stránky videí jsou videa (app/video-sitemap.xml/route.ts).
+    sitemap: [`${baseUrl}/sitemap.xml`, `${baseUrl}/video-sitemap.xml`],
   };
 }

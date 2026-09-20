@@ -4734,3 +4734,171 @@ input:focus, textarea:focus, select:focus {
     --glass-bg-strong: rgba(46, 46, 52, 0.97);
   }
 }
+
+/* ---------- Vložitelný přehrávač (/embed/[id]) ----------
+   Stránka bez kostry appky, žije v cizím rámu (Discord, X, cizí web).
+   Video na celou plochu rámu, v rohu odkaz zpět na Kine. */
+.embed-shell {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  overflow: hidden;
+}
+
+.embed-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.embed-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 20px);
+  padding: 6px 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(10, 10, 14, 0.62);
+  color: #fff;
+  text-decoration: none;
+  font-size: 12px;
+  line-height: 1.2;
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 4px 16px rgba(0, 0, 0, 0.35);
+  transition: background var(--dur-2) var(--ease);
+}
+
+.embed-badge:hover {
+  background: rgba(10, 10, 14, 0.85);
+}
+
+.embed-badge-logo {
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--brand);
+}
+
+.embed-badge-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.embed-badge-creator {
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+}
+
+.embed-unavailable {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #ddd;
+  font-size: 14px;
+  text-align: center;
+  padding: 20px;
+}
+
+.embed-unavailable a {
+  color: var(--brand);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+@media (max-width: 480px) {
+  .embed-badge-creator {
+    display: none;
+  }
+}
+
+/* ---------- Klipy (components/ClipPanel.tsx) ---------- */
+.clip-panel {
+  margin-top: 14px;
+}
+
+.clip-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.clip-field > span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-bottom: 6px;
+}
+
+.clip-field-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.clip-field-row input {
+  width: 110px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Řádek pod názvem: z jakého videa klip je a kdo ho vystřihl. */
+.clip-origin {
+  margin: -6px 0 10px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.clip-origin a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.clip-origin a:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Udržení diváků (components/StatsRetention.tsx) ---------- */
+.stats-retention-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  max-height: 220px;
+}
+
+.stats-retention-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.stats-retention-label {
+  fill: var(--text-faint);
+  font-size: 11px;
+}
+
+.stats-retention-area {
+  fill: rgba(var(--brand-rgb), 0.16);
+}
+
+.stats-retention-line {
+  fill: none;
+  stroke: var(--brand);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.stats-retention-drop {
+  fill: var(--text);
+  stroke: var(--brand);
+  stroke-width: 2;
+}

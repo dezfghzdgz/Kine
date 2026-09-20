@@ -1,80 +1,200 @@
-KINE - sklo: čisté plochy, barva appky jen při stisku
-======================================================
+KINE - viditelnost zvenku, klipy, autorská práva, udržení, hromadné nahrání
+===========================================================================
 
-12 souborů (jen ty, co se změnily). Rozbal do kořene repa a přepiš.
-Pak: node zkontroluj-soubory.mjs --uklid   (pořád tam jsou ty tři zbytky)
-Pak push. Žádná migrace, žádná nová závislost.
+50 souborů (jen ty, co se změnily nebo jsou nové). Rozbal do kořene repa
+a přepiš. Pak:
+
+  1. node zkontroluj-soubory.mjs --uklid     (smaže ty tři zbytky, co tam
+                                              pořád leží - tentokrát fakt)
+  2. V Supabase (SQL Editor) pusť tři migrace, v libovolném pořadí,
+     každou klidně i dvakrát - nic nerozbijí:
+        supabase-migration-klipy.sql
+        supabase-migration-autorska-prava.sql
+        supabase-migration-udrzeni.sql
+     Bez nich appka běží dál; jen se klipy hlásí "zatím nejsou zapnuté",
+     formulář autorských práv vrací chybu a křivka udržení se neukáže.
+  3. Push. Žádná nová závislost.
+
+Nepovinné (Vercel -> Environment Variables): UPLOAD_DAILY_LIMIT - kolik
+videí smí jeden účet nahrát za den. Výchozí je 20; až si někdo bude
+přenášet kanál a nahrávat 60 videí, zvedni to. Je to v .env.example.
 
 
-CO JE NOVÉ   (app/globals.css - oddíl "KINE GLASS" na konci)
-----------
-Vzhled ve stylu skla, jak jsi chtěl: plochy jsou v klidu čisté a bez
-barvy, s vlasem světla po horní hraně a lehkým prosvítáním toho, co je
-pod nimi. Barva appky - ta, kterou máš nastavenou u loga (fialová) - se
-objeví JEN ve chvíli, kdy na něco klikneš nebo klepneš: tlačítko se
-zabarví a rozsvítí (60 ms), po puštění zase pomalu zhasne (180 ms).
-Klid = čistota, dotyk = barva.
+NEJDŘÍV JEDNA OPRAVA MĚ SAMÉHO
+------------------------------
+Když jsem ti minule psal, co by Kine posunulo, tvrdil jsem, že stránka
+videa nemá náhledy odkazů pro Discord a spol. To nebyla pravda - měla
+(app/watch/[id]/layout.tsx, název + obrázek + og:video). Co chybělo, je
+níž v prvním oddílu: vlastní přehrávač k vložení s odkazem zpět, náhled
+pro X, oEmbed, strukturovaná data pro Google, sitemapa videí a hlavičky,
+které vkládání vůbec dovolí. Omlouvám se za tu nepřesnost.
 
-Konkrétně:
-- Tlačítka: místo plné bílé je světlejší sklo; vedlejší tlačítka
-  (reakce pod videem, filtry, hudba) tišší sklo. Bílá zůstala jen
-  u vybraných stavů (třeba zvolený režim v Nastavení) a u tlačítka +
-  dole na telefonu - to je hlavní akce.
-- Stisk: barva appky s prstencem a jemnou září. Platí pro všechna
-  tlačítka, položky menu vlevo, spodní navigaci, nabídky, hudbu.
-- Pole: sklo; kliknutí do pole = tenký prstenec v barvě appky (i hledání).
-- Lišta hudby dole, spodní navigace na telefonu, nabídky (profil, ⋮ u
-  karty), dialogy (potvrzení, nahlášení, GIFy, grafy) a zásuvky na
-  telefonu: rozostřené sklo - prosvítá pod nimi obsah stránky.
-- Karty a rámečky v toku stránky zůstávají čisté (jen vlas světla
-  nahoře) - rozostření je drahé a nic pod nimi neprosvítá.
-- Funguje ve všech třech tématech (tmavé, světlé, šedé).
-- Kdo má v systému vypnutou průhlednost, dostane plné plochy; starší
-  prohlížeč bez rozostření (televize) dostane plnější plochy, ať je
-  text čitelný.
 
-Barva stisku sedí s tvou barvou appky (components/BrandLogo.tsx nově
-nastavuje i --brand-rgb, lib/brandColor.ts s testem). Když si barvu u
-loga změníš, změní se i barva stisku.
+1) VIDITELNOST ZVENKU   (embed, oEmbed, X, Google)
+----------------------
+Cílem je, aby každý odkaz na Kine hozený kamkoliv ven byl reklama na Kine.
 
-Kdyby se ti chtělo ladit sílu (app/globals.css, oddíl KINE GLASS):
-  --press-tint   síla barvy při stisku (0.28 = 28 %; víc = sytější)
-  --glass-blur   rozostření plujících ploch (18px)
-  --glass-fill-strong / --glass-fill   světlost skla tlačítek
+- /embed/<id>  - vložitelný přehrávač. Čisté video bez kostry appky,
+  v rohu malý odštítek "Kine" s odkazem na stránku videa. Jen veřejná a
+  hotová videa; u ostatních "Video není dostupné", bez prozrazení názvu.
+  Umí ?start=90 (začne v 1:30).
+- Menu Sdílet u videa má novou položku "Kopírovat kód pro vložení"
+  (iframe) - jen u veřejného hotového videa.
+- Discord, Facebook, Slack: og:video teď míří na náš embed (dřív na holý
+  přehrávač Cloudflare bez stopy po Kine). X/Twitter: karta "player" -
+  video se přehraje přímo v příspěvku.
+- oEmbed (/api/oembed) - podle něj si WordPress, Notion nebo Medium
+  vloží přehrávač jen z vložené adresy.
+- JSON-LD VideoObject ve stránce videa - Google umí ukázat video ve
+  výsledcích s náhledem a délkou, ne jako obyčejný odkaz.
+- /video-sitemap.xml - sitemapa videí (až 1000 veřejných), zapsaná
+  i v robots.txt. Přihlaš ji v Google Search Console k té běžné.
+- next.config.js: /embed/* smí být v rámu na cizím webu
+  (frame-ancestors *), zbytek appky dál ne (SAMEORIGIN).
 
-Dvě drobné úpravy v kódu kvůli tomu: dialogy dostaly třídu modal-glass
-(5 souborů, jeden řádek v každém) a kostra appky poslouchá dotyk, ať
-iPhone ukazuje stav stisku (bez toho ho Safari na dotyku neukazuje).
+
+2) KLIPY   (lib/clips.ts, components/ClipPanel.tsx, app/api/videos/clip)
+--------
+Divák si z veřejného hotového videa vystřihne 3-60 s: tlačítko "Klip"
+pod videem -> panel s časy (předvyplněných posledních 30 s, tlačítka
+"= teď" berou čas z přehrávače, zkratky 15/30/60 s) -> Vytvořit.
+Cloudflare klip vyrobí ze svého API (žádné stahování a překódování
+u nás), za pár desítek sekund je hotový.
+
+- Klip je nové video. Vlastní ho PŮVODNÍ tvůrce (je v jeho Moje videa,
+  počítá se mu do statistik, může ho smazat), ten kdo ho vystřihl je
+  uvedený pod názvem: "Klip z videa <původní>" · "vystřihl/a <kdo>".
+- Pod původním videem je sekce "Klipy z tohoto videa".
+- Odběratelům se u klipu neposílá oznámení (nespamovat).
+- Limit 30 klipů na účet a den (každý klip je uložená minuta u
+  Cloudflare = peníze). Klipy se NEpočítají do denního limitu nahrání.
+- Stránka videa, které se ještě zpracovává (typicky čerstvý klip), se teď
+  sama doptává a jakmile je hotové, načte se - nemusíš obnovovat.
+
+Náklad: klip 30 s = půl minuty uložené (5 $ za 1000 minut/měsíc) plus
+přehrávání. Při 30/den/účet je to zanedbatelné; kdyby se to rozjelo,
+limit je jedna konstanta (CLIPS_PER_DAY v lib/clips.ts).
+
+
+3) AUTORSKÁ PRÁVA   (/copyright, /reports)
+-----------------
+Není to cenzura a nechci, aby to tak vypadalo - je to zákonná
+povinnost platformy: když někdo nahraje cizí film nebo písničku bez
+svolení, držitel práv musí mít kam napsat, a ty musíš mít kde to
+vyřídit. Bez toho tě může vypnout hosting nebo Cloudflare, ne jen
+právník. O všem rozhoduje člověk (ty nebo moderátor), nic se nemaže
+automaticky, žádné filtry slov, žádné skenování obsahu.
+
+- /copyright - formulář bez přihlášení (držitel práv obvykle účet nemá):
+  jméno, e-mail, organizace, adresa videa, popis díla (min. 20 znaků),
+  potvrzení dobré víry. Odkaz na něj je v nabídce Nahlásit u videa
+  (předvyplní adresu), v patičce profilu a v Pravidlech.
+  Limit 5 oznámení za hodinu z jedné adresy (proti spamu).
+- /reports (moderátoři) - nahoře nová fronta "Autorská práva": každé
+  oznámení s odkazem na video, poznámkou a dvěma tlačítky: "Video
+  odstraněno" (video musíš smazat sám v Moje videa / admin - úmyslně,
+  ať to udělá člověk) a "Zamítnout". Moderátoři a admini dostanou při
+  novém oznámení notifikaci.
+- Tabulka copyright_notices - čtou a mění ji jen staff (is_staff()),
+  zapisuje jen server. Text o "protioznámení" v patičce formuláře
+  odkazuje na kinesupport@gmail.com.
+
+
+4) KŘIVKA UDRŽENÍ   (Statistiky kanálu -> "Udržení diváků")
+-----------------
+To, co má YouTube v Studiu a Netflix interně: kolik procent diváků je
+ještě u videa v které jeho části a kde nejvíc odpadají. Vybereš video
+(výchozí nejsledovanější), graf ukáže křivku, "v půlce zbývá X %",
+"do konce Y %" a největší propad ("v 1:20 odpadlo 30 %") - to je
+přesně místo, kde se má video příště střihnout.
+
+- Data jsou z historie sledování (watch_history), ale přes funkci
+  creator_video_progress, která vrátí JEN čísla pozic - nikdy kdo. A jen
+  majiteli videa nebo přijatému spolutvůrci; cizí dostane nula řádků
+  (ověřeno na databázi).
+- Pod 5 diváků se křivka neukazuje (nic by neříkala a šlo by poznat
+  konkrétního člověka).
+- Výpočet (lib/retention.ts) má test; graf je jedno SVG bez knihovny.
+
+
+5) HROMADNÉ NAHRÁNÍ   (/upload -> "Nahrát víc videí naráz")
+------------------
+Kdo si přenáší kanál, nenahraje 60 videí po jednom průvodcem. Přepínač
+na první stránce nahrávání otevře hromadný režim: vyber víc souborů,
+názvy se předvyplní ze jmen souborů (podtržítka na mezery, dají se
+přepsat), společné nastavení (kategorie, jazyk, viditelnost, hashtagy,
+playlisty, pro děti, AI). Viditelnost je výchozí SOUKROMÉ - tvůrce si
+popisy a náhledy doladí v Moje videa a zveřejní, až bude chtít.
+
+- Nahrává se jeden soubor po druhém na pozadí (lib/uploadManager.tsx je
+  teď fronta) - dá se přitom chodit po appce. Proužek dole ukazuje
+  "3/12 · název", kolik čeká, kolik selhalo, a na konci odkaz na Moje
+  videa. Rozměry videa (svislé/vodorovné) si úloha přečte sama.
+- Ve frontě se nečeká na zpracování u Cloudflare - další soubor jde
+  nahoru hned. Zpracování hlídá webhook / doptávání v Moje videa.
+- Denní limit nahrání byl napevno 20; teď ho čte z UPLOAD_DAILY_LIMIT
+  (výchozí dál 20). Soubory nad limit ve frontě skončí chybou "limit" a
+  ukážou se jako selhané - pusť je druhý den nebo zvedni limit.
+- Jednotlivé nahrání (průvodce) se nezměnilo.
 
 
 CO ODKLIKAT
 -----------
-  [ ] Klikni a DRŽ jakékoliv tlačítko: zabarví se fialově (tvou barvou),
-      po puštění zhasne. Menu vlevo, reakce pod videem, lišta hudby.
-  [ ] iPhone: klepni a drž na položku spodní navigace - to samé, bez
-      šedého záblesku.
-  [ ] Klikni do hledání / do pole: fialový prstenec, jinde nic.
-  [ ] Odroluj stránku pod spodní navigaci (telefon) nebo pod lištu
-      hudby: obsah pod ní prosvítá rozostřený.
-  [ ] Otevři ⋮ u karty a nabídku profilu: sklo.
-  [ ] Přepni světlé a šedé téma: sedí.
-  [ ] Změň barvu u loga (5× klik na Kine): barva stisku se změní taky.
+Viditelnost:
+  [ ] Otevři /embed/<id veřejného videa>: hraje, v rohu odštítek Kine
+      s odkazem. Zkus /embed/<id soukromého>: "Video není dostupné".
+  [ ] Sdílet -> "Kopírovat kód pro vložení" -> vlož do libovolného HTML
+      (třeba codepen.io): přehrávač běží v rámu.
+  [ ] Hoď odkaz na video do Discordu: přehrává se rovnou v chatu.
+      (X potřebuje schválit doménu pro player card - viz níž.)
+  [ ] /video-sitemap.xml a robots.txt (dvě Sitemap: řádky).
+Klipy:
+  [ ] Pusť veřejné video, klikni "Klip", nech posledních 30 s, Vytvořit.
+      Klikni "Otevřít klip" - stránka ukáže "zpracovává", a jakmile
+      Cloudflare dodělá, sama se načte. Pod původním videem je sekce
+      Klipy z tohoto videa (po obnovení).
+  [ ] U klipu je pod názvem "Klip z videa …" s odkazem na původní.
+  [ ] Nepřihlášený klikne "Klip" -> přihlášení.
+Autorská práva:
+  [ ] Nahlásit u videa -> odkaz "porušení autorských práv" -> formulář
+      má předvyplněnou adresu. Odešli neúplný (chyby se zvýrazní),
+      pak úplný. V /reports (jako moderátor) je nahoře ve frontě;
+      poznámka + Zamítnout -> zmizí; "Zobrazit vyřízené" ho ukáže.
+Udržení:
+  [ ] Statistiky kanálu -> Udržení diváků: u videa s 5+ zhlédnutími
+      křivka; u novějšího "zatím málo diváků".
+Hromadné nahrání:
+  [ ] /upload -> "Nahrát víc videí naráz" -> vyber 3 krátké soubory,
+      kategorie, Nahrát. Chodí po appce; proužek dole ukazuje 1/3, 2/3,
+      3/3 a odkaz na Moje videa. Tam jsou všechna tři soukromá.
 
-Když bys chtěl barvu i na najetí myší, nebo naopak jemnější stisk,
-napiš - je to jedna hodnota.
+X/Twitter player card: aby se video přehrávalo přímo v příspěvku na X,
+musí X doménu pro "player card" jednou schválit (dřív Card Validator,
+dnes žádost přes X Developer). Do té doby X ukáže velký obrázek
+s názvem - to funguje hned.
 
 
 CO JSEM OVĚŘIL
 --------------
-- Na TVÉM aktuálním mainu (46b5083) s tímhle balíčkem: skutečný tsc
-  bez chyby, skutečný next build prošel, otisky sedí, 17 testovacích
-  sad / 141 kontrol.
-- Vzhled vykreslený v Chromiu (tmavé, světlé, šedé téma, telefon 390 px):
-  stisknuté tlačítko má fialový tint a záři, pole s kurzorem fialový
-  prstenec, spodní navigace na telefonu prosvítá rozostřená, ostatní
-  plochy bez barvy. Náhled "před/po" je přiložený jako obrázek.
-- Prošel jsem všechna tlačítka s vlastní třídou, jestli mají definované
-  pozadí, aby změna výchozího tlačítka nikde nevyrobila bílé na bílém.
+- Na TVÉM aktuálním mainu (9092fbb) s tímhle balíčkem: skutečný tsc bez
+  chyby, skutečný next build prošel, otisky sedí, 21 testovacích sad /
+  165 kontrol (nové: embed, clips, copyrightNotice, retention).
+- Sestavenou appku jsem spustil a proklepal: /embed/<id> vrací
+  Content-Security-Policy: frame-ancestors * a NEMÁ X-Frame-Options,
+  /watch/<id> dál má SAMEORIGIN; robots.txt uvádí obě sitemapy; oEmbed
+  vrací 404 u cizí adresy a 501 u XML; formulář autorských práv vrací
+  seznam chybějících polí; klip bez přihlášení 401.
+- Tři migrace prošly na lokálním Postgresu dvakrát za sebou (jsou
+  idempotentní). creator_video_progress: majitel vidí řádky, cizí nula.
+- Křivku udržení jsem vykreslil v Chromiu (screenshot v minulé zprávě).
+- Vlastní přehrávač hudby, sklo, nahrávání po částech - beze změny,
+  jen lib/uploadManager.tsx je přepsaný na frontu; jednotlivé nahrání
+  jde stejnou cestou jako dřív a typově sedí.
 
-Co ověřené NENÍ: skutečné iPhone Safari (rozostření a stav stisku na
-dotyku) - postup je standardní, ale potvrdit ho musí telefon.
+Co ověřené NENÍ (odsud se nedá):
+- Skutečné volání Cloudflare "clip" API - kód je podle jejich
+  dokumentace, ale první klip udělej ty a kdyby Cloudflare odmítl,
+  pošli mi hlášku (appka ji ukáže).
+- Jak přesně náhled vykreslí Discord a X - hlavičky jsou standardní.
+- Skutečné hromadné nahrání víc souborů v prohlížeči (logiku fronty
+  jsem prošel po řádcích, ale běh s reálnými soubory potvrdí až ty).

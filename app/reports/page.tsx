@@ -8,6 +8,7 @@ import { useUserRole } from '@/lib/useUserRole';
 import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import LoadFailed from '@/components/LoadFailed';
 import { SkeletonRows } from '@/components/Skeleton';
+import CopyrightQueue from '@/components/CopyrightQueue';
 
 type Filter = 'open' | 'done' | 'all';
 type Sort = 'count' | 'recent';
@@ -184,6 +185,10 @@ export default function ModerationReportsPage() {
   return (
     <div style={{ maxWidth: 860 }}>
       <p className="section-title">{t('reportsPageTitle')}</p>
+
+      {/* Oznámení držitelů práv (formulář /copyright) - jiná fronta než
+          hlášení diváků: má jméno a e-mail oznamovatele a zákonnou lhůtu. */}
+      <CopyrightQueue />
 
       {loadFailed && <LoadFailed onRetry={load} />}
 

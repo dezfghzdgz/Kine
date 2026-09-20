@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 
@@ -91,6 +92,16 @@ export default function ReportModal({
               <textarea value={details} onChange={(e) => setDetails(e.target.value)} rows={3} placeholder={t('reportDetailsPlaceholder')} />
             </div>
             <button type="submit" disabled={submitting}>{submitting ? t('submittingReport') : t('submitReport')}</button>
+            {/* Držitel práv má vlastní cestu (bez přihlášení, s prohlášením) -
+                app/copyright/page.tsx. Nahlášení tady je pro diváky. */}
+            {videoId && (
+              <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-faint)', lineHeight: 1.5 }}>
+                {t('reportCopyrightHint')}{' '}
+                <Link href={`/copyright?video=${videoId}`} onClick={onClose} style={{ color: 'var(--text-dim)' }}>
+                  {t('copyrightTitle')}
+                </Link>
+              </p>
+            )}
           </form>
         )}
       </div>

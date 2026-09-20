@@ -11,7 +11,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,6 +39,19 @@ export function prelozit(...relativniCesty) {
   } catch {
     // Překladač si stěžuje na typy z Reactu, které tu nejsou nainstalované.
     // JavaScript i tak vygeneruje a o ten nám jde.
+  }
+
+  // Překladač nechá "import './x'" bez přípony (tak to chce Next), ale Node
+  // při spuštění testu chce "./x.js". Doplní se to až v přeloženém výstupu,
+  // takže se dají testovat i soubory, které si něco berou ze sousedního.
+  for (const soubor of readdirSync(kam)) {
+    if (!soubor.endsWith('.js')) continue;
+    const cesta = join(kam, soubor);
+    const obsah = readFileSync(cesta, 'utf8').replace(
+      /(from\s+['"])(\.\.?\/[^'"]+?)(['"])/g,
+      (cely, pred, modul, po) => (/\.(js|mjs|json)$/.test(modul) ? cely : `${pred}${modul}.js${po}`)
+    );
+    writeFileSync(cesta, obsah);
   }
 
   return kam;

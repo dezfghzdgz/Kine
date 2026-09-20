@@ -22,6 +22,14 @@ import { uploadResumable } from './tusUpload';
  * Co tím nezískáme: obnovení stránky nebo zavření karty nahrávání pořád
  * ukončí - prohlížeč po obnovení už nemá vybraný soubor a znovu si ho
  * vzít nemůže. Na to appka aspoň upozorní (viz beforeunload níž).
+ *
+ * FRONTA (hromadné nahrání, přenos kanálu)
+ *
+ * Tvůrce, který si sem přenáší kanál, nenahraje 60 videí po jednom. Proto
+ * se sem dá poslat víc úloh naráz: běží jedna po druhé (souběžně by si
+ * jen braly pásmo a Cloudflare by je stejně řadil), proužek dole ukazuje
+ * "3/12" a na konci odkaz na Moje videa. Rozměry videa si úloha dopočítá
+ * sama, když je nedostala (u hromadného výběru se nikde nepřehrávají).
  */
 
 export type UploadJob = {
@@ -61,10 +69,19 @@ export type UploadState = {
   failedInvites: { videoId: string; names: string[] } | null;
   /** Běží nahrávání? Podle toho se hlídá zavření karty i druhý pokus. */
   busy: boolean;
+  /** Fronta: kolik úloh čeká za tou, co běží. */
+  queued: number;
+  /** Fronta: kolik úloh z dávky je hotových (i s chybou) a kolik jich celkem bylo. */
+  batchDone: number;
+  batchTotal: number;
+  batchFailed: number;
 };
 
 type UploadCommands = {
+  /** Zařadí úlohu; když nic neběží, rozjede se hned, jinak počká ve frontě. */
   start: (job: UploadJob) => void;
+  /** Zařadí víc úloh naráz (hromadné nahrání). */
+  startMany: (jobs: UploadJob[]) => void;
   /** Uklidí hlášku po dokončení nebo po chybě. */
   dismiss: () => void;
 };
@@ -77,10 +94,47 @@ const EMPTY: UploadState = {
   error: null,
   failedInvites: null,
   busy: false,
+  queued: 0,
+  batchDone: 0,
+  batchTotal: 0,
+  batchFailed: 0,
 };
 
 const StateContext = createContext<UploadState>(EMPTY);
-const CommandsContext = createContext<UploadCommands>({ start: () => {}, dismiss: () => {} });
+const CommandsContext = createContext<UploadCommands>({ start: () => {}, startMany: () => {}, dismiss: () => {} });
+
+/**
+ * Rozměry videa ze souboru - jen v prohlížeči, přes skrytý <video>.
+ * Když se to do pár vteřin nepovede (exotický formát), vrátí null a
+ * rozměry doplní Cloudflare po zpracování (lib/markVideoReady.ts).
+ */
+function readDimensions(file: File): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    if (typeof document === 'undefined') return resolve(null);
+    const video = document.createElement('video');
+    const url = URL.createObjectURL(file);
+    let done = false;
+    const finish = (value: { width: number; height: number } | null) => {
+      if (done) return;
+      done = true;
+      URL.revokeObjectURL(url);
+      video.removeAttribute('src');
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), 5000);
+    video.preload = 'metadata';
+    video.muted = true;
+    video.onloadedmetadata = () => {
+      clearTimeout(timer);
+      finish(video.videoWidth && video.videoHeight ? { width: video.videoWidth, height: video.videoHeight } : null);
+    };
+    video.onerror = () => {
+      clearTimeout(timer);
+      finish(null);
+    };
+    video.src = url;
+  });
+}
 
 export function useUploadState() {
   return useContext(StateContext);
@@ -133,6 +187,10 @@ async function waitUntilReady(videoId: string, token: string | undefined): Promi
 export function UploadProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<UploadState>(EMPTY);
   const busyRef = useRef(false);
+  const queueRef = useRef<UploadJob[]>([]);
+  // Dávka: počítadla pro proužek ("3/12"). Nulují se, když fronta doběhne
+  // a tvůrce hlášku zavře.
+  const batchRef = useRef({ done: 0, total: 0, failed: 0 });
 
   const uprav = useCallback((zmena: Partial<UploadState>) => {
     setState((prev) => ({ ...prev, ...zmena }));
@@ -156,30 +214,78 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('beforeunload', varuj);
   }, [state.busy]);
 
+  function beginJob(job: UploadJob) {
+    busyRef.current = true;
+    const batch = batchRef.current;
+    setState((prev) => ({
+      ...prev,
+      phase: 'uploading',
+      percent: 0,
+      title: job.title,
+      videoId: null,
+      error: null,
+      failedInvites: null,
+      busy: true,
+      queued: queueRef.current.length,
+      batchDone: batch.done,
+      batchTotal: batch.total,
+      batchFailed: batch.failed,
+    }));
+    void run(job);
+  }
+
+  /** Po doběhnutí úlohy pustí další z fronty, nebo ohlásí konec dávky. */
+  function finishJob(outcome: 'done' | 'error', patch: Partial<UploadState>) {
+    const batch = batchRef.current;
+    batch.done += 1;
+    if (outcome === 'error') batch.failed += 1;
+
+    const next = queueRef.current.shift();
+    if (next) {
+      // Průběžné hlášení jen na okamžik - hned se rozjede další úloha.
+      uprav({ ...patch, batchDone: batch.done, batchFailed: batch.failed, queued: queueRef.current.length });
+      beginJob(next);
+      return;
+    }
+
+    busyRef.current = false;
+    uprav({ ...patch, phase: outcome, busy: false, queued: 0, batchDone: batch.done, batchTotal: batch.total, batchFailed: batch.failed });
+  }
+
   const start = useCallback(
     (job: UploadJob) => {
-      // Dvě nahrávání naráz nedávají smysl a hlavně by si přepsala stav.
-      if (busyRef.current) return;
-      busyRef.current = true;
-
-      setState({
-        phase: 'uploading',
-        percent: 0,
-        title: job.title,
-        videoId: null,
-        error: null,
-        failedInvites: null,
-        busy: true,
-      });
-
-      void run(job);
+      if (busyRef.current) {
+        queueRef.current.push(job);
+        batchRef.current.total += 1;
+        uprav({ queued: queueRef.current.length, batchTotal: batchRef.current.total });
+        return;
+      }
+      // Nic neběží = nová dávka (i když je dole ještě hláška z té minulé).
+      batchRef.current = { done: 0, total: 1, failed: 0 };
+      beginJob(job);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
 
+  const startMany = useCallback(
+    (jobs: UploadJob[]) => {
+      for (const job of jobs) start(job);
+    },
+    [start]
+  );
+
   async function run(job: UploadJob) {
     try {
+      // Hromadný výběr rozměry nezná (soubory se nikde nepřehrávají) -
+      // dopočítají se tady, ať Sparks poznají svislé video hned.
+      if (job.width == null || job.height == null) {
+        const dims = await readDimensions(job.file);
+        if (dims) {
+          job = { ...job, width: dims.width, height: dims.height };
+        }
+      }
+
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
 
@@ -295,26 +401,25 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       }
 
       uprav({ phase: 'processing' });
-      await waitUntilReady(newVideoId, token);
+      // Ve frontě se na zpracování nečeká - další soubor má jít nahoru
+      // hned. Zpracování hlídá webhook / doptávání v Moje videa.
+      if (queueRef.current.length === 0) await waitUntilReady(newVideoId, token);
 
-      busyRef.current = false;
-      uprav({
-        phase: 'done',
-        busy: false,
+      finishJob('done', {
         failedInvites: failed.length > 0 ? { videoId: newVideoId, names: failed } : null,
       });
     } catch (err: any) {
-      busyRef.current = false;
-      uprav({ phase: 'error', busy: false, error: err?.message ?? 'Nahrávání se nepovedlo.' });
+      finishJob('error', { error: err?.message ?? 'Nahrávání se nepovedlo.' });
     }
   }
 
   const dismiss = useCallback(() => {
     if (busyRef.current) return;
+    batchRef.current = { done: 0, total: 0, failed: 0 };
     setState(EMPTY);
   }, []);
 
-  const commands = useMemo<UploadCommands>(() => ({ start, dismiss }), [start, dismiss]);
+  const commands = useMemo<UploadCommands>(() => ({ start, startMany, dismiss }), [start, startMany, dismiss]);
 
   return (
     <CommandsContext.Provider value={commands}>

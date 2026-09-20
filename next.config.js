@@ -10,7 +10,9 @@ const nextConfig = {
   async headers() {
     return [
       {
-        source: '/(.*)',
+        // Všechno kromě vložitelného přehrávače (/embed/...), který cizí
+        // stránky do rámu načíst smí - viz pravidlo pod tímhle.
+        source: '/:path((?!embed/).*)',
         headers: [
           // Brání načítání appky jako iframe v cizích stránkách (clickjacking)
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
@@ -20,6 +22,16 @@ const nextConfig = {
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           // Povolí jen potřebné webové funkce (zakáže zbytečné API jako kamera bez přihlášení)
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+        ],
+      },
+      {
+        // Vložitelný přehrávač: smí ho zarámovat kdokoliv (Discord, X,
+        // cizí web s kódem "Vložit na web"). Ostatní hlavičky zůstávají.
+        source: '/embed/:path*',
+        headers: [
+          { key: 'Content-Security-Policy', value: 'frame-ancestors *' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
         ],
       },
       {

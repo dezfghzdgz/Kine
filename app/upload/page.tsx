@@ -39,6 +39,12 @@ export default function UploadPage() {
   // Krok 1 - obsah videa
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // Hromadné nahrání (přenos kanálu): víc souborů naráz, názvy ze souborů,
+  // společné nastavení, do fronty v lib/uploadManager.tsx.
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkFiles, setBulkFiles] = useState<{ file: File; title: string }[]>([]);
+  const [bulkVisibility, setBulkVisibility] = useState<Visibility>('private');
+  const [bulkSent, setBulkSent] = useState(0);
   const [videoWidth, setVideoWidth] = useState<number | null>(null);
   const [videoHeight, setVideoHeight] = useState<number | null>(null);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
@@ -166,6 +172,65 @@ export default function UploadPage() {
    * u dvanáctiminutového videa to znamenalo sedět čtvrt hodiny u jedné
    * stránky a nedělat nic.
    */
+  function pickBulkFiles(list: FileList | null) {
+    const files = Array.from(list ?? []).filter((f) => f.type.startsWith('video/') || /\.(mp4|mov|mkv|webm|avi|m4v)$/i.test(f.name));
+    setBulkFiles(
+      files.map((f) => ({
+        file: f,
+        // Název ze souboru: bez přípony, podtržítka a pomlčky na mezery.
+        title: f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().slice(0, 150) || f.name,
+      }))
+    );
+  }
+
+  /**
+   * Hromadné nahrání: každý soubor je jedna úloha se společným nastavením.
+   * Výchozí viditelnost je soukromé - tvůrce si názvy a popisy doladí
+   * v klidu v Moje videa a zveřejní, až bude chtít. Upload běží na pozadí
+   * jeden po druhém (lib/uploadManager.tsx).
+   */
+  function handleBulkSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (bulkFiles.length === 0) {
+      setError(t('bulkNoFiles'));
+      return;
+    }
+    if (!category) {
+      setError(t('selectCategoryPlaceholder'));
+      return;
+    }
+    setError(null);
+    uploadCommands.startMany(
+      bulkFiles.map(({ file: f, title: name }) => ({
+        file: f,
+        thumbnailFile: null,
+        title: name.trim() || f.name,
+        description: '',
+        hashtags: hashtagsInput
+          .split(/[\s,]+/)
+          .map((h) => h.trim().replace(/^#/, '').toLowerCase())
+          .filter((h) => h.length > 0),
+        madeForKids,
+        hasPaidPromotion: false,
+        isAiGenerated,
+        language,
+        category,
+        visibility: bulkVisibility,
+        isPremiere: false,
+        scheduledAt: null,
+        width: null,
+        height: null,
+        chapters: [],
+        captions: [],
+        playlistIds: selectedPlaylists,
+        collaborators: [],
+        collabInviteMessage: '',
+      }))
+    );
+    setBulkSent(bulkFiles.length);
+    setBulkFiles([]);
+  }
+
   function handleFinalSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!file || upload.busy) return;
@@ -218,10 +283,136 @@ export default function UploadPage() {
     );
   }
 
+  if (step === 1 && bulkMode) {
+    return (
+      <form className="form-container" style={{ maxWidth: 560 }} onSubmit={handleBulkSubmit}>
+        <h1>{t('bulkUploadTitle')}</h1>
+        <p style={{ color: 'var(--text-dim)', fontSize: 14, lineHeight: 1.6, marginTop: -6 }}>{t('bulkUploadIntro')}</p>
+        <button type="button" className="reaction-btn" onClick={() => { setBulkMode(false); setError(null); }} style={{ alignSelf: 'flex-start' }}>
+          ← {t('bulkBackToSingle')}
+        </button>
+
+        {bulkSent > 0 && (
+          <div className="panel">
+            <p style={{ margin: 0, color: 'var(--text)' }}>{t('bulkStarted').replace('{count}', String(bulkSent))}</p>
+            <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--text-dim)' }}>{t('bulkStartedNote')}</p>
+            <Link href="/your-videos" className="reaction-btn" style={{ display: 'inline-flex', marginTop: 12, textDecoration: 'none' }}>
+              {t('yourVideos')}
+            </Link>
+          </div>
+        )}
+
+        <div className="panel">
+          <p className="panel-heading">
+            {t('bulkFilesLabel')}
+            <FieldHint text={t('bulkFilesHint')} />
+          </p>
+          <input type="file" accept="video/*" multiple onChange={(e) => pickBulkFiles(e.target.files)} />
+          {bulkFiles.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+              {bulkFiles.map((item, i) => (
+                <div key={`${item.file.name}-${i}`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    value={item.title}
+                    onChange={(e) => setBulkFiles((prev) => prev.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))}
+                    style={{ flex: 1, minWidth: 0, fontSize: 13 }}
+                    aria-label={t('videoTitle')}
+                  />
+                  <span style={{ fontSize: 12, color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>
+                    {(item.file.size / 1024 / 1024).toFixed(0)} MB
+                  </span>
+                  <button
+                    type="button"
+                    className="reaction-btn"
+                    onClick={() => setBulkFiles((prev) => prev.filter((_, j) => j !== i))}
+                    aria-label={t('delete')}
+                    style={{ minHeight: 30, padding: '2px 8px' }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>{t('bulkCount').replace('{count}', String(bulkFiles.length))}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <p className="panel-heading" style={{ marginBottom: -4 }}>{t('bulkSharedSettings')}</p>
+          <div>
+            <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('categoryLabel')}</label>
+            <select value={category} onChange={(e) => setCategory(e.target.value)} required>
+              <option value="" disabled>{t('selectCategoryPlaceholder')}</option>
+              {CATEGORY_KEYS.map((c) => <option key={c} value={c}>{t(c)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('videoLanguageLabel')}</label>
+            <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+              {LANGUAGE_OPTIONS.map((l) => <option key={l.code} value={l.code}>{t(l.key)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('whoCanSeeVideo')}</label>
+            {([
+              ['private', t('visibilityPrivate')],
+              ['subscribers', t('visibilitySubscribers')],
+              ['public', t('visibilityPublic')],
+            ] as [Visibility, string][]).map(([value, label]) => (
+              <label key={value} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginTop: 6 }}>
+                <input type="radio" name="bulkVisibility" style={{ width: 'auto' }} checked={bulkVisibility === value} onChange={() => setBulkVisibility(value)} />
+                {label}
+              </label>
+            ))}
+            <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: '6px 0 0' }}>{t('bulkVisibilityNote')}</p>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('srcHashtag')}</label>
+            <input value={hashtagsInput} onChange={(e) => setHashtagsInput(e.target.value)} placeholder={t('hashtagsPlaceholderExample')} />
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={madeForKids} onChange={(e) => setMadeForKids(e.target.checked)} />
+            {t('madeForKidsLabel')}
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={isAiGenerated} onChange={(e) => setIsAiGenerated(e.target.checked)} />
+            {t('aiContentLabel')}
+          </label>
+          {playlists.length > 0 && (
+            <div>
+              <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('playlists')}</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                {playlists.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`reaction-btn ${selectedPlaylists.includes(p.id) ? 'active' : ''}`}
+                    onClick={() => togglePlaylist(p.id)}
+                  >
+                    {p.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {error && <p className="error-text">{error}</p>}
+        <button type="submit" disabled={bulkFiles.length === 0}>
+          {t('bulkUploadButton').replace('{count}', String(bulkFiles.length))}
+        </button>
+      </form>
+    );
+  }
+
   if (step === 1) {
     return (
       <form className="form-container" style={{ maxWidth: 560 }} onSubmit={goToStep2}>
         <h1>{t('uploadVideo')}</h1>
+
+        <button type="button" className="reaction-btn" onClick={() => { setBulkMode(true); setError(null); }} style={{ alignSelf: 'flex-start' }}>
+          {t('bulkSwitch')}
+        </button>
 
         <div className="panel">
           <p className="panel-heading">

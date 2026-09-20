@@ -13,11 +13,15 @@ import { useLanguage } from '@/lib/i18n';
  * hotovo, dá odkaz na video.
  */
 export default function UploadProgressBar() {
-  const { phase, percent, title, videoId, error, failedInvites } = useUploadState();
+  const { phase, percent, title, videoId, error, failedInvites, queued, batchDone, batchTotal, batchFailed } = useUploadState();
   const { dismiss } = useUploadCommands();
   const { t } = useLanguage();
 
   if (phase === 'idle') return null;
+
+  // Dávka (hromadné nahrání): "3/12" před názvem a na konci souhrn.
+  const batch = batchTotal > 1;
+  const finished = phase === 'done' || phase === 'error';
 
   const popis =
     phase === 'uploading'
@@ -27,16 +31,28 @@ export default function UploadProgressBar() {
         : phase === 'processing'
           ? t('processingLabel')
           : phase === 'done'
-            ? t('uploadDoneLabel')
-            : t('uploadFailedLabel');
+            ? batch
+              ? t('uploadBatchDone').replace('{done}', String(batchDone - batchFailed)).replace('{total}', String(batchTotal))
+              : t('uploadDoneLabel')
+            : batch
+              ? t('uploadBatchDone').replace('{done}', String(batchDone - batchFailed)).replace('{total}', String(batchTotal))
+              : t('uploadFailedLabel');
+
+  const nadpis = batch && !finished
+    ? `${Math.min(batchDone + 1, batchTotal)}/${batchTotal} · ${title || t('uploadTitle')}`
+    : batch
+      ? t('uploadBatchTitle')
+      : title || t('uploadTitle');
 
   return (
     <div className={`upload-bar upload-bar-${phase}`} role="status" aria-live="polite">
       <div className="upload-bar-body">
-        <p className="upload-bar-title">{title || t('uploadTitle')}</p>
+        <p className="upload-bar-title">{nadpis}</p>
         <p className="upload-bar-status">
           {popis}
+          {queued > 0 ? ` · ${t('uploadQueued').replace('{count}', String(queued))}` : ''}
           {error ? ` · ${error}` : ''}
+          {batch && finished && batchFailed > 0 ? ` · ${t('uploadBatchFailed').replace('{count}', String(batchFailed))}` : ''}
           {failedInvites ? ` · ${failedInvites.names.join(', ')}` : ''}
         </p>
 
@@ -48,7 +64,12 @@ export default function UploadProgressBar() {
       </div>
 
       <div className="upload-bar-actions">
-        {phase === 'done' && videoId && (
+        {finished && batch && (
+          <Link href="/your-videos" className="upload-bar-link">
+            {t('yourVideos')}
+          </Link>
+        )}
+        {phase === 'done' && !batch && videoId && (
           <Link href={`/watch/${videoId}`} className="upload-bar-link">
             {t('uploadOpenVideo')}
           </Link>

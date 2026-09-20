@@ -35,9 +35,11 @@ export async function markVideoReady(
   videoId: string,
   payload: { duration?: number; thumbnail?: string; input?: { width?: number; height?: number } }
 ): Promise<void> {
+  // select('*') schválně: čtou se i sloupce z novějších migrací (klipy),
+  // které v databázi ještě být nemusí - výběr podle jména by bez nich spadl.
   const { data: video } = await supabaseServer
     .from('videos')
-    .select('id, status, custom_thumbnail, owner_id, title, visibility')
+    .select('*')
     .eq('id', videoId)
     .single();
 
@@ -64,7 +66,8 @@ export async function markVideoReady(
   // oznámení odběratelům, kteří si to u tohohle kanálu přejí (zvoneček
   // vedle "Odebírat"). Kontrola stavu výš zajišťuje, že se oznámení
   // pošlou jen jednou, i kdyby přišly obě cesty naráz.
-  if (video.visibility !== 'public') return;
+  // Klip není nové video tvůrce (vystřihl ho divák) - odběratelům se nehlásí.
+  if (video.visibility !== 'public' || video.clipped_from_video_id) return;
 
   const { data: subs } = await supabaseServer
     .from('subscriptions')

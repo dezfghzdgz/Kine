@@ -47,9 +47,11 @@ export default function RulesPage() {
 
       <h2 style={{ color: 'var(--text)' }}>Copyright</h2>
       <p>
-        Don't upload content you don't have the rights to. If you believe your content was
-        used without permission, contact us (we're gradually building a formal reporting
-        process).
+        Don't upload content you don't have the rights to. If you believe your work was
+        used without permission, send a notice through the{' '}
+        <a href="/copyright" style={{ color: 'var(--text)' }}>copyright notice form</a> - no account
+        needed. A moderator reviews every notice; when it's justified, the video is taken
+        down and the uploader is informed and can respond.
       </p>
 
       <h2 style={{ color: 'var(--text)' }}>Suitability for children</h2>

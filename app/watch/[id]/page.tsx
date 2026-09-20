@@ -42,6 +42,8 @@ import VideoCard from '@/components/VideoCard';
 import { formatDuration } from '@/lib/homeRecommendation';
 import { decideMiniPlayer, digitSeekTarget } from '@/lib/miniPlayer';
 import { resolvePlaybackId } from '@/lib/playbackToken';
+import { embedCode } from '@/lib/embed';
+import ClipPanel from '@/components/ClipPanel';
 
 const MUSIC_VIEW_KEY = 'kine-music-view';
 
@@ -91,6 +93,11 @@ function WatchPageInner() {
   const playlistScrolledForRef = useRef<string | null>(null);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  // Klipy (lib/clips.ts): panel na vystřižení, hotové klipy z tohoto videa,
+  // a u klipu odkaz na původní video + kdo ho vystřihl.
+  const [clipOpen, setClipOpen] = useState(false);
+  const [clips, setClips] = useState<any[]>([]);
+  const [clipOrigin, setClipOrigin] = useState<{ id: string; title: string; by: string | null } | null>(null);
   const [confirmModDelete, setConfirmModDelete] = useState(false);
   const { isModerator } = useUserRole();
   const playlistId = searchParams.get('playlist');
@@ -822,6 +829,32 @@ function WatchPageInner() {
     return () => clearTimeout(timer);
   }, [showUpNext, upNextCountdown]);
 
+  // Video, které se ještě zpracovává (typicky čerstvě vystřižený klip -
+  // odkaz "Otevřít klip" vede sem hned), se doptává Cloudflare stejně jako
+  // stránka Tvá videa. Jakmile je hotové, stránka si ho načte znovu -
+  // divák nemusí obnovovat.
+  useEffect(() => {
+    if (!video || video.status === 'ready') return;
+    let cancelled = false;
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch('/api/videos/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId: video.id }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled && body?.status === 'ready') load();
+      } catch {
+        // Síť zrovna nešla - zkusí se to za chvíli znovu.
+      }
+    }, 8000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [video?.id, video?.status]);
+
   function seekTo(seconds: number) {
     if (playerRef.current) {
       playerRef.current.currentTime = seconds;
@@ -897,6 +930,34 @@ function WatchPageInner() {
     const currentIsSpark = isSpark(data);
     const matchingFormat = (others ?? []).filter((v: any) => isSpark(v) === currentIsSpark);
     setOtherVideos(matchingFormat.slice(0, 24));
+
+    // Klipy z tohoto videa a původ, když je tohle samo klip. Bez migrace
+    // (supabase-migration-klipy.sql) sloupec chybí a dotaz vrátí chybu -
+    // pak se prostě nic neukáže.
+    setClipOpen(false);
+    setClips([]);
+    setClipOrigin(null);
+    supabase
+      .from('videos')
+      .select('id, title, thumbnail_url, views, width, height, duration_seconds, category, owner_id, cloudflare_video_id, created_at, clipped_by, profiles!videos_owner_id_fkey(username)')
+      .eq('clipped_from_video_id', videoId)
+      .eq('status', 'ready')
+      .eq('visibility', 'public')
+      .order('created_at', { ascending: false })
+      .limit(12)
+      .then(({ data: rows, error: clipsError }) => {
+        if (!clipsError && rows) setClips(rows);
+      });
+    if (data.clipped_from_video_id) {
+      Promise.all([
+        supabase.from('videos').select('id, title').eq('id', data.clipped_from_video_id).maybeSingle(),
+        data.clipped_by
+          ? supabase.from('profiles').select('username').eq('id', data.clipped_by).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]).then(([orig, by]) => {
+        if (orig.data) setClipOrigin({ id: orig.data.id, title: orig.data.title, by: (by.data as any)?.username ?? null });
+      });
+    }
 
     // Ochrana proti umělému nahánění zhlédnutí:
     // 1) počítáme až po pár vteřinách skutečného sledování, ne hned při otevření stránky
@@ -988,6 +1049,18 @@ function WatchPageInner() {
   async function shareMoment() {
     const seconds = Math.floor(playerRef.current?.currentTime ?? 0);
     await shareUrl(`${window.location.origin}/watch/${videoId}?t=${seconds}`);
+  }
+
+  /** Kód iframe pro cizí web (lib/embed.ts) - jen u veřejného videa, jinde by přehrávač neměl co hrát. */
+  async function copyEmbedCode() {
+    setShareMenuOpen(false);
+    const code = embedCode(videoId, { width: video?.width, height: video?.height, title: video?.title });
+    try {
+      await navigator.clipboard.writeText(code);
+      setToast({ message: t('embedCodeCopied'), type: 'success' });
+    } catch {
+      setToast({ message: code, type: 'error' });
+    }
   }
 
   async function toggleWatchLater() {
@@ -1379,6 +1452,15 @@ function WatchPageInner() {
           </div>
         )}
         <h1 className="video-title">{video.title}</h1>
+        {video.status !== 'ready' && (
+          <p className="clip-origin" aria-live="polite">{t('processingVideoNote')}</p>
+        )}
+        {clipOrigin && (
+          <p className="clip-origin">
+            <Link href={`/watch/${clipOrigin.id}`}>{t('clipOfVideo').replace('{title}', clipOrigin.title)}</Link>
+            {clipOrigin.by && <span> · {t('clipBy').replace('{user}', clipOrigin.by)}</span>}
+          </p>
+        )}
         <div className="video-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <Link href={`/channel/${video.profiles?.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="profile-avatar-small" style={{ width: 28, height: 28 }}>
@@ -1433,9 +1515,32 @@ function WatchPageInner() {
               <div className="profile-dropdown" style={{ bottom: 'auto', top: 'calc(100% + 8px)', left: 0, width: 200 }}>
                 <button className="profile-dropdown-item" onClick={shareVideo}>{t('shareVideo')}</button>
                 <button className="profile-dropdown-item" onClick={shareMoment}>{t('shareMoment')}</button>
+                {video.visibility === 'public' && video.status === 'ready' && (
+                  <button className="profile-dropdown-item" onClick={copyEmbedCode}>{t('shareEmbed')}</button>
+                )}
               </div>
             )}
           </div>
+          {video.visibility === 'public' && video.status === 'ready' && mode !== 'music' && (
+            <button
+              className={`reaction-btn ${clipOpen ? 'active' : ''}`}
+              onClick={() => {
+                if (!userId) {
+                  router.push('/login');
+                  return;
+                }
+                setClipOpen((v) => !v);
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                <circle cx="6" cy="6" r="3" />
+                <circle cx="6" cy="18" r="3" />
+                <path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12" />
+              </svg>
+              {t('clipButton')}
+            </button>
+          )}
           <AddToPlaylist videoId={video.id} />
           <DownloadButton videoId={video.id} cloudflareVideoId={video.cloudflare_video_id} />
           <button className={`reaction-btn ${inWatchLater ? 'active' : ''}`} onClick={toggleWatchLater} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1454,6 +1559,15 @@ function WatchPageInner() {
             </button>
           )}
         </div>
+
+        {clipOpen && (
+          <ClipPanel
+            videoId={video.id}
+            duration={playerRef.current?.duration || video.duration_seconds || 0}
+            getCurrentTime={() => playerRef.current?.currentTime ?? 0}
+            onClose={() => setClipOpen(false)}
+          />
+        )}
 
         {reportOpen && <ReportModal videoId={video.id} onClose={() => setReportOpen(false)} />}
         {confirmModDelete && (
@@ -1483,13 +1597,23 @@ function WatchPageInner() {
         )}
       </div>
 
-      {otherVideos.length > 0 && (
+      {(clips.length > 0 || otherVideos.length > 0) && (
         <div className="watch-recommendations">
-          <p className="section-title">{t('otherVideosHeading')}</p>
+          {clips.length > 0 && (
+            <>
+              <p className="section-title">{t('clipsFromVideoHeading')}</p>
+              <div className={clips.some((c: any) => isSpark(c)) ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 28 }}>
+                {clips.map((c: any) => (
+                  <VideoCard key={c.id} video={c} href={`/watch/${c.id}`} formatDuration={formatDuration} />
+                ))}
+              </div>
+            </>
+          )}
+          {otherVideos.length > 0 && <p className="section-title">{t('otherVideosHeading')}</p>}
           {/* Stejné karty jako na hlavní stránce - včetně nabídky ⋮ (fronta,
               uložit, playlist, nezajímá mě, nahlásit) a náhledu po najetí.
               Dřív tu byl vlastní zjednodušený odkaz bez nabídky. */}
-          {buildVideoBlocks(otherVideos).map((block, bi) => (
+          {otherVideos.length > 0 && buildVideoBlocks(otherVideos).map((block, bi) => (
             <div key={bi} className={block.type === 'sparks' ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 20 }}>
               {block.items.map((v: any) => (
                 <VideoCard
