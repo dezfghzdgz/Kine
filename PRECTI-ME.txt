@@ -1,7 +1,13 @@
-KINE - viditelnost zvenku, klipy, autorská práva, udržení, hromadné nahrání
-===========================================================================
+KINE - viditelnost zvenku, klipy, autorská práva, udržení, hromadné
+nahrání + webová část "Kine do PC"
+====================================================================
 
-50 souborů (jen ty, co se změnily nebo jsou nové). Rozbal do kořene repa
+Tenhle balíček NAHRAZUJE ten předchozí (viditelnost-klipy-prava) -
+obsahuje všechno z něj a k tomu webovou část appky do PC. Když jsi ten
+předchozí ještě nerozbalil, rozbal jen tenhle; když už ano, klidně
+přepiš tímhle, nic se nerozbije.
+
+57 souborů (jen ty, co se změnily nebo jsou nové). Rozbal do kořene repa
 a přepiš. Pak:
 
   1. node zkontroluj-soubory.mjs --uklid     (smaže ty tři zbytky, co tam
@@ -18,6 +24,8 @@ a přepiš. Pak:
 Nepovinné (Vercel -> Environment Variables): UPLOAD_DAILY_LIMIT - kolik
 videí smí jeden účet nahrát za den. Výchozí je 20; až si někdo bude
 přenášet kanál a nahrávat 60 videí, zvedni to. Je to v .env.example.
+Také nepovinné: NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL - odkud se stahuje
+appka do PC (výchozí GitHub Releases repa kine-desktop, viz níž).
 
 
 NEJDŘÍV JEDNA OPRAVA MĚ SAMÉHO
@@ -138,8 +146,37 @@ popisy a náhledy doladí v Moje videa a zveřejní, až bude chtít.
 - Jednotlivé nahrání (průvodce) se nezměnilo.
 
 
+6) KINE DO PC - WEBOVÁ ČÁST   (appka sama je ve zvláštním balíčku)
+---------------------------
+Appka do PC (kine-desktop) potřebuje od webu čtyři věci:
+- /api/desktop/config  - vydá appce adresu Supabase a veřejný anon klíč
+  (ten samý, co má každý návštěvník v prohlížeči). Appka nemá nic
+  zadrátovaného, takže se dá přepnout i na localhost při vývoji.
+- /api/desktop/link    - přihlášený uživatel si vyžádá jednorázový
+  přihlašovací token pro počítač (admin generateLink, nic se neposílá
+  e-mailem). Appka z něj udělá VLASTNÍ relaci - prohlížeč a appka se
+  tak navzájem neodhlašují.
+- /connect             - stránka, kam appka pošle prohlížeč: "Připojit
+  počítač k účtu @ty?" -> jedno kliknutí -> token letí appce na
+  127.0.0.1 (když to prohlížeč nepustí, přes odkaz kine://). Nepřihlášený
+  jde přes /login?next=/connect… a vrátí se (login nově umí ?next=,
+  jen relativní cesty v rámci Kine).
+- /download            - stránka ke stažení s návodem; odkaz "Kine do PC"
+  je v levém menu a v nabídce profilu, jen na počítači (na telefonu
+  se schová).
+K tomu: /api/videos/create-upload-url bere "preferResumable" - appka
+nahrává vždycky po částech (kvůli průběhu a pokračování po pauze).
+Žádná migrace.
+
+
 CO ODKLIKAT
 -----------
+Kine do PC (web):
+  [ ] /download se otevře, tlačítko vede na GitHub Releases (zatím 404,
+      dokud nevydáš první verzi appky - viz balíček kine-desktop).
+  [ ] /connect bez parametrů: "odkaz je neúplný". Zbytek se ověří až
+      s appkou: Účet -> Připojit přes prohlížeč.
+  [ ] /api/desktop/config vrací JSON s supabaseUrl a supabaseAnonKey.
 Viditelnost:
   [ ] Otevři /embed/<id veřejného videa>: hraje, v rohu odštítek Kine
       s odkazem. Zkus /embed/<id soukromého>: "Video není dostupné".
@@ -179,6 +216,10 @@ CO JSEM OVĚŘIL
 - Na TVÉM aktuálním mainu (9092fbb) s tímhle balíčkem: skutečný tsc bez
   chyby, skutečný next build prošel, otisky sedí, 21 testovacích sad /
   165 kontrol (nové: embed, clips, copyrightNotice, retention).
+- Webová část Kine do PC: /api/desktop/config vrací JSON, /api/desktop/
+  link bez tokenu 401, /connect a /download 200, sitemapa má /download.
+  Připojení appky proti skutečné Supabase (generateLink + verifyOtp)
+  odsud vyzkoušet nejde - první připojení udělej ty.
 - Sestavenou appku jsem spustil a proklepal: /embed/<id> vrací
   Content-Security-Policy: frame-ancestors * a NEMÁ X-Frame-Options,
   /watch/<id> dál má SAMEORIGIN; robots.txt uvádí obě sitemapy; oEmbed

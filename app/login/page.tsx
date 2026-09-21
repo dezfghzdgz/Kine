@@ -117,10 +117,17 @@ export default function LoginPage() {
         }
       }
 
+      // ?next=/connect?… - odkud přihlášení přišlo (třeba připojení počítače
+      // z appky Kine do PC). Jen relativní cesta v rámci Kine, nikam ven.
+      const next = new URLSearchParams(window.location.search).get('next');
+      const safeNext = next && /^\/(?!\/)[\w\-./?=&%+]*$/.test(next) ? next : null;
+
       setToast({ message: t('loginSuccess'), type: 'success' });
       setTimeout(() => {
         if (redirectTo) {
           router.push(redirectTo);
+        } else if (safeNext) {
+          router.push(safeNext);
         } else {
           router.push('/');
           router.refresh();

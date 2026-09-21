@@ -34,14 +34,18 @@ export async function POST(req: NextRequest) {
   // Velikost souboru posílá prohlížeč. Podle ní se pozná, jestli stačí
   // jeden požadavek, nebo se musí nahrávat po částech.
   let fileSize = 0;
+  let preferResumable = false;
   try {
     const body = await req.json();
     fileSize = Number(body?.fileSize) || 0;
+    // Appka Kine do PC chce po částech vždycky - kvůli průběhu a hlavně
+    // kvůli pokračování po pauze (nahrávání se zastaví, když hráč pustí hru).
+    preferResumable = body?.preferResumable === true;
   } catch {
     // Starší verze stránky velikost neposílala - pak se jede jako dřív.
   }
 
-  if (fileSize > RESUMABLE_FROM_BYTES) {
+  if (fileSize > RESUMABLE_FROM_BYTES || (preferResumable && fileSize > 0)) {
     return createResumableUpload(accountId, apiToken, fileSize);
   }
 

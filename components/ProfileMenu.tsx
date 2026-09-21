@@ -112,6 +112,10 @@ export default function ProfileMenu({
             {t('channelStats')}
           </Link>
 
+          <Link href="/download" className="profile-dropdown-item sidebar-desktop-only" onClick={() => setOpen(false)}>
+            {t('desktopAppLink')}
+          </Link>
+
           <div className="theme-slider-row">
             <span className="theme-slider-label">{t('appearance')}: {THEME_LABELS[theme]}</span>
             <ThemeSlider theme={theme} onChange={applyTheme} />

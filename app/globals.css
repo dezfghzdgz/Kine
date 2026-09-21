@@ -4902,3 +4902,10 @@ input:focus, textarea:focus, select:focus {
   stroke: var(--brand);
   stroke-width: 2;
 }
+
+/* ---- Kine do PC: odkaz jen na počítači (na telefonu se appka nedá nainstalovat) ---- */
+@media (max-width: 900px), (pointer: coarse) {
+  .sidebar-desktop-only {
+    display: none !important;
+  }
+}
