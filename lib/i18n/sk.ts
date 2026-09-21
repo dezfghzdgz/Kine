@@ -894,4 +894,7 @@ export const sk: Record<DictKey, string> = {
   downloadInApp: 'Apku už máš - beží v nej práve toto okno. Klipy nájdeš v menu vľavo.',
   desktopClipsLink: 'Klipy v PC',
   adminPlusLabel: 'Predplatné',
+  desktopBannerTitle: 'Kine do PC',
+  desktopBannerText: 'Klipy z hry jedným klávesom a Kine ako aplikácia v počítači. Zadarmo, Windows 10/11.',
+  desktopBannerButton: 'Stiahnuť',
 };

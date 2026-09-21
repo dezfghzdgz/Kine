@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import OnboardingChecklist from '@/components/OnboardingChecklist';
+import DesktopAppBanner from '@/components/DesktopAppBanner';
 import LoadFailed from '@/components/LoadFailed';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
@@ -428,6 +429,7 @@ export default function HomePage() {
   if (!blocks) {
     return (
       <div>
+        <DesktopAppBanner />
         <p className="section-title">{t('recommendedForYouHeading')}</p>
         {loadFailed && <LoadFailed onRetry={startLoad} />}
         <div className="video-grid">
@@ -445,6 +447,8 @@ export default function HomePage() {
 
   return (
     <div>
+      {/* Kine do PC na dosah - jen na počítači, ne v okně appky, jde zavřít. */}
+      <DesktopAppBanner />
       <OnboardingChecklist />
       {/* "Tady jsi skončil" - jen pro přihlášené a jen když je co dokoukat;
           jinak se nevykreslí nic. */}

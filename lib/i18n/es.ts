@@ -894,4 +894,7 @@ export const es: Record<DictKey, string> = {
   downloadInApp: 'Ya tienes la app: esta ventana se está ejecutando en ella. Tus clips están en el menú de la izquierda.',
   desktopClipsLink: 'Clips en el PC',
   adminPlusLabel: 'Suscripciones',
+  desktopBannerTitle: 'Kine para PC',
+  desktopBannerText: 'Clips de juego con una tecla y Kine como aplicación de escritorio. Gratis, Windows 10/11.',
+  desktopBannerButton: 'Descargar',
 };

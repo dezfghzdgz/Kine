@@ -894,4 +894,7 @@ export const uk: Record<DictKey, string> = {
   downloadInApp: 'Програма в тебе вже є - це вікно працює в ній. Кліпи знайдеш у меню зліва.',
   desktopClipsLink: 'Кліпи на ПК',
   adminPlusLabel: 'Підписки',
+  desktopBannerTitle: 'Kine для ПК',
+  desktopBannerText: 'Кліпи з гри однією клавішею і Kine як програма на комп’ютері. Безкоштовно, Windows 10/11.',
+  desktopBannerButton: 'Завантажити',
 };

@@ -900,6 +900,9 @@ export const cs = {
   downloadInApp: 'Appku už máš - běží v ní právě tohle okno. Klipy najdeš v menu vlevo.',
   desktopClipsLink: 'Klipy v PC',
   adminPlusLabel: 'Předplatné',
+  desktopBannerTitle: 'Kine do PC',
+  desktopBannerText: 'Klipy ze hry jednou klávesou a Kine jako aplikace v počítači. Zdarma, Windows 10/11.',
+  desktopBannerButton: 'Stáhnout',
 } as const;
 
 export type DictKey = keyof typeof cs;
