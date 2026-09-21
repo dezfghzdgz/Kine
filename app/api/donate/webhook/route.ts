@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripeServer } from '@/lib/stripeServer';
+import { isPaidTier, tierFromStripePriceId, type PaidTier } from '@/lib/plus';
 import { supabaseServer } from '@/lib/supabaseServer';
 
 // Appka poslouchá na "checkout.session.completed" - to je jediná chvíle,
@@ -41,21 +42,23 @@ export async function POST(req: NextRequest) {
     }
 
     if (session.mode === 'subscription' && session.metadata?.kind === 'kine-plus') {
-      // Koupené Kine Plus (app/api/plus/checkout). Konec období si
-      // přečteme z předplatného, ať Plus po nezaplacení samo vyprší.
+      // Koupené předplatné (app/api/plus/checkout): varianta je v metadatech
+      // (kine / clips / all). Konec období si přečteme z předplatného, ať
+      // po nezaplacení samo vyprší.
       const userId = session.metadata?.userId;
       if (userId) {
         let periodEnd: string | null = null;
+        let sub: any = null;
         try {
-          const sub: any = await stripeServer.subscriptions.retrieve(session.subscription);
+          sub = await stripeServer.subscriptions.retrieve(session.subscription);
           periodEnd = plusUntilFromSubscription(sub);
         } catch {
-          // Bez konce období: Plus platí, dokud webhook nepřijde s update.
+          // Bez konce období: předplatné platí, dokud webhook nepřijde s update.
         }
         await supabaseServer
           .from('profiles')
           .update({
-            plan: 'plus',
+            plan: planFromSubscription(sub, session.metadata?.tier),
             plan_until: periodEnd,
             plan_stripe_subscription_id: session.subscription,
             plan_stripe_customer_id: session.customer,
@@ -83,13 +86,14 @@ export async function POST(req: NextRequest) {
   }
 
   if ((event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') && (event.data.object as any)?.metadata?.kind === 'kine-plus') {
-    // Kine Plus: aktivní/zkušební = plus do konce období (+3 dny rezerva
-    // na opožděnou platbu), cokoliv jiného (zrušené, nezaplacené) = free.
+    // Předplatné Kine: aktivní/zkušební = varianta do konce období (+3 dny
+    // rezerva na opožděnou platbu), cokoliv jiného (zrušené, nezaplacené)
+    // = free. Změna varianty v portálu Stripe = jiná cena v položkách.
     const sub = event.data.object as any;
     const active = event.type !== 'customer.subscription.deleted' && (sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due');
     await supabaseServer
       .from('profiles')
-      .update(active ? { plan: 'plus', plan_until: plusUntilFromSubscription(sub) } : { plan: 'free', plan_until: null })
+      .update(active ? { plan: planFromSubscription(sub, sub.metadata?.tier), plan_until: plusUntilFromSubscription(sub) } : { plan: 'free', plan_until: null })
       .eq('plan_stripe_subscription_id', sub.id);
   } else if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
     const sub = event.data.object as any;
@@ -107,6 +111,15 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ received: true });
+}
+
+/**
+ * Varianta předplatného: podle ceny v předplatném (změna v portálu), jinak
+ * podle metadat z nákupu; když nic nesedí, 'all' (starší jediná varianta).
+ */
+function planFromSubscription(sub: any, metadataTier: unknown): PaidTier {
+  const priceId = sub?.items?.data?.[0]?.price?.id ?? sub?.plan?.id ?? null;
+  return tierFromStripePriceId(priceId) ?? (isPaidTier(metadataTier) ? metadataTier : 'all');
 }
 
 /** Konec zaplaceného období + 3 dny rezervy; bez období null (= bez konce). */

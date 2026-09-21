@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { hasPlus } from '@/lib/plus';
+import { hasKinePlus } from '@/lib/plus';
 
 /**
- * Odznak PLUS u jména (Kine Plus, lib/plus.ts).
+ * Odznak PLUS u jména - má ho, kdo platí Kine Plus nebo Kine Plus + Klipy
+ * (lib/plus.ts). Samotné Klipy Plus (jen appka) odznak nedávají.
  *
  * Plán si načítá sám podle id - stránky ho nemusí přidávat do svých
  * dotazů na profil. Díky tomu se nic nerozbije, když migrace
@@ -30,7 +31,7 @@ export default function PlusBadge({ userId, size = 'sm' }: { userId?: string | n
       .eq('id', userId)
       .maybeSingle()
       .then(({ data, error }) => {
-        const value = !error && hasPlus(data?.plan, data?.plan_until);
+        const value = !error && hasKinePlus(data?.plan, data?.plan_until);
         cache.set(userId, value);
         if (!cancelled) setPlus(value);
       });

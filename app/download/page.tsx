@@ -3,20 +3,25 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
+import { isInDesktopApp } from '@/lib/desktopRelease';
 
 /**
  * Stránka ke stažení appky Kine do PC.
  *
- * Tlačítko vede na /download/windows - to pošle prohlížeč rovnou na
- * nejnovější instalátor (GitHub Releases repa kine-desktop), takže
- * uživatel GitHub nevidí, jen mu začne stahování. Verze a datum se
- * berou z /api/desktop/latest.
+ * Dvě volby, jeden instalátor: "Kine + klipy" (Kine jako aplikace na
+ * koukání videí + klipovač) a "jen klipovač" (malá appka v liště). Odkazy
+ * vedou na /download/windows, které pošle prohlížeč rovnou na instalátor
+ * v našem úložišti - uživatel nikam nechodí, jen mu začne stahování.
+ * Podle názvu staženého souboru si appka předvyplní režim; v nastavení
+ * jde kdykoliv přepnout. Verze a datum se berou z /api/desktop/latest.
  */
 export default function DownloadPage() {
   const { t } = useLanguage();
   const [release, setRelease] = useState<{ version: string; publishedAt: string | null; sizeBytes: number | null } | null | undefined>(undefined);
+  const [inApp, setInApp] = useState(false);
 
   useEffect(() => {
+    setInApp(isInDesktopApp());
     fetch('/api/desktop/latest')
       .then((r) => r.json())
       .then((body) => setRelease(body.release ?? null))
@@ -34,24 +39,40 @@ export default function DownloadPage() {
         .join(' · ')
     : null;
 
+  const card = (title: string, text: string, href: string, button: string, primary: boolean) => (
+    <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, minWidth: 240, margin: 0 }}>
+      <p className="panel-heading" style={{ margin: 0, color: primary ? 'var(--brand)' : undefined }}>{title}</p>
+      <p style={{ margin: 0, color: 'var(--text-dim)', lineHeight: 1.6, fontSize: 14, flex: 1 }}>{text}</p>
+      <a href={href} className={`reaction-btn ${primary ? 'active' : ''}`} style={{ textDecoration: 'none', fontSize: 15, padding: '11px 18px', alignSelf: 'flex-start' }}>
+        {button}
+      </a>
+    </div>
+  );
+
   return (
-    <div className="form-container" style={{ maxWidth: 680 }}>
+    <div className="form-container" style={{ maxWidth: 760 }}>
       <h1>{t('downloadTitle')}</h1>
       <p style={{ color: 'var(--text-dim)', fontSize: 15, lineHeight: 1.6, marginTop: -6 }}>{t('downloadIntro')}</p>
 
-      <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          <a href="/download/windows" className="reaction-btn active" style={{ textDecoration: 'none', fontSize: 16, padding: '12px 22px' }}>
-            {t('desktopDownloadButton')}
-          </a>
-          <span style={{ color: 'var(--text-faint)', fontSize: 13 }}>
-            {t('downloadRequirements')}
-            {versionLine ? ` · ${versionLine}` : ''}
-          </span>
+      {inApp ? (
+        <div className="panel">
+          <p style={{ margin: 0, color: 'var(--text)' }}>{t('downloadInApp')}</p>
         </div>
-        {release === null && <p style={{ margin: 0, fontSize: 13, color: 'var(--text-faint)' }}>{t('downloadNotYet')}</p>}
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-faint)', lineHeight: 1.6 }}>{t('downloadUnsigned')}</p>
-      </div>
+      ) : (
+        <>
+          <p className="panel-heading" style={{ marginBottom: 10 }}>{t('downloadChooseTitle')}</p>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            {card(t('downloadFullTitle'), t('downloadFullText'), '/download/windows', t('downloadFullButton'), true)}
+            {card(t('downloadClipperTitle'), t('downloadClipperText'), '/download/windows?variant=clipper', t('downloadClipperButton'), false)}
+          </div>
+          <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--text-faint)', lineHeight: 1.6 }}>
+            {t('downloadSameApp')} {t('downloadRequirements')}
+            {versionLine ? ` · ${versionLine}` : ''}
+          </p>
+          {release === null && <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-faint)' }}>{t('downloadNotYet')}</p>}
+          <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-faint)', lineHeight: 1.6 }}>{t('downloadUnsigned')}</p>
+        </>
+      )}
 
       <div className="panel" style={{ marginTop: 14 }}>
         <p className="panel-heading">{t('downloadHowTitle')}</p>

@@ -117,7 +117,7 @@ export default function ProfileMenu({
           </Link>
 
           <Link href="/plus" className="profile-dropdown-item" onClick={() => setOpen(false)}>
-            Kine Plus
+            ✦ {t('plusPageTitle')}
           </Link>
 
           <div className="theme-slider-row">

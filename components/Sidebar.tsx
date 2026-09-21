@@ -12,6 +12,7 @@ import ProfileMenu from './ProfileMenu';
 import NotificationBell from './NotificationBell';
 import SparksNavButton from './SparksNavButton';
 import { useUserRole } from '@/lib/useUserRole';
+import { isInDesktopApp } from '@/lib/desktopRelease';
 import {
   FireIcon, SparkleIcon, DiceIcon,
   CarIcon, PlaneIcon, FilmIcon, GamepadIcon, MusicIcon, ComedyIcon, BlogIcon,
@@ -82,6 +83,11 @@ export default function Sidebar() {
   const [user, setUser] = useState<{ id: string; username: string; avatar_url: string | null } | null>(null);
   const [ratingMode, setRatingMode] = useState<'stars' | 'like_dislike'>('like_dislike');
   const [loading, setLoading] = useState(true);
+  // Běží web v okně appky Kine do PC? (až po načtení v prohlížeči, ať se server a klient shodnou)
+  const [inDesktopApp, setInDesktopApp] = useState(false);
+  useEffect(() => {
+    setInDesktopApp(isInDesktopApp());
+  }, []);
 
   useEffect(() => {
     loadUser();
@@ -360,14 +366,26 @@ export default function Sidebar() {
               💛 {t('donateSidebarLabel')}
             </Link>
           )}
-          {/* Appka do PC dává smysl jen na počítači - na telefonu se schová (CSS). */}
-          <Link href="/download" className="sidebar-link sidebar-desktop-only" onClick={closeMobileNav}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <rect x="2" y="3" width="20" height="14" rx="2" />
-              <path d="M8 21h8M12 17v4" />
-            </svg>
-            {t('desktopAppLink')}
-          </Link>
+          {/* Appka do PC dává smysl jen na počítači - na telefonu se schová (CSS).
+              Uvnitř appky (režim "Kine + klipy") místo toho odkaz na klipy v ní
+              (kine://…, appka si ho převezme). */}
+          {inDesktopApp ? (
+            <a href="kine://open?tab=clips" className="sidebar-link" onClick={closeMobileNav}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="2" y="4" width="20" height="16" rx="2" />
+                <path d="M10 9l5 3-5 3z" fill="currentColor" stroke="none" />
+              </svg>
+              {t('desktopClipsLink')}
+            </a>
+          ) : (
+            <Link href="/download" className="sidebar-link sidebar-desktop-only" onClick={closeMobileNav}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="2" y="3" width="20" height="14" rx="2" />
+                <path d="M8 21h8M12 17v4" />
+              </svg>
+              {t('desktopAppLink')}
+            </Link>
+          )}
           {isModerator && (
             <Link href="/reports" className="sidebar-link" onClick={closeMobileNav}>
               🚩 {t('reportsPageTitle')}
@@ -385,7 +403,7 @@ export default function Sidebar() {
           )}
           {isAdmin && (
             <Link href="/admin/plus" className="sidebar-link" onClick={closeMobileNav}>
-              ✦ Kine Plus
+              ✦ {t('adminPlusLabel')}
             </Link>
           )}
 

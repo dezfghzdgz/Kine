@@ -4,11 +4,14 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 /**
- * Admin: kdo má Kine Plus a ruční přidělení / odebrání.
+ * Admin: kdo má předplatné (Kine Plus / Klipy Plus / obojí) a ruční
+ * přidělení / odebrání.
  *
- * Bez hledání ukazuje všechny s Plus. Ruční Plus přebíjí Stripe (vazba
- * na předplatné se zahodí) - hodí se pro partnery, testery a náhrady.
+ * Bez hledání ukazuje všechny s předplatným. Ruční přidělení přebíjí
+ * Stripe (vazba na předplatné se zahodí) - hodí se pro partnery, testery
+ * a náhrady.
  */
+const PLAN_NAMES: Record<string, string> = { free: 'základní', kine: 'Kine Plus', clips: 'Klipy Plus', all: 'Kine Plus + Klipy', plus: 'Kine Plus + Klipy' };
 type Row = {
   id: string;
   username: string;
@@ -66,7 +69,7 @@ export default function AdminPlusPage() {
     setUsers(body.users ?? []);
   }
 
-  async function setPlan(user: Row, plan: 'free' | 'plus') {
+  async function setPlan(user: Row, plan: 'free' | 'kine' | 'clips' | 'all') {
     setSavingId(user.id);
     setError(null);
     const draft = drafts[user.id] ?? { until: '', note: '' };
@@ -86,9 +89,9 @@ export default function AdminPlusPage() {
 
   return (
     <div className="form-container" style={{ maxWidth: 820 }}>
-      <h1>Kine Plus</h1>
+      <h1>Předplatné</h1>
       <p style={{ color: 'var(--text-dim)', fontSize: 14, lineHeight: 1.6, marginTop: -6 }}>
-        Kdo má placenou verzi. Bez hledání jsou tu všichni s Plus. Ruční Plus přebíjí předplatné u Stripe.
+        Kdo má placenou verzi (Kine Plus = web, Klipy Plus = appka, nebo obojí). Bez hledání jsou tu všichni s předplatným. Ruční přidělení přebíjí předplatné u Stripe.
       </p>
 
       {notConfigured && (
@@ -122,7 +125,7 @@ export default function AdminPlusPage() {
                   {u.display_name && <span style={{ color: 'var(--text-dim)' }}> · {u.display_name}</span>}
                 </div>
                 <span style={{ fontSize: 13, color: u.active ? 'var(--brand)' : 'var(--text-faint)' }}>
-                  {u.active ? `PLUS${u.plan_until ? ` do ${new Date(u.plan_until).toLocaleDateString('cs-CZ')}` : ' bez konce'}${u.viaStripe ? ' · Stripe' : ' · ručně'}` : 'základní'}
+                  {u.active ? `${PLAN_NAMES[u.plan] ?? u.plan}${u.plan_until ? ` do ${new Date(u.plan_until).toLocaleDateString('cs-CZ')}` : ' bez konce'}${u.viaStripe ? ' · Stripe' : ' · ručně'}` : 'základní'}
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -143,10 +146,16 @@ export default function AdminPlusPage() {
                     style={{ display: 'block', marginTop: 4, width: '100%' }}
                   />
                 </label>
-                <button type="button" disabled={savingId === u.id} onClick={() => setPlan(u, 'plus')}>
-                  Dát Plus
+                <button type="button" disabled={savingId === u.id} onClick={() => setPlan(u, 'kine')}>
+                  Kine Plus
                 </button>
-                <button type="button" className="reaction-btn" disabled={savingId === u.id || u.plan !== 'plus'} onClick={() => setPlan(u, 'free')}>
+                <button type="button" disabled={savingId === u.id} onClick={() => setPlan(u, 'clips')}>
+                  Klipy Plus
+                </button>
+                <button type="button" disabled={savingId === u.id} onClick={() => setPlan(u, 'all')}>
+                  Obojí
+                </button>
+                <button type="button" className="reaction-btn" disabled={savingId === u.id || u.plan === 'free'} onClick={() => setPlan(u, 'free')}>
                   Odebrat
                 </button>
               </div>

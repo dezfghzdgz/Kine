@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { shouldBeProtected, syncVideoProtection } from '@/lib/streamProtection';
+import { hasKinePlus, KINE_PLUS_UPLOAD_MULTIPLIER } from '@/lib/plus';
 
 // Poté, co prohlížeč dokončí upload videa přímo do Cloudflare,
 // zavolá tenhle endpoint, aby se video zapsalo do naší databáze.
@@ -38,10 +39,16 @@ export async function POST(req: NextRequest) {
 
   // Denní limit nahrávání, ať se appka nedá zahltit. Dřív natvrdo 5 - to
   // je málo pro tvůrce, který si přenáší kanál (viz hromadné nahrání).
-  // Nastavuje se proměnnou UPLOAD_DAILY_LIMIT na Vercelu, výchozí 20.
+  // Nastavuje se proměnnou UPLOAD_DAILY_LIMIT na Vercelu, výchozí 20;
+  // s Kine Plus (lib/plus.ts) je limit 3x vyšší.
   // Klipy (videos.clipped_from_video_id) se do limitu nepočítají - vlastní
   // je tvůrce původního videa, ale vystřihují je diváci.
-  const dailyLimit = Math.max(1, Number(process.env.UPLOAD_DAILY_LIMIT) || 20);
+  const baseLimit = Math.max(1, Number(process.env.UPLOAD_DAILY_LIMIT) || 20);
+  let dailyLimit = baseLimit;
+  {
+    const plan = await supabaseServer.from('profiles').select('plan, plan_until').eq('id', userData.user.id).maybeSingle();
+    if (!plan.error && hasKinePlus(plan.data?.plan, plan.data?.plan_until)) dailyLimit = baseLimit * KINE_PLUS_UPLOAD_MULTIPLIER;
+  }
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   let recentUploadCount = 0;
   {

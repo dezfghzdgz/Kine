@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
-import { hasPlus } from '@/lib/plus';
+import { hasPlus, isPaidTier, normalizePlan } from '@/lib/plus';
 
 /**
- * Ruční správa Kine Plus (admin): dát někomu Plus na dobu určitou nebo
- * bez konce (partneři, testeři, náhrada za problém), nebo ho odebrat.
- * Sloupce plánu jsou chráněné spouštěčem - jde to jen tudy (service role).
+ * Ruční správa předplatného (admin): dát někomu Kine Plus / Klipy Plus /
+ * obojí na dobu určitou nebo bez konce (partneři, testeři, náhrada za
+ * problém), nebo ho odebrat. Sloupce plánu jsou chráněné spouštěčem -
+ * jde to jen tudy (service role).
  *
- * GET  ?search=jmeno  - uživatelé a jejich plán
- * POST { userId, plan: 'free'|'plus', until: ISO|null, note }
+ * GET  ?search=jmeno  - uživatelé a jejich plán (bez hledání: kdo má předplatné)
+ * POST { userId, plan: 'free'|'kine'|'clips'|'all', until: ISO|null, note }
  */
 async function requireAdmin(req: NextRequest): Promise<string | null> {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
     .order('username', { ascending: true })
     .limit(50);
   if (search) query = query.ilike('username', `%${search}%`);
-  else query = query.eq('plan', 'plus');
+  else query = query.neq('plan', 'free');
 
   const { data, error } = await query;
   if (error) {
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message, code: 'not-configured' }, { status: 503 });
   }
   return NextResponse.json({
-    users: (data ?? []).map((u: any) => ({ ...u, active: hasPlus(u.plan, u.plan_until), viaStripe: Boolean(u.plan_stripe_subscription_id) })),
+    users: (data ?? []).map((u: any) => ({ ...u, plan: normalizePlan(u.plan), active: hasPlus(u.plan, u.plan_until), viaStripe: Boolean(u.plan_stripe_subscription_id) })),
   });
 }
 
@@ -47,11 +48,11 @@ export async function POST(req: NextRequest) {
   if (!adminId) return NextResponse.json({ error: 'Nemáš oprávnění.' }, { status: 403 });
 
   const { userId, plan, until, note } = await req.json().catch(() => ({}));
-  if (!userId || (plan !== 'free' && plan !== 'plus')) {
-    return NextResponse.json({ error: 'Chybí userId nebo plán.' }, { status: 400 });
+  if (!userId || (plan !== 'free' && !isPaidTier(plan))) {
+    return NextResponse.json({ error: 'Chybí userId nebo plán (free / kine / clips / all).' }, { status: 400 });
   }
   let planUntil: string | null = null;
-  if (plan === 'plus' && until) {
+  if (plan !== 'free' && until) {
     const date = new Date(until);
     if (Number.isNaN(date.getTime())) return NextResponse.json({ error: 'Neplatné datum.' }, { status: 400 });
     planUntil = date.toISOString();
@@ -71,7 +72,14 @@ export async function POST(req: NextRequest) {
 
   await supabaseServer.from('notifications').insert({
     user_id: userId,
-    message: plan === 'plus' ? 'Máš Kine Plus. Appka Kine do PC teď může nahrávat klipy automaticky.' : 'Kine Plus na tvém účtu skončilo.',
+    message:
+      plan === 'free'
+        ? 'Předplatné Kine na tvém účtu skončilo.'
+        : plan === 'kine'
+          ? 'Máš Kine Plus.'
+          : plan === 'clips'
+            ? 'Máš Klipy Plus. Appka Kine do PC teď může nahrávat klipy automaticky.'
+            : 'Máš Kine Plus + Klipy. Appka Kine do PC teď může nahrávat klipy automaticky.',
     link: '/plus',
   });
 
