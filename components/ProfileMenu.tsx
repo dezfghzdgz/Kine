@@ -116,6 +116,10 @@ export default function ProfileMenu({
             {t('desktopAppLink')}
           </Link>
 
+          <Link href="/plus" className="profile-dropdown-item" onClick={() => setOpen(false)}>
+            Kine Plus
+          </Link>
+
           <div className="theme-slider-row">
             <span className="theme-slider-label">{t('appearance')}: {THEME_LABELS[theme]}</span>
             <ThemeSlider theme={theme} onChange={applyTheme} />

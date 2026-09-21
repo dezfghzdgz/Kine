@@ -1,25 +1,34 @@
 KINE - viditelnost zvenku, klipy, autorská práva, udržení, hromadné
-nahrání + webová část "Kine do PC"
+nahrání + webová část "Kine do PC" + Kine Plus
 ====================================================================
 
-Tenhle balíček NAHRAZUJE ten předchozí (viditelnost-klipy-prava) -
-obsahuje všechno z něj a k tomu webovou část appky do PC. Když jsi ten
-předchozí ještě nerozbalil, rozbal jen tenhle; když už ano, klidně
-přepiš tímhle, nic se nerozbije.
+Tenhle balíček NAHRAZUJE oba předchozí z dneška (viditelnost-klipy-prava
+i kine-do-pc) - obsahuje všechno z nich a navíc Kine Plus a stažení
+appky rovnou z Kine. Rozbal jen tenhle; když už máš nějaký z předchozích
+rozbalený, klidně přepiš, nic se nerozbije.
 
-57 souborů (jen ty, co se změnily nebo jsou nové). Rozbal do kořene repa
+71 souborů (jen ty, co se změnily nebo jsou nové). Rozbal do kořene repa
 a přepiš. Pak:
 
   1. node zkontroluj-soubory.mjs --uklid     (smaže ty tři zbytky, co tam
                                               pořád leží - tentokrát fakt)
-  2. V Supabase (SQL Editor) pusť tři migrace, v libovolném pořadí,
+  2. V Supabase (SQL Editor) pusť čtyři migrace, v libovolném pořadí,
      každou klidně i dvakrát - nic nerozbijí:
         supabase-migration-klipy.sql
         supabase-migration-autorska-prava.sql
         supabase-migration-udrzeni.sql
+        supabase-migration-kine-plus.sql
      Bez nich appka běží dál; jen se klipy hlásí "zatím nejsou zapnuté",
-     formulář autorských práv vrací chybu a křivka udržení se neukáže.
+     formulář autorských práv vrací chybu, křivka udržení se neukáže a
+     Plus se nedá nikomu dát.
   3. Push. Žádná nová závislost.
+  4. Až budeš chtít Plus prodávat: Stripe -> Product catalog -> Add
+     product "Kine Plus", cena měsíční (recurring) -> ID ceny (price_…)
+     do Vercelu jako STRIPE_PLUS_PRICE_ID, cenu jako text do
+     NEXT_PUBLIC_PLUS_PRICE_LABEL (třeba "79 Kč / měsíc"). Ve Stripe
+     u webhooku (už ho máš pro dary) zkontroluj, že posílá i
+     customer.subscription.updated a customer.subscription.deleted.
+     Do té doby Plus dáváš ručně v /admin/plus (i pro testování).
 
 Nepovinné (Vercel -> Environment Variables): UPLOAD_DAILY_LIMIT - kolik
 videí smí jeden účet nahrát za den. Výchozí je 20; až si někdo bude
@@ -166,14 +175,54 @@ Appka do PC (kine-desktop) potřebuje od webu čtyři věci:
   se schová).
 K tomu: /api/videos/create-upload-url bere "preferResumable" - appka
 nahrává vždycky po částech (kvůli průběhu a pokračování po pauze).
-Žádná migrace.
+- /download/windows - stažení rovnou z Kine: pošle prohlížeč na nejnovější
+  Kine-Setup.exe na GitHub Releases (GitHub má stálou adresu
+  releases/latest/download/<soubor>, proto se instalátor jmenuje pořád
+  stejně). Uživatel GitHub nevidí. /api/desktop/latest dává verzi a datum
+  pro stránku /download. Repo jde přepnout přes NEXT_PUBLIC_DESKTOP_REPO.
+- /api/desktop/me - appce říká, kdo je, jaký má plán (Plus) a jakou barvu
+  Kine má u loga - appka se do ní přebarví.
+
+
+7) KINE PLUS   (placená verze; /plus, /admin/plus, lib/plus.ts)
+-----------
+Přesně jak jsi chtěl: základ zdarma bez omezení - appka klipuje, klipy
+do 60 s, na Kine se nahrávají ručně (okýnko po hře nebo Knihovna) a platí
+pro ně stejná pravidla jako pro každé video (denní limit, pravidla Kine).
+Plus: appka nahrává klipy automaticky (po hře, nikdy během ní), klipy až
+5 minut, odznak PLUS u jména (na stránce videa a kanálu).
+
+- Tabulka profiles dostala plan ('free'|'plus'), plan_until, vazbu na
+  Stripe a poznámku. Měnit to smí jen server (spouštěč v databázi to
+  z prohlížeče tiše vrátí - stejně jako u is_admin). Ověřeno na databázi.
+- /plus - stránka: co je zdarma, co je v Plus, cena (z
+  NEXT_PUBLIC_PLUS_PRICE_LABEL), tlačítko Pořídit (Stripe Checkout,
+  předplatné), pro majitele "Spravovat předplatné" (Stripe portál -
+  v dashboardu Stripe ho jednou zapni: Settings -> Billing -> Customer
+  portal). Odkaz je v nabídce profilu a na /download.
+- Webhook (ten samý /api/donate/webhook) nastaví Plus po zaplacení a
+  hlídá prodloužení/zrušení (plan_until = konec období + 3 dny rezervy).
+- /admin/plus - ty jako admin dáš komukoliv Plus ručně (na dobu nebo bez
+  konce, s poznámkou) nebo ho odebereš. Ruční Plus přebíjí Stripe.
+- Appka do PC si plán bere z /api/desktop/me: bez Plus je volba
+  "nahrát automaticky" zamčená s odkazem na /plus, délka klipu max 60 s;
+  když Plus vyprší, appka se sama vrátí na ruční nahrávání.
 
 
 CO ODKLIKAT
 -----------
+Kine Plus:
+  [ ] /plus se otevře (bez ceny, dokud nenastavíš STRIPE_PLUS_PRICE_ID -
+      tlačítko pak hlásí "připravuje se").
+  [ ] /admin/plus -> najdi svůj účet -> Dát Plus. Na své stránce kanálu
+      a u svého videa je odznak PLUS. V appce do PC (Účet) se objeví
+      "Kine Plus" a odemkne se automatické nahrávání.
+  [ ] Odebrat -> odznak zmizí, appka po obnovení plánu (Účet) zamkne auto.
 Kine do PC (web):
-  [ ] /download se otevře, tlačítko vede na GitHub Releases (zatím 404,
-      dokud nevydáš první verzi appky - viz balíček kine-desktop).
+  [ ] /download se otevře; tlačítko vede na /download/windows, které
+      přesměruje na GitHub Releases (zatím 404, dokud nevydáš první
+      verzi appky - postup v JAK-VYDAT.md v balíčku kine-desktop). Po
+      vydání se na stránce ukáže i verze a datum.
   [ ] /connect bez parametrů: "odkaz je neúplný". Zbytek se ověří až
       s appkou: Účet -> Připojit přes prohlížeč.
   [ ] /api/desktop/config vrací JSON s supabaseUrl a supabaseAnonKey.
@@ -217,9 +266,15 @@ CO JSEM OVĚŘIL
   chyby, skutečný next build prošel, otisky sedí, 21 testovacích sad /
   165 kontrol (nové: embed, clips, copyrightNotice, retention).
 - Webová část Kine do PC: /api/desktop/config vrací JSON, /api/desktop/
-  link bez tokenu 401, /connect a /download 200, sitemapa má /download.
-  Připojení appky proti skutečné Supabase (generateLink + verifyOtp)
-  odsud vyzkoušet nejde - první připojení udělej ty.
+  link a /api/desktop/me bez tokenu 401, /connect a /download 200,
+  /download/windows přesměruje (302) na GitHub, sitemapa má /download
+  i /plus. Připojení appky proti skutečné Supabase (generateLink +
+  verifyOtp) odsud vyzkoušet nejde - první připojení udělej ty.
+- Kine Plus: migrace prošla dvakrát; spouštěč vrací změnu plánu
+  z prohlížeče a pustí ji ze serveru; has_plus() správně hlídá platnost.
+  Stránky /plus a /admin/plus 200, API bez tokenu 401/403. Skutečnou
+  platbu přes Stripe odsud vyzkoušet nejde - první nákup udělej v testovacím
+  režimu Stripe ty (webhook události customer.subscription.*).
 - Sestavenou appku jsem spustil a proklepal: /embed/<id> vrací
   Content-Security-Policy: frame-ancestors * a NEMÁ X-Frame-Options,
   /watch/<id> dál má SAMEORIGIN; robots.txt uvádí obě sitemapy; oEmbed

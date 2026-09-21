@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabaseClient';
 import SubscribeButton from '@/components/SubscribeButton';
 import CreatorSubscribeButton from '@/components/CreatorSubscribeButton';
 import VerifiedBadge from '@/components/VerifiedBadge';
+import PlusBadge from '@/components/PlusBadge';
 import PostComposer from '@/components/PostComposer';
 import PostCard from '@/components/PostCard';
 import { buildVideoBlocks, isSpark } from '@/lib/videoBlocks';
@@ -269,6 +270,7 @@ function ChannelPageInner() {
           <p className="video-title" style={{ margin: 0, fontSize: 24 }}>
             {profile.display_name ?? profile.username}
             <VerifiedBadge tier={profile.verification_tier} />
+            <PlusBadge userId={profile.id} size="md" />
             {trustRating !== null && trustRating >= 90 && (
               <span title={t('highRatingTitle').replace('{rating}', String(trustRating))} style={{ marginLeft: 5, fontSize: 15 }}>⭐</span>
             )}

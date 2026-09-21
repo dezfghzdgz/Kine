@@ -40,7 +40,29 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (session.mode === 'subscription') {
+    if (session.mode === 'subscription' && session.metadata?.kind === 'kine-plus') {
+      // Koupené Kine Plus (app/api/plus/checkout). Konec období si
+      // přečteme z předplatného, ať Plus po nezaplacení samo vyprší.
+      const userId = session.metadata?.userId;
+      if (userId) {
+        let periodEnd: string | null = null;
+        try {
+          const sub: any = await stripeServer.subscriptions.retrieve(session.subscription);
+          periodEnd = plusUntilFromSubscription(sub);
+        } catch {
+          // Bez konce období: Plus platí, dokud webhook nepřijde s update.
+        }
+        await supabaseServer
+          .from('profiles')
+          .update({
+            plan: 'plus',
+            plan_until: periodEnd,
+            plan_stripe_subscription_id: session.subscription,
+            plan_stripe_customer_id: session.customer,
+          })
+          .eq('id', userId);
+      }
+    } else if (session.mode === 'subscription') {
       // Vzniklo nové aktivní předplatné konkrétního tvůrce.
       const subscriberId = session.metadata?.subscriberId;
       const creatorId = session.metadata?.creatorId;
@@ -60,7 +82,16 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
+  if ((event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') && (event.data.object as any)?.metadata?.kind === 'kine-plus') {
+    // Kine Plus: aktivní/zkušební = plus do konce období (+3 dny rezerva
+    // na opožděnou platbu), cokoliv jiného (zrušené, nezaplacené) = free.
+    const sub = event.data.object as any;
+    const active = event.type !== 'customer.subscription.deleted' && (sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due');
+    await supabaseServer
+      .from('profiles')
+      .update(active ? { plan: 'plus', plan_until: plusUntilFromSubscription(sub) } : { plan: 'free', plan_until: null })
+      .eq('plan_stripe_subscription_id', sub.id);
+  } else if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
     const sub = event.data.object as any;
     const status = event.type === 'customer.subscription.deleted'
       ? 'canceled'
@@ -76,4 +107,11 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ received: true });
+}
+
+/** Konec zaplaceného období + 3 dny rezervy; bez období null (= bez konce). */
+function plusUntilFromSubscription(sub: any): string | null {
+  const end = sub?.current_period_end ?? sub?.items?.data?.[0]?.current_period_end;
+  if (!end) return null;
+  return new Date(end * 1000 + 3 * 24 * 60 * 60 * 1000).toISOString();
 }

@@ -7,7 +7,7 @@ import { supabaseServer } from '@/lib/supabaseServer';
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
-  const staticRoutes = ['', '/explore', '/login', '/signup', '/terms', '/privacy', '/rules', '/copyright', '/download'].map((path) => ({
+  const staticRoutes = ['', '/explore', '/login', '/signup', '/terms', '/privacy', '/rules', '/copyright', '/download', '/plus'].map((path) => ({
     url: `${baseUrl}${path}`,
     lastModified: new Date(),
   }));

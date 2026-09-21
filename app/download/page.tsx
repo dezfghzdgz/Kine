@@ -1,20 +1,38 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
 
 /**
  * Stránka ke stažení appky Kine do PC.
  *
- * Instalátor se staví na GitHubu (kine-desktop, GitHub Actions) a leží
- * v Releases; odkaz se dá přepnout přes NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL,
- * až bude třeba vlastní doména nebo jiné místo.
+ * Tlačítko vede na /download/windows - to pošle prohlížeč rovnou na
+ * nejnovější instalátor (GitHub Releases repa kine-desktop), takže
+ * uživatel GitHub nevidí, jen mu začne stahování. Verze a datum se
+ * berou z /api/desktop/latest.
  */
-const DOWNLOAD_URL = process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL || 'https://github.com/dezfghzdgz/kine-desktop/releases/latest';
-
 export default function DownloadPage() {
   const { t } = useLanguage();
+  const [release, setRelease] = useState<{ version: string; publishedAt: string | null; sizeBytes: number | null } | null | undefined>(undefined);
+
+  useEffect(() => {
+    fetch('/api/desktop/latest')
+      .then((r) => r.json())
+      .then((body) => setRelease(body.release ?? null))
+      .catch(() => setRelease(null));
+  }, []);
 
   const steps = [t('downloadStep1'), t('downloadStep2'), t('downloadStep3'), t('downloadStep4')];
+  const versionLine = release
+    ? [
+        `${t('downloadVersion')} ${release.version}`,
+        release.publishedAt ? new Date(release.publishedAt).toLocaleDateString('cs-CZ') : null,
+        release.sizeBytes ? `${Math.round(release.sizeBytes / 1024 / 1024)} MB` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : null;
 
   return (
     <div className="form-container" style={{ maxWidth: 680 }}>
@@ -23,11 +41,15 @@ export default function DownloadPage() {
 
       <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          <a href={DOWNLOAD_URL} target="_blank" rel="noopener noreferrer" className="reaction-btn active" style={{ textDecoration: 'none', fontSize: 16, padding: '12px 22px' }}>
+          <a href="/download/windows" className="reaction-btn active" style={{ textDecoration: 'none', fontSize: 16, padding: '12px 22px' }}>
             {t('desktopDownloadButton')}
           </a>
-          <span style={{ color: 'var(--text-faint)', fontSize: 13 }}>{t('downloadRequirements')}</span>
+          <span style={{ color: 'var(--text-faint)', fontSize: 13 }}>
+            {t('downloadRequirements')}
+            {versionLine ? ` · ${versionLine}` : ''}
+          </span>
         </div>
+        {release === null && <p style={{ margin: 0, fontSize: 13, color: 'var(--text-faint)' }}>{t('downloadNotYet')}</p>}
         <p style={{ margin: 0, fontSize: 13, color: 'var(--text-faint)', lineHeight: 1.6 }}>{t('downloadUnsigned')}</p>
       </div>
 
@@ -38,6 +60,13 @@ export default function DownloadPage() {
             <li key={s}>{s}</li>
           ))}
         </ol>
+      </div>
+
+      <div className="panel" style={{ marginTop: 14 }}>
+        <p className="panel-heading">{t('downloadFreePlusTitle')}</p>
+        <p style={{ margin: '8px 0 0', color: 'var(--text-dim)', lineHeight: 1.7 }}>
+          {t('downloadFreePlusText')} <Link href="/plus">{t('downloadFreePlusLink')}</Link>
+        </p>
       </div>
 
       <div className="panel" style={{ marginTop: 14 }}>

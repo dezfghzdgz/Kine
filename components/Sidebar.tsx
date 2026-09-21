@@ -383,6 +383,11 @@ export default function Sidebar() {
               🐞 {t('clientErrorsLabel')}
             </Link>
           )}
+          {isAdmin && (
+            <Link href="/admin/plus" className="sidebar-link" onClick={closeMobileNav}>
+              ✦ Kine Plus
+            </Link>
+          )}
 
           {!loading && (
             <div style={{ marginTop: 'auto' }}>

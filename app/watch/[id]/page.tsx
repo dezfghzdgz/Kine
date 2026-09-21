@@ -17,6 +17,7 @@ import ChapterTimeline from '@/components/ChapterTimeline';
 import CaptionsOverlay from '@/components/CaptionsOverlay';
 import ReportModal from '@/components/ReportModal';
 import VerifiedBadge from '@/components/VerifiedBadge';
+import PlusBadge from '@/components/PlusBadge';
 import Toast, { ToastType } from '@/components/Toast';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -1468,6 +1469,7 @@ function WatchPageInner() {
             </span>
             <span>{creatorName}</span>
             <VerifiedBadge tier={video.profiles?.verification_tier} />
+            <PlusBadge userId={video.profiles?.id} />
                 {trustRating !== null && trustRating >= 90 && <span title={t('highRatingTitle').replace('{rating}', String(trustRating))} style={{ marginLeft: 5, fontSize: 13 }}>⭐</span>}
           </Link>
           <span>{video.views} {t('views')}</span>
