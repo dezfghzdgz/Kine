@@ -1,20 +1,22 @@
 /**
- * Kde leží appka Kine do PC a v jaké je verzi.
+ * Kde leží appky do PC a v jaké jsou verzi.
  *
- * Instalátor staví GitHub Actions v repu kine-desktop a nahrává ho na dvě
- * místa: do našeho úložiště (Cloudflare R2 - odsud stahují lidi a odsud si
- * nainstalované appky berou aktualizace) a jako zálohu do GitHub Releases.
+ * Dvě appky z jednoho repa kine-desktop: "Kine" (Kine do PC - Kine jako
+ * aplikace + klipovač) a "Kine Clipper" (jen klipovač). Instalátory staví
+ * GitHub Actions a nahrává je na dvě místa: do našeho úložiště (Cloudflare
+ * R2 - odsud stahují lidi a odsud si nainstalované appky berou
+ * aktualizace; každá appka ve své složce full/ a clipper/) a jako zálohu do
+ * GitHub Releases.
  *
- * NEXT_PUBLIC_DESKTOP_DOWNLOAD_BASE  veřejná adresa složky v úložišti, např.
+ * NEXT_PUBLIC_DESKTOP_DOWNLOAD_BASE  veřejná adresa úložiště, např.
  *                                    https://pub-xxxx.r2.dev nebo https://stahnout.kine.cz
- *                                    (tam leží Kine-Setup.exe, Kine-Clipper-Setup.exe,
- *                                    latest.yml) - to samé, co je v GitHubu jako
- *                                    proměnná DESKTOP_DOWNLOAD_BASE
+ *                                    (tam leží full/Kine-Setup.exe, full/latest.yml,
+ *                                    clipper/Kine-Clipper-Setup.exe, clipper/latest.yml)
+ *                                    - to samé, co je v GitHubu jako proměnná
+ *                                    DESKTOP_DOWNLOAD_BASE
  * NEXT_PUBLIC_DESKTOP_REPO           "vlastnik/kine-desktop" na GitHubu (záloha)
- * NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL   přebije všechno - přímá adresa instalátoru
- *
- * Jeden instalátor, dva názvy: podle názvu si appka při prvním spuštění
- * předvyplní režim ("Kine + klipy" / "jen klipovač").
+ * NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL   přebije všechno - přímá adresa instalátoru Kine
+ *                                    (klipovač se hledá vedle něj)
  */
 export const DESKTOP_REPO = process.env.NEXT_PUBLIC_DESKTOP_REPO || 'dezfghzdgz/kine-desktop';
 export const DESKTOP_DOWNLOAD_BASE = (process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_BASE || '').replace(/\/+$/, '');
@@ -27,26 +29,45 @@ export const DESKTOP_INSTALLER_NAMES: Record<DesktopVariant, string> = {
 };
 export const DESKTOP_INSTALLER_NAME = DESKTOP_INSTALLER_NAMES.full;
 
+/** Názvy appek, jak se ukazují lidem (nelokalizované - takhle se jmenují i po instalaci). */
+export const DESKTOP_APP_NAMES: Record<DesktopVariant, string> = { full: 'Kine', clipper: 'Kine Clipper' };
+
 export function desktopDownloadUrl(variant: DesktopVariant = 'full'): string {
   const file = DESKTOP_INSTALLER_NAMES[variant];
   if (process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL) {
-    // Ruční adresa míří na jeden soubor - druhý název leží vedle něj.
+    // Ruční adresa míří na jeden soubor - druhý leží vedle něj.
     return process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL.replace(/[^/]+$/, file);
   }
-  if (DESKTOP_DOWNLOAD_BASE) return `${DESKTOP_DOWNLOAD_BASE}/${file}`;
+  if (DESKTOP_DOWNLOAD_BASE) return `${DESKTOP_DOWNLOAD_BASE}/${variant}/${file}`;
   return `https://github.com/${DESKTOP_REPO}/releases/latest/download/${file}`;
+}
+
+/**
+ * Starší rozložení úložiště (do appky 0.4.0): instalátory v kořeni, ne ve
+ * složkách full/ a clipper/. Bere se, když nová složka ještě neexistuje
+ * (web nasazený dřív než první vydání 0.5.0). Null bez úložiště.
+ */
+export function legacyDesktopDownloadUrl(variant: DesktopVariant = 'full'): string | null {
+  if (!DESKTOP_DOWNLOAD_BASE || process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL) return null;
+  return `${DESKTOP_DOWNLOAD_BASE}/${DESKTOP_INSTALLER_NAMES[variant]}`;
 }
 
 export type DesktopRelease = { version: string; publishedAt: string | null; sizeBytes: number | null };
 
 /**
- * Nejnovější vydání: z latest.yml v našem úložišti (píše ho electron-builder),
- * záložně z GitHubu (veřejné API, bez klíče). Null, když se nepovede.
+ * Nejnovější vydání appky: z latest.yml v našem úložišti (píše ho
+ * electron-builder; ve složce appky, u Kine záložně i v kořeni - tam ležel
+ * do verze 0.4.0), záložně z GitHubu (veřejné API, bez klíče). Null, když
+ * se nepovede.
  */
-export async function fetchLatestRelease(): Promise<DesktopRelease | null> {
+export async function fetchLatestRelease(variant: DesktopVariant = 'full'): Promise<DesktopRelease | null> {
   if (DESKTOP_DOWNLOAD_BASE) {
-    const fromStore = await fetchLatestYml(`${DESKTOP_DOWNLOAD_BASE}/latest.yml`);
+    const fromStore = await fetchLatestYml(`${DESKTOP_DOWNLOAD_BASE}/${variant}/latest.yml`);
     if (fromStore) return fromStore;
+    if (variant === 'full') {
+      const legacy = await fetchLatestYml(`${DESKTOP_DOWNLOAD_BASE}/latest.yml`);
+      if (legacy) return legacy;
+    }
   }
   try {
     const res = await fetch(`https://api.github.com/repos/${DESKTOP_REPO}/releases/latest`, {
@@ -55,7 +76,7 @@ export async function fetchLatestRelease(): Promise<DesktopRelease | null> {
     });
     if (!res.ok) return null;
     const data = await res.json();
-    const asset = Array.isArray(data.assets) ? data.assets.find((a: any) => a?.name === DESKTOP_INSTALLER_NAME) : null;
+    const asset = Array.isArray(data.assets) ? data.assets.find((a: any) => a?.name === DESKTOP_INSTALLER_NAMES[variant]) : null;
     return {
       version: String(data.tag_name ?? data.name ?? '').replace(/^v/, ''),
       publishedAt: data.published_at ?? null,

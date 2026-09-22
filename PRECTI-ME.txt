@@ -1,37 +1,61 @@
-KINE - sdílené přihlášení s appkou do PC + proužek znovu za týden
-=================================================================
+KINE - dvě appky do PC, nová stránka předplatného, proužek „Kine a klipy“
+=======================================================================
 
-Malý balíček k appce do PC 0.4.0 (ta je ve zvláštním ZIPu). 14 souborů
-(jen ty, co se změnily nebo jsou nové). Rozbal do kořene repa a přepiš.
-Pak:
+Balíček k appce do PC 0.5.0 (ta je ve zvláštním ZIPu). 17 souborů (jen
+ty, co se změnily). Rozbal do kořene repa a přepiš. Pak:
 
   1. node zkontroluj-soubory.mjs --uklid   (kdyby tam ještě ležely zbytky
                                             z minula - tests/username.test.mjs
                                             a spol.; tohle je smaže)
-  2. Push. Žádná migrace, žádná nová závislost, žádná proměnná.
+  2. Push. Žádná migrace, žádná nová závislost.
 
-Pořadí nevadí: web umí novou stránku i bez nové appky a stará appka
-0.3.0 s novým webem funguje jako dřív.
+  3. Pořadí nevadí: web míří na nové složky úložiště (full/, clipper/),
+     a dokud tam po vydání appky 0.5.0 nejsou, pošle lidi na starý soubor
+     v kořeni (ověřuje si to sám).
 
 CO SE ZMĚNILO
 -------------
-- Nová stránka /connect/app (app/connect/app/page.tsx): sem appka pošle
-  web vložený do svého okna, když jsi přihlášený v appce a web ne.
-  Appka si přes /api/desktop/link (už existuje) vyžádá jednorázový
-  token, stránka z něj udělá běžné přihlášení a přejde na původní adresu
-  (?next=…, jen cesty na Kine - žádné cizí adresy). Opačný směr
-  (přihlásíš se ve webu v okně, appka se přihlásí taky) řeší appka sama
-  přes ten samý /api/desktop/link - na webu k tomu není třeba nic.
-- Proužek "Kine do PC" na hlavní stránce se po zavření křížkem vrátí za
-  7 dní (dřív navždy). Kdo appku stáhl, ho v jejím okně nevidí vůbec.
-  Kdo ho zavřel se starou verzí, uvidí ho znovu za týden od téhle změny.
-- Osm překladů (cs, en, sk, de, pl, es, fr, uk) - čtyři nové klíče
-  (connectApp*).
-- tests/plus.test.mjs: nový test pro to týdenní vracení proužku.
+- Stahování (/download): dvě různé appky s vlastní ikonou a názvem -
+  „Kine do PC“ (Kine + klipovač v jednom okně, štítek „Včetně klipovače“)
+  a „Kine Klipovač“ (jen klipovač, štítek „Jen klipovač“). U každé tři
+  věci, které dostaneš, název souboru, verze. Text pod tím říká, že stačí
+  jedna. Upozornění na SmartScreen zůstává (do podpisu).
+- /download/windows: přesměrování na instalátor podle appky; když nová složka
+  v úložišti ještě není, pošle na starý soubor v kořeni (HEAD, 5 min paměť).
+- lib/desktopRelease.ts: adresy instalátorů podle appky
+  (<úložiště>/full/Kine-Setup.exe, <úložiště>/clipper/Kine-Clipper-Setup.exe),
+  verze každé appky zvlášť (full/latest.yml, clipper/latest.yml; u Kine
+  záložně starý kořenový latest.yml). /api/desktop/latest vrací obě.
+- Proužek na hlavní stránce a odkaz v levém menu: „Kine a klipy“ (dřív
+  „Kine do PC“), text „Kine jako aplikace v počítači a klipy ze hry jednou
+  klávesou - nebo jen klipovač“.
+- Předplatné (/plus) předělané jako nabídka pro zákazníka: titulek s tím,
+  co člověk dostane, tři karty s cenou a výhodami (obojí zvýrazněné jako
+  „Nejvýhodnější“, ikony, fajfky), srovnávací tabulka Zdarma / Kine Plus /
+  Klipy Plus / Obojí, časté otázky (zrušení, platba, co se stane s videi),
+  tlačítko „Přihlásit se a vybrat“ pro nepřihlášené. Ceny se berou
+  z prostředí - viz níže.
+- Osm překladů (cs, en, sk, de, pl, es, fr, uk): 8 nových klíčů ke
+  stahování, 24 k předplatnému, 13 přepsaných.
+- tests/plus.test.mjs: test adres podle appky.
+
+CENY NA STRÁNCE PŘEDPLATNÉHO
+----------------------------
+Dokud nejsou nastavené, ukazuje se u variant „Brzy“ (schválně - nic se
+nevymýšlí). Aby se objevily ceny a tlačítka „Vybrat · cena“, nastav ve
+Vercelu (Settings → Environment Variables) a redeployni:
+  NEXT_PUBLIC_PLUS_KINE_PRICE_LABEL   např. 79 Kč / měsíc
+  NEXT_PUBLIC_PLUS_CLIPS_PRICE_LABEL  např. 99 Kč / měsíc
+  NEXT_PUBLIC_PLUS_ALL_PRICE_LABEL    např. 149 Kč / měsíc
+a k nim Stripe Price ID pro platbu:
+  STRIPE_PLUS_KINE_PRICE_ID, STRIPE_PLUS_CLIPS_PRICE_ID, STRIPE_PLUS_ALL_PRICE_ID
+(ceny jsou jen příklad - rozhodni sám; zaokrouhlené částky a „obojí“
+o dost levnější než součet fungují nejlíp).
 
 CO JSEM OVĚŘIL
 --------------
-- Na tvém aktuálním mainu (4aa3b66 klipovac vic): skutečný tsc bez
-  chyby, skutečný next build prošel (/connect/app je v seznamu stránek),
-  22 testovacích sad prošlo (tests/username.test.mjs je ten starý zbytek,
-  který --uklid smaže).
+- Na tvém aktuálním mainu (1568018): tsc bez chyby, next build prošel
+  (/plus, /download, /download/windows v seznamu), 23 sad testů prošlo
+  (tests/username.test.mjs je ten starý zbytek, který --uklid smaže).
+  /plus, /download a proužek jsem vykreslil v Chromiu (screenshoty ve
+  zprávě), /plus i na šířce telefonu.

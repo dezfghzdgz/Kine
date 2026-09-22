@@ -17,6 +17,10 @@ process.env.NEXT_PUBLIC_PLUS_CLIPS_PRICE_LABEL = '79 Kč / měsíc';
 const kam = prelozit('lib/plus.ts', 'lib/desktopRelease.ts');
 const plus = await import(join(kam, 'plus.js'));
 const release = await import(join(kam, 'desktopRelease.js'));
+// Druhý otisk modulu s nastaveným úložištěm (adresa se čte při načtení).
+process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_BASE = 'https://pub-x.r2.dev/';
+const releaseWithBase = await import(join(kam, 'desktopRelease.js') + '?base=1');
+delete process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_BASE;
 
 let prosly = 0;
 let padly = 0;
@@ -62,6 +66,12 @@ test('adresy instalátoru: úložiště, jinak GitHub; dva názvy', () => {
   assert.equal(release.desktopDownloadUrl('full'), 'https://github.com/dezfghzdgz/kine-desktop/releases/latest/download/Kine-Setup.exe');
   assert.equal(release.desktopDownloadUrl('clipper'), 'https://github.com/dezfghzdgz/kine-desktop/releases/latest/download/Kine-Clipper-Setup.exe');
   assert.equal(release.DESKTOP_INSTALLER_NAMES.clipper, 'Kine-Clipper-Setup.exe');
+});
+
+test('s úložištěm každá appka ve své složce (full/, clipper/)', () => {
+  assert.equal(releaseWithBase.desktopDownloadUrl('full'), 'https://pub-x.r2.dev/full/Kine-Setup.exe');
+  assert.equal(releaseWithBase.desktopDownloadUrl('clipper'), 'https://pub-x.r2.dev/clipper/Kine-Clipper-Setup.exe');
+  assert.equal(releaseWithBase.DESKTOP_APP_NAMES.clipper, 'Kine Clipper');
 });
 
 test('proužek "Kine do PC" se po zavření vrátí za týden', () => {
