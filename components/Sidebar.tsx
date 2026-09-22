@@ -79,6 +79,15 @@ export default function Sidebar() {
   const { isModerator, isAdmin } = useUserRole();
   const [exploreOpen, setExploreOpen] = useState(false);
   const { open: mobileNavOpen, close: closeMobileNav } = useMobileNav();
+
+  // Rozbalený Explore na nižším okně: menu roluje, tak ať je seznam hned vidět.
+  useEffect(() => {
+    if (!exploreOpen) return;
+    const id = requestAnimationFrame(() => {
+      document.querySelectorAll<HTMLElement>('.sidebar-sublist').forEach((el) => el.scrollIntoView({ block: 'nearest' }));
+    });
+    return () => cancelAnimationFrame(id);
+  }, [exploreOpen]);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [user, setUser] = useState<{ id: string; username: string; avatar_url: string | null } | null>(null);
   const [ratingMode, setRatingMode] = useState<'stars' | 'like_dislike'>('like_dislike');

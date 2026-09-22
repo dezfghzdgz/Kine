@@ -1,61 +1,17 @@
-KINE - dvě appky do PC, nová stránka předplatného, proužek „Kine a klipy“
-=======================================================================
+KINE - rozbalený Explore na nižším okně
+=======================================
 
-Balíček k appce do PC 0.5.0 (ta je ve zvláštním ZIPu). 17 souborů (jen
-ty, co se změnily). Rozbal do kořene repa a přepiš. Pak:
+Malý balíček (4 soubory). Rozbal do kořene repa a přepiš, pak:
 
-  1. node zkontroluj-soubory.mjs --uklid   (kdyby tam ještě ležely zbytky
-                                            z minula - tests/username.test.mjs
-                                            a spol.; tohle je smaže)
+  1. node zkontroluj-soubory.mjs --uklid
   2. Push. Žádná migrace, žádná nová závislost.
-
-  3. Pořadí nevadí: web míří na nové složky úložiště (full/, clipper/),
-     a dokud tam po vydání appky 0.5.0 nejsou, pošle lidi na starý soubor
-     v kořeni (ověřuje si to sám).
 
 CO SE ZMĚNILO
 -------------
-- Stahování (/download): dvě různé appky s vlastní ikonou a názvem -
-  „Kine do PC“ (Kine + klipovač v jednom okně, štítek „Včetně klipovače“)
-  a „Kine Klipovač“ (jen klipovač, štítek „Jen klipovač“). U každé tři
-  věci, které dostaneš, název souboru, verze. Text pod tím říká, že stačí
-  jedna. Upozornění na SmartScreen zůstává (do podpisu).
-- /download/windows: přesměrování na instalátor podle appky; když nová složka
-  v úložišti ještě není, pošle na starý soubor v kořeni (HEAD, 5 min paměť).
-- lib/desktopRelease.ts: adresy instalátorů podle appky
-  (<úložiště>/full/Kine-Setup.exe, <úložiště>/clipper/Kine-Clipper-Setup.exe),
-  verze každé appky zvlášť (full/latest.yml, clipper/latest.yml; u Kine
-  záložně starý kořenový latest.yml). /api/desktop/latest vrací obě.
-- Proužek na hlavní stránce a odkaz v levém menu: „Kine a klipy“ (dřív
-  „Kine do PC“), text „Kine jako aplikace v počítači a klipy ze hry jednou
-  klávesou - nebo jen klipovač“.
-- Předplatné (/plus) předělané jako nabídka pro zákazníka: titulek s tím,
-  co člověk dostane, tři karty s cenou a výhodami (obojí zvýrazněné jako
-  „Nejvýhodnější“, ikony, fajfky), srovnávací tabulka Zdarma / Kine Plus /
-  Klipy Plus / Obojí, časté otázky (zrušení, platba, co se stane s videi),
-  tlačítko „Přihlásit se a vybrat“ pro nepřihlášené. Ceny se berou
-  z prostředí - viz níže.
-- Osm překladů (cs, en, sk, de, pl, es, fr, uk): 8 nových klíčů ke
-  stahování, 24 k předplatnému, 13 přepsaných.
-- tests/plus.test.mjs: test adres podle appky.
-
-CENY NA STRÁNCE PŘEDPLATNÉHO
-----------------------------
-Dokud nejsou nastavené, ukazuje se u variant „Brzy“ (schválně - nic se
-nevymýšlí). Aby se objevily ceny a tlačítka „Vybrat · cena“, nastav ve
-Vercelu (Settings → Environment Variables) a redeployni:
-  NEXT_PUBLIC_PLUS_KINE_PRICE_LABEL   např. 79 Kč / měsíc
-  NEXT_PUBLIC_PLUS_CLIPS_PRICE_LABEL  např. 99 Kč / měsíc
-  NEXT_PUBLIC_PLUS_ALL_PRICE_LABEL    např. 149 Kč / měsíc
-a k nim Stripe Price ID pro platbu:
-  STRIPE_PLUS_KINE_PRICE_ID, STRIPE_PLUS_CLIPS_PRICE_ID, STRIPE_PLUS_ALL_PRICE_ID
-(ceny jsou jen příklad - rozhodni sám; zaokrouhlené částky a „obojí“
-o dost levnější než součet fungují nejlíp).
-
-CO JSEM OVĚŘIL
---------------
-- Na tvém aktuálním mainu (1568018): tsc bez chyby, next build prošel
-  (/plus, /download, /download/windows v seznamu), 23 sad testů prošlo
-  (tests/username.test.mjs je ten starý zbytek, který --uklid smaže).
-  /plus, /download a proužek jsem vykreslil v Chromiu (screenshoty ve
-  zprávě), /plus i na šířce telefonu.
+- Explore v levém menu se po rozbalení na nižších oknech (1080p, okno
+  appky do PC) neukázal - seznam kategorií je položka rolovacího sloupce
+  a ten ji na malé výšce smrsknul na nulu (na 2K bylo místa dost, proto
+  tam fungoval). Teď se nesmršťuje (rolovat má celé menu) a po rozbalení
+  se seznam posune do zorného pole. Ověřeno v Chromiu na výšce 620 px:
+  dřív 0-255 px podle počtu položek v menu, teď plných 320 px se
+  rolováním. components/Sidebar.tsx, app/globals.css.

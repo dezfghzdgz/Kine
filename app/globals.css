@@ -357,6 +357,10 @@ select:focus-visible {
   gap: 2px;
   max-height: 320px;
   overflow-y: auto;
+  /* Položka flexového sloupce .sidebar-nav s overflow: auto má automaticky
+     min-height 0 - na nižších oknech (1080p, okno appky) ji sloupec smrsknul
+     na nulu a rozbalený Explore "nic neukázal". Nesmršťovat; rolovat má nav. */
+  flex: none;
 }
 
 .content-area {

@@ -1,5 +1,5 @@
 {
-  "dodavka": "kine-dve-appky-predplatne-2026-09-22",
+  "dodavka": "kine-explore-nizke-okno-2026-09-22",
   "soubory": {
     ".env.example": "c35e1fa7b0b948e1",
     ".github/workflows/zaloha-databaze.yml": "4543c1c8ed69fb42",
@@ -38,7 +38,7 @@
     "app/download/windows/route.ts": "84cfeddd8781a5ad",
     "app/downloaded/page.tsx": "6f000e79c6e57e05",
     "app/embed/[id]/page.tsx": "ccb067521662619c",
-    "app/globals.css": "4ec14fb0711bbe33",
+    "app/globals.css": "db345597bb941beb",
     "app/history/page.tsx": "3bd1a39e95fe2350",
     "app/layout.tsx": "341bff44be85f16b",
     "app/liked/page.tsx": "1ad4db7b40a8b13f",
@@ -86,7 +86,7 @@
     "components/RatingChartModal.tsx": "6274b20d5db1f478",
     "components/ReportModal.tsx": "a460d5a4a8bfeed0",
     "components/SearchResults.tsx": "60b98acb1560aa11",
-    "components/Sidebar.tsx": "6f475e049c057b7d",
+    "components/Sidebar.tsx": "b2347588210d1433",
     "components/Skeleton.tsx": "cce7f62f35ad9d92",
     "components/SparksCard.tsx": "5a0a46cd9edfafb8",
     "components/StatChartModal.tsx": "0a1cedfea97a8f2f",
@@ -145,7 +145,7 @@
     "next.config.js": "387289a2bd0d809e",
     "package-lock.json": "62eb16fc4f8e22c6",
     "package.json": "a4f21e8f10f47569",
-    "PRECTI-ME.txt": "6cba1320b05b9c7a",
+    "PRECTI-ME.txt": "2d1083d4dae7f5ec",
     "supabase-migration-autorska-prava.sql": "4850c31eb507b115",
     "supabase-migration-kine-plus.sql": "dac8c9c5394046b9",
     "supabase-migration-klipy.sql": "24d71371d899313f",
