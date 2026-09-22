@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
-import { isInDesktopApp } from '@/lib/desktopRelease';
+import { desktopBannerDismissed, isInDesktopApp } from '@/lib/desktopRelease';
 
 const DISMISS_KEY = 'kine-desktop-banner-dismissed';
 
@@ -11,7 +11,9 @@ const DISMISS_KEY = 'kine-desktop-banner-dismissed';
  * Proužek nahoře na hlavní stránce: "Kine do PC - stáhnout". Aby lidi
  * nemuseli vědět, kam přesně jít (odkaz v levém menu úplně dole je
  * snadné přehlédnout). Jen na počítači (CSS třída sidebar-desktop-only),
- * ne v okně appky, a po zavření křížkem si to prohlížeč pamatuje.
+ * ne v okně appky. Po zavření křížkem si prohlížeč pamatuje čas zavření
+ * a proužek se vrátí až po týdnu (kdo appku mezitím stáhl, ho v jejím
+ * okně nevidí vůbec).
  */
 export default function DesktopAppBanner() {
   const { t } = useLanguage();
@@ -19,7 +21,14 @@ export default function DesktopAppBanner() {
 
   useEffect(() => {
     try {
-      if (isInDesktopApp() || localStorage.getItem(DISMISS_KEY)) return;
+      if (isInDesktopApp()) return;
+      const stored = localStorage.getItem(DISMISS_KEY);
+      // Starší verze ukládala jen "1" (navždy): brát jako zavřené dnes, ať se proužek vrátí za týden.
+      if (stored === '1') {
+        localStorage.setItem(DISMISS_KEY, String(Date.now()));
+        return;
+      }
+      if (desktopBannerDismissed(stored)) return;
     } catch {
       // bez localStorage se proužek prostě ukáže
     }
@@ -31,7 +40,7 @@ export default function DesktopAppBanner() {
   function dismiss() {
     setShow(false);
     try {
-      localStorage.setItem(DISMISS_KEY, '1');
+      localStorage.setItem(DISMISS_KEY, String(Date.now()));
     } catch {
       // nevadí
     }

@@ -897,4 +897,8 @@ export const es: Record<DictKey, string> = {
   desktopBannerTitle: 'Kine para PC',
   desktopBannerText: 'Clips de juego con una tecla y Kine como aplicación de escritorio. Gratis, Windows 10/11.',
   desktopBannerButton: 'Descargar',
+  connectAppTitle: 'Inicio de sesión en la app de Kine',
+  connectAppSigningIn: 'Iniciando sesión con la misma cuenta que en la app…',
+  connectAppFailed: 'No se pudo iniciar sesión. Inicia sesión manualmente: la app lo recogerá.',
+  connectAppInvalid: 'Este enlace está incompleto. Abre Kine de nuevo desde la app.',
 };

@@ -64,5 +64,16 @@ test('adresy instalátoru: úložiště, jinak GitHub; dva názvy', () => {
   assert.equal(release.DESKTOP_INSTALLER_NAMES.clipper, 'Kine-Clipper-Setup.exe');
 });
 
+test('proužek "Kine do PC" se po zavření vrátí za týden', () => {
+  const now = Date.now();
+  const den = 24 * 3600 * 1000;
+  assert.equal(release.desktopBannerDismissed(null, now), false, 'nikdy nezavřený se ukáže');
+  assert.equal(release.desktopBannerDismissed(String(now - 2 * den), now), true, 'zavřený před dvěma dny zůstává schovaný');
+  assert.equal(release.desktopBannerDismissed(String(now - 8 * den), now), false, 'po týdnu se ukáže znovu');
+  assert.equal(release.desktopBannerDismissed('1', now), true, 'starší "1" se bere jako zavřené teď');
+  assert.equal(release.desktopBannerDismissed('nesmysl', now), true);
+  assert.equal(release.DESKTOP_BANNER_SHOW_AGAIN_MS, 7 * den);
+});
+
 console.log(`\n${prosly} prošlo, ${padly} padlo`);
 process.exit(padly ? 1 : 0);

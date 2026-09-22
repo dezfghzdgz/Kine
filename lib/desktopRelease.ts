@@ -98,3 +98,18 @@ export function parseLatestYml(text: string): DesktopRelease | null {
 export function isInDesktopApp(): boolean {
   return typeof navigator !== 'undefined' && /KineDesktop\//.test(navigator.userAgent);
 }
+
+/** Proužek "Kine do PC" na hlavní stránce se po zavření vrátí za týden. */
+export const DESKTOP_BANNER_SHOW_AGAIN_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Má proužek zůstat schovaný? `stored` je čas zavření (ms) z localStorage;
+ * starší verze ukládala jen "1" - tu volající převede na dnešní čas, tady
+ * se bere jako "zavřeno teď".
+ */
+export function desktopBannerDismissed(stored: string | null, now = Date.now()): boolean {
+  if (!stored) return false;
+  const at = Number(stored);
+  if (!Number.isFinite(at) || at <= 1) return true;
+  return now - at < DESKTOP_BANNER_SHOW_AGAIN_MS;
+}

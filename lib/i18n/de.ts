@@ -897,4 +897,8 @@ export const de: Record<DictKey, string> = {
   desktopBannerTitle: 'Kine für PC',
   desktopBannerText: 'Spiel-Clips mit einer Taste und Kine als Desktop-App. Kostenlos, Windows 10/11.',
   desktopBannerButton: 'Herunterladen',
+  connectAppTitle: 'Anmeldung in der Kine-App',
+  connectAppSigningIn: 'Du wirst mit demselben Konto wie in der App angemeldet…',
+  connectAppFailed: 'Die Anmeldung hat nicht geklappt. Melde dich manuell an - die App übernimmt es dann.',
+  connectAppInvalid: 'Dieser Link ist unvollständig. Öffne Kine noch einmal aus der App.',
 };

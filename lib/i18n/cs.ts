@@ -903,6 +903,10 @@ export const cs = {
   desktopBannerTitle: 'Kine do PC',
   desktopBannerText: 'Klipy ze hry jednou klávesou a Kine jako aplikace v počítači. Zdarma, Windows 10/11.',
   desktopBannerButton: 'Stáhnout',
+  connectAppTitle: 'Přihlášení v appce Kine',
+  connectAppSigningIn: 'Přihlašuji tě stejným účtem jako v appce…',
+  connectAppFailed: 'Přihlášení se nepovedlo. Přihlas se ručně - appka to pak převezme.',
+  connectAppInvalid: 'Odkaz je neúplný. Otevři Kine znovu z appky.',
 } as const;
 
 export type DictKey = keyof typeof cs;

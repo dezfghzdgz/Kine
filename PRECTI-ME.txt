@@ -1,29 +1,37 @@
-KINE - proužek "Kine do PC" na hlavní stránce
-==============================================
+KINE - sdílené přihlášení s appkou do PC + proužek znovu za týden
+=================================================================
 
-Malý balíček k appce do PC 0.3.0 (ta je ve zvláštním ZIPu). 13 souborů
+Malý balíček k appce do PC 0.4.0 (ta je ve zvláštním ZIPu). 14 souborů
 (jen ty, co se změnily nebo jsou nové). Rozbal do kořene repa a přepiš.
 Pak:
 
-  1. node zkontroluj-soubory.mjs --uklid   (pořád tam leží ty tři zbytky
+  1. node zkontroluj-soubory.mjs --uklid   (kdyby tam ještě ležely zbytky
                                             z minula - tests/username.test.mjs
                                             a spol.; tohle je smaže)
   2. Push. Žádná migrace, žádná nová závislost, žádná proměnná.
 
+Pořadí nevadí: web umí novou stránku i bez nové appky a stará appka
+0.3.0 s novým webem funguje jako dřív.
+
 CO SE ZMĚNILO
 -------------
-- Hlavní stránka má nahoře proužek "Kine do PC - klipy ze hry jednou
-  klávesou a Kine jako aplikace v počítači. Stáhnout" (components/
-  DesktopAppBanner.tsx). Jen na počítači (na telefonu se appka nedá
-  nainstalovat), NE v okně appky (ta si do User-Agentu píše KineDesktop),
-  křížkem se zavře a prohlížeč si to pamatuje. Odkaz vede na /download,
-  kde jsou ty dvě volby (Kine + klipy / jen klipovač). Lidi tak nemusí
-  vědět, kam přesně jít - přesně to, co jsi psal.
-- Osm překladů (cs, en, sk, de, pl, es, fr, uk) - tři nové klíče.
+- Nová stránka /connect/app (app/connect/app/page.tsx): sem appka pošle
+  web vložený do svého okna, když jsi přihlášený v appce a web ne.
+  Appka si přes /api/desktop/link (už existuje) vyžádá jednorázový
+  token, stránka z něj udělá běžné přihlášení a přejde na původní adresu
+  (?next=…, jen cesty na Kine - žádné cizí adresy). Opačný směr
+  (přihlásíš se ve webu v okně, appka se přihlásí taky) řeší appka sama
+  přes ten samý /api/desktop/link - na webu k tomu není třeba nic.
+- Proužek "Kine do PC" na hlavní stránce se po zavření křížkem vrátí za
+  7 dní (dřív navždy). Kdo appku stáhl, ho v jejím okně nevidí vůbec.
+  Kdo ho zavřel se starou verzí, uvidí ho znovu za týden od téhle změny.
+- Osm překladů (cs, en, sk, de, pl, es, fr, uk) - čtyři nové klíče
+  (connectApp*).
+- tests/plus.test.mjs: nový test pro to týdenní vracení proužku.
 
 CO JSEM OVĚŘIL
 --------------
-- Na tvém aktuálním mainu (8762099 klipi3): skutečný tsc bez chyby,
-  skutečný next build prošel, 21 testovacích sad prošlo (tests/username.
-  test.mjs je ten starý zbytek, který --uklid smaže). Proužek jsem
-  vykreslil v Chromiu (screenshot v zprávě).
+- Na tvém aktuálním mainu (4aa3b66 klipovac vic): skutečný tsc bez
+  chyby, skutečný next build prošel (/connect/app je v seznamu stránek),
+  22 testovacích sad prošlo (tests/username.test.mjs je ten starý zbytek,
+  který --uklid smaže).

@@ -897,4 +897,8 @@ export const sk: Record<DictKey, string> = {
   desktopBannerTitle: 'Kine do PC',
   desktopBannerText: 'Klipy z hry jedným klávesom a Kine ako aplikácia v počítači. Zadarmo, Windows 10/11.',
   desktopBannerButton: 'Stiahnuť',
+  connectAppTitle: 'Prihlásenie v appke Kine',
+  connectAppSigningIn: 'Prihlasujem ťa rovnakým účtom ako v appke…',
+  connectAppFailed: 'Prihlásenie sa nepodarilo. Prihlás sa ručne - appka to potom prevezme.',
+  connectAppInvalid: 'Odkaz je neúplný. Otvor Kine znova z appky.',
 };
