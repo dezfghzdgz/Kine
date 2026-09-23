@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { shouldBeProtected, syncVideoProtection } from '@/lib/streamProtection';
 import { hasKinePlus, KINE_PLUS_UPLOAD_MULTIPLIER } from '@/lib/plus';
+import { sweepProcessing } from '@/lib/markVideoReady';
 
 // Poté, co prohlížeč dokončí upload videa přímo do Cloudflare,
 // zavolá tenhle endpoint, aby se video zapsalo do naší databáze.
@@ -143,6 +144,10 @@ export async function POST(req: NextRequest) {
       );
     }
   }
+
+  // Nové nahrání = tvůrce je aktivní; při té příležitosti se dodělají
+  // jeho (i cizí) dřívější videa, která zůstala viset jako "processing".
+  await sweepProcessing();
 
   return NextResponse.json({ video: data });
 }

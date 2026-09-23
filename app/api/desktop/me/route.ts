@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { allPriceLabels, anyTierAvailable, hasClipsPlus, hasKinePlus, normalizePlan, FREE_CLIP_MAX_SECONDS, PLUS_CLIP_MAX_SECONDS } from '@/lib/plus';
+import { sweepProcessing } from '@/lib/markVideoReady';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +39,9 @@ export async function GET(req: NextRequest) {
   const clipsPlus = hasClipsPlus(profile?.plan, profile?.plan_until);
   const kinePlus = hasKinePlus(profile?.plan, profile?.plan_until);
   const prices = allPriceLabels();
+  // Appka se ptá při startu a občas - dobrá chvíle dodělat videa, která
+  // po nahrání z appky zůstala viset jako "processing" (viz markVideoReady).
+  await sweepProcessing();
   return NextResponse.json({
     id: userData.user.id,
     username: profile?.username ?? userData.user.email?.split('@')[0] ?? 'kine',

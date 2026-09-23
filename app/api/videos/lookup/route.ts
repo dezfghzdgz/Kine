@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
+import { refreshFromCloudflare, sweepProcessing } from '@/lib/markVideoReady';
 
 // Záloha pro stránku /watch, když prohlížeč video přes RLS nevidí.
 //
@@ -49,6 +50,18 @@ export async function POST(req: NextRequest) {
   }
   if (!video) {
     return NextResponse.json({ exists: false }, { headers: { 'Cache-Control': 'no-store' } });
+  }
+
+  // Video se ještě "zpracovává" - zeptat se Cloudflare rovnou (často je
+  // dávno hotové, jen se nikdo nezeptal - typicky po nahrání z appky Kine
+  // do PC), a při té příležitosti uklidit i další zaseklá.
+  if (video.status && video.status !== 'ready') {
+    try {
+      if ((await refreshFromCloudflare(video.id)) === 'ready') video.status = 'ready';
+    } catch {
+      // Cloudflare neodpověděl - stránka si video ověří znovu za chvíli.
+    }
+    await sweepProcessing();
   }
 
   const owner = !!userId && video.owner_id === userId;

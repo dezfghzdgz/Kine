@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { refreshFromCloudflare } from '@/lib/markVideoReady';
+import { refreshFromCloudflare, sweepProcessing } from '@/lib/markVideoReady';
 
 // Zeptá se Cloudflare Stream, jestli je video už zpracované, a pokud ano,
 // aktualizuje záznam v naší databázi (status, náhledový obrázek, délka).
@@ -15,6 +15,10 @@ export async function POST(req: NextRequest) {
   }
 
   const vysledek = await refreshFromCloudflare(videoId);
+
+  // Když se už někdo ptá, projdou se při té příležitosti i ostatní zaseklá
+  // videa (nejvýš jednou za minutu a půl; viz sweepProcessing).
+  await sweepProcessing();
 
   if (vysledek === 'not-found') {
     return NextResponse.json({ error: 'Video nenalezeno.' }, { status: 404 });

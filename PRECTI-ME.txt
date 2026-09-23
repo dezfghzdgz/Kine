@@ -1,42 +1,63 @@
-KINE - video po nahrání hlásilo "neexistuje, nebo na něj nemáš přístup"
-=======================================================================
+KINE - video nahrané z appky "se zpracovává" a na Kine nikde není
+===================================================================
 
-Malý balíček (11 souborů). Rozbal do kořene repa a přepiš, pak:
+Malý balíček (9 souborů). Rozbal do kořene repa a přepiš, pak:
 
   1. node zkontroluj-soubory.mjs --uklid
-  2. Push. Žádná migrace, žádná nová závislost.
+  2. Push. Žádná migrace, žádná nová závislost, žádná nová proměnná
+     na Vercelu (CRON_SECRET je nepovinný, viz níž).
+
+CO SE DĚLO
+----------
+Video se do databáze zapíše jako "processing" a na "ready" ho přepne
+až někdo, kdo se Cloudflare zeptá, jestli je zpracované. Dokud se to
+nestane, není v žádném seznamu na Kine (přehled, kanál, hledání) -
+všechny berou jen "ready". Ptát se chodil jen prohlížeč tvůrce: stránka
+nahrávání chvíli po nahrání, Tvoje videa a stránka videa, když jsou
+otevřené. Appka Kine do PC video nahrála, potvrdila - a nikdo se už
+nezeptal. Na Cloudflare bylo hotové, na Kine viselo jako "zpracovává se"
+donekonečna. (Webhook od Cloudflare, který by to řešil, se musí nastavit
+ručně příkazem - to se nikdy nestalo; pořád je to volitelné.)
 
 CO SE ZMĚNILO
 -------------
-- Stránka /watch si video načítá z databáze přes pravidla RLS. Když ho
-  prohlížeč nevidí (soukromé video a prohlížeč přihlášený jiným účtem
-  nebo vůbec, vypršelá relace, smazané video), dotaz vrátil nic a stránka
-  ukázala jen obecnou hlášku s technickým detailem "Cannot coerce the
-  result to a single JSON object". Přesně to se stalo po nahrání klipu
-  z appky (klipy jdou v základu jako soukromé).
-- Nově se stránka v takovém případě zeptá serveru (app/api/videos/lookup,
-  service role): majiteli podle přihlašovacího tokenu vrátí video celé
-  (stránka ho ukáže i se stavem "zpracovává se"), ostatním jen důvod. Podle
-  něj se ukáže srozumitelná hláška: "video bylo smazané" / "je soukromé,
-  přihlas se účtem, kterým jsi ho nahrál" (s odkazem na přihlášení) /
-  "patří jinému účtu než tvému" (odkaz na přihlášení jiným účtem) /
-  "ještě se zpracovává". Obecná hláška s technickým detailem zůstává jen
-  když server neví nic (výpadek). Veřejné video cizího tvůrce se tudy
-  celé nevrací (shadow ban a spol. dál platí).
-- Ověřeno v Chromiu s napodobenými odpověďmi: všech pět případů dává
-  správnou hlášku, majitel vidí stránku videa. next build prošel.
-- Texty v osmi jazycích (lib/i18n).
+- lib/markVideoReady.ts: nová funkce sweepProcessing() - projde nejstarší
+  zaseklá videa (status != ready, z posledních 7 dnů, starší než minutu,
+  nejvýš pár naráz) a u každého se Cloudflare zeptá; když je hotové,
+  přepne ho na ready (a pošle oznámení odběratelům jako dosud). Nejvýš
+  jednou za minutu a půl na instanci, nikdy neshodí dotaz, ze kterého se
+  volá.
+- Volá se z míst, kam chodí provoz i bez tvůrcova prohlížeče:
+    app/api/videos/status    (dotaz na stav - i z appky Kine do PC)
+    app/api/videos/lookup    (záloha stránky videa; navíc se hned zeptá
+                              na to jedno video, když je "processing")
+    app/api/videos/confirm   (nové nahrání dodělá i ta předešlá)
+    app/api/desktop/me       (appka Kine do PC při startu a občas)
+- app/api/videos/sweep (nový): úklid na zavolání, otevřít v prohlížeči
+  https://kine-lac.vercel.app/api/videos/sweep vrátí {checked, ready}.
+  vercel.json (nový) ho pouští denně ve 4:00 UTC (cron Vercelu; na plánu
+  Hobby smí být denní). Když na Vercelu nastavíš proměnnou CRON_SECRET,
+  cizí volání se odmítne - bez ní je cesta otevřená, ale nic škodlivého
+  tudy nejde (jen dotaz na Cloudflare, omezený).
+- Appka Kine do PC 0.9.1 se k tomu po nahrání sama ptá na stav dokola,
+  ukazuje "Nahráno · Kine ho zpracovává…" a "Je na Kine" až doopravdy
+  (viz repo kine-desktop). Tenhle balíček ale pomůže i videím nahraným
+  ze starších verzí appky a z prohlížeče, kde tvůrce zavřel kartu.
+
+OVĚŘENO
+-------
+- npx tsc --noEmit a next build prošly.
+- /api/videos/sweep a /api/videos/status vrací JSON i bez Cloudflare
+  (úklid tiše skončí, dotaz odpoví jako dřív).
 
 SOUBORY
 -------
-  app/api/videos/lookup/route.ts   (nový)
-  app/watch/[id]/page.tsx
-  lib/i18n/{cs,en,sk,de,pl,es,fr,uk}.ts
-  PRECTI-ME.txt, stav-souboru.json
-
-POZNÁMKA K APPCE DO PC
-----------------------
-Kine Clipper od verze 0.8.0 otvírá Kine v prohlížeči přes /connect/app
-s jednorázovým tokenem - prohlížeč se přihlásí stejným účtem jako appka
-a soukromý klip je hned vidět. Tahle oprava webu řeší zbytek (odkaz
-poslaný kamarádovi, jiný účet, starší appka).
+  PRECTI-ME.txt                       tohle
+  stav-souboru.json                   otisky (pro zkontroluj-soubory.mjs)
+  vercel.json                         NOVÝ - denní cron na úklid
+  lib/markVideoReady.ts               sweepProcessing()
+  app/api/videos/sweep/route.ts       NOVÝ - úklid na zavolání
+  app/api/videos/status/route.ts      + úklid
+  app/api/videos/lookup/route.ts      + dotaz na to jedno video, + úklid
+  app/api/videos/confirm/route.ts     + úklid
+  app/api/desktop/me/route.ts         + úklid
