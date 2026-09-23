@@ -939,6 +939,11 @@ export const cs = {
   plusFaq3A: 'Kartou přes Stripe. Kine tvoje číslo karty nikdy nevidí; fakturu i změnu karty řeší portál Stripe ve správě předplatného.',
   plusFaq4Q: 'Co se stane s mými videi a klipy, když předplatné zruším?',
   plusFaq4A: 'Nic. Všechno, co jsi nahrál, zůstává. Skončí jen výhody navíc - odznak, vyšší limit, automatické nahrávání.',
+  videoDeletedNote: 'Tohle video už neexistuje - bylo smazané.',
+  videoPrivateSignInNote: 'Tohle video je soukromé. Když je tvoje, přihlas se účtem, kterým jsi ho nahrál.',
+  videoPrivateOtherAccountNote: 'Tohle video je soukromé a patří jinému účtu, než kterým jsi přihlášený. Když je tvoje, přihlas se účtem, kterým jsi ho nahrál.',
+  videoProcessingNote: 'Video se ještě zpracovává - za chvíli se tu objeví. Zkus stránku obnovit.',
+  videoPrivateSwitchAccountLink: 'Přihlásit se jiným účtem →',
 } as const;
 
 export type DictKey = keyof typeof cs;

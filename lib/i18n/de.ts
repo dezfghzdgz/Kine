@@ -933,4 +933,9 @@ export const de: Record<DictKey, string> = {
   plusFaq3A: 'Per Karte über Stripe. Kine sieht deine Kartennummer nie; Rechnungen und Kartenwechsel laufen über das Stripe-Portal in der Abo-Verwaltung.',
   plusFaq4Q: 'Was passiert mit meinen Videos und Clips, wenn ich kündige?',
   plusFaq4A: 'Nichts. Alles, was du hochgeladen hast, bleibt. Nur die Extras enden - Abzeichen, höheres Limit, automatischer Upload.',
+  videoDeletedNote: 'Dieses Video gibt es nicht mehr - es wurde gelöscht.',
+  videoPrivateSignInNote: 'Dieses Video ist privat. Wenn es deins ist, melde dich mit dem Konto an, mit dem du es hochgeladen hast.',
+  videoPrivateOtherAccountNote: 'Dieses Video ist privat und gehört einem anderen Konto als dem, mit dem du angemeldet bist. Wenn es deins ist, melde dich mit dem Konto an, mit dem du es hochgeladen hast.',
+  videoProcessingNote: 'Das Video wird noch verarbeitet - es erscheint hier in Kürze. Lade die Seite neu.',
+  videoPrivateSwitchAccountLink: 'Mit anderem Konto anmelden →',
 };

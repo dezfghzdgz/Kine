@@ -69,6 +69,9 @@ function WatchPageInner() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [notFoundDetail, setNotFoundDetail] = useState<string | null>(null);
+  /** Proč video nejde ukázat (ze serverové zálohy /api/videos/lookup) - přesná hláška místo obecné. */
+  const [notFoundReason, setNotFoundReason] = useState<'missing' | 'private' | 'processing' | 'unavailable' | null>(null);
+  const [notFoundSignedIn, setNotFoundSignedIn] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [inWatchLater, setInWatchLater] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -863,15 +866,57 @@ function WatchPageInner() {
     }
   }
 
+  /**
+   * Prohlížeč video nevidí (RLS, jiný účet, vypršelá relace, smazané video):
+   * server řekne, co se děje - majiteli vrátí video celé, ostatním jen důvod.
+   */
+  async function lookupFallback(): Promise<any | null> {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const res = await fetch('/api/videos/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ videoId }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body) return null;
+      if (body.exists === false) {
+        setNotFoundReason('missing');
+        return null;
+      }
+      if (body.owner && body.video) return body.video;
+      setNotFoundSignedIn(!!body.signedIn);
+      if (body.visibility && body.visibility !== 'public') setNotFoundReason('private');
+      else if (body.status && body.status !== 'ready') setNotFoundReason('processing');
+      else setNotFoundReason('unavailable');
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   async function load() {
     setLoading(true);
     setNotFound(false);
+    setNotFoundReason(null);
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('videos')
       .select('*, profiles!videos_owner_id_fkey(id, username, display_name, avatar_url, created_at, verification_tier)')
       .eq('id', videoId)
       .single();
+
+    if (error || !data) {
+      // Majitel čerstvě nahraného (soukromého, zpracovávaného) videa ho má vidět
+      // vždycky - i když prohlížeč zrovna není přihlášený stejným účtem, jak ho
+      // bere RLS. Server to rozhodne podle přihlašovacího tokenu.
+      const fromServer = await lookupFallback();
+      if (fromServer) {
+        data = fromServer;
+        error = null;
+      }
+    }
 
     if (error || !data) {
       console.error('Kine: video se nepodařilo načíst', { videoId, error });
@@ -1126,10 +1171,27 @@ function WatchPageInner() {
   if (loading) return <p style={{ color: 'var(--text-faint)' }}>{t('loading')}</p>;
 
   if (notFound || !video) {
+    // Přesná hláška podle toho, co server ví; obecná jen když neví nic.
+    const reasonText =
+      notFoundReason === 'missing'
+        ? t('videoDeletedNote')
+        : notFoundReason === 'private'
+          ? notFoundSignedIn
+            ? t('videoPrivateOtherAccountNote')
+            : t('videoPrivateSignInNote')
+          : notFoundReason === 'processing'
+            ? t('videoProcessingNote')
+            : t('videoNotFoundOrNoAccessNote');
     return (
       <div className="auth-gate">
-        <p>{t('videoNotFoundOrNoAccessNote')}</p>
-        {notFoundDetail && (
+        <p>{reasonText}</p>
+        {notFoundReason === 'private' && !notFoundSignedIn && (
+          <Link href={`/login?next=${encodeURIComponent(`/watch/${videoId}`)}`}>{t('loginLink')}</Link>
+        )}
+        {notFoundReason === 'private' && notFoundSignedIn && (
+          <Link href={`/login?next=${encodeURIComponent(`/watch/${videoId}`)}`}>{t('videoPrivateSwitchAccountLink')}</Link>
+        )}
+        {notFoundReason === null && notFoundDetail && (
           <p style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8 }}>
             {t('technicalDetailNote').replace('{detail}', notFoundDetail)}
           </p>

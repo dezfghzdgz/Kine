@@ -933,4 +933,9 @@ export const fr: Record<DictKey, string> = {
   plusFaq3A: "Par carte via Stripe. Kine ne voit jamais ton numéro de carte ; factures et changement de carte passent par le portail Stripe dans la gestion de l'abonnement.",
   plusFaq4Q: "Qu'arrive-t-il à mes vidéos et clips si j'annule ?",
   plusFaq4A: "Rien. Tout ce que tu as envoyé reste. Seuls les extras s'arrêtent : le badge, la limite plus haute, l'envoi automatique.",
+  videoDeletedNote: "Cette vidéo n'existe plus - elle a été supprimée.",
+  videoPrivateSignInNote: "Cette vidéo est privée. Si c'est la tienne, connecte-toi avec le compte qui l'a envoyée.",
+  videoPrivateOtherAccountNote: "Cette vidéo est privée et appartient à un autre compte que celui avec lequel tu es connecté. Si c'est la tienne, connecte-toi avec le compte qui l'a envoyée.",
+  videoProcessingNote: 'La vidéo est encore en traitement - elle apparaîtra ici dans un instant. Essaie de recharger la page.',
+  videoPrivateSwitchAccountLink: 'Se connecter avec un autre compte →',
 };

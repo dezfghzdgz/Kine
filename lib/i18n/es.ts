@@ -933,4 +933,9 @@ export const es: Record<DictKey, string> = {
   plusFaq3A: 'Con tarjeta a través de Stripe. Kine nunca ve el número de tu tarjeta; las facturas y el cambio de tarjeta se gestionan en el portal de Stripe desde la gestión de la suscripción.',
   plusFaq4Q: '¿Qué pasa con mis vídeos y clips si cancelo?',
   plusFaq4A: 'Nada. Todo lo que subiste se queda. Solo terminan los extras: la insignia, el límite más alto y la subida automática.',
+  videoDeletedNote: 'Este video ya no existe - fue eliminado.',
+  videoPrivateSignInNote: 'Este video es privado. Si es tuyo, inicia sesión con la cuenta con la que lo subiste.',
+  videoPrivateOtherAccountNote: 'Este video es privado y pertenece a otra cuenta distinta de la que tienes iniciada. Si es tuyo, inicia sesión con la cuenta con la que lo subiste.',
+  videoProcessingNote: 'El video todavía se está procesando - aparecerá aquí en un momento. Prueba a recargar la página.',
+  videoPrivateSwitchAccountLink: 'Iniciar sesión con otra cuenta →',
 };

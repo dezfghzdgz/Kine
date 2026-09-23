@@ -933,4 +933,9 @@ export const sk: Record<DictKey, string> = {
   plusFaq3A: 'Kartou cez Stripe. Kine tvoje číslo karty nikdy nevidí; faktúru aj zmenu karty rieši portál Stripe v správe predplatného.',
   plusFaq4Q: 'Čo sa stane s mojimi videami a klipmi, keď predplatné zruším?',
   plusFaq4A: 'Nič. Všetko, čo si nahral, zostáva. Skončia len výhody navyše - odznak, vyšší limit, automatické nahrávanie.',
+  videoDeletedNote: 'Toto video už neexistuje - bolo zmazané.',
+  videoPrivateSignInNote: 'Toto video je súkromné. Ak je tvoje, prihlás sa účtom, ktorým si ho nahral.',
+  videoPrivateOtherAccountNote: 'Toto video je súkromné a patrí inému účtu, než ktorým si prihlásený. Ak je tvoje, prihlás sa účtom, ktorým si ho nahral.',
+  videoProcessingNote: 'Video sa ešte spracúva - o chvíľu sa tu objaví. Skús stránku obnoviť.',
+  videoPrivateSwitchAccountLink: 'Prihlásiť sa iným účtom →',
 };

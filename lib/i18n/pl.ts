@@ -933,4 +933,9 @@ export const pl: Record<DictKey, string> = {
   plusFaq3A: 'Kartą przez Stripe. Kine nigdy nie widzi numeru twojej karty; faktury i zmianę karty obsługuje portal Stripe w zarządzaniu subskrypcją.',
   plusFaq4Q: 'Co stanie się z moimi wideo i klipami, gdy zrezygnuję?',
   plusFaq4A: 'Nic. Wszystko, co wgrałeś, zostaje. Kończą się tylko dodatki - odznaka, wyższy limit, automatyczne wgrywanie.',
+  videoDeletedNote: 'Ten film już nie istnieje - został usunięty.',
+  videoPrivateSignInNote: 'Ten film jest prywatny. Jeśli jest twój, zaloguj się kontem, z którego go wysłałeś.',
+  videoPrivateOtherAccountNote: 'Ten film jest prywatny i należy do innego konta niż to, na którym jesteś zalogowany. Jeśli jest twój, zaloguj się kontem, z którego go wysłałeś.',
+  videoProcessingNote: 'Film jest jeszcze przetwarzany - za chwilę się tu pojawi. Spróbuj odświeżyć stronę.',
+  videoPrivateSwitchAccountLink: 'Zaloguj się innym kontem →',
 };

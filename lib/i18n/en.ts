@@ -933,4 +933,9 @@ export const en: Record<DictKey, string> = {
   plusFaq3A: 'By card via Stripe. Kine never sees your card number; invoices and card changes are handled in the Stripe portal under subscription management.',
   plusFaq4Q: 'What happens to my videos and clips if I cancel?',
   plusFaq4A: 'Nothing. Everything you uploaded stays. Only the extras end - the badge, the higher limit, automatic upload.',
+  videoDeletedNote: 'This video no longer exists - it was deleted.',
+  videoPrivateSignInNote: "This video is private. If it's yours, sign in with the account you uploaded it with.",
+  videoPrivateOtherAccountNote: "This video is private and belongs to a different account than the one you're signed in with. If it's yours, sign in with the account you uploaded it with.",
+  videoProcessingNote: 'The video is still processing - it will show up here in a moment. Try refreshing the page.',
+  videoPrivateSwitchAccountLink: 'Sign in with another account →',
 };
