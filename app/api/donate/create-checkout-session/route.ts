@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripeServer } from '@/lib/stripeServer';
+import { siteUrlFrom } from '@/lib/siteUrl';
 
 // Vytvoří appce jednorázovou platební relaci na podporu appky Kine (ne
 // appky konkrétního tvůrce - to appka řešit později v rámci většího
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Neplatná částka.' }, { status: 400 });
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const siteUrl = siteUrlFrom(req);
 
     const sessionParams: any = {
       mode: 'payment',

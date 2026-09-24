@@ -1,11 +1,12 @@
 import { MetadataRoute } from 'next';
 import { supabaseServer } from '@/lib/supabaseServer';
+import { SITE_URL } from '@/lib/linkPreview';
 
 // Tenhle soubor appka automaticky promění na /sitemap.xml - je to seznam
 // všech stránek appky, ať appka vyhledávačů ví, co všechno na appce
 // zaindexovat (kromě toho, na co narazí sama procházením odkazů).
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  const baseUrl = SITE_URL;
 
   const staticRoutes = ['', '/explore', '/login', '/signup', '/terms', '/privacy', '/rules', '/copyright', '/download', '/plus'].map((path) => ({
     url: `${baseUrl}${path}`,

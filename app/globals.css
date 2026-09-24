@@ -5820,3 +5820,7 @@ input:focus, textarea:focus, select:focus {
 @media (hover: none) {
   .history-remove { opacity: 0.85; }
 }
+
+/* Studio živého vysílání: odkaz na appku (vysílání bez OBS) */
+.live-guide-app { margin: 0 0 10px; }
+.live-guide-app a { color: var(--text); font-weight: 600; }

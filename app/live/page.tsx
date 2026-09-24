@@ -339,6 +339,11 @@ export default function LiveStudioPage() {
 
             <div className="panel">
               <p className="panel-heading">{t('liveGuideHeading')}</p>
+              {/* Bez OBS: appka Kine do PC / Kine Clipper má tlačítko Vysílat a klíč si vezme sama. */}
+              <p className="live-hint live-guide-app">
+                {t('liveGuideApp')}{' '}
+                <Link href="/download">{t('liveGuideAppLink')}</Link>
+              </p>
               <ol className="live-guide">
                 <li>{t('liveGuideStep1')}</li>
                 <li>{t('liveGuideStep2')}</li>

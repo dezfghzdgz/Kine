@@ -975,6 +975,8 @@ export const cs = {
   liveGuideStep2: 'V Nastavení → Výstup nastav datový tok videa 4500-6000 kb/s pro 1080p (3000 pro 720p), interval klíčových snímků 2 s a kodér grafické karty (NVENC, AMF nebo QuickSync), ať hra neseká.',
   liveGuideStep3: 'Klikni na „Spustit vysílání“. Za pár vteřin tu naskočí „Jsi živě“ a odběratelé dostanou oznámení.',
   liveGuideStep4: 'Po skončení najdeš záznam níž a jedním klikem z něj uděláš video.',
+  liveGuideApp: 'Nejjednodušší je appka Kine do PC nebo Kine Clipper: klikneš na Vysílat a klíč si vezme sama – OBS nepotřebuješ. Pro scény a overlaye použij OBS podle kroků níž.',
+  liveGuideAppLink: 'Stáhnout appku →',
   liveRecordingsHeading: 'Záznamy vysílání',
   liveRecordingsEmpty: 'Zatím žádné. Záznam se tu objeví pár minut po skončení vysílání.',
   liveRecordingsNote: 'Nezveřejněné záznamy se po 30 dnech samy smažou.',

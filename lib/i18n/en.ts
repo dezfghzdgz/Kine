@@ -969,6 +969,8 @@ export const en: Record<DictKey, string> = {
   liveGuideStep2: 'In Settings → Output set the video bitrate to 4500-6000 kbps for 1080p (3000 for 720p), keyframe interval 2 s, and use the graphics card encoder (NVENC, AMF or QuickSync) so your game stays smooth.',
   liveGuideStep3: "Click \"Start Streaming\". In a few seconds \"You're live\" shows up here and your subscribers get notified.",
   liveGuideStep4: 'When you finish, the recording appears below - turn it into a video with one click.',
+  liveGuideApp: 'The easiest way is the Kine for PC or Kine Clipper app: click Go live and it takes the key itself - no OBS needed. For scenes and overlays use OBS with the steps below.',
+  liveGuideAppLink: 'Get the app →',
   liveRecordingsHeading: 'Stream recordings',
   liveRecordingsEmpty: 'None yet. A recording shows up here a few minutes after the stream ends.',
   liveRecordingsNote: 'Unpublished recordings are deleted automatically after 30 days.',

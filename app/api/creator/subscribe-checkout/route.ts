@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripeServer } from '@/lib/stripeServer';
 import { supabaseServer } from '@/lib/supabaseServer';
+import { siteUrlFrom } from '@/lib/siteUrl';
 
 // Appka si bere 15 % z každého předplatného jako provizi za appku - je
 // to jen konstanta appky, appka jde kdykoliv změnit.
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Tenhle tvůrce ještě předplatné nenastavil.' }, { status: 400 });
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  const siteUrl = siteUrlFrom(req);
 
   const sessionParams: any = {
     mode: 'subscription',

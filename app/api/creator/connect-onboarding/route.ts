@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripeServer } from '@/lib/stripeServer';
 import { supabaseServer } from '@/lib/supabaseServer';
+import { siteUrlFrom } from '@/lib/siteUrl';
 
 // Zajistí, aby měl tvůrce vlastní Stripe Connect Express účet, a pošle
 // ho na stránku onboardingu hostovanou Stripem (ověří si identitu,
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
       await supabaseServer.from('profiles').update({ stripe_account_id: accountId }).eq('id', userData.user.id);
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const siteUrl = siteUrlFrom(req);
 
     const accountLink = await stripeServer.accountLinks.create({
       account: accountId,

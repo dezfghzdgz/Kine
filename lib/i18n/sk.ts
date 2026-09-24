@@ -969,6 +969,8 @@ export const sk: Record<DictKey, string> = {
   liveGuideStep2: 'V Nastavenia → Výstup nastav dátový tok videa 4500-6000 kb/s pre 1080p (3000 pre 720p), interval kľúčových snímok 2 s a kodér grafickej karty (NVENC, AMF alebo QuickSync), aby hra nesekala.',
   liveGuideStep3: 'Klikni na „Spustiť vysielanie“. O pár sekúnd tu naskočí „Si naživo“ a odberatelia dostanú upozornenie.',
   liveGuideStep4: 'Po skončení nájdeš záznam nižšie a jedným klikom z neho urobíš video.',
+  liveGuideApp: 'Najjednoduchšia je appka Kine do PC alebo Kine Clipper: klikneš na Vysielať a kľúč si vezme sama – OBS nepotrebuješ. Na scény a overlaye použi OBS podľa krokov nižšie.',
+  liveGuideAppLink: 'Stiahnuť appku →',
   liveRecordingsHeading: 'Záznamy vysielania',
   liveRecordingsEmpty: 'Zatiaľ žiadne. Záznam sa tu objaví pár minút po skončení vysielania.',
   liveRecordingsNote: 'Nezverejnené záznamy sa po 30 dňoch samy zmažú.',

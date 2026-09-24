@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripeServer } from '@/lib/stripeServer';
 import { supabaseServer } from '@/lib/supabaseServer';
+import { siteUrlFrom } from '@/lib/siteUrl';
 
 /**
  * Správa předplatného Kine Plus (zrušení, změna karty) - zákaznický
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'K tomuhle účtu není u Stripe žádné předplatné (Plus máš nastavené ručně).', code: 'no-customer' }, { status: 400 });
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  const siteUrl = siteUrlFrom(req);
   try {
     const session = await stripeServer.billingPortal.sessions.create({
       customer: profile.plan_stripe_customer_id,

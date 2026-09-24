@@ -7,6 +7,13 @@ import { supabaseServer } from '@/lib/supabaseServer';
 // kdy appka může s jistotou vědět, že platba opravdu proběhla (nestačí
 // jen appce věřit, že se úspěšně vrátil na "thank-you" stránku - to jde
 // obejít).
+//
+// Jeden webhook pro všechny platby: dary, Kine Plus a předplatné tvůrců.
+// Ve Stripe (Developers -> Webhooks) adresa https://<web>/api/donate/webhook
+// a události checkout.session.completed, customer.subscription.updated,
+// customer.subscription.deleted; podpisový klíč (whsec_…) do
+// STRIPE_WEBHOOK_SECRET. Když zápis do databáze selže, vrátí se 500 a Stripe
+// to zkusí znovu (všechny zápisy jde bezpečně opakovat).
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const signature = req.headers.get('stripe-signature');
@@ -26,18 +33,23 @@ export async function POST(req: NextRequest) {
     const session = event.data.object as any;
 
     if (session.mode === 'payment') {
-      // Jednorázový dar appky.
+      // Jednorázový dar appky. Stripe může stejnou událost poslat víckrát - dar se zapíše jen jednou.
       const userId = session.metadata?.userId;
       const amountTotal = session.amount_total ? session.amount_total / 100 : 0;
 
-      await supabaseServer.from('donations').insert({
-        user_id: userId ?? null,
-        amount_eur: amountTotal,
-        stripe_session_id: session.id,
-      });
+      const existing = await supabaseServer.from('donations').select('id').eq('stripe_session_id', session.id).limit(1);
+      if (!existing.error && (existing.data ?? []).length === 0) {
+        const { error } = await supabaseServer.from('donations').insert({
+          user_id: userId ?? null,
+          amount_eur: amountTotal,
+          stripe_session_id: session.id,
+        });
+        if (error) return retryLater(error.message);
+      }
 
       if (userId) {
-        await supabaseServer.from('profiles').update({ is_supporter: true }).eq('id', userId);
+        const { error } = await supabaseServer.from('profiles').update({ is_supporter: true }).eq('id', userId);
+        if (error) return retryLater(error.message);
       }
     }
 
@@ -55,7 +67,7 @@ export async function POST(req: NextRequest) {
         } catch {
           // Bez konce období: předplatné platí, dokud webhook nepřijde s update.
         }
-        await supabaseServer
+        const { error } = await supabaseServer
           .from('profiles')
           .update({
             plan: planFromSubscription(sub, session.metadata?.tier),
@@ -64,6 +76,7 @@ export async function POST(req: NextRequest) {
             plan_stripe_customer_id: session.customer,
           })
           .eq('id', userId);
+        if (error) return retryLater(error.message);
       }
     } else if (session.mode === 'subscription') {
       // Vzniklo nové aktivní předplatné konkrétního tvůrce.
@@ -71,7 +84,7 @@ export async function POST(req: NextRequest) {
       const creatorId = session.metadata?.creatorId;
 
       if (subscriberId && creatorId) {
-        await supabaseServer.from('channel_subscriptions').upsert(
+        const { error } = await supabaseServer.from('channel_subscriptions').upsert(
           {
             subscriber_id: subscriberId,
             creator_id: creatorId,
@@ -81,6 +94,7 @@ export async function POST(req: NextRequest) {
           },
           { onConflict: 'subscriber_id,creator_id' }
         );
+        if (error) return retryLater(error.message);
       }
     }
   }
@@ -91,26 +105,41 @@ export async function POST(req: NextRequest) {
     // = free. Změna varianty v portálu Stripe = jiná cena v položkách.
     const sub = event.data.object as any;
     const active = event.type !== 'customer.subscription.deleted' && (sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due');
-    await supabaseServer
+    const { error } = await supabaseServer
       .from('profiles')
       .update(active ? { plan: planFromSubscription(sub, sub.metadata?.tier), plan_until: plusUntilFromSubscription(sub) } : { plan: 'free', plan_until: null })
       .eq('plan_stripe_subscription_id', sub.id);
+    if (error) return retryLater(error.message);
   } else if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
     const sub = event.data.object as any;
+    // Členství u tvůrce: aktivní / zkušební = člen, nezaplacené čeká (past_due), cokoliv jiného
+    // (zrušené, nezaplacené po všech pokusech, pozastavené, nedokončené) = konec.
     const status = event.type === 'customer.subscription.deleted'
       ? 'canceled'
-      : (sub.status === 'past_due' ? 'past_due' : 'active');
+      : sub.status === 'active' || sub.status === 'trialing'
+        ? 'active'
+        : sub.status === 'past_due'
+          ? 'past_due'
+          : 'canceled';
+    // Novější verze API Stripe mají konec období u položky předplatného, ne u předplatného.
+    const periodEnd = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end ?? null;
 
-    await supabaseServer
+    const { error } = await supabaseServer
       .from('channel_subscriptions')
       .update({
         status,
-        current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+        current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
       })
       .eq('stripe_subscription_id', sub.id);
+    if (error) return retryLater(error.message);
   }
 
   return NextResponse.json({ received: true });
+}
+
+/** Zápis do databáze selhal - 500, ať Stripe událost pošle znovu (dělá to až 3 dny). */
+function retryLater(message: string) {
+  return NextResponse.json({ error: `Databáze: ${message}` }, { status: 500 });
 }
 
 /**

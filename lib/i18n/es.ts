@@ -969,6 +969,8 @@ export const es: Record<DictKey, string> = {
   liveGuideStep2: 'En Ajustes → Salida pon una tasa de bits de vídeo de 4500-6000 kbps para 1080p (3000 para 720p), intervalo de fotogramas clave de 2 s y el codificador de la tarjeta gráfica (NVENC, AMF o QuickSync) para que el juego vaya fluido.',
   liveGuideStep3: 'Haz clic en «Iniciar transmisión». En unos segundos aparecerá aquí «Estás en directo» y tus suscriptores recibirán una notificación.',
   liveGuideStep4: 'Al terminar, encontrarás la grabación abajo y la convertirás en vídeo con un clic.',
+  liveGuideApp: 'Lo más fácil es la app Kine para PC o Kine Clipper: pulsa En directo y ella misma toma la clave, sin necesidad de OBS. Para escenas y superposiciones usa OBS con los pasos de abajo.',
+  liveGuideAppLink: 'Descargar la app →',
   liveRecordingsHeading: 'Grabaciones de emisiones',
   liveRecordingsEmpty: 'Todavía ninguna. La grabación aparece aquí unos minutos después de terminar la emisión.',
   liveRecordingsNote: 'Las grabaciones sin publicar se borran solas a los 30 días.',

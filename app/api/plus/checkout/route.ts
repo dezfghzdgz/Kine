@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripeServer } from '@/lib/stripeServer';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { hasPlus, isPaidTier, tierStripePriceId } from '@/lib/plus';
+import { siteUrlFrom } from '@/lib/siteUrl';
 
 /**
  * Koupě předplatného: založí u Stripe předplatné (Checkout) a pošle
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Předplatné už máš - změnit ho jde ve správě předplatného.', code: 'already-subscribed' }, { status: 409 });
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  const siteUrl = siteUrlFrom(req);
   const userId = userData.user.id;
 
   try {

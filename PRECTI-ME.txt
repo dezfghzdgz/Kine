@@ -1,130 +1,54 @@
-KINE - živé vysílání, premiéry, titulky, lepší přehrávač a hledání
-==================================================================
+KINE - platby připravené na klíče ze Stripe, vysílání z appky
+============================================================
 
-Balíček 52 souborů (21 nových). Rozbal do kořene repa a přepiš, pak:
+Malý balíček (24 souborů, 1 nový). Rozbal do kořene repa a přepiš, pak:
 
-  1. Supabase -> SQL Editor -> vlož a spusť CELÝ soubor
-     supabase-migration-zive-vysilani.sql (jde pustit i víckrát, nic se
-     nezdvojí). Bez něj web jede dál, jen živé vysílání a chat ukážou,
-     že ještě nejsou zapnuté.
-  2. Push / nahrání přes GitHub. Žádná nová závislost. Nová proměnná na
-     Vercelu NENÍ potřeba - živé vysílání i titulky jedou přes stávající
-     CLOUDFLARE_ACCOUNT_ID a CLOUDFLARE_STREAM_API_TOKEN.
-  3. Nepovinné: NEXT_PUBLIC_STREAM_CUSTOMER_CODE = kód z adresy
-     customer-XXXX.cloudflarestream.com (Cloudflare -> Stream -> video ->
-     Embed). Bez něj si ho web vezme z náhledů nahraných videí.
-  4. Nepovinné: na GitHubu smaž tři staré zbytky (nic nerozbíjí, jen
-     překáží): tests/username.test.mjs,
-     supabase-migration-zarizeni-chyby-jmena.sql,
-     app/tests/playerStart.test.mjs
-     Když máš repo i u sebe: node zkontroluj-soubory.mjs --uklid
+  1. Push / nahrání přes GitHub. Žádná migrace, žádná nová závislost.
+  2. Klíče ze Stripe a celý postup spuštění naostro jsou v návodu
+     "Spuštění Kine naostro" (poslal ti ho Claude jako stránku).
 
-CO JE NOVÉ
-----------
-ŽIVÉ VYSÍLÁNÍ (Cloudflare Stream Live)
-- /live = studio: "Vytvořit klíč" -> adresa serveru a klíč do OBS
-  (klíč je schovaný, jde zkopírovat, jde vyrobit nový), stav živě /
-  offline s náhledem, název, popis a kategorie vysílání, návod pro OBS,
-  záznamy vysílání a jejich zveřejnění jako video jedním klikem (záznam,
-  který nezveřejníš, Cloudflare po 30 dnech smaže).
-- /live/<id kanálu> = stránka pro diváky: přehrávač, čas od začátku,
-  kanál s odběrem a chat (píše jen přihlášený, 1 zpráva za 1,5 s,
-  mazat smí autor, majitel kanálu a moderátor).
-- Řada "Živě" na hlavní stránce, odznak ŽIVĚ na kanálu, odkaz
-  "Vysílat živě" v menu. Odběratelé dostanou oznámení "je živě"
-  (nejvýš jednou za 30 minut, zablokovaný kanál nikde není).
-- Klíč k vysílání vidí jen server (tabulka live_inputs nemá pro
-  prohlížeč žádný přístup).
+CO SE ZMĚNILO
+-------------
+PLATBY
+- Návrat ze Stripe (po zaplacení, ze správy předplatného, z propojení
+  tvůrce) šel bez proměnné NEXT_PUBLIC_SITE_URL na http://localhost:3000 -
+  zákazník po zaplacení skončil na neexistující stránce. Teď se vezme
+  adresa, na kterou přišel (lib/siteUrl.ts).
+- Webhook (app/api/donate/webhook): když zápis do databáze selže, vrátí
+  500 a Stripe událost pošle znovu (dřív se platba mohla ztratit); dar se
+  zapíše jen jednou i při opakovaném doručení; předplatné tvůrce, které
+  Stripe označí jako nezaplacené / pozastavené, už není "aktivní"; konec
+  období se čte i z novějších verzí API Stripe.
+- .env.example: popsané STRIPE_SECRET_KEY a STRIPE_WEBHOOK_SECRET.
 
-PREMIÉRY A NAPLÁNOVANÁ VIDEA
-- Naplánované video je až do svého času vidět jen majiteli (dřív bylo
-  vidět hned). Premiéra má odpočet místo přehrávače a chat, v seznamech
-  štítek "Premiéra · datum". Oznámení odběratelům chodí až ve chvíli
-  zveřejnění a jen jednou (dřív hned po nahrání - a dvakrát).
+ODKAZY A NÁHLEDY
+- Když na Vercelu chybí NEXT_PUBLIC_SITE_URL, web vezme svou produkční
+  adresu od Vercelu (VERCEL_PROJECT_PRODUCTION_URL) - náhledy sdílených
+  odkazů, sitemapa a robots.txt už nemíří na localhost.
 
-TITULKY A KAPITOLY
-- Automatické titulky (AI od Cloudflare, zdarma): po zpracování videa
-  se vygenerují samy (čeština, angličtina, němčina, španělština,
-  francouzština, polština a další; slovenštinu a ukrajinštinu Cloudflare
-  neumí). V úpravách videa jdou vygenerovat ručně, nahrát .srt / .vtt,
-  opravit a smazat.
-- Kapitoly: z popisu videa jako na YouTube ("0:00 Úvod" po řádcích),
-  nebo zadané v úpravách videa. Kapitoly od appky Kine do PC (momenty
-  z nahrávky zápasu) chodí rovnou.
-
-PŘEHRÁVAČ
-- Náhled snímku při najetí na časovou osu (s názvem kapitoly),
-  aktuální kapitola vedle času, seznam kapitol s náhledy pod videem.
-- Kino režim (klávesa T), opakování, vypínatelné automatické přehrání
-  dalšího videa.
-
-HLEDÁNÍ, KOMENTÁŘE, HISTORIE
-- Filtry hledání: typ (videa / Sparks), kdy nahráno, délka, řazení.
-- Komentáře: řazení Nejlepší / Nejnovější, načítání po 20, časy v
-  komentáři jsou klikací (skok ve videu), oznámení o odpovědi.
-- Historie: odebrat jedno video, smazat celou historii.
-- Stránka hashtagu ve stejném vzhledu jako zbytek webu a přeložená.
-
-POJISTKY
-- Kapitoly a titulky, které pošle prohlížeč nebo appka, se na serveru
-  pročistí (rozbitá data dřív mohla shodit stránku videa).
-- Úprava videa: pole Název a Popis přes celou šířku.
-- 117 nových textů v 8 jazycích.
+ŽIVÉ VYSÍLÁNÍ
+- Studio /live říká, že nejjednodušší je vysílat z appky Kine do PC /
+  Kine Clipper (tlačítko Vysílat, bez OBS) - od verze 0.9.5.
 
 OVĚŘENO
 -------
-- npx tsc --noEmit a next build prošly.
-- Testy: tests/captions.test.mjs (9) a tests/liveAndScheduling.test.mjs
-  (7) prošly, ostatní testy beze změny.
-- Stránky proklikané v prohlížeči s napodobeným Supabase a Cloudflare:
-  hlavní stránka s řadou Živě, vysílání pro diváky (živě i offline),
-  studio, premiéra s odpočtem, video s kapitolami a náhledem na ose,
-  hledání s filtry, úprava videa s titulky, historie - bez chyb.
+- npx tsc --noEmit a next build prošly, testy webu beze změny.
+- Stránky proklikané s napodobeným Supabase a Cloudflare (studio,
+  vysílání, premiéra, video, hledání, úprava videa, historie) bez chyb.
 
 SOUBORY
 -------
-  PRECTI-ME.txt                         tohle
-  stav-souboru.json                     otisky (pro zkontroluj-soubory.mjs)
-  supabase-migration-zive-vysilani.sql  NOVÝ - spustit v Supabase
-  app/api/live/chat/route.ts            NOVÝ - psaní a mazání v chatu
-  app/api/live/me/route.ts              NOVÝ - klíč a nastavení vysílání
-  app/api/live/now/route.ts             NOVÝ - kdo je živě
-  app/api/live/recordings/route.ts      NOVÝ - záznamy a jejich zveřejnění
-  app/api/live/status/route.ts          NOVÝ - stav vysílání kanálu
-  app/api/videos/captions/route.ts      NOVÝ - AI titulky na požádání
-  app/api/videos/confirm/route.ts       pročištění kapitol a titulků
-  app/live/page.tsx                     NOVÝ - studio
-  app/live/[id]/page.tsx                NOVÝ - stránka vysílání
-  app/channel/[id]/page.tsx             odznak ŽIVĚ, naplánovaná videa
-  app/explore/page.tsx                  premiéry
-  app/globals.css                       vzhled nového
-  app/hashtag/[tag]/page.tsx            přepsaná
-  app/history/page.tsx                  odebírání z historie
-  app/page.tsx                          řada Živě
-  app/search/page.tsx                   filtry
-  app/sparks/page.tsx                   bez budoucích premiér
-  app/watch/[id]/page.tsx               premiéry, kapitoly, kino režim
-  app/your-videos/[id]/edit/page.tsx    kapitoly, titulky
-  components/CaptionsOverlay.tsx        titulky s koncem řádku
-  components/ChapterTimeline.tsx        náhled na ose, opakování, kino
-  components/CommentSection.tsx         řazení, stránkování, časy
-  components/ExpandableText.tsx         přeložené "Zobrazit víc"
-  components/LiveBadge.tsx              NOVÝ
-  components/LiveChat.tsx               NOVÝ
-  components/LiveNowRow.tsx             NOVÝ
-  components/NotificationBell.tsx       oznámení "je živě"
-  components/SearchResults.tsx          filtry
-  components/Sidebar.tsx                Vysílat živě
-  components/VideoCard.tsx              štítek premiéry
-  lib/apiUser.ts                        NOVÝ
-  lib/autoCaptions.ts                   NOVÝ - AI titulky
-  lib/captions.ts                       NOVÝ - titulky a kapitoly
-  lib/liveChat.ts                       NOVÝ
-  lib/liveStream.ts                     NOVÝ - Cloudflare Stream Live
-  lib/scheduling.ts                     NOVÝ - naplánovaná videa
-  lib/searchFilters.ts                  NOVÝ - filtry hledání
-  lib/markVideoReady.ts                 oznámení jen jednou a včas
-  lib/useWatchProgress.ts               oprava procent dokoukání
+  PRECTI-ME.txt                                  tohle
+  stav-souboru.json                              otisky (pro zkontroluj-soubory.mjs)
+  .env.example                                   Stripe klíče popsané
+  lib/siteUrl.ts                                 NOVÝ - adresa webu pro Stripe
+  lib/linkPreview.ts                             adresa webu i bez proměnné
+  app/layout.tsx, app/robots.ts, app/sitemap.ts  adresa webu z lib/linkPreview
+  app/api/donate/webhook/route.ts                pojistky webhooku
+  app/api/plus/checkout/route.ts                 návrat ze Stripe
+  app/api/plus/portal/route.ts                   návrat ze Stripe
+  app/api/donate/create-checkout-session/route.ts  návrat ze Stripe
+  app/api/creator/subscribe-checkout/route.ts    návrat ze Stripe
+  app/api/creator/connect-onboarding/route.ts    návrat ze Stripe
+  app/live/page.tsx, app/globals.css             odkaz na vysílání z appky
   lib/i18n/cs.ts de.ts en.ts es.ts fr.ts pl.ts sk.ts uk.ts
-  tests/captions.test.mjs               NOVÝ
-  tests/liveAndScheduling.test.mjs      NOVÝ

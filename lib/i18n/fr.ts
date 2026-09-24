@@ -969,6 +969,8 @@ export const fr: Record<DictKey, string> = {
   liveGuideStep2: 'Dans Paramètres → Sortie, règle le débit vidéo sur 4500-6000 kb/s pour du 1080p (3000 pour du 720p), l’intervalle d’images clés sur 2 s et l’encodeur de la carte graphique (NVENC, AMF ou QuickSync) pour que ton jeu reste fluide.',
   liveGuideStep3: 'Clique sur « Démarrer le streaming ». Quelques secondes plus tard, « Tu es en direct » s’affiche ici et tes abonnés sont prévenus.',
   liveGuideStep4: 'À la fin, tu trouveras l’enregistrement ci-dessous et tu en feras une vidéo en un clic.',
+  liveGuideApp: 'Le plus simple : l\'app Kine pour PC ou Kine Clipper. Clique sur Direct et elle récupère la clé toute seule - pas besoin d\'OBS. Pour les scènes et overlays, utilise OBS avec les étapes ci-dessous.',
+  liveGuideAppLink: 'Télécharger l\'app →',
   liveRecordingsHeading: 'Enregistrements des directs',
   liveRecordingsEmpty: 'Aucun pour l’instant. Un enregistrement apparaît ici quelques minutes après la fin du direct.',
   liveRecordingsNote: 'Les enregistrements non publiés sont supprimés automatiquement après 30 jours.',

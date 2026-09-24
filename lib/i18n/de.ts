@@ -969,6 +969,8 @@ export const de: Record<DictKey, string> = {
   liveGuideStep2: 'Stelle unter Einstellungen → Ausgabe eine Video-Bitrate von 4500-6000 kbit/s für 1080p (3000 für 720p), ein Keyframe-Intervall von 2 s und den Encoder der Grafikkarte (NVENC, AMF oder QuickSync) ein, damit dein Spiel flüssig bleibt.',
   liveGuideStep3: 'Klicke auf „Stream starten“. Nach ein paar Sekunden erscheint hier „Du bist live“ und deine Abonnenten werden benachrichtigt.',
   liveGuideStep4: 'Nach dem Stream findest du die Aufnahme unten und machst mit einem Klick ein Video daraus.',
+  liveGuideApp: 'Am einfachsten geht es mit der App Kine für PC oder Kine Clipper: auf Live gehen klicken, den Schlüssel holt sie sich selbst - kein OBS nötig. Für Szenen und Overlays nimm OBS mit den Schritten unten.',
+  liveGuideAppLink: 'App holen →',
   liveRecordingsHeading: 'Stream-Aufnahmen',
   liveRecordingsEmpty: 'Noch keine. Eine Aufnahme erscheint hier ein paar Minuten nach dem Ende des Streams.',
   liveRecordingsNote: 'Unveröffentlichte Aufnahmen werden nach 30 Tagen automatisch gelöscht.',

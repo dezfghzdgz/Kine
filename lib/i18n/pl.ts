@@ -969,6 +969,8 @@ export const pl: Record<DictKey, string> = {
   liveGuideStep2: 'W Ustawienia → Wyjście ustaw bitrate wideo 4500-6000 kb/s dla 1080p (3000 dla 720p), odstęp klatek kluczowych 2 s i koder karty graficznej (NVENC, AMF lub QuickSync), żeby gra nie przycinała.',
   liveGuideStep3: 'Kliknij „Rozpocznij transmisję”. Za kilka sekund pojawi się tu „Jesteś na żywo”, a subskrybenci dostaną powiadomienie.',
   liveGuideStep4: 'Po zakończeniu nagranie znajdziesz poniżej i jednym kliknięciem zrobisz z niego film.',
+  liveGuideApp: 'Najprościej przez aplikację Kine na PC lub Kine Clipper: klikasz Na żywo, a klucz pobierze sama - OBS nie jest potrzebny. Do scen i nakładek użyj OBS według kroków poniżej.',
+  liveGuideAppLink: 'Pobierz aplikację →',
   liveRecordingsHeading: 'Nagrania transmisji',
   liveRecordingsEmpty: 'Jeszcze żadnych. Nagranie pojawi się tu kilka minut po zakończeniu transmisji.',
   liveRecordingsNote: 'Nieopublikowane nagrania usuwają się same po 30 dniach.',

@@ -9,8 +9,9 @@ import { MobileNavProvider } from '@/lib/mobileNavContext';
 import { MusicPlayerProvider } from '@/lib/musicPlayer';
 import { UploadProvider } from '@/lib/uploadManager';
 import './globals.css';
+import { SITE_URL } from '@/lib/linkPreview';
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+const siteUrl = SITE_URL;
 
 /**
  * Písmo appky.

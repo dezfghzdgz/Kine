@@ -9,7 +9,19 @@
  * app/channel/[id]/layout.tsx.
  */
 
-export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+/**
+ * Veřejná adresa webu. NEXT_PUBLIC_SITE_URL, a když na Vercelu chybí, jeho
+ * vlastní produkční adresa (VERCEL_PROJECT_PRODUCTION_URL - vlastní doména,
+ * jinak *.vercel.app). Bez toho se náhledy odkazů, sitemapa i robots.txt
+ * odkazovaly na localhost a sdílený odkaz neměl obrázek.
+ */
+export const SITE_URL = (() => {
+  const env = (process.env.NEXT_PUBLIC_SITE_URL ?? '').trim().replace(/\/+$/, '');
+  if (env) return env;
+  const vercel = (process.env.VERCEL_PROJECT_PRODUCTION_URL ?? '').trim();
+  if (vercel) return `https://${vercel.replace(/^https?:\/\//, '').replace(/\/+$/, '')}`;
+  return 'http://localhost:3000';
+})();
 
 /**
  * Zkrácení popisu do délky, kterou sítě reálně zobrazí.
