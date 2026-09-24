@@ -1,5 +1,6 @@
 import { supabaseServer } from './supabaseServer';
 import { shouldBeProtected, syncVideoProtection } from './streamProtection';
+import { requestAutoCaptions, sweepCaptions } from './autoCaptions';
 
 /**
  * "Video je zpracované" - jedno místo pro obě cesty, kterými se to appka
@@ -62,12 +63,38 @@ export async function markVideoReady(
     await syncVideoProtection(videoId);
   }
 
+  // Automatické titulky (Cloudflare AI) - jen když tvůrce nedal vlastní a jazyk to umí.
+  await requestAutoCaptions({ ...video, ...updates });
+
   // Video se právě stalo "ready" a je veřejné - vhodná chvíle poslat
   // oznámení odběratelům, kteří si to u tohohle kanálu přejí (zvoneček
-  // vedle "Odebírat"). Kontrola stavu výš zajišťuje, že se oznámení
-  // pošlou jen jednou, i kdyby přišly obě cesty naráz.
-  // Klip není nové video tvůrce (vystřihl ho divák) - odběratelům se nehlásí.
+  // vedle "Odebírat"). Klip není nové video tvůrce (vystřihl ho divák) -
+  // odběratelům se nehlásí. Naplánované video a premiéra se hlásí až ve
+  // chvíli zveřejnění (sweepScheduled) - dřív to odběratelé dostali hned
+  // po nahrání a klikli na video, které ještě nemělo být venku.
   if (video.visibility !== 'public' || video.clipped_from_video_id) return;
+  if (video.scheduled_at && new Date(video.scheduled_at).getTime() > Date.now()) return;
+  await notifySubscribers(video);
+}
+
+/**
+ * Oznámení o novém videu odběratelům - právě jednou. Kdo první zapíše
+ * subscribers_notified_at (webhook, doptání se, úklid naplánovaných), ten
+ * oznámení pošle; ostatní už ne. Bez migrace (sloupec chybí) se pošle
+ * bez hlídání, jako dřív.
+ */
+export async function notifySubscribers(video: { id: string; owner_id: string; title: string }): Promise<void> {
+  const claim = await supabaseServer
+    .from('videos')
+    .update({ subscribers_notified_at: new Date().toISOString() })
+    .eq('id', video.id)
+    .is('subscribers_notified_at', null)
+    .select('id');
+  if (claim.error) {
+    if (!/subscribers_notified_at/.test(claim.error.message ?? '')) return;
+  } else if (!claim.data || claim.data.length === 0) {
+    return;
+  }
 
   const { data: subs } = await supabaseServer
     .from('subscriptions')
@@ -82,9 +109,43 @@ export async function markVideoReady(
       user_id: s.subscriber_id,
       type: 'new_video',
       message: `Nové video: "${video.title}"`,
-      link: `/watch/${videoId}`,
+      link: `/watch/${video.id}`,
     }))
   );
+}
+
+/**
+ * Naplánovaná videa a premiéry, jejichž čas zveřejnění právě nastal (a
+ * videa, která se z neveřejných stala veřejnými): odběratelé dostanou
+ * oznámení teď. Jen posledních 7 dní; bez migrace nic nedělá.
+ */
+export async function sweepScheduled(max = 10): Promise<number> {
+  const now = Date.now();
+  const { data, error } = await supabaseServer
+    .from('videos')
+    .select('*')
+    .eq('status', 'ready')
+    .eq('visibility', 'public')
+    .is('subscribers_notified_at', null)
+    .gte('created_at', new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString())
+    .or(`scheduled_at.is.null,scheduled_at.lte.${new Date(now).toISOString()}`)
+    .order('created_at', { ascending: true })
+    .limit(max);
+  if (error || !data) return 0;
+  let sent = 0;
+  for (const video of data) {
+    if (video.clipped_from_video_id) {
+      await supabaseServer.from('videos').update({ subscribers_notified_at: new Date().toISOString() }).eq('id', video.id);
+      continue;
+    }
+    try {
+      await notifySubscribers(video);
+      sent += 1;
+    } catch {
+      // Jedno video nevyšlo - zkusí se příště.
+    }
+  }
+  return sent;
 }
 
 /** Zeptá se Cloudflare na stav videa a případně ho přepne na hotové. */
@@ -167,6 +228,10 @@ export async function sweepProcessing(options: { max?: number; force?: boolean }
           // Jedno video nejde ověřit (síť, Cloudflare) - další se zkusí dál.
         }
       }
+      // Při té příležitosti oznámení naplánovaných videí, jejichž čas nastal,
+      // a převzetí hotových automatických titulků.
+      await sweepScheduled().catch(() => 0);
+      await sweepCaptions().catch(() => 0);
     } catch {
       // Úklid nesmí shodit dotaz, ze kterého se volá.
     }

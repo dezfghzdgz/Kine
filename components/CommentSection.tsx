@@ -14,6 +14,10 @@ import ReportModal from './ReportModal';
 import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { categoryLabel } from '@/lib/categories';
 import LoadFailed from './LoadFailed';
+import { parseTimestamp } from '@/lib/captions';
+
+/** Kolik komentářů se ukáže naráz (další po kliknutí). */
+const COMMENTS_PAGE = 20;
 
 type Comment = {
   id: string;
@@ -52,14 +56,13 @@ function formatDuration(seconds: number | null) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// Rozpozná v textu komentáře časy jako "1:23" nebo "01:23" a udělá z nich
-// klikací odkazy, které přeskočí přehrávač na dané místo (jako na YouTube).
+// Rozpozná v textu komentáře časy jako "1:23", "01:23" nebo "1:02:03" a udělá
+// z nich klikací odkazy, které přeskočí přehrávač na dané místo (jako na YouTube).
 function renderCommentContent(content: string, onSeek?: (seconds: number) => void) {
-  const parts = content.split(/(\b\d{1,2}:\d{2}\b|@[a-zA-Z0-9_]+)/g);
+  const parts = content.split(/(\b\d{1,2}:\d{2}(?::\d{2})?\b|@[a-zA-Z0-9_]+)/g);
   return parts.map((part, i) => {
-    const timeMatch = part.match(/^(\d{1,2}):(\d{2})$/);
-    if (timeMatch && onSeek) {
-      const seconds = Number(timeMatch[1]) * 60 + Number(timeMatch[2]);
+    const seconds = /^\d{1,2}:\d{2}(?::\d{2})?$/.test(part) ? parseTimestamp(part) : null;
+    if (seconds !== null && onSeek) {
       return (
         <span
           key={i}
@@ -117,9 +120,13 @@ export default function CommentSection({
   // Komentáře se nepodařilo načíst. Bez tohohle se pod videem vykreslilo
   // "Zatím žádné komentáře" - i u videa, které jich má padesát.
   const [commentsFailed, setCommentsFailed] = useState(false);
+  // Řazení (jako na YouTube) a kolik komentářů je vidět.
+  const [sortMode, setSortMode] = useState<'top' | 'newest'>('top');
+  const [visibleCount, setVisibleCount] = useState(COMMENTS_PAGE);
 
   useEffect(() => {
     loadComments();
+    setVisibleCount(COMMENTS_PAGE);
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
   }, [videoId]);
 
@@ -254,7 +261,8 @@ export default function CommentSection({
       if (parentComment && parentComment.user_id !== authData.user.id) {
         await supabase.from('notifications').insert({
           user_id: parentComment.user_id,
-          message: 'Někdo odpověděl na tvůj komentář',
+          type: 'comment_reply',
+          message: t('commentReplyNotification'),
           link: `/watch/${videoId}`,
         });
       }
@@ -325,9 +333,20 @@ export default function CommentSection({
     loadComments();
   }
 
-  const flowComments = comments
+  // Připnutý první; pak podle řazení: "Nejlepší" = lajky mínus nelajky (srdíčko
+  // od tvůrce navrch), při shodě novější; "Nejnovější" = podle času.
+  const allTopLevel = comments
     .filter((c) => !c.parent_id)
-    .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+    .sort((a, b) => {
+      if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+      if (sortMode === 'top') {
+        const score = (c: Comment) => c.likeCount - c.dislikeCount + (c.hearted_by_creator ? 2 : 0);
+        const diff = score(b) - score(a);
+        if (diff !== 0) return diff;
+      }
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  const flowComments = allTopLevel.slice(0, visibleCount);
   const repliesFor = (id: string) => comments.filter((c) => c.parent_id === id);
 
   return (
@@ -341,7 +360,7 @@ export default function CommentSection({
             className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
             onClick={() => setActiveTab(tab)}
           >
-            {tab === 'Popis' ? t('description2') : tab === 'Flow' ? t('comments') : t('technicalTab')}
+            {tab === 'Popis' ? t('description2') : tab === 'Flow' ? `${t('comments')}${comments.length > 0 ? ` (${comments.length})` : ''}` : t('technicalTab')}
           </button>
         ))}
       </div>
@@ -404,6 +423,17 @@ export default function CommentSection({
             <button type="submit" disabled={posting} style={{ alignSelf: 'flex-start' }}>{t('postComment')}</button>
             {postError && <p className="error-text" style={{ fontSize: 12.5 }}>{postError}</p>}
           </form>
+          )}
+
+          {allTopLevel.length > 1 && (
+            <div className="comment-sort" role="group" aria-label={t('commentSortLabel')}>
+              <button type="button" className={`search-chip ${sortMode === 'top' ? 'active' : ''}`} onClick={() => setSortMode('top')}>
+                {t('commentSortTop')}
+              </button>
+              <button type="button" className={`search-chip ${sortMode === 'newest' ? 'active' : ''}`} onClick={() => setSortMode('newest')}>
+                {t('commentSortNewest')}
+              </button>
+            </div>
           )}
 
           {flowComments.map((c) => (
@@ -520,6 +550,17 @@ export default function CommentSection({
               )}
             </div>
           ))}
+
+          {allTopLevel.length > flowComments.length && (
+            <button
+              type="button"
+              className="reaction-btn"
+              style={{ marginBottom: 12 }}
+              onClick={() => setVisibleCount((n) => n + COMMENTS_PAGE)}
+            >
+              {t('commentsShowMore').replace('{count}', String(allTopLevel.length - flowComments.length))}
+            </button>
+          )}
 
           {commentsFailed ? (
             <LoadFailed onRetry={loadComments} />

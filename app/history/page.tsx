@@ -8,7 +8,14 @@ import { supabase } from '@/lib/supabaseClient';
 import { fetchAllRows, fetchByIds } from '@/lib/loadAll';
 import { useLanguage } from '@/lib/i18n';
 import LoadFailed from '@/components/LoadFailed';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import Toast, { ToastType } from '@/components/Toast';
 
+/**
+ * Historie sledování. Položku jde odebrat (✕ na kartě) a celou historii
+ * smazat - jako na YouTube. Odebrané video zmizí i z "Pokračovat ve
+ * sledování" a doporučování ho přestane brát jako zhlédnuté.
+ */
 function HistoryPageInner() {
   const { t } = useLanguage();
   const searchParams = useSearchParams();
@@ -19,6 +26,8 @@ function HistoryPageInner() {
   // stránka tvrdila, že seznam je prázdný.
   const [loadFailed, setLoadFailed] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
   useEffect(() => {
     startLoad();
@@ -68,9 +77,34 @@ function HistoryPageInner() {
     if (videoIds.length > 0) {
       // Pořadí drží historie, ne databáze - proto ho fetchByIds zachovává.
       setVideos(await fetchByIds<any>('videos', 'id, title, thumbnail_url, views, profiles!videos_owner_id_fkey(username)', videoIds));
+    } else {
+      setVideos([]);
     }
 
     setLoading(false);
+  }
+
+  async function removeOne(videoId: string) {
+    if (!userId) return;
+    const before = videos;
+    setVideos((list) => list.filter((v) => v.id !== videoId));
+    const { error } = await supabase.from('watch_history').delete().eq('user_id', userId).eq('video_id', videoId);
+    if (error) {
+      setVideos(before);
+      setToast({ message: t('menuActionFailed'), type: 'error' });
+    }
+  }
+
+  async function clearAll() {
+    setConfirmClear(false);
+    if (!userId) return;
+    const { error } = await supabase.from('watch_history').delete().eq('user_id', userId);
+    if (error) {
+      setToast({ message: t('menuActionFailed'), type: 'error' });
+      return;
+    }
+    setVideos([]);
+    setToast({ message: t('historyClearedNote'), type: 'success' });
   }
 
   if (loadFailed) return <LoadFailed onRetry={startLoad} />;
@@ -79,8 +113,8 @@ function HistoryPageInner() {
   if (!userId) {
     return (
       <div className="auth-gate">
-        <p>Pro zobrazení historie se musíš nejdřív přihlásit.</p>
-        <Link href="/login">{t('loginLink')}</Link>
+        <p>{t('historySignInNote')}</p>
+        <Link href="/login?next=%2Fhistory">{t('loginLink')}</Link>
       </div>
     );
   }
@@ -90,29 +124,46 @@ function HistoryPageInner() {
   if (videos.length === 0) {
     return (
       <div className="auth-gate">
-        <p>Historie</p>
-        <p style={{ fontSize: 13 }}>Tady uvidíš videa, která jsi nedávno sledoval/a.</p>
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+        <p>{t('historyTitle')}</p>
+        <p style={{ fontSize: 13 }}>{t('historyEmptyNote')}</p>
       </div>
     );
   }
 
   return (
     <div>
-      <p className="section-title">Historie</p>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {confirmClear && <ConfirmDialog message={t('historyClearConfirm')} onConfirm={clearAll} onCancel={() => setConfirmClear(false)} />}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+        <p className="section-title" style={{ margin: 0 }}>{t('historyTitle')}</p>
+        <button type="button" className="reaction-btn" onClick={() => setConfirmClear(true)}>
+          {t('historyClearButton')}
+        </button>
+      </div>
       <div className="video-grid">
         {filtered.map((v: any) => (
-          <Link href={`/watch/${v.id}`} key={v.id} className="video-card">
-            <div className="video-thumb">
-              {v.thumbnail_url ? (
-                <Image src={v.thumbnail_url} alt={v.title} width={320} height={180} />
-              ) : null}
-              <div className="play-badge">▶</div>
-            </div>
-            <p className="video-card-title">{v.title}</p>
-            <p className="video-card-meta">
-              {v.profiles?.username ?? 'neznámý tvůrce'} · {v.views} {t('views')}
-            </p>
-          </Link>
+          <div key={v.id} className="video-card history-card">
+            <Link href={`/watch/${v.id}`}>
+              <div className="video-thumb">
+                {v.thumbnail_url ? <Image src={v.thumbnail_url} alt={v.title} width={320} height={180} /> : null}
+                <div className="play-badge">▶</div>
+              </div>
+              <p className="video-card-title">{v.title}</p>
+              <p className="video-card-meta">
+                {v.profiles?.username ?? t('unknownCreator')} · {v.views} {t('views')}
+              </p>
+            </Link>
+            <button
+              type="button"
+              className="history-remove"
+              onClick={() => removeOne(v.id)}
+              aria-label={t('historyRemoveItem')}
+              title={t('historyRemoveItem')}
+            >
+              ✕
+            </button>
+          </div>
         ))}
       </div>
     </div>

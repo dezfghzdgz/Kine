@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabaseServer';
 import { shouldBeProtected, syncVideoProtection } from '@/lib/streamProtection';
 import { hasKinePlus, KINE_PLUS_UPLOAD_MULTIPLIER } from '@/lib/plus';
 import { sweepProcessing } from '@/lib/markVideoReady';
+import { sanitizeCaptions, sanitizeChapters } from '@/lib/captions';
 
 // Poté, co prohlížeč dokončí upload videa přímo do Cloudflare,
 // zavolá tenhle endpoint, aby se video zapsalo do naší databáze.
@@ -97,8 +98,9 @@ export async function POST(req: NextRequest) {
       scheduled_at: scheduledAt || null,
       width: width ?? null,
       height: height ?? null,
-      chapters: chapters ?? [],
-      captions: captions ?? [],
+      // Od klienta (web, appka) se bere jen to, co dává smysl - rozbité kapitoly by shodily stránku videa.
+      chapters: sanitizeChapters(chapters),
+      captions: sanitizeCaptions(captions),
       hashtags: hashtags ?? [],
     })
     .select()
@@ -116,34 +118,10 @@ export async function POST(req: NextRequest) {
     await syncVideoProtection(data.id);
   }
 
-  // Pokud je video hned veřejně publikované (ne naplánované na později),
-  // dáme vědět všem odběratelům tohohle kanálu.
-  const isImmediatelyPublic =
-    (visibility ?? 'public') === 'public' && (!scheduledAt || new Date(scheduledAt) <= new Date());
-
-  if (isImmediatelyPublic) {
-    const { data: subs } = await supabaseServer
-      .from('subscriptions')
-      .select('subscriber_id')
-      .eq('channel_id', userData.user.id);
-
-    if (subs && subs.length > 0) {
-      const { data: profile } = await supabaseServer
-        .from('profiles')
-        .select('username, display_name')
-        .eq('id', userData.user.id)
-        .single();
-      const name = profile?.display_name ?? profile?.username ?? 'Tvůrce, kterého sleduješ';
-
-      await supabaseServer.from('notifications').insert(
-        subs.map((s) => ({
-          user_id: s.subscriber_id,
-          message: `${name} nahrál/a nové video: ${title}`,
-          link: `/watch/${data.id}`,
-        }))
-      );
-    }
-  }
+  // Odběratelům se tady nic neposílá: video se ještě zpracovává (odkaz by
+  // vedl na "zpracovává se") a oznámení pošle markVideoReady, až bude hotové
+  // - jednou, jen těm se zapnutým zvonečkem, a u naplánovaného videa až
+  // v čase zveřejnění. Dřív šlo oznámení odsud i odtamtud, tedy dvakrát.
 
   // Nové nahrání = tvůrce je aktivní; při té příležitosti se dodělají
   // jeho (i cizí) dřívější videa, která zůstala viset jako "processing".

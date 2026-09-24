@@ -12,7 +12,7 @@ type Notification = {
   link: string | null;
   read: boolean;
   created_at: string;
-  type: 'default' | 'collab_invite' | 'like_milestone' | 'view_milestone' | 'donation' | 'subscription' | 'new_video' | 'comment_reply' | 'moderation_warning';
+  type: 'default' | 'collab_invite' | 'like_milestone' | 'view_milestone' | 'donation' | 'subscription' | 'new_video' | 'comment_reply' | 'moderation_warning' | 'live';
 };
 
 /**
@@ -32,6 +32,7 @@ const NOTIFICATION_TYPE_STYLES: Record<string, { color: string; icon: string; la
   donation: { color: '#f07eb0', icon: '💛', labelKey: 'notifTypeDonation' },
   new_video: { color: '#8a8a8f', icon: '🎬', labelKey: 'notifTypeNewVideo' },
   moderation_warning: { color: '#e0453f', icon: '⚠', labelKey: 'notifTypeWarning' },
+  live: { color: '#ff3b3b', icon: '🔴', labelKey: 'notifTypeLive' },
   default: { color: '#8a8a8f', icon: '•', labelKey: 'notifTypeOther' },
 };
 

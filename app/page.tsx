@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
 import VideoCard from '@/components/VideoCard';
 import ContinueWatching from '@/components/ContinueWatching';
+import LiveNowRow from '@/components/LiveNowRow';
 import { scoreVideo, explainVideo, buildBlocks, formatDuration, FEED_BATCH, WATCHED_HISTORY_LIMIT } from '@/lib/homeRecommendation';
 import type { Block } from '@/lib/homeRecommendation';
 import { loadHiddenContent, filterHidden, clearHiddenContent, NOTHING_HIDDEN } from '@/lib/hiddenContent';
@@ -16,7 +17,7 @@ import type { HiddenContent } from '@/lib/hiddenContent';
 import { isSpark, nearMissSparks } from '@/lib/videoBlocks';
 
 const VIDEO_COLUMNS =
-  'id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, hashtags, owner_id, cloudflare_video_id, profiles!videos_owner_id_fkey(username)';
+  'id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, hashtags, owner_id, cloudflare_video_id, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username)';
 
 // Kolik dávek za sebou smí vyjít naprázdno, než to appka vzdá. Když má divák
 // schovaný celý kanál, může se stát, že se z jedné dávky nedostane do feedu
@@ -418,6 +419,8 @@ export default function HomePage() {
     return (
       <div>
         {notices}
+        {/* I bez jediného videa může někdo vysílat živě. */}
+        <LiveNowRow />
         <div style={{ textAlign: 'center', padding: '80px 0', color: 'var(--text-faint)' }}>
           <p>{t('noVideosYet')}</p>
           <Link href="/upload" style={{ color: 'var(--text)' }}>{t('uploadFirstVideo')}</Link>
@@ -453,6 +456,8 @@ export default function HomePage() {
       {/* "Tady jsi skončil" - jen pro přihlášené a jen když je co dokoukat;
           jinak se nevykreslí nic. */}
       <ContinueWatching />
+      {/* Kdo teď vysílá živě - když nikdo, nevykreslí se nic. */}
+      <LiveNowRow />
       <p className="section-title">{t('recommendedForYouHeading')}</p>
       {notices}
 

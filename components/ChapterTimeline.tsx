@@ -41,6 +41,13 @@ export default function ChapterTimeline({
   isMaximized,
   onToggleMaximize,
   compact = false,
+  previewSrc,
+  theater,
+  onToggleTheater,
+  loop,
+  onToggleLoop,
+  autoplay,
+  onToggleAutoplay,
 }: {
   chapters: Chapter[];
   duration: number;
@@ -53,6 +60,17 @@ export default function ChapterTimeline({
   /** Mini přehrávač (rámeček ~300 px): jen posuvník, přehrát, zvuk a celá
    *  obrazovka. Čas, posuvník hlasitosti a nabídka ⋮ se do něj nevejdou. */
   compact?: boolean;
+  /** Náhled snímku v daném čase (najetí na posuvník, jako na YouTube). */
+  previewSrc?: (seconds: number) => string | null;
+  /** Kino režim (široký přehrávač) - tlačítko jen na počítači. */
+  theater?: boolean;
+  onToggleTheater?: () => void;
+  /** Opakovat video pořád dokola. */
+  loop?: boolean;
+  onToggleLoop?: () => void;
+  /** Po konci pustit další video. */
+  autoplay?: boolean;
+  onToggleAutoplay?: () => void;
 }) {
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(true);
@@ -107,6 +125,9 @@ export default function ChapterTimeline({
   const [speed, setSpeed] = useState(1);
   const [hoverTitle, setHoverTitle] = useState<string | null>(null);
   const [hoverX, setHoverX] = useState(0);
+  // Čas pod myší (náhled snímku a čas nad posuvníkem); null = myš není nad posuvníkem.
+  const [hoverSeconds, setHoverSeconds] = useState<number | null>(null);
+  const [trackWidth, setTrackWidth] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const { t } = useLanguage();
 
@@ -231,8 +252,19 @@ export default function ChapterTimeline({
     const ratio = (e.clientX - rect.left) / rect.width;
     const seconds = clampSeek(ratio * total, total);
     setHoverX(e.clientX - rect.left);
+    setTrackWidth(rect.width);
     setHoverTitle(segmentTitleAt(seconds));
+    setHoverSeconds(seconds);
   }
+
+  // Náhled snímku: čas se zaokrouhlí (asi sto kroků na video), ať se při
+  // pohybu myší nestahuje obrázek pro každou vteřinu zvlášť.
+  const previewStep = total > 0 ? Math.max(1, Math.round(total / 100)) : 1;
+  const previewAt = hoverSeconds !== null ? Math.min(Math.round(hoverSeconds / previewStep) * previewStep, Math.max(0, Math.floor(total) - 1)) : null;
+  const previewImage = previewAt !== null && previewSrc && !touchUi ? previewSrc(previewAt) : null;
+  const PREVIEW_W = 168;
+  const previewLeft = Math.max(PREVIEW_W / 2, Math.min(hoverX, Math.max(PREVIEW_W / 2, trackWidth - PREVIEW_W / 2)));
+  const currentChapter = sorted.length > 0 ? segmentTitleAt(current) : null;
 
   function togglePlay() {
     if (!player) return;
@@ -381,15 +413,17 @@ export default function ChapterTimeline({
           transition: 'opacity 0.25s ease',
         }}
       >
-        {hoverTitle && (
+        {hoverSeconds !== null && !compact && (
           <div
-            style={{
-              position: 'absolute', bottom: 44, left: `${hoverX}px`, transform: 'translateX(-50%)',
-              background: 'rgba(10,10,11,0.9)', color: '#fff', fontSize: 12, padding: '4px 8px',
-              borderRadius: 6, whiteSpace: 'nowrap', pointerEvents: 'none',
-            }}
+            className="player-hover-preview"
+            style={{ left: `calc(${previewImage ? previewLeft : hoverX}px + ${compact ? 8 : 14}px)` }}
           >
-            {hoverTitle}
+            {previewImage && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={previewImage} alt="" width={PREVIEW_W} height={Math.round((PREVIEW_W * 9) / 16)} decoding="async" />
+            )}
+            {hoverTitle && <span className="player-hover-chapter">{hoverTitle}</span>}
+            <span className="player-hover-time">{formatTime(hoverSeconds)}</span>
           </div>
         )}
 
@@ -409,7 +443,7 @@ export default function ChapterTimeline({
             player.currentTime = clampSeek(ratio * total, total);
           }}
           onMouseMove={handleTrackHover}
-          onMouseLeave={() => setHoverTitle(null)}
+          onMouseLeave={() => { setHoverTitle(null); setHoverSeconds(null); }}
           style={{
             padding: touchUi ? '12px 0' : '8px 0', margin: touchUi ? '-12px 0 -2px' : '-8px 0 2px',
             cursor: 'pointer', touchAction: 'none',
@@ -464,6 +498,9 @@ export default function ChapterTimeline({
               <span style={{ fontSize: 12, opacity: 0.85, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                 {total > 0 ? `${formatTime(current)} / ${formatTime(total)}` : formatTime(current)}
               </span>
+            )}
+            {!compact && currentChapter && (
+              <span className="player-chapter-label" title={currentChapter}>• {currentChapter}</span>
             )}
           </div>
 
@@ -565,6 +602,30 @@ export default function ChapterTimeline({
                       <span>{t('playbackSpeedLabel')}</span>
                       <span style={{ color: 'rgba(255,255,255,0.6)' }}>{speed}x</span>
                     </button>
+                    {onToggleLoop && (
+                      <button
+                        onClick={onToggleLoop}
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
+                          color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
+                        }}
+                      >
+                        <span>{t('playerLoopLabel')}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>{loop ? t('onLabel') : t('offLabel')}</span>
+                      </button>
+                    )}
+                    {onToggleAutoplay && (
+                      <button
+                        onClick={onToggleAutoplay}
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
+                          color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
+                        }}
+                      >
+                        <span>{t('playerAutoplayLabel')}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>{autoplay ? t('onLabel') : t('offLabel')}</span>
+                      </button>
+                    )}
                     {/* Přehled zkratek (components/KeyboardShortcuts.tsx) - pro
                         toho, kdo "?" nezná. Na dotyku klávesnice není. */}
                     {!touchUi && (
@@ -639,6 +700,21 @@ export default function ChapterTimeline({
               </div>
             )}
 
+            {onToggleTheater && !compact && !isMaximized && !touchUi && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onToggleTheater(); }}
+                type="button"
+                className="player-theater-btn"
+                title={theater ? t('playerTheaterOff') : t('playerTheaterOn')}
+                aria-label={theater ? t('playerTheaterOff') : t('playerTheaterOn')}
+                aria-pressed={!!theater}
+                style={iconBtn}
+              >
+                <svg width="20" height="16" viewBox="0 0 24 18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  {theater ? <rect x="4" y="4" width="16" height="10" rx="1.5" /> : <rect x="1.5" y="2" width="21" height="14" rx="2" />}
+                </svg>
+              </button>
+            )}
             <button
               onClick={(e) => { e.stopPropagation(); onToggleMaximize(); }}
               type="button"

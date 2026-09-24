@@ -3,11 +3,12 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useLanguage } from '@/lib/i18n';
+import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { SpeakerIcon } from './ReactionIcons';
 import VideoCardMenu from './VideoCardMenu';
 import { supabase } from '@/lib/supabaseClient';
 import { unhideVideo, unhideChannel } from '@/lib/hiddenContent';
+import { isUpcomingPremiere } from '@/lib/scheduling';
 
 const HOVER_DELAY_MS = 150;
 const SOUND_PREF_KEY = 'kine-preview-sound-enabled';
@@ -35,8 +36,10 @@ function VideoCard({
   reason?: string | null;
   hideCreator?: boolean;
 }) {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const [previewing, setPreviewing] = useState(false);
+  // Premiéra, která ještě nezačala: náhled po najetí nehraje (video jde pustit až v čase premiéry).
+  const upcomingPremiere = isUpcomingPremiere(video);
   const [muted, setMuted] = useState(true);
   // Když si divák video (nebo celý kanál) schová, karta na místě zůstane a
   // změní se na hlášku s možností to vzít zpět - jako na YouTube. Kdyby
@@ -83,7 +86,7 @@ function VideoCard({
   }, [previewing, video.cloudflare_video_id]);
 
   function startHover() {
-    if (!video.cloudflare_video_id) return;
+    if (!video.cloudflare_video_id || upcomingPremiere) return;
     // Neveřejné video (soukromé, pro odběratele) hraje jen s podepsaným
     // tokenem (lib/streamProtection.ts) - náhled po najetí by skončil
     // chybou Cloudflare. Bez viditelnosti v datech se bere jako veřejné.
@@ -176,9 +179,14 @@ function VideoCard({
               <div className="watch-progress-fill" style={{ width: `${progressPercent}%` }} />
             </div>
           )}
-          {!previewing && video.duration_seconds && formatDuration ? (
+          {!previewing && video.duration_seconds && formatDuration && !upcomingPremiere ? (
             <span className="video-duration">{formatDuration(video.duration_seconds)}</span>
           ) : null}
+          {upcomingPremiere && (
+            <span className="video-premiere-badge">
+              {t('premiereBadge')} · {new Date(video.scheduled_at).toLocaleString(DATE_LOCALES[lang], { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
         </div>
       </Link>
 

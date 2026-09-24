@@ -213,6 +213,12 @@ export default function Sidebar() {
           {t('create')}
         </Link>
         {user && (
+          <Link href="/live" className={`sidebar-link ${pathname === '/live' ? 'active' : ''}`}>
+            <span className="sidebar-live-icon" aria-hidden="true" />
+            {t('goLiveLink')}
+          </Link>
+        )}
+        {user && (
           <Link href="/donate" className={`sidebar-link ${pathname === '/donate' ? 'active' : ''}`}>
             💛 {t('donateSidebarLabel')}
           </Link>
@@ -297,6 +303,10 @@ export default function Sidebar() {
             <PlaylistIcon />
             {t('postPollTab')}
           </Link>
+          <Link href="/live" className="sidebar-link" onClick={() => setCreateMenuOpen(false)}>
+            <span className="sidebar-live-icon" aria-hidden="true" />
+            {t('goLiveLink')}
+          </Link>
         </div>
       </div>
     )}
@@ -370,6 +380,12 @@ export default function Sidebar() {
             <CreateIcon />
             {t('create')}
           </Link>
+          {user && (
+            <Link href="/live" className="sidebar-link" onClick={closeMobileNav}>
+              <span className="sidebar-live-icon" aria-hidden="true" />
+              {t('goLiveLink')}
+            </Link>
+          )}
           {user && (
             <Link href="/donate" className="sidebar-link" onClick={closeMobileNav}>
               💛 {t('donateSidebarLabel')}

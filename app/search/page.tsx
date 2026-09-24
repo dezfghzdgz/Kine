@@ -1,13 +1,15 @@
 import { supabaseServer } from '@/lib/supabaseServer';
 import { computeTrustRating } from '@/lib/trustRating';
 import SearchResults from '@/components/SearchResults';
+import { applySearchFilters, filtersActive, parseSearchFilters, type SearchFilters } from '@/lib/searchFilters';
+import { isSpark } from '@/lib/videoBlocks';
 
 export const dynamic = 'force-dynamic';
 
 /** Co karta videa potřebuje (components/VideoCard.tsx): náhled po najetí,
  *  tvar, délku, tvůrce. */
 const CARD_FIELDS =
-  'id, title, thumbnail_url, views, width, height, duration_seconds, category, owner_id, cloudflare_video_id, profiles!videos_owner_id_fkey(id, username, created_at)';
+  'id, title, thumbnail_url, views, width, height, duration_seconds, category, owner_id, cloudflare_video_id, created_at, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(id, username, created_at)';
 
 /**
  * Hledání.
@@ -18,8 +20,8 @@ const CARD_FIELDS =
  * neproběhla (funkce chybí), spadne to na staré "název obsahuje" - hledá
  * hůř, ale hledá.
  */
-async function searchVideos(query: string): Promise<any[]> {
-  const { data, error } = await supabaseServer.rpc('search_videos', { q: query, max_rows: 48 });
+async function searchVideos(query: string, maxRows: number): Promise<any[]> {
+  const { data, error } = await supabaseServer.rpc('search_videos', { q: query, max_rows: maxRows });
 
   if (!error && Array.isArray(data)) {
     // Funkce vrací jen to nejnutnější (id, název, náhled, zhlédnutí, tvůrce)
@@ -41,7 +43,7 @@ async function searchVideos(query: string): Promise<any[]> {
     .eq('status', 'ready')
     .eq('visibility', 'public')
     .ilike('title', `%${query}%`)
-    .limit(48);
+    .limit(maxRows);
   return videosRaw ?? [];
 }
 
@@ -61,8 +63,11 @@ async function searchCreators(query: string): Promise<any[]> {
   return creators ?? [];
 }
 
-async function searchAll(query: string, minRating: number | null) {
-  let [videos, creators] = await Promise.all([searchVideos(query), searchCreators(query)]);
+async function searchAll(query: string, minRating: number | null, filters: SearchFilters) {
+  // S filtry se bere víc kandidátů - část jich filtr vyřadí.
+  let [videos, creators] = await Promise.all([searchVideos(query, filtersActive(filters) ? 120 : 48), searchCreators(query)]);
+  // Typ, datum, délka, řazení (lib/searchFilters.ts); naplánovaná videa, která ještě nejsou venku, vypadnou vždycky.
+  videos = applySearchFilters(videos, filters, isSpark);
 
   if (minRating !== null) {
     const uniqueOwners = new Map<string, string>();
@@ -92,17 +97,27 @@ async function searchAll(query: string, minRating: number | null) {
   return { videos, creators, recommended };
 }
 
-export default async function SearchPage({ searchParams }: { searchParams: { q?: string; minRating?: string } }) {
+export default async function SearchPage({ searchParams }: { searchParams: Record<string, string | undefined> }) {
   const query = searchParams.q?.trim() ?? '';
   const minRating = searchParams.minRating ? Number(searchParams.minRating) : null;
+  const filters = parseSearchFilters(searchParams);
 
   if (!query) {
-    return <SearchResults query="" videos={[]} creators={[]} recommended={[]} />;
+    return <SearchResults query="" videos={[]} creators={[]} recommended={[]} filters={filters} minRating={searchParams.minRating ?? null} />;
   }
 
-  const { videos, creators, recommended } = await searchAll(query, minRating);
+  const { videos, creators, recommended } = await searchAll(query, minRating, filters);
 
   // Kreslí se až v prohlížeči (components/SearchResults.tsx) - jazyk si
   // divák volí tam a server o něm neví.
-  return <SearchResults query={query} videos={videos} creators={creators} recommended={recommended} />;
+  return (
+    <SearchResults
+      query={query}
+      videos={videos}
+      creators={filters.type === 'all' ? creators : []}
+      recommended={recommended}
+      filters={filters}
+      minRating={searchParams.minRating ?? null}
+    />
+  );
 }

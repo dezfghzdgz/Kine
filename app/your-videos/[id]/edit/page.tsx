@@ -6,11 +6,19 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import Toast, { ToastType } from '@/components/Toast';
 import { useLanguage } from '@/lib/i18n';
+import { autoCaptionLanguage, chaptersFromDescription, parseSubtitles, sanitizeCaptions, sanitizeChapters, toSrt } from '@/lib/captions';
 
 // Na jednom videu se můžou podílet nejvýš 4 tvůrci - ten, kdo ho nahrál,
 // a k tomu tři spolutvůrci. Všichni čtyři se pak ukazují pod videem.
 const MAX_VIDEO_CREATORS = 4;
 const MAX_COLLABORATORS = MAX_VIDEO_CREATORS - 1;
+
+function formatChapterTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+}
 
 export default function EditVideoPage() {
   const { t } = useLanguage();
@@ -33,6 +41,12 @@ export default function EditVideoPage() {
   const [collabSearch, setCollabSearch] = useState('');
   const [collabResults, setCollabResults] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
   const [collabError, setCollabError] = useState<string | null>(null);
+  // Kapitoly ("0:00 Úvod" po řádcích) a titulky (formát SRT) - obojí jde upravit i po nahrání.
+  const [chaptersText, setChaptersText] = useState('');
+  const [captionsText, setCaptionsText] = useState('');
+  const [videoLanguage, setVideoLanguage] = useState<string | null>(null);
+  const [videoReady, setVideoReady] = useState(false);
+  const [autoCaptions, setAutoCaptions] = useState<'idle' | 'working' | 'unsupported' | 'error'>('idle');
 
   async function loadCollaborators() {
     const { data } = await supabase
@@ -176,7 +190,7 @@ export default function EditVideoPage() {
 
     const { data: video } = await supabase
       .from('videos')
-      .select('id, title, description, thumbnail_url, owner_id, visibility')
+      .select('*')
       .eq('id', videoId)
       .single();
 
@@ -191,6 +205,14 @@ export default function EditVideoPage() {
     setThumbnailUrl(video.thumbnail_url ?? null);
     setVisibility((video.visibility as 'public' | 'private' | 'subscribers') ?? 'public');
     setVideoOwnerId(video.owner_id);
+    setChaptersText(
+      sanitizeChapters(video.chapters)
+        .map((c) => `${formatChapterTime(c.time)} ${c.title}`)
+        .join('\n')
+    );
+    setCaptionsText(toSrt(sanitizeCaptions(video.captions)));
+    setVideoLanguage(video.language ?? null);
+    setVideoReady(video.status === 'ready');
 
     const { data: myProfile } = await supabase.from('profiles').select('trailer_video_id').eq('id', authData.user.id).single();
     setIsTrailer(myProfile?.trailer_video_id === videoId);
@@ -217,8 +239,70 @@ export default function EditVideoPage() {
     }
   }
 
+  /** Automatické titulky (Cloudflare AI): požádat, pak se ptát, dokud nejsou hotové; výsledek jde do pole k úpravě. */
+  async function generateCaptions() {
+    const language = autoCaptionLanguage(videoLanguage);
+    if (!language) {
+      setAutoCaptions('unsupported');
+      return;
+    }
+    setAutoCaptions('working');
+    const { data: sessionData } = await supabase.auth.getSession();
+    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionData.session?.access_token ?? ''}` };
+    const call = async (action: 'generate' | 'status') => {
+      const res = await fetch('/api/videos/captions', { method: 'POST', headers, body: JSON.stringify({ videoId, action, language }) });
+      return res.json().catch(() => ({ status: 'error' }));
+    };
+    const started = await call('generate');
+    if (started.status === 'error' || started.error) {
+      setAutoCaptions('error');
+      return;
+    }
+    // Minutové video trvá Cloudflare zhruba desítky vteřin; ptát se nejvýš ~10 minut.
+    for (let i = 0; i < 120; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      const state = await call('status');
+      if (state.status === 'ready' && Array.isArray(state.captions)) {
+        setCaptionsText(toSrt(state.captions));
+        setAutoCaptions('idle');
+        setToast({ message: t('captionsGeneratedNote'), type: 'success' });
+        return;
+      }
+      if (state.status === 'error') {
+        setAutoCaptions('error');
+        return;
+      }
+    }
+    setAutoCaptions('error');
+  }
+
+  async function importCaptionsFile(file: File | null) {
+    if (!file) return;
+    const text = await file.text();
+    const parsed = parseSubtitles(text);
+    if (parsed.length === 0) {
+      setToast({ message: t('captionsImportFailed'), type: 'error' });
+      return;
+    }
+    setCaptionsText(toSrt(parsed));
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+
+    // Kapitoly: stejná pravidla jako kapitoly z popisu (první na 0:00, aspoň dvě).
+    const chapterLines = chaptersText.trim();
+    const chapters = chapterLines ? chaptersFromDescription(chapterLines) : [];
+    if (chapterLines && chapters.length === 0) {
+      setToast({ message: t('chaptersInvalidNote'), type: 'error' });
+      return;
+    }
+    const captions = captionsText.trim() ? parseSubtitles(captionsText) : [];
+    if (captionsText.trim() && captions.length === 0) {
+      setToast({ message: t('captionsImportFailed'), type: 'error' });
+      return;
+    }
+
     setSaving(true);
 
     const { data: authData } = await supabase.auth.getUser();
@@ -234,7 +318,7 @@ export default function EditVideoPage() {
         .upload(path, newThumbnailFile, { upsert: true });
 
       if (uploadError) {
-        setToast({ message: 'Nahrání náhledu se nepovedlo: ' + uploadError.message, type: 'error' });
+        setToast({ message: t('thumbnailUploadFailedNote').replace('{message}', uploadError.message), type: 'error' });
         setSaving(false);
         return;
       }
@@ -251,13 +335,15 @@ export default function EditVideoPage() {
         thumbnail_url: newThumbnailUrl,
         custom_thumbnail: newThumbnailFile ? true : undefined,
         visibility,
+        chapters,
+        captions,
       })
       .eq('id', videoId);
 
     setSaving(false);
 
     if (error) {
-      setToast({ message: 'Uložení se nepovedlo: ' + error.message, type: 'error' });
+      setToast({ message: t('saveFailedNote').replace('{message}', error.message), type: 'error' });
       return;
     }
 
@@ -276,7 +362,7 @@ export default function EditVideoPage() {
       await supabase.from('profiles').update({ trailer_video_id: null }).eq('id', authData.user.id).eq('trailer_video_id', videoId);
     }
 
-    setToast({ message: 'Video bylo upraveno', type: 'success' });
+    setToast({ message: t('videoUpdatedNote'), type: 'success' });
     setTimeout(() => router.push(`/watch/${videoId}`), 900);
   }
 
@@ -306,13 +392,58 @@ export default function EditVideoPage() {
 
       <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div>
-          <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('videoTitle')}</label>
-          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} required />
+          <label htmlFor="edit-title" style={{ display: 'block', fontSize: 12, color: 'var(--text-faint)', marginBottom: 6 }}>{t('videoTitle')}</label>
+          <input id="edit-title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={150} required style={{ width: '100%' }} />
         </div>
         <div>
-          <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('description2')}</label>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} />
+          <label htmlFor="edit-description" style={{ display: 'block', fontSize: 12, color: 'var(--text-faint)', marginBottom: 6 }}>{t('description2')}</label>
+          <textarea id="edit-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={7} maxLength={5000} style={{ width: '100%' }} />
         </div>
+      </div>
+
+      <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <p className="panel-heading" style={{ margin: 0 }}>{t('chapters')}</p>
+        <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>{t('chaptersEditHint')}</p>
+        <textarea
+          value={chaptersText}
+          onChange={(e) => setChaptersText(e.target.value)}
+          rows={4}
+          placeholder={'0:00 ' + t('chapterExampleIntro') + '\n1:30 ' + t('chapterExampleMain')}
+          style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 13 }}
+        />
+        {!chaptersText.trim() && chaptersFromDescription(description).length > 0 && (
+          <button type="button" className="live-small-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setChaptersText(chaptersFromDescription(description).map((c) => `${formatChapterTime(c.time)} ${c.title}`).join('\n'))}>
+            {t('chaptersFromDescriptionButton')}
+          </button>
+        )}
+      </div>
+
+      <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <p className="panel-heading" style={{ margin: 0 }}>{t('captions')}</p>
+        <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>{t('captionsEditHint')}</p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <label className="live-small-btn" style={{ cursor: 'pointer' }}>
+            {t('captionsImportButton')}
+            <input type="file" accept=".srt,.vtt,text/vtt,application/x-subrip" style={{ display: 'none' }} onChange={(e) => importCaptionsFile(e.target.files?.[0] ?? null)} />
+          </label>
+          <button type="button" className="live-small-btn" onClick={generateCaptions} disabled={!videoReady || autoCaptions === 'working'}>
+            {autoCaptions === 'working' ? t('captionsGenerating') : t('captionsGenerateButton')}
+          </button>
+          {captionsText.trim() && (
+            <button type="button" className="live-small-btn live-danger" onClick={() => setCaptionsText('')}>
+              {t('captionsClearButton')}
+            </button>
+          )}
+        </div>
+        {autoCaptions === 'unsupported' && <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>{t('captionsUnsupportedLanguage')}</p>}
+        {autoCaptions === 'error' && <p className="error-text" style={{ margin: 0 }}>{t('captionsGenerateFailed')}</p>}
+        <textarea
+          value={captionsText}
+          onChange={(e) => setCaptionsText(e.target.value)}
+          rows={8}
+          placeholder={'1\n00:00:01,000 --> 00:00:03,500\n' + t('captionTextPlaceholder')}
+          style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12.5 }}
+        />
       </div>
 
       <div className="panel">

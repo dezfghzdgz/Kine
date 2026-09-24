@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { useLanguage } from '@/lib/i18n';
 
 export default function ExpandableText({ text }: { text: string }) {
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
   const isLong = text.length > 160;
   const shown = expanded || !isLong ? text : text.slice(0, 160) + '…';
@@ -18,7 +20,7 @@ export default function ExpandableText({ text }: { text: string }) {
             fontSize: 13, fontWeight: 600, marginTop: 6, cursor: 'pointer',
           }}
         >
-          {expanded ? 'Zobrazit méně' : 'Zobrazit více'}
+          {expanded ? t('showLessLabel') : t('showMoreLabel')}
         </button>
       )}
     </div>

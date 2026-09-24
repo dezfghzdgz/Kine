@@ -62,7 +62,7 @@ function ExploreInner() {
       .from('videos')
       // cloudflare_video_id je tu kvůli náhledu při najetí myší a stahování
       // z nabídky ⋮ - bez něj by karta obojí tiše vynechala.
-      .select('id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, cloudflare_video_id, profiles!videos_owner_id_fkey(id, username, created_at)')
+      .select('id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, cloudflare_video_id, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(id, username, created_at)')
       .eq('status', 'ready')
       .eq('visibility', 'public')
       .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso},is_premiere.eq.true`);

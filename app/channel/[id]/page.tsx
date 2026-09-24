@@ -17,6 +17,8 @@ import { useLanguage } from '@/lib/i18n';
 import { computeTrustRatingClient, getTotalReactionCount, RATING_UNLOCK_THRESHOLD } from '@/lib/trustRatingClient';
 import { useUserRole } from '@/lib/useUserRole';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import LiveBadge from '@/components/LiveBadge';
+import { visibleNowFilter } from '@/lib/scheduling';
 
 type Tab = 'home' | 'videos' | 'sparks' | 'posts' | 'playlists';
 
@@ -83,13 +85,17 @@ function ChannelPageInner() {
     }
 
     if (profileData) {
+      // Naplánovaná videa (zveřejní se později) vidí jen majitel kanálu; premiéry
+      // všichni jako "připravuje se" - stejně jako hlavní stránka (lib/scheduling.ts).
+      const ownChannel = authData.user?.id === channelId;
+      let videosQuery = supabase
+        .from('videos')
+        .select('id, title, thumbnail_url, views, width, height, duration_seconds, created_at, cloudflare_video_id, scheduled_at, is_premiere')
+        .eq('owner_id', channelId)
+        .eq('status', 'ready');
+      if (!ownChannel) videosQuery = videosQuery.or(visibleNowFilter());
       const [{ data: videoData }, { data: collabRows }, { data: postData }, { data: playlistData }, { data: myPlaylists }] = await Promise.all([
-        supabase
-          .from('videos')
-          .select('id, title, thumbnail_url, views, width, height, duration_seconds, created_at, cloudflare_video_id')
-          .eq('owner_id', channelId)
-          .eq('status', 'ready')
-          .order('created_at', { ascending: false }),
+        videosQuery.order('created_at', { ascending: false }),
         // Videa, kde je tenhle profil přidaný jako spolutvůrce - appka je
         // ukáže i tady, ne jen na kanálu toho, kdo je reálně nahrál. appka
         // schválně nefiltruje "accepted" přímo v appky dotazu, protože
@@ -291,6 +297,10 @@ function ChannelPageInner() {
             @{profile.username} · {subscriberCount} {t('subscribersSuffix')} · {videos.length} {t('videosSuffix')}
             {trustRating !== null && ` · Rating ${trustRating}%`}
           </p>
+          {/* Kanál právě vysílá živě - odkaz na přenos (jinak se nevykreslí nic). */}
+          <div style={{ margin: '6px 0' }}>
+            <LiveBadge channelId={profile.id} withTitle />
+          </div>
           {profile.bio && (
             <p style={{ color: 'var(--text-dim)', fontSize: 13, maxWidth: 560, margin: '4px 0' }}>{profile.bio}</p>
           )}

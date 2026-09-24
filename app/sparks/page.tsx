@@ -78,7 +78,8 @@ function SparksPageInner() {
       .select('id, title, description, cloudflare_video_id, duration_seconds, width, height, created_at, profiles!videos_owner_id_fkey(id, username, display_name, avatar_url, verification_tier)')
       .eq('status', 'ready')
       .eq('visibility', 'public')
-      .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso},is_premiere.eq.true`)
+      // Sparks hrají samy - premiéra se tu objeví až ve chvíli, kdy začne.
+      .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso}`)
       .order('created_at', { ascending: false })
       .limit(80);
 

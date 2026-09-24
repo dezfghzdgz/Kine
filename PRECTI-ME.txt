@@ -1,63 +1,130 @@
-KINE - video nahrané z appky "se zpracovává" a na Kine nikde není
-===================================================================
+KINE - živé vysílání, premiéry, titulky, lepší přehrávač a hledání
+==================================================================
 
-Malý balíček (9 souborů). Rozbal do kořene repa a přepiš, pak:
+Balíček 52 souborů (21 nových). Rozbal do kořene repa a přepiš, pak:
 
-  1. node zkontroluj-soubory.mjs --uklid
-  2. Push. Žádná migrace, žádná nová závislost, žádná nová proměnná
-     na Vercelu (CRON_SECRET je nepovinný, viz níž).
+  1. Supabase -> SQL Editor -> vlož a spusť CELÝ soubor
+     supabase-migration-zive-vysilani.sql (jde pustit i víckrát, nic se
+     nezdvojí). Bez něj web jede dál, jen živé vysílání a chat ukážou,
+     že ještě nejsou zapnuté.
+  2. Push / nahrání přes GitHub. Žádná nová závislost. Nová proměnná na
+     Vercelu NENÍ potřeba - živé vysílání i titulky jedou přes stávající
+     CLOUDFLARE_ACCOUNT_ID a CLOUDFLARE_STREAM_API_TOKEN.
+  3. Nepovinné: NEXT_PUBLIC_STREAM_CUSTOMER_CODE = kód z adresy
+     customer-XXXX.cloudflarestream.com (Cloudflare -> Stream -> video ->
+     Embed). Bez něj si ho web vezme z náhledů nahraných videí.
+  4. Nepovinné: na GitHubu smaž tři staré zbytky (nic nerozbíjí, jen
+     překáží): tests/username.test.mjs,
+     supabase-migration-zarizeni-chyby-jmena.sql,
+     app/tests/playerStart.test.mjs
+     Když máš repo i u sebe: node zkontroluj-soubory.mjs --uklid
 
-CO SE DĚLO
+CO JE NOVÉ
 ----------
-Video se do databáze zapíše jako "processing" a na "ready" ho přepne
-až někdo, kdo se Cloudflare zeptá, jestli je zpracované. Dokud se to
-nestane, není v žádném seznamu na Kine (přehled, kanál, hledání) -
-všechny berou jen "ready". Ptát se chodil jen prohlížeč tvůrce: stránka
-nahrávání chvíli po nahrání, Tvoje videa a stránka videa, když jsou
-otevřené. Appka Kine do PC video nahrála, potvrdila - a nikdo se už
-nezeptal. Na Cloudflare bylo hotové, na Kine viselo jako "zpracovává se"
-donekonečna. (Webhook od Cloudflare, který by to řešil, se musí nastavit
-ručně příkazem - to se nikdy nestalo; pořád je to volitelné.)
+ŽIVÉ VYSÍLÁNÍ (Cloudflare Stream Live)
+- /live = studio: "Vytvořit klíč" -> adresa serveru a klíč do OBS
+  (klíč je schovaný, jde zkopírovat, jde vyrobit nový), stav živě /
+  offline s náhledem, název, popis a kategorie vysílání, návod pro OBS,
+  záznamy vysílání a jejich zveřejnění jako video jedním klikem (záznam,
+  který nezveřejníš, Cloudflare po 30 dnech smaže).
+- /live/<id kanálu> = stránka pro diváky: přehrávač, čas od začátku,
+  kanál s odběrem a chat (píše jen přihlášený, 1 zpráva za 1,5 s,
+  mazat smí autor, majitel kanálu a moderátor).
+- Řada "Živě" na hlavní stránce, odznak ŽIVĚ na kanálu, odkaz
+  "Vysílat živě" v menu. Odběratelé dostanou oznámení "je živě"
+  (nejvýš jednou za 30 minut, zablokovaný kanál nikde není).
+- Klíč k vysílání vidí jen server (tabulka live_inputs nemá pro
+  prohlížeč žádný přístup).
 
-CO SE ZMĚNILO
--------------
-- lib/markVideoReady.ts: nová funkce sweepProcessing() - projde nejstarší
-  zaseklá videa (status != ready, z posledních 7 dnů, starší než minutu,
-  nejvýš pár naráz) a u každého se Cloudflare zeptá; když je hotové,
-  přepne ho na ready (a pošle oznámení odběratelům jako dosud). Nejvýš
-  jednou za minutu a půl na instanci, nikdy neshodí dotaz, ze kterého se
-  volá.
-- Volá se z míst, kam chodí provoz i bez tvůrcova prohlížeče:
-    app/api/videos/status    (dotaz na stav - i z appky Kine do PC)
-    app/api/videos/lookup    (záloha stránky videa; navíc se hned zeptá
-                              na to jedno video, když je "processing")
-    app/api/videos/confirm   (nové nahrání dodělá i ta předešlá)
-    app/api/desktop/me       (appka Kine do PC při startu a občas)
-- app/api/videos/sweep (nový): úklid na zavolání, otevřít v prohlížeči
-  https://kine-lac.vercel.app/api/videos/sweep vrátí {checked, ready}.
-  vercel.json (nový) ho pouští denně ve 4:00 UTC (cron Vercelu; na plánu
-  Hobby smí být denní). Když na Vercelu nastavíš proměnnou CRON_SECRET,
-  cizí volání se odmítne - bez ní je cesta otevřená, ale nic škodlivého
-  tudy nejde (jen dotaz na Cloudflare, omezený).
-- Appka Kine do PC 0.9.1 se k tomu po nahrání sama ptá na stav dokola,
-  ukazuje "Nahráno · Kine ho zpracovává…" a "Je na Kine" až doopravdy
-  (viz repo kine-desktop). Tenhle balíček ale pomůže i videím nahraným
-  ze starších verzí appky a z prohlížeče, kde tvůrce zavřel kartu.
+PREMIÉRY A NAPLÁNOVANÁ VIDEA
+- Naplánované video je až do svého času vidět jen majiteli (dřív bylo
+  vidět hned). Premiéra má odpočet místo přehrávače a chat, v seznamech
+  štítek "Premiéra · datum". Oznámení odběratelům chodí až ve chvíli
+  zveřejnění a jen jednou (dřív hned po nahrání - a dvakrát).
+
+TITULKY A KAPITOLY
+- Automatické titulky (AI od Cloudflare, zdarma): po zpracování videa
+  se vygenerují samy (čeština, angličtina, němčina, španělština,
+  francouzština, polština a další; slovenštinu a ukrajinštinu Cloudflare
+  neumí). V úpravách videa jdou vygenerovat ručně, nahrát .srt / .vtt,
+  opravit a smazat.
+- Kapitoly: z popisu videa jako na YouTube ("0:00 Úvod" po řádcích),
+  nebo zadané v úpravách videa. Kapitoly od appky Kine do PC (momenty
+  z nahrávky zápasu) chodí rovnou.
+
+PŘEHRÁVAČ
+- Náhled snímku při najetí na časovou osu (s názvem kapitoly),
+  aktuální kapitola vedle času, seznam kapitol s náhledy pod videem.
+- Kino režim (klávesa T), opakování, vypínatelné automatické přehrání
+  dalšího videa.
+
+HLEDÁNÍ, KOMENTÁŘE, HISTORIE
+- Filtry hledání: typ (videa / Sparks), kdy nahráno, délka, řazení.
+- Komentáře: řazení Nejlepší / Nejnovější, načítání po 20, časy v
+  komentáři jsou klikací (skok ve videu), oznámení o odpovědi.
+- Historie: odebrat jedno video, smazat celou historii.
+- Stránka hashtagu ve stejném vzhledu jako zbytek webu a přeložená.
+
+POJISTKY
+- Kapitoly a titulky, které pošle prohlížeč nebo appka, se na serveru
+  pročistí (rozbitá data dřív mohla shodit stránku videa).
+- Úprava videa: pole Název a Popis přes celou šířku.
+- 117 nových textů v 8 jazycích.
 
 OVĚŘENO
 -------
 - npx tsc --noEmit a next build prošly.
-- /api/videos/sweep a /api/videos/status vrací JSON i bez Cloudflare
-  (úklid tiše skončí, dotaz odpoví jako dřív).
+- Testy: tests/captions.test.mjs (9) a tests/liveAndScheduling.test.mjs
+  (7) prošly, ostatní testy beze změny.
+- Stránky proklikané v prohlížeči s napodobeným Supabase a Cloudflare:
+  hlavní stránka s řadou Živě, vysílání pro diváky (živě i offline),
+  studio, premiéra s odpočtem, video s kapitolami a náhledem na ose,
+  hledání s filtry, úprava videa s titulky, historie - bez chyb.
 
 SOUBORY
 -------
-  PRECTI-ME.txt                       tohle
-  stav-souboru.json                   otisky (pro zkontroluj-soubory.mjs)
-  vercel.json                         NOVÝ - denní cron na úklid
-  lib/markVideoReady.ts               sweepProcessing()
-  app/api/videos/sweep/route.ts       NOVÝ - úklid na zavolání
-  app/api/videos/status/route.ts      + úklid
-  app/api/videos/lookup/route.ts      + dotaz na to jedno video, + úklid
-  app/api/videos/confirm/route.ts     + úklid
-  app/api/desktop/me/route.ts         + úklid
+  PRECTI-ME.txt                         tohle
+  stav-souboru.json                     otisky (pro zkontroluj-soubory.mjs)
+  supabase-migration-zive-vysilani.sql  NOVÝ - spustit v Supabase
+  app/api/live/chat/route.ts            NOVÝ - psaní a mazání v chatu
+  app/api/live/me/route.ts              NOVÝ - klíč a nastavení vysílání
+  app/api/live/now/route.ts             NOVÝ - kdo je živě
+  app/api/live/recordings/route.ts      NOVÝ - záznamy a jejich zveřejnění
+  app/api/live/status/route.ts          NOVÝ - stav vysílání kanálu
+  app/api/videos/captions/route.ts      NOVÝ - AI titulky na požádání
+  app/api/videos/confirm/route.ts       pročištění kapitol a titulků
+  app/live/page.tsx                     NOVÝ - studio
+  app/live/[id]/page.tsx                NOVÝ - stránka vysílání
+  app/channel/[id]/page.tsx             odznak ŽIVĚ, naplánovaná videa
+  app/explore/page.tsx                  premiéry
+  app/globals.css                       vzhled nového
+  app/hashtag/[tag]/page.tsx            přepsaná
+  app/history/page.tsx                  odebírání z historie
+  app/page.tsx                          řada Živě
+  app/search/page.tsx                   filtry
+  app/sparks/page.tsx                   bez budoucích premiér
+  app/watch/[id]/page.tsx               premiéry, kapitoly, kino režim
+  app/your-videos/[id]/edit/page.tsx    kapitoly, titulky
+  components/CaptionsOverlay.tsx        titulky s koncem řádku
+  components/ChapterTimeline.tsx        náhled na ose, opakování, kino
+  components/CommentSection.tsx         řazení, stránkování, časy
+  components/ExpandableText.tsx         přeložené "Zobrazit víc"
+  components/LiveBadge.tsx              NOVÝ
+  components/LiveChat.tsx               NOVÝ
+  components/LiveNowRow.tsx             NOVÝ
+  components/NotificationBell.tsx       oznámení "je živě"
+  components/SearchResults.tsx          filtry
+  components/Sidebar.tsx                Vysílat živě
+  components/VideoCard.tsx              štítek premiéry
+  lib/apiUser.ts                        NOVÝ
+  lib/autoCaptions.ts                   NOVÝ - AI titulky
+  lib/captions.ts                       NOVÝ - titulky a kapitoly
+  lib/liveChat.ts                       NOVÝ
+  lib/liveStream.ts                     NOVÝ - Cloudflare Stream Live
+  lib/scheduling.ts                     NOVÝ - naplánovaná videa
+  lib/searchFilters.ts                  NOVÝ - filtry hledání
+  lib/markVideoReady.ts                 oznámení jen jednou a včas
+  lib/useWatchProgress.ts               oprava procent dokoukání
+  lib/i18n/cs.ts de.ts en.ts es.ts fr.ts pl.ts sk.ts uk.ts
+  tests/captions.test.mjs               NOVÝ
+  tests/liveAndScheduling.test.mjs      NOVÝ

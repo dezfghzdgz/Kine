@@ -21,7 +21,7 @@ import PlusBadge from '@/components/PlusBadge';
 import Toast, { ToastType } from '@/components/Toast';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useLanguage } from '@/lib/i18n';
+import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { useUserRole } from '@/lib/useUserRole';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { ShareIcon, WatchLaterIcon, ReportIcon, TrashIcon } from '@/components/ReactionIcons';
@@ -45,6 +45,13 @@ import { decideMiniPlayer, digitSeekTarget } from '@/lib/miniPlayer';
 import { resolvePlaybackId } from '@/lib/playbackToken';
 import { embedCode } from '@/lib/embed';
 import ClipPanel from '@/components/ClipPanel';
+import LiveChat from '@/components/LiveChat';
+import { videoRoom } from '@/lib/liveChat';
+import { formatCountdown, isHiddenScheduled, isUpcomingPremiere } from '@/lib/scheduling';
+import { effectiveChapters } from '@/lib/captions';
+
+const THEATER_KEY = 'kine-theater';
+const AUTOPLAY_KEY = 'kine-autoplay';
 
 const MUSIC_VIEW_KEY = 'kine-music-view';
 
@@ -57,6 +64,13 @@ function formatChapterTime(seconds: number) {
 function WatchPageInner() {
   const { t, lang } = useLanguage();
   const params = useParams();
+  // Hodiny pro odpočet premiéry (tikají jen když je na co čekat - viz efekt níž).
+  const [clock, setClock] = useState(() => Date.now());
+  // Kino režim (široký přehrávač), opakování a automatické pokračování dalším videem.
+  const [theater, setTheater] = useState(false);
+  const [loop, setLoop] = useState(false);
+  const [autoplay, setAutoplay] = useState(true);
+  const [chaptersOpen, setChaptersOpen] = useState(true);
   const router = useRouter();
   const searchParams = useSearchParams();
   const videoId = params.id as string;
@@ -190,6 +204,19 @@ function WatchPageInner() {
     });
   }, [playlistId]);
 
+  // Odpočet premiéry / naplánovaného videa: tiká jen dokud čas nenastal.
+  useEffect(() => {
+    const at = video?.scheduled_at ? new Date(video.scheduled_at).getTime() : 0;
+    setClock(Date.now());
+    if (!at || at <= Date.now()) return;
+    const timer = setInterval(() => {
+      const now = Date.now();
+      setClock(now);
+      if (now >= at) clearInterval(timer);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [video?.id, video?.scheduled_at]);
+
   useEffect(() => {
     setShowAiBadge(true);
     const timer = setTimeout(() => setShowAiBadge(false), 10000);
@@ -210,10 +237,43 @@ function WatchPageInner() {
     try {
       const saved = localStorage.getItem(MUSIC_VIEW_KEY);
       if (saved === 'cover' || saved === 'video') setMusicView(saved);
+      setTheater(localStorage.getItem(THEATER_KEY) === '1');
+      setAutoplay(localStorage.getItem(AUTOPLAY_KEY) !== 'off');
     } catch {
       // Zakázaný localStorage - zůstane výchozí obal.
     }
   }, []);
+
+  function toggleTheater() {
+    setTheater((v) => {
+      try {
+        localStorage.setItem(THEATER_KEY, v ? '0' : '1');
+      } catch {
+        // Volba se nezapamatuje.
+      }
+      return !v;
+    });
+  }
+
+  function toggleAutoplay() {
+    setAutoplay((v) => {
+      try {
+        localStorage.setItem(AUTOPLAY_KEY, v ? 'off' : 'on');
+      } catch {
+        // Volba se nezapamatuje.
+      }
+      return !v;
+    });
+  }
+
+  // Opakování: přehrávač Cloudflare to umí sám (a pak nehlásí konec, takže nenaskočí další video).
+  useEffect(() => {
+    if (playerReady && playerRef.current) playerRef.current.loop = loop;
+  }, [loop, playerReady]);
+
+  useEffect(() => {
+    setLoop(false);
+  }, [videoId]);
 
   /**
    * Přepnutí mezi obalem a videem.
@@ -352,6 +412,10 @@ function WatchPageInner() {
       } else if (e.code === 'KeyL') {
         e.preventDefault();
         seekBy(10);
+      } else if (e.code === 'KeyT') {
+        // T = kino režim (jako na YouTube).
+        e.preventDefault();
+        toggleTheater();
       } else if (e.code === 'KeyC') {
         if (!hasCaptionsRef.current) return;
         e.preventDefault();
@@ -824,7 +888,8 @@ function WatchPageInner() {
   }, [playerReady, upNextQueue]);
 
   useEffect(() => {
-    if (!showUpNext) return;
+    // Automatické pokračování vypnuté: nabídka dalších videí zůstane, ale nikam se nejde samo.
+    if (!showUpNext || !autoplay) return;
     if (upNextCountdown <= 0) {
       router.push(nextHref(upNextQueue[0].id));
       return;
@@ -1200,14 +1265,36 @@ function WatchPageInner() {
     );
   }
 
+  // Naplánované video (ne premiéra) do času zveřejnění vidí jen majitel. Dřív
+  // šlo přes odkaz pustit hned a objevovalo se i v hledání a na kanálu.
+  const ownerView = !!userId && userId === (video.owner_id ?? video.profiles?.id);
+  if (!ownerView && isHiddenScheduled(video, clock)) {
+    return (
+      <div className="auth-gate">
+        <p>{t('scheduledNotYetTitle').replace('{date}', new Date(video.scheduled_at).toLocaleString(DATE_LOCALES[lang]))}</p>
+        <Link href={`/channel/${video.profiles?.id ?? video.owner_id}`}>{t('liveGoToChannel')}</Link>
+      </div>
+    );
+  }
+  // Premiéra, která ještě nezačala: místo přehrávače odpočet (a chat) - pustit jde až v čase premiéry.
+  const premiereWaiting = !ownerView && isUpcomingPremiere(video, clock);
+  const premiereAt = video.scheduled_at ? new Date(video.scheduled_at).getTime() : 0;
+  // Chat premiéry běží před začátkem a ještě chvíli po konci videa.
+  const premiereChat = !!video.is_premiere && premiereAt > 0 && clock < premiereAt + ((video.duration_seconds ?? 0) + 30 * 60) * 1000;
+
   const creatorName = video.profiles?.display_name ?? video.profiles?.username ?? t('unknownCreator');
-  const chapters: { time: number; title: string }[] = video.chapters ?? [];
+  // Kapitoly zadané při nahrání, jinak z popisu ("0:00 Úvod" po řádcích) - lib/captions.ts.
+  const chapters: { time: number; title: string }[] = effectiveChapters(video);
+  const frameId = video.playback_id ?? video.cloudflare_video_id;
+  // Snímek videa v daném čase (Cloudflare) - náhled na posuvníku a u kapitol.
+  const frameAt = (seconds: number) =>
+    frameId && video.status === 'ready' ? `https://videodelivery.net/${frameId}/thumbnails/thumbnail.jpg?time=${Math.max(0, Math.floor(seconds))}s&height=108` : null;
   const captions: { time: number; text: string }[] = video.captions ?? [];
   hasCaptionsRef.current = captions.length > 0;
   const miniActive = !!mini && !isMaximized;
 
   return (
-    <div className="watch-layout">
+    <div className={`watch-layout ${theater && mode !== 'music' ? 'watch-layout-theater' : ''}`}>
       <Script src="https://embed.cloudflarestream.com/embed/sdk.latest.js" onLoad={handlePlayerSdkReady} />
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <WatchHistoryTracker videoId={video.id} />
@@ -1218,7 +1305,18 @@ function WatchPageInner() {
             Video se jeho obraz jen promítne do krabice níž. Dva
             přehrávače téhož videa si lezly do zelí a právě proto se
             video po přepnutí nikdy nenačetlo. */}
-        {mode === 'music' ? (
+        {premiereWaiting ? (
+          <div className="premiere-wait" style={{ aspectRatio: '16/9' }}>
+            {video.thumbnail_url && <div className="premiere-wait-bg" style={{ backgroundImage: `url(${video.thumbnail_url})` }} />}
+            <div className="premiere-wait-body">
+              <span className="premiere-wait-label">{t('premiereCountdownTitle')}</span>
+              <span className="premiere-wait-count" aria-live="off">{formatCountdown(premiereAt - clock)}</span>
+              <span className="premiere-wait-date">
+                {t('premiereStartsAt').replace('{date}', new Date(premiereAt).toLocaleString(DATE_LOCALES[lang]))}
+              </span>
+            </div>
+          </div>
+        ) : mode === 'music' ? (
           showMusicStage ? (
             <MusicStage />
           ) : (
@@ -1336,6 +1434,13 @@ function WatchPageInner() {
                         isMaximized={isMaximized}
                         onToggleMaximize={toggleFullscreen}
                         compact={miniActive}
+                        previewSrc={frameAt}
+                        theater={theater}
+                        onToggleTheater={toggleTheater}
+                        loop={loop}
+                        onToggleLoop={() => setLoop((v) => !v)}
+                        autoplay={autoplay}
+                        onToggleAutoplay={toggleAutoplay}
                       />
                     )}
                     {playerReady && captions.length > 0 && captionsEnabled && (
@@ -1345,7 +1450,7 @@ function WatchPageInner() {
                       <div className="player-upnext" style={{ position: 'absolute', inset: 0, background: 'rgba(10,10,11,0.92)', zIndex: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
                         <div style={{ textAlign: 'center', maxWidth: 820, width: '100%' }}>
                           <p style={{ color: 'var(--text-faint)', fontSize: 12, marginBottom: 14 }}>
-                            {t('nextVideoInSecondsNote').replace('{seconds}', String(upNextCountdown))}
+                            {autoplay ? t('nextVideoInSecondsNote').replace('{seconds}', String(upNextCountdown)) : t('nextVideoPickNote')}
                           </p>
                           <div style={{ display: 'flex', gap: 20, justifyContent: 'center', flexWrap: 'wrap' }}>
                             {upNextQueue.slice(0, 2).map((v: any) => (
@@ -1515,6 +1620,32 @@ function WatchPageInner() {
           </div>
         )}
         <h1 className="video-title">{video.title}</h1>
+        {chapters.length > 0 && !premiereWaiting && (
+          <div className="chapter-list">
+            <button type="button" className="chapter-list-toggle" onClick={() => setChaptersOpen((v) => !v)} aria-expanded={chaptersOpen}>
+              <span>
+                {t('chapters')} · {chapters.length}
+              </span>
+              <span aria-hidden="true">{chaptersOpen ? '▴' : '▾'}</span>
+            </button>
+            {chaptersOpen && (
+              <div className="chapter-list-items">
+                {chapters.map((c, i) => {
+                  const img = frameAt(c.time);
+                  return (
+                    <button key={`${c.time}-${i}`} type="button" className="chapter-item" onClick={() => seekTo(c.time)}>
+                      <span className="chapter-item-thumb">
+                        {img && <img src={img} alt="" loading="lazy" decoding="async" />}
+                        <span className="chapter-item-time">{formatChapterTime(c.time)}</span>
+                      </span>
+                      <span className="chapter-item-title">{c.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
         {video.status !== 'ready' && (
           <p className="clip-origin" aria-live="polite">{t('processingVideoNote')}</p>
         )}
@@ -1647,16 +1778,16 @@ function WatchPageInner() {
             fontSize: 12, background: 'var(--panel-raised)', border: '1px solid var(--border)',
             padding: '8px 12px', borderRadius: 8, color: 'var(--text-dim)', marginTop: 10,
           }}>
-            ⓘ Toto video obsahuje placenou propagaci
+            ⓘ {t('paidPromotionNote')}
           </p>
         )}
 
-        {video.is_premiere && video.scheduled_at && new Date(video.scheduled_at) > new Date() && (
+        {video.scheduled_at && premiereAt > clock && ownerView && (
           <p style={{
             fontSize: 13, background: 'var(--panel-raised)', border: '1px solid var(--border)',
             padding: '10px 12px', borderRadius: 8, color: 'var(--text)', marginTop: 10, fontWeight: 600,
           }}>
-            🎬 Premiéra: video bude k přehrání {new Date(video.scheduled_at).toLocaleString('cs-CZ')}
+            🎬 {(video.is_premiere ? t('premiereOwnerNote') : t('scheduledOwnerNote')).replace('{date}', new Date(premiereAt).toLocaleString(DATE_LOCALES[lang]))}
           </p>
         )}
       </div>
@@ -1694,6 +1825,12 @@ function WatchPageInner() {
       )}
 
       <div className="watch-comments-column">
+        {premiereChat && (
+          <div style={{ marginBottom: 20 }}>
+            <p className="section-title">🎬 {t('premiereChatHeading')}</p>
+            <LiveChat room={videoRoom(video.id)} canModerate={ownerView} />
+          </div>
+        )}
         <p className="section-title">{t('interactionPanelTitle')}</p>
 
         <div className="panel">

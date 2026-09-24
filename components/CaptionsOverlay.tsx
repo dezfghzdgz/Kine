@@ -1,9 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { captionAt, type Caption } from '@/lib/captions';
 
-type Caption = { time: number; text: string };
-
+/**
+ * Titulky přes video. Řádek s koncem (import .srt/.vtt, automatické
+ * titulky) platí do svého konce, starší ručně psané do dalšího řádku
+ * (nejvýš 4 s) - lib/captions.ts.
+ */
 export default function CaptionsOverlay({ captions, player }: { captions: Caption[]; player: any }) {
   const [activeText, setActiveText] = useState<string | null>(null);
 
@@ -12,16 +16,8 @@ export default function CaptionsOverlay({ captions, player }: { captions: Captio
     const sorted = [...captions].sort((a, b) => a.time - b.time);
 
     const interval = setInterval(() => {
-      const current = player.currentTime ?? 0;
-      let text: string | null = null;
-      for (let i = 0; i < sorted.length; i++) {
-        const nextTime = sorted[i + 1]?.time ?? sorted[i].time + 4;
-        if (current >= sorted[i].time && current < nextTime) {
-          text = sorted[i].text;
-        }
-      }
-      setActiveText(text);
-    }, 300);
+      setActiveText(captionAt(sorted, player.currentTime ?? 0));
+    }, 250);
 
     return () => clearInterval(interval);
   }, [player, captions]);
@@ -37,8 +33,9 @@ export default function CaptionsOverlay({ captions, player }: { captions: Captio
     >
       <span
         style={{
-          background: 'rgba(0,0,0,0.75)', color: '#fff', fontSize: 15, fontWeight: 500,
-          padding: '4px 10px', borderRadius: 4, boxDecorationBreak: 'clone',
+          background: 'rgba(0,0,0,0.75)', color: '#fff', fontSize: 'clamp(13px, 1.6vw, 20px)', fontWeight: 500,
+          padding: '4px 10px', borderRadius: 4, boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone',
+          whiteSpace: 'pre-line', lineHeight: 1.45,
         }}
       >
         {activeText}
