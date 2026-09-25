@@ -1,0 +1,237 @@
+From 099201aaa0f6285f1689cc791430ea4541927168 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 24 Sep 2026 21:49:56 +0000
+Subject: [PATCH] =?UTF-8?q?Live:=20stav=20=C5=BEiv=C4=9B=20podle=20hl?=
+ =?UTF-8?q?=C3=A1=C5=A1en=C3=AD=20appky,=20rychlej=C5=A1=C3=AD=20obnova,?=
+ =?UTF-8?q?=20=C4=8Diteln=C3=BD=20select?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ app/api/live/me/route.ts        | 13 +++++-
+ app/globals.css                 |  8 ++++
+ app/live/[id]/page.tsx          |  4 +-
+ components/LiveBadge.tsx        |  2 +-
+ components/LiveNowRow.tsx       |  2 +-
+ lib/liveStream.ts               | 74 +++++++++++++++++++++++++++++++++
+ supabase-migration-live-app.sql |  9 ++++
+ 7 files changed, 107 insertions(+), 5 deletions(-)
+ create mode 100644 supabase-migration-live-app.sql
+
+diff --git a/app/api/live/me/route.ts b/app/api/live/me/route.ts
+index d2ac842..35a3d6c 100644
+--- a/app/api/live/me/route.ts
++++ b/app/api/live/me/route.ts
+@@ -1,7 +1,7 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { supabaseServer } from '@/lib/supabaseServer';
+ import { isMissingTable, userFromRequest } from '@/lib/apiUser';
+-import { createLiveInput, deleteLiveInput, liveConfigured, publicLive, syncLiveStreams, type LiveStreamRow } from '@/lib/liveStream';
++import { appLiveSignal, createLiveInput, deleteLiveInput, liveConfigured, publicLive, syncLiveStreams, type LiveStreamRow } from '@/lib/liveStream';
+ import { CATEGORY_KEYS } from '@/lib/categories';
+ 
+ export const dynamic = 'force-dynamic';
+@@ -44,6 +44,17 @@ export async function POST(req: NextRequest) {
+   const body = await req.json().catch(() => ({}));
+   const action = String(body?.action ?? '');
+ 
++  // Appka (Kine Clipper) hlásí, že vysílá: hned se ukáže jako živé a dozví se, jestli ji Cloudflare vidí.
++  if (action === 'started' || action === 'ping' || action === 'stopped') {
++    if (action === 'started') {
++      const { data: profile } = await supabaseServer.from('profiles').select('is_banned').eq('id', user.id).maybeSingle();
++      if (profile?.is_banned) return NextResponse.json({ error: 'Účet je zablokovaný.' }, { status: 403 });
++    }
++    const result = await appLiveSignal(user.id, action);
++    if (!result) return NextResponse.json({ error: 'Nejdřív si založ klíč pro vysílání.' }, { status: 404 });
++    return NextResponse.json({ ok: true, confirmed: result.confirmed, migrated: result.migrated }, { headers: { 'Cache-Control': 'no-store' } });
++  }
++
+   if (action === 'details') {
+     const title = String(body?.title ?? '').trim().slice(0, 100);
+     const description = String(body?.description ?? '').trim().slice(0, 2000);
+diff --git a/app/globals.css b/app/globals.css
+index 40de6a7..9b99d3d 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -5824,3 +5824,11 @@ input:focus, textarea:focus, select:focus {
+ /* Studio živého vysílání: odkaz na appku (vysílání bez OBS) */
+ .live-guide-app { margin: 0 0 10px; }
+ .live-guide-app a { color: var(--text); font-weight: 600; }
++
++/* Rozbalený výběr (select): pole má průhledné pozadí, takže seznam voleb
++   bez tohohle vyšel bílý s bílým písmem. Barvy z motivu platí i pro seznam. */
++select option,
++select optgroup {
++  background-color: var(--panel-raised);
++  color: var(--text);
++}
+diff --git a/app/live/[id]/page.tsx b/app/live/[id]/page.tsx
+index a58e9da..4419ea6 100644
+--- a/app/live/[id]/page.tsx
++++ b/app/live/[id]/page.tsx
+@@ -30,7 +30,7 @@ type Status = {
+ /**
+  * Stránka živého přenosu kanálu: přehrávač Cloudflare (s vlastním
+  * ovládáním - u živého vysílání umí i počet diváků), název, kanál a chat.
+- * Stav se obnovuje každých 15 s: když přenos začne nebo skončí, stránka
++ * Stav se obnovuje každých 6 s: když přenos začne nebo skončí, stránka
+  * se přepne sama.
+  */
+ export default function LivePage() {
+@@ -68,7 +68,7 @@ export default function LivePage() {
+       }
+     }
+     load();
+-    const timer = setInterval(load, 15 * 1000);
++    const timer = setInterval(load, 6 * 1000);
+     const tick = setInterval(() => setNow(Date.now()), 1000);
+     return () => {
+       cancelled = true;
+diff --git a/components/LiveBadge.tsx b/components/LiveBadge.tsx
+index 2437f24..d0ec401 100644
+--- a/components/LiveBadge.tsx
++++ b/components/LiveBadge.tsx
+@@ -24,7 +24,7 @@ export default function LiveBadge({ channelId, withTitle = false }: { channelId:
+       }
+     }
+     load();
+-    const timer = setInterval(load, 60 * 1000);
++    const timer = setInterval(load, 30 * 1000);
+     return () => {
+       cancelled = true;
+       clearInterval(timer);
+diff --git a/components/LiveNowRow.tsx b/components/LiveNowRow.tsx
+index 3f3ae71..24e8083 100644
+--- a/components/LiveNowRow.tsx
++++ b/components/LiveNowRow.tsx
+@@ -35,7 +35,7 @@ export default function LiveNowRow() {
+       }
+     }
+     load();
+-    const refresh = setInterval(load, 60 * 1000);
++    const refresh = setInterval(load, 20 * 1000);
+     const tick = setInterval(() => setNow(Date.now()), 1000);
+     return () => {
+       cancelled = true;
+diff --git a/lib/liveStream.ts b/lib/liveStream.ts
+index 123c6a7..88fc73b 100644
+--- a/lib/liveStream.ts
++++ b/lib/liveStream.ts
+@@ -32,10 +32,14 @@ export type LiveStreamRow = {
+   checked_at: string | null;
+   notified_video_uid: string | null;
+   notified_at: string | null;
++  /** Kdy naposledy appka (Kine Clipper) ohlásila, že vysílá. Sloupec je z migrace supabase-migration-live-app.sql. */
++  app_ping_at?: string | null;
+ };
+ 
+ /** Nejvýš jednou za tolik se Cloudflare ptá, kdo vysílá. */
+ const SYNC_THROTTLE_MS = 12 * 1000;
++/** Appka hlásí vysílání každých ~15 s; do tolika po posledním hlášení se vysílání bere jako živé, i když ho Cloudflare ještě (nebo už) nehlásí. */
++const APP_PING_FRESH_MS = 45 * 1000;
+ /** Nový přenos do půl hodiny po posledním oznámení se odběratelům znovu nehlásí (výpadek, restart OBS). */
+ const RENOTIFY_AFTER_MS = 30 * 60 * 1000;
+ 
+@@ -229,6 +233,13 @@ export async function syncLiveStreams(options: { force?: boolean } = {}): Promis
+             await supabaseServer.from('live_streams').update({ checked_at: nowIso }).eq('owner_id', row.owner_id);
+           }
+         } else if (row.is_live) {
++          if (appPingFresh(row)) {
++            // Appka hlásí, že vysílá - Cloudflare to jen ještě nepotvrdil (nebo krátce vypadl). Zůstává živě.
++            if (row.current_video_uid) {
++              await supabaseServer.from('live_streams').update({ current_video_uid: null, checked_at: nowIso }).eq('owner_id', row.owner_id);
++            }
++            continue;
++          }
+           await supabaseServer
+             .from('live_streams')
+             .update({ is_live: false, ended_at: nowIso, checked_at: nowIso, updated_at: nowIso })
+@@ -247,6 +258,69 @@ export async function syncLiveStreams(options: { force?: boolean } = {}): Promis
+   }
+ }
+ 
++export function appPingFresh(row: Pick<LiveStreamRow, 'app_ping_at'>): boolean {
++  return !!row.app_ping_at && Date.now() - new Date(row.app_ping_at).getTime() < APP_PING_FRESH_MS;
++}
++
++function isMissingPingColumn(error: { message?: string; code?: string } | null): boolean {
++  return !!error && (error.code === '42703' || /app_ping_at/i.test(error.message ?? ''));
++}
++
++/**
++ * Hlášení z appky: "začal jsem vysílat" / "pořád vysílám" / "skončil jsem".
++ * Vysílání se podle toho ukáže jako živé hned (Cloudflare ho potvrdí až za
++ * pár vteřin, někdy déle) a `confirmed` řekne appce, jestli ho Cloudflare
++ * opravdu vidí. Vrací null, když kanál nemá založený klíč.
++ */
++export async function appLiveSignal(
++  ownerId: string,
++  action: 'started' | 'ping' | 'stopped'
++): Promise<{ confirmed: boolean; migrated: boolean } | null> {
++  const { data } = await supabaseServer.from('live_streams').select('*').eq('owner_id', ownerId).maybeSingle();
++  if (!data) return null;
++  const row = data as LiveStreamRow;
++  const nowIso = new Date().toISOString();
++  let migrated = true;
++
++  async function write(patch: Record<string, unknown>): Promise<void> {
++    const first = await supabaseServer.from('live_streams').update(patch).eq('owner_id', ownerId);
++    if (isMissingPingColumn(first.error)) {
++      // Migrace ještě není pustěná: stav se dá uložit i bez hlášení (jen ho pak srovná Cloudflare sám).
++      migrated = false;
++      const { app_ping_at: _drop, ...rest } = patch;
++      await supabaseServer.from('live_streams').update(rest).eq('owner_id', ownerId);
++    }
++  }
++
++  if (action === 'stopped') {
++    await write({
++      app_ping_at: null,
++      is_live: false,
++      ended_at: row.is_live ? nowIso : row.ended_at,
++      current_video_uid: null,
++      checked_at: nowIso,
++      updated_at: nowIso,
++    });
++    return { confirmed: false, migrated };
++  }
++
++  const wasLive = row.is_live;
++  await write({
++    app_ping_at: nowIso,
++    is_live: true,
++    ended_at: null,
++    started_at: wasLive && row.started_at ? row.started_at : nowIso,
++    ...(wasLive ? {} : { current_video_uid: null }),
++    updated_at: nowIso,
++  });
++  if (!wasLive) await notifyGoingLive(row, `app:${nowIso}`);
++
++  // Srovnat s Cloudflare (nejvýš jednou za pár vteřin) a říct appce, jestli proud vidí.
++  await syncLiveStreams();
++  const { data: after } = await supabaseServer.from('live_streams').select('is_live, current_video_uid').eq('owner_id', ownerId).maybeSingle();
++  return { confirmed: !!after?.is_live && !!after?.current_video_uid, migrated };
++}
++
+ /**
+  * Odběratelé (se zapnutým zvonečkem) dostanou "X je živě". Jednou za přenos
+  * a nejvýš jednou za půl hodiny - o to se postará podmíněný zápis: kdo ho
+diff --git a/supabase-migration-live-app.sql b/supabase-migration-live-app.sql
+new file mode 100644
+index 0000000..e0e901b
+--- /dev/null
++++ b/supabase-migration-live-app.sql
+@@ -0,0 +1,9 @@
++-- ============================================================================
++-- Vysílání z appky (Kine Clipper / Kine do PC): appka Kine sama hlásí, že
++-- vysílá (každých ~15 s), takže se vysílání ukáže jako živé hned - ne až
++-- když ho najde Cloudflare.
++--
++-- Spusť v Supabase -> SQL Editor. Dá se pustit i víckrát. Bez ní všechno
++-- funguje po staru (stav živě jen podle Cloudflare).
++-- ============================================================================
++alter table live_streams add column if not exists app_ping_at timestamptz;
+-- 
+2.43.0
+
