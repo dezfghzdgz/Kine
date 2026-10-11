@@ -1,0 +1,16 @@
+# Závislosti a sestavení (vytvoří si je Vercel sám)
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Tajné klíče - NIKDY do repa. Na Vercelu patří do Settings -> Environment Variables.
+.env
+.env.*
+!.env.example
+
+# Vercel a systém
+.vercel/
+.DS_Store
+Thumbs.db
+*.log

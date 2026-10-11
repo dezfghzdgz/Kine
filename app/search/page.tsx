@@ -20,6 +20,11 @@ const CARD_FIELDS =
  * neproběhla (funkce chybí), spadne to na staré "název obsahuje" - hledá
  * hůř, ale hledá.
  */
+/** "%" a "_" jsou v LIKE zástupné znaky - hledaný text se bere doslova. */
+function escapeLike(text: string): string {
+  return text.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
 async function searchVideos(query: string, maxRows: number): Promise<any[]> {
   const { data, error } = await supabaseServer.rpc('search_videos', { q: query, max_rows: maxRows });
 
@@ -42,7 +47,7 @@ async function searchVideos(query: string, maxRows: number): Promise<any[]> {
     .select(CARD_FIELDS)
     .eq('status', 'ready')
     .eq('visibility', 'public')
-    .ilike('title', `%${query}%`)
+    .ilike('title', `%${escapeLike(query)}%`)
     .limit(maxRows);
   return videosRaw ?? [];
 }
@@ -53,7 +58,7 @@ async function searchCreators(query: string): Promise<any[]> {
 
   // Záloha. Čárka a závorky mají ve filtru PostgREST význam - z hledaného
   // textu se vyhodí, ať si nikdo nesloží vlastní podmínku.
-  const safe = query.replace(/[,()]/g, ' ').trim();
+  const safe = query.replace(/[,()"*%\\]/g, ' ').trim();
   if (!safe) return [];
   const { data: creators } = await supabaseServer
     .from('profiles')

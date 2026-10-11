@@ -547,6 +547,30 @@ export default function ChapterTimeline({
           </div>
 
           <div ref={settingsRef} style={{ justifySelf: 'end', display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
+            {/* Titulky jedním klikem (jako CC na YouTube) - jen u videa, které je má. Zapnuté = podtržené barvou Kine. */}
+            {hasCaptions && onToggleCaptions && !compact && (
+              <button
+                type="button"
+                className="player-cc-btn"
+                onClick={(e) => { e.stopPropagation(); onToggleCaptions(); }}
+                aria-pressed={!!captionsEnabled}
+                title={`${t('captionsMenuLabel')}: ${captionsEnabled ? t('onLabel') : t('offLabel')} (C)`}
+                aria-label={`${t('captionsMenuLabel')}: ${captionsEnabled ? t('onLabel') : t('offLabel')}`}
+                style={iconBtn}
+              >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    fontSize: 11, fontWeight: 800, letterSpacing: 0.4, lineHeight: 1,
+                    padding: '3px 4px', borderRadius: 4, border: '1.6px solid currentColor',
+                    opacity: captionsEnabled ? 1 : 0.72,
+                    boxShadow: captionsEnabled ? 'inset 0 -3px 0 var(--brand)' : 'none',
+                  }}
+                >
+                  CC
+                </span>
+              </button>
+            )}
             {!compact && (
             <button
               type="button"

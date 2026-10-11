@@ -12,6 +12,7 @@ export default function PostCard({ post, userId }: { post: any; userId: string |
   const router = useRouter();
   const [options, setOptions] = useState<{ text: string; votes: number }[]>(post.poll_options ?? []);
   const [myVote, setMyVote] = useState<number | null>(null);
+  const [voting, setVoting] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
   const [myReaction, setMyReaction] = useState<'like' | 'dislike' | null>(null);
@@ -60,14 +61,32 @@ export default function PostCard({ post, userId }: { post: any; userId: string |
 
   async function vote(index: number) {
     if (!userId) { router.push('/login'); return; }
-    if (myVote !== null) return;
+    if (myVote !== null || voting) return;
+    setVoting(true);
 
-    await supabase.from('post_votes').insert({ post_id: post.id, user_id: userId, option_index: index });
-    const updated = [...options];
-    updated[index] = { ...updated[index], votes: (updated[index].votes ?? 0) + 1 };
-    setOptions(updated);
-    setMyVote(index);
-    await supabase.from('posts').update({ poll_options: updated }).eq('id', post.id);
+    // Hlas zapíše a výsledky spočítá databáze (funkce vote_post_poll) - dřív
+    // si prohlížeč přepisoval celý příspěvek sám, a tak to šlo komukoli.
+    const { data, error } = await supabase.rpc('vote_post_poll', { p_post_id: post.id, p_option: index });
+    if (!error && Array.isArray(data)) {
+      setOptions(data as { text: string; votes: number }[]);
+      setMyVote(index);
+      setVoting(false);
+      return;
+    }
+
+    // Funkce v databázi ještě není (migrace bezpecnost-rijen neproběhla) - postaru.
+    const missing = !!error && (error.code === 'PGRST202' || error.code === '42883' || /vote_post_poll/.test(error.message ?? ''));
+    if (missing) {
+      const { error: insertError } = await supabase.from('post_votes').insert({ post_id: post.id, user_id: userId, option_index: index });
+      if (!insertError) {
+        const updated = [...options];
+        updated[index] = { ...updated[index], votes: (updated[index].votes ?? 0) + 1 };
+        setOptions(updated);
+        setMyVote(index);
+        await supabase.from('posts').update({ poll_options: updated }).eq('id', post.id);
+      }
+    }
+    setVoting(false);
   }
 
   const totalVotes = options.reduce((s, o) => s + (o.votes ?? 0), 0);

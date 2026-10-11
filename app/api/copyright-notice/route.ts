@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { videoIdFromUrl } from '@/lib/embed';
+import { clientIp } from '@/lib/clientIp';
 import { NOTICES_PER_HOUR_PER_IP, tidy, validateNotice, type NoticeInput } from '@/lib/copyrightNotice';
 
 /**
@@ -27,10 +28,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Formulář není vyplněný správně.', problems }, { status: 400 });
   }
 
-  const ip =
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    req.headers.get('x-real-ip') ||
-    'unknown';
+  const ip = clientIp(req.headers);
 
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const { count, error: countError } = await supabaseServer

@@ -26,7 +26,7 @@ export default function ReportModal({
   const [details, setDetails] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<boolean | 'tooFast'>(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,7 +52,8 @@ export default function ReportModal({
     // Poděkovat za nahlášení, které se neuložilo, je to nejhorší, co může
     // appka udělat - člověk odejde s pocitem, že se to řeší, a neřeší se nic.
     if (error) {
-      setFailed(true);
+      // KN429 = moc hlášení za sebou (strop v databázi) - jiná hláška než obecná chyba.
+      setFailed(error.code === 'KN429' ? 'tooFast' : true);
       return;
     }
     setDone(true);
@@ -72,7 +73,7 @@ export default function ReportModal({
         </div>
 
         {failed && (
-          <p className="error-text" style={{ fontSize: 13 }}>{t('reportFailed')}</p>
+          <p className="error-text" style={{ fontSize: 13 }}>{failed === 'tooFast' ? t('commentTooFast') : t('reportFailed')}</p>
         )}
 
         {done ? (
@@ -89,7 +90,7 @@ export default function ReportModal({
             </div>
             <div>
               <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('reportDetailsLabel')}</label>
-              <textarea value={details} onChange={(e) => setDetails(e.target.value)} rows={3} placeholder={t('reportDetailsPlaceholder')} />
+              <textarea value={details} onChange={(e) => setDetails(e.target.value)} rows={3} maxLength={2000} placeholder={t('reportDetailsPlaceholder')} />
             </div>
             <button type="submit" disabled={submitting}>{submitting ? t('submittingReport') : t('submitReport')}</button>
             {/* Držitel práv má vlastní cestu (bez přihlášení, s prohlášením) -

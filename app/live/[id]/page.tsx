@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
+import { authHeaders } from '@/lib/authHeaders';
 import { channelRoom, liveElapsed } from '@/lib/liveChat';
 import { categoryLabel } from '@/lib/categories';
 import LiveChat from '@/components/LiveChat';
@@ -30,7 +31,7 @@ type Status = {
 /**
  * Stránka živého přenosu kanálu: přehrávač Cloudflare (s vlastním
  * ovládáním - u živého vysílání umí i počet diváků), název, kanál a chat.
- * Stav se obnovuje každých 15 s: když přenos začne nebo skončí, stránka
+ * Stav se obnovuje každých 6 s: když přenos začne nebo skončí, stránka
  * se přepne sama.
  */
 export default function LivePage() {
@@ -52,7 +53,7 @@ export default function LivePage() {
     let cancelled = false;
     async function load() {
       try {
-        const res = await fetch(`/api/live/status?channel=${encodeURIComponent(channelId)}`, { cache: 'no-store' });
+        const res = await fetch(`/api/live/status?channel=${encodeURIComponent(channelId)}`, { cache: 'no-store', headers: await authHeaders() });
         const body = await res.json().catch(() => null);
         if (cancelled) return;
         if (!res.ok || !body) {
@@ -68,7 +69,7 @@ export default function LivePage() {
       }
     }
     load();
-    const timer = setInterval(load, 15 * 1000);
+    const timer = setInterval(load, 6 * 1000);
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => {
       cancelled = true;

@@ -85,6 +85,7 @@ export default function VideoReactions({ videoId, ownerId }: { videoId: string; 
         if (count && shouldNotifyLikeMilestone(count)) {
           await supabase.from('notifications').insert({
             user_id: ownerId,
+            type: 'like_milestone',
             message: `Tvoje video dosáhlo ${count} ${count === 1 ? 'lajku' : 'lajků'}!`,
             link: `/watch/${videoId}`,
           });

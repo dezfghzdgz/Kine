@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isMissingTable, userFromRequest } from '@/lib/apiUser';
-import { createLiveInput, deleteLiveInput, liveConfigured, publicLive, syncLiveStreams, type LiveStreamRow } from '@/lib/liveStream';
+import { appLiveSignal, createLiveInput, deleteLiveInput, liveConfigured, publicLive, syncLiveStreams, type LiveStreamRow } from '@/lib/liveStream';
 import { CATEGORY_KEYS } from '@/lib/categories';
 
 export const dynamic = 'force-dynamic';
@@ -43,6 +43,24 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const action = String(body?.action ?? '');
+
+  // Appka (Kine Clipper) hlásí, že vysílá: hned se ukáže jako živé a dozví se, jestli ji Cloudflare vidí.
+  if (action === 'started' || action === 'ping' || action === 'stopped') {
+    // Zablokovaný účet nevysílá - ani pokračováním přenosu, který začal před zablokováním.
+    if (action !== 'stopped') {
+      const { data: profile } = await supabaseServer.from('profiles').select('is_banned').eq('id', user.id).maybeSingle();
+      if (profile?.is_banned) {
+        await appLiveSignal(user.id, 'stopped');
+        return NextResponse.json({ error: 'Účet je zablokovaný.' }, { status: 403 });
+      }
+    }
+    const result = await appLiveSignal(user.id, action);
+    if (!result) return NextResponse.json({ error: 'Nejdřív si založ klíč pro vysílání.' }, { status: 404 });
+    return NextResponse.json(
+      { ok: true, confirmed: result.confirmed, migrated: result.migrated, viewers: result.viewers },
+      { headers: { 'Cache-Control': 'no-store' } }
+    );
+  }
 
   if (action === 'details') {
     const title = String(body?.title ?? '').trim().slice(0, 100);

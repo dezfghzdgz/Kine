@@ -1,19 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripeServer } from '@/lib/stripeServer';
 import { siteUrlFrom } from '@/lib/siteUrl';
+import { userFromRequest } from '@/lib/apiUser';
 
 // Vytvoří appce jednorázovou platební relaci na podporu appky Kine (ne
 // appky konkrétního tvůrce - to appka řešit později v rámci většího
 // systému předplatných).
 export async function POST(req: NextRequest) {
   try {
-    const { amountEur, amountCzk, userId } = await req.json();
+    const { amountEur, amountCzk } = await req.json();
+
+    // Komu se dar připíše (odznak podporovatele), určuje přihlášení - ne
+    // pole v požadavku. Dřív šlo poslat cizí userId a přidělit odznak
+    // i zápis daru libovolnému účtu. Bez přihlášení je dar anonymní.
+    const user = await userFromRequest(req);
+    const userId = user?.id ?? null;
 
     // Dřív se pole jmenovalo amountCzk, ale účtovalo se v eurech - kdo
     // napsal "200" v domnění, že jde o koruny, zaplatil 200 EUR. Starý název
     // se tu přijímá dál, aby po nasazení neselhala rozdělaná platba.
-    const amount = Number(amountEur ?? amountCzk);
-    if (!amount || amount < 1 || amount > 2000) {
+    const amount = Math.round(Number(amountEur ?? amountCzk) * 100) / 100;
+    if (!Number.isFinite(amount) || amount < 1 || amount > 2000) {
       return NextResponse.json({ error: 'Neplatná částka.' }, { status: 400 });
     }
 

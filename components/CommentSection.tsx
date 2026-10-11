@@ -248,7 +248,8 @@ export default function CommentSection({
     // i to, co člověk napsal, a on si myslí, že se komentář ztratil.
     if (commentError) {
       setPosting(false);
-      setPostError(t('commentFailed'));
+      // KN429 = strop rychlosti v databázi (10 komentářů za minutu).
+      setPostError(commentError.code === 'KN429' ? t('commentTooFast') : t('commentFailed'));
       return;
     }
 
@@ -269,6 +270,7 @@ export default function CommentSection({
     } else if (ownerId && ownerId !== authData.user.id) {
       await supabase.from('notifications').insert({
         user_id: ownerId,
+        type: 'comment_reply',
         message: 'Nový komentář na tvém videu',
         link: `/watch/${videoId}`,
       });

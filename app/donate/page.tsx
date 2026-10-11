@@ -32,10 +32,13 @@ export default function DonatePage() {
     }
 
     setLoading(true);
+    // Dar se připíše přihlášenému účtu podle tokenu (server si ho ověří sám).
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
     const res = await fetch('/api/donate/create-checkout-session', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amountEur: amount, userId }),
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ amountEur: amount }),
     });
     const data = await res.json();
     setLoading(false);

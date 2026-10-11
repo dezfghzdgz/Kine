@@ -52,6 +52,8 @@ import { effectiveChapters } from '@/lib/captions';
 
 const THEATER_KEY = 'kine-theater';
 const AUTOPLAY_KEY = 'kine-autoplay';
+/** Titulky: '1' = zapnuté (platí pro všechna videa), cokoli jiného = vypnuté (výchozí). */
+const CAPTIONS_KEY = 'kine-captions';
 
 const MUSIC_VIEW_KEY = 'kine-music-view';
 
@@ -93,7 +95,10 @@ function WatchPageInner() {
   // Přehrávač se nerozjel a je potřeba do něj kliknout. Bez tohohle
   // zůstal černý obdélník bez ovládání a nedalo se s ním nic dělat.
   const [needsPlayTap, setNeedsPlayTap] = useState(false);
-  const [captionsEnabled, setCaptionsEnabled] = useState(true);
+  // Titulky jsou předem vypnuté; kdo si je zapne, má je zapnuté u všech videí, dokud je zase nevypne (CAPTIONS_KEY).
+  const [captionsEnabled, setCaptionsEnabled] = useState(false);
+  // Klávesa C žije v posluchači navěšeném jednou - aktuální stav titulků potřebuje i on.
+  const captionsRef = useRef(false);
   const [showAiBadge, setShowAiBadge] = useState(true);
   const [isMaximized, setIsMaximized] = useState(false);
   // Fallback jen pro prohlížeče, které neumí Fullscreen API na obyčejném
@@ -239,10 +244,26 @@ function WatchPageInner() {
       if (saved === 'cover' || saved === 'video') setMusicView(saved);
       setTheater(localStorage.getItem(THEATER_KEY) === '1');
       setAutoplay(localStorage.getItem(AUTOPLAY_KEY) !== 'off');
+      const captionsOn = localStorage.getItem(CAPTIONS_KEY) === '1';
+      captionsRef.current = captionsOn;
+      setCaptionsEnabled(captionsOn);
     } catch {
       // Zakázaný localStorage - zůstane výchozí obal.
     }
   }, []);
+
+  /** Zapne / vypne titulky a volbu si zapamatuje pro další videa (do dalšího přepnutí). */
+  function toggleCaptions() {
+    const next = !captionsRef.current;
+    captionsRef.current = next;
+    setCaptionsEnabled(next);
+    try {
+      localStorage.setItem(CAPTIONS_KEY, next ? '1' : '0');
+    } catch {
+      // Volba se nezapamatuje.
+    }
+    return next;
+  }
 
   function toggleTheater() {
     setTheater((v) => {
@@ -419,7 +440,8 @@ function WatchPageInner() {
       } else if (e.code === 'KeyC') {
         if (!hasCaptionsRef.current) return;
         e.preventDefault();
-        setCaptionsEnabled((v) => !v);
+        const on = toggleCaptions();
+        flashHint(`${t('captionsMenuLabel')}: ${on ? t('onLabel') : t('offLabel')}`);
       } else if (/^[0-9]$/.test(e.key)) {
         // 0-9 = skok na desetinu videa (5 = polovina). Podle znaku, ne podle
         // klávesy: na české klávesnici se číslice píšou přes Shift a e.code
@@ -1430,7 +1452,7 @@ function WatchPageInner() {
                         player={playerRef.current}
                         hasCaptions={captions.length > 0}
                         captionsEnabled={captionsEnabled}
-                        onToggleCaptions={() => setCaptionsEnabled((v) => !v)}
+                        onToggleCaptions={toggleCaptions}
                         isMaximized={isMaximized}
                         onToggleMaximize={toggleFullscreen}
                         compact={miniActive}

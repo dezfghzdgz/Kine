@@ -1,19 +1,34 @@
+import { createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
+import { clientIp } from '@/lib/clientIp';
 
 const MAX_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
 const MAX_REQUESTS_PER_IP_PER_HOUR = 20;
 
+/**
+ * Klíč zámku: e-mail + adresa, ze které se kdo přihlašuje.
+ *
+ * Dřív se zamykal jen e-mail. Endpoint je veřejný, takže kdokoli mohl
+ * pětkrát poslat "record-failure" s cizím e-mailem a zamknout tak jeho
+ * majitele na čtvrt hodiny - pořád dokola. Teď se zamkne jen ten, kdo
+ * hádá heslo, a jen na svém připojení; skutečný majitel se odjinud
+ * přihlásí normálně. Adresa se ukládá jen jako otisk.
+ */
+function lockKey(email: string, ip: string): string {
+  return `${email}#${createHash('sha256').update(ip).digest('hex').slice(0, 16)}`;
+}
+
 // Tenhle endpoint appka volá kolem přihlašování - drží si počet
-// neúspěšných pokusů podle emailu a po 5 chybách účet na 15 minut
-// dočasně uzamkne (bez ohledu na to, jestli má uživatel 2FA nebo ne).
+// neúspěšných pokusů a po 5 chybách přihlašování z dané adresy na 15
+// minut dočasně uzamkne (bez ohledu na to, jestli má uživatel 2FA nebo ne).
 //
 // Appka tady navíc hlídá i to, kolikrát se sem ozvala STEJNÁ adresa (IP)
-// za hodinu - bez tohohle by šlo appku klidně zavolat přímo (bez appky
-// hesla) a někoho tak uzamknout jen podle jeho emailu.
+// za hodinu. IP bere od Vercelu (lib/clientIp.ts) - hlavičku
+// x-forwarded-for si klient může poslat vlastní.
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? req.headers.get('x-real-ip') ?? 'unknown';
+  const ip = clientIp(req.headers);
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
   const { count: ipRequestCount } = await supabaseServer
@@ -28,17 +43,20 @@ export async function POST(req: NextRequest) {
 
   await supabaseServer.from('login_attempt_ip_log').insert({ ip_address: ip });
 
-  const { email, action } = await req.json();
+  const body = await req.json().catch(() => ({}));
+  const email = body?.email;
+  const action = body?.action;
 
-  if (!email || typeof email !== 'string') {
+  if (!email || typeof email !== 'string' || email.length > 320) {
     return NextResponse.json({ error: 'Chybí email.' }, { status: 400 });
   }
   const normalizedEmail = email.trim().toLowerCase();
+  const key = lockKey(normalizedEmail, ip);
 
   const { data: existing } = await supabaseServer
     .from('login_lockouts')
     .select('failed_count, locked_until')
-    .eq('email', normalizedEmail)
+    .eq('email', key)
     .maybeSingle();
 
   const now = new Date();
@@ -52,9 +70,14 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'reset') {
-    await supabaseServer
-      .from('login_lockouts')
-      .upsert({ email: normalizedEmail, failed_count: 0, locked_until: null, updated_at: now.toISOString() });
+    // Vynulovat smí jen ten, kdo se právě opravdu přihlásil - jinak by si
+    // útočník mezi pokusy počítadlo sám mazal.
+    const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '').trim();
+    const { data: auth } = token ? await supabaseServer.auth.getUser(token) : { data: { user: null } };
+    if (!auth.user || auth.user.email?.toLowerCase() !== normalizedEmail) {
+      return NextResponse.json({ error: 'Nepřihlášený.' }, { status: 401 });
+    }
+    await supabaseServer.from('login_lockouts').delete().eq('email', key);
     return NextResponse.json({ ok: true });
   }
 
@@ -73,7 +96,7 @@ export async function POST(req: NextRequest) {
     await supabaseServer
       .from('login_lockouts')
       .upsert({
-        email: normalizedEmail,
+        email: key,
         failed_count: shouldLock ? 0 : nextCount,
         locked_until: lockedUntil,
         updated_at: now.toISOString(),

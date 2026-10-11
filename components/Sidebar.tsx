@@ -267,9 +267,16 @@ export default function Sidebar() {
       <button className="mobile-nav-item mobile-nav-create" onClick={() => setCreateMenuOpen(true)}>
         <CreateIcon />
       </button>
-      {/* Nepřihlášený nemá zvoneček - prázdný slot drží pět sloupců, ať je
-          + pořád přesně uprostřed. */}
-      {user ? <NotificationBell mobileTrigger /> : <span className="mobile-nav-item" aria-hidden="true" />}
+      {/* Nepřihlášený nemá zvoneček - místo prázdné díry Odběry (jako YouTube);
+          pět sloupců drží + pořád přesně uprostřed. */}
+      {user ? (
+        <NotificationBell mobileTrigger />
+      ) : (
+        <Link href="/subscriptions" className={`mobile-nav-item ${pathname === '/subscriptions' ? 'active' : ''}`}>
+          <SubscribersIcon />
+          <span>{t('subscriptions')}</span>
+        </Link>
+      )}
       {user ? (
         <Link href="/channel/me" className="mobile-nav-item">
           <span className="mobile-nav-avatar">

@@ -63,6 +63,7 @@ export default function SubscribeButton({ channelId }: { channelId: string }) {
       const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', userId).single();
       await supabase.from('notifications').insert({
         user_id: channelId,
+        type: 'subscription',
         message: `${myProfile?.username ?? 'Někdo'} začal odebírat tvůj kanál`,
         link: `/channel/${userId}`,
       });

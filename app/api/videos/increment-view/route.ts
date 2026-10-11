@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { sanitizeDeviceClass } from '@/lib/deviceClass';
+import { clientIp } from '@/lib/clientIp';
 
 const COOLDOWN_MS = 30 * 60 * 1000; // 30 minut
 
@@ -49,7 +50,8 @@ export async function POST(req: NextRequest) {
     .single();
   if (!video) return NextResponse.json({ error: 'Video nenalezeno.' }, { status: 404 });
 
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? req.headers.get('x-real-ip') ?? 'unknown';
+  // IP od Vercelu, ne z hlavičky, kterou si klient může poslat sám (lib/clientIp.ts).
+  const ip = clientIp(req.headers);
   const cooldownStart = new Date(Date.now() - COOLDOWN_MS).toISOString();
 
   const { data: recentView } = await supabaseServer

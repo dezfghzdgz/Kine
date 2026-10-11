@@ -22,11 +22,12 @@ export default function LoginPage() {
   // API z jakéhokoliv důvodu selže (ještě neproběhla SQL migrace, výpadek
   // sítě...), appka to jen potichu přeskočí a pokračuje dál - přihlášení
   // samotné na tom nesmí nikdy zůstat "viset".
-  async function callLockoutApi(action: 'check' | 'record-failure' | 'reset') {
+  async function callLockoutApi(action: 'check' | 'record-failure' | 'reset', accessToken?: string) {
     try {
       const res = await fetch('/api/login-attempt', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // Vynulování počítadla server přijme jen s platným přihlášením.
+        headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
         body: JSON.stringify({ email, action }),
       });
       if (!res.ok) return null;
@@ -72,7 +73,7 @@ export default function LoginPage() {
       }
 
         // Přihlášení se povedlo - vynulujeme počítadlo špatných pokusů.
-      callLockoutApi('reset');
+      callLockoutApi('reset', data.session?.access_token);
 
       let redirectTo: string | null = null;
 

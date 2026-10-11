@@ -803,6 +803,7 @@ button:disabled {
 .watch-video-column {
   grid-column: 1;
   grid-row: 1;
+  min-width: 0;
 }
 
 .watch-comments-column {
@@ -1097,7 +1098,9 @@ button:disabled {
 
 @media (max-width: 900px) {
   .watch-layout {
-    grid-template-columns: 1fr;
+    /* minmax(0, ...): jinak si sloupec vezme šířku nejširšího obsahu (řada
+       kapitol) a celá stránka na telefonu jezdí do strany. */
+    grid-template-columns: minmax(0, 1fr);
   }
   .watch-video-column {
     grid-column: 1;
@@ -5824,3 +5827,11 @@ input:focus, textarea:focus, select:focus {
 /* Studio živého vysílání: odkaz na appku (vysílání bez OBS) */
 .live-guide-app { margin: 0 0 10px; }
 .live-guide-app a { color: var(--text); font-weight: 600; }
+
+/* Rozbalený výběr (select): pole má průhledné pozadí, takže seznam voleb
+   bez tohohle vyšel bílý s bílým písmem. Barvy z motivu platí i pro seznam. */
+select option,
+select optgroup {
+  background-color: var(--panel-raised);
+  color: var(--text);
+}

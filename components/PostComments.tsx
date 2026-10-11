@@ -27,6 +27,7 @@ export default function PostComments({ postId, onCommentAdded }: { postId: strin
   const [text, setText] = useState('');
   const [imageFile, setImageFile] = useState<File | string | null>(null);
   const [posting, setPosting] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,8 +49,10 @@ export default function PostComments({ postId, onCommentAdded }: { postId: strin
     const { data: authData } = await supabase.auth.getUser();
     if (!authData.user) { router.push('/login'); return; }
     if (!text.trim() && !imageFile) return;
+    if (text.length > 2000) return;
 
     setPosting(true);
+    setPostError(null);
     let imageUrl: string | null = null;
 
     if (typeof imageFile === 'string') {
@@ -64,12 +67,20 @@ export default function PostComments({ postId, onCommentAdded }: { postId: strin
       }
     }
 
-    await supabase.from('comments').insert({
+    const { error: commentError } = await supabase.from('comments').insert({
       post_id: postId,
       user_id: authData.user.id,
       content: text.trim(),
       image_url: imageUrl,
     });
+
+    // Neuložený komentář nesmí zmizet z pole - dřív se pole vyprázdnilo
+    // i při chybě a člověk si myslel, že komentář odešel.
+    if (commentError) {
+      setPosting(false);
+      setPostError(commentError.code === 'KN429' ? t('commentTooFast') : t('commentFailed'));
+      return;
+    }
 
     setText('');
     setImageFile(null);
@@ -87,6 +98,7 @@ export default function PostComments({ postId, onCommentAdded }: { postId: strin
             placeholder={t('writeComment')}
             value={text}
             onChange={(e) => setText(e.target.value)}
+            maxLength={2000}
             style={{ flex: 1, minWidth: 0, border: 'none', background: 'none' }}
           />
           <EmojiPicker onSelect={(emoji) => setText((v) => v + emoji)} />
@@ -97,6 +109,7 @@ export default function PostComments({ postId, onCommentAdded }: { postId: strin
             {t('attachedLabel')} {typeof imageFile === 'string' ? 'GIF' : imageFile.name} <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setImageFile(null)}>{t('removeLabel')}</span>
           </p>
         )}
+        {postError && <p className="error-text" style={{ fontSize: 12.5, margin: 0 }}>{postError}</p>}
         <button type="submit" disabled={posting} style={{ alignSelf: 'flex-start' }}>{t('postComment')}</button>
       </form>
 

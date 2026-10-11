@@ -35,7 +35,7 @@ export default function LiveNowRow() {
       }
     }
     load();
-    const refresh = setInterval(load, 60 * 1000);
+    const refresh = setInterval(load, 20 * 1000);
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => {
       cancelled = true;

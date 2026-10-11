@@ -168,6 +168,7 @@ export default function SparksCard({
         if (count && shouldNotifyLikeMilestone(count)) {
           await supabase.from('notifications').insert({
             user_id: video.profiles.id,
+            type: 'like_milestone',
             message: `Tvoje video dosáhlo ${count} ${count === 1 ? 'lajku' : 'lajků'}!`,
             link: `/watch/${video.id}`,
           });

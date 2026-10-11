@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { DownloadIcon, PeopleIcon, PlaylistIcon, WatchLaterIcon, BellIcon } from './ReactionIcons';
+import { safeInternalLink } from '@/lib/safeLink';
 
 type Notification = {
   id: string;
@@ -13,6 +14,9 @@ type Notification = {
   read: boolean;
   created_at: string;
   type: 'default' | 'collab_invite' | 'like_milestone' | 'view_milestone' | 'donation' | 'subscription' | 'new_video' | 'comment_reply' | 'moderation_warning' | 'live';
+  /** Kdo oznámení poslal z prohlížeče (odběr, komentář, pozvánka). Oznámení od Kine (serveru) ho nemají. */
+  sender_id?: string | null;
+  senderName?: string | null;
 };
 
 /**
@@ -117,14 +121,25 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
     if (!authData.user) return;
     setUserId(authData.user.id);
 
+    // select('*'): sloupec sender_id přidává migrace bezpecnost-rijen - bez ní by výčet sloupců spadl.
     const { data } = await supabase
       .from('notifications')
-      .select('id, message, link, read, created_at, type')
+      .select('*')
       .eq('user_id', authData.user.id)
       .order('created_at', { ascending: false })
       .limit(30);
 
-    setNotifications(data ?? []);
+    // U oznámení od lidí (ne od Kine) je vidět, kdo je poslal - podvrh za
+    // "systémovou" zprávu se tak pozná na první pohled.
+    const rows = (data ?? []) as Notification[];
+    const me = authData.user.id;
+    const senderIds = Array.from(new Set(rows.map((r) => r.sender_id).filter((id): id is string => !!id && id !== me)));
+    let names: Record<string, string> = {};
+    if (senderIds.length > 0) {
+      const { data: senders } = await supabase.from('profiles').select('id, username').in('id', senderIds);
+      names = Object.fromEntries((senders ?? []).map((p: { id: string; username: string }) => [p.id, p.username]));
+    }
+    setNotifications(rows.map((r) => ({ ...r, senderName: r.sender_id ? names[r.sender_id] ?? null : null })));
   }
 
   async function handleClick(n: Notification) {
@@ -133,7 +148,9 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
       setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
     }
     setOpen(false);
-    if (n.link) router.push(n.link);
+    // Jen stránka Kine - starší záznam s odkazem ven ("//nekde.jinde") se neotevře.
+    const link = safeInternalLink(n.link);
+    if (link) router.push(link);
   }
 
   async function deleteNotification(e: React.MouseEvent, id: string) {
@@ -253,7 +270,12 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
                       background: 'rgba(0, 201, 167, 0.12)', border: '1px solid var(--brand)',
                     }}
                   >
-                    <p style={{ fontSize: 13, margin: '0 0 8px', fontWeight: 600 }}>{n.message}</p>
+                    <p style={{ fontSize: 13, margin: '0 0 8px', fontWeight: 600 }}>
+                      {n.message}
+                      {n.senderName && (
+                        <span style={{ display: 'block', fontSize: 11.5, fontWeight: 400, color: 'var(--text-dim)', marginTop: 2 }}>@{n.senderName}</span>
+                      )}
+                    </p>
                     {collabErrors[n.id] && (
                       <p style={{ fontSize: 11.5, color: '#ff6b6b', margin: '0 0 8px' }}>{collabErrors[n.id]}</p>
                     )}
@@ -303,6 +325,7 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
                       {n.message}
                       <span style={{ display: 'block', fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
                         {new Date(n.created_at).toLocaleString(DATE_LOCALES[lang])}
+                        {n.senderName && n.type !== 'like_milestone' ? ` · @${n.senderName}` : ''}
                       </span>
                     </button>
                     <button
