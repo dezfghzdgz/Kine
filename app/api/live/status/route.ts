@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
-import { isMissingTable, userFromRequest } from '@/lib/apiUser';
+import { isMissingTable, isStaffUser, userFromRequest } from '@/lib/apiUser';
 import { publicLive, syncLiveStreams, type LiveStreamRow } from '@/lib/liveStream';
+import type { LiveRestriction } from '@/lib/liveNow';
+import { liveHiddenNow } from '@/lib/nudityRules';
 import { runInBackground } from '@/lib/background';
 import { tipTarget } from '@/lib/liveTipsServer';
 import { tipFeePercent } from '@/lib/liveTips';
@@ -66,24 +68,36 @@ export async function GET(req: NextRequest) {
   const { is_banned: banned, is_shadow_banned: shadowBanned, ...publicProfile } = (profile ?? {}) as Record<string, any>;
   if (isMissingTable(error)) return NextResponse.json({ enabled: false, live: false, profile: profile ? publicProfile : null });
   if (!profile) return NextResponse.json({ error: 'Kanál nenalezen.' }, { status: 404 });
-  // Zablokovaný kanál se jako živý neukazuje nikomu, shadow-banovaný jen
-  // svému majiteli (stejně jako řada "Živě" na hlavní stránce).
+  // Kdo se ptá a jestli je z týmu Kine - zjišťuje se jen když je to potřeba
+  // (stránka se ptá často, ověření přihlášení stojí dotaz na Supabase).
   let requester: { id: string } | null | undefined;
   const who = async () => (requester === undefined ? (requester = await userFromRequest(req)) : requester);
-  const hidden = !!banned || (!!shadowBanned && (await who())?.id !== channel);
-  if (!row || hidden) return NextResponse.json({ enabled: true, live: false, profile: publicProfile, stream: null }, { headers: { 'Cache-Control': 'no-store' } });
+  let staffMemo: boolean | undefined;
+  const isStaff = async () => (staffMemo === undefined ? (staffMemo = await isStaffUser((await who())?.id)) : staffMemo);
+
+  // Zablokovaný kanál se jako živý neukazuje nikomu, shadow-banovaný jen
+  // svému majiteli (stejně jako řada "Živě" na hlavní stránce). Moderátoři
+  // a správci je vidí s upozorněním, proč je ostatní nevidí.
+  let restricted: LiveRestriction | null = null;
+  if (banned || shadowBanned) {
+    const own = !banned && (await who())?.id === channel;
+    if (!own) {
+      if (!(await isStaff())) {
+        return NextResponse.json({ enabled: true, live: false, profile: publicProfile, stream: null }, { headers: { 'Cache-Control': 'no-store' } });
+      }
+      restricted = banned ? 'banned' : 'shadow-ban';
+    }
+  }
+  if (!row) return NextResponse.json({ enabled: true, live: false, profile: publicProfile, stream: null }, { headers: { 'Cache-Control': 'no-store' } });
   const stream = await publicLive(row as LiveStreamRow);
   if (stream.live) runInBackground(import('@/lib/nudityScan').then((m) => m.scanLiveStreams()), 'kontrola obsahu přenosů');
 
   // Přenos skrytý automatickou kontrolou obsahu: divákům bez přehrávače
   // ("čeká na kontrolu"), majitel a moderátoři Kine ho vidí i s upozorněním.
-  if ((row as any).moderation_hidden_at && stream.live) {
-    const me = await who();
-    let privileged = me?.id === channel;
-    if (!privileged && me) {
-      const { data: role } = await supabaseServer.from('profiles').select('role').eq('id', me.id).maybeSingle();
-      privileged = role?.role === 'moderator' || role?.role === 'admin';
-    }
+  // Skrytí platí jen pro přenos, při kterém vzniklo (lib/nudityRules.ts).
+  if (liveHiddenNow(row as any) && stream.live) {
+    const own = (await who())?.id === channel;
+    const privileged = own || (await isStaff());
     if (!privileged) {
       return NextResponse.json(
         { enabled: true, live: true, held: true, profile: publicProfile, stream: { ...stream, playerUrl: null, inputId: null, videoUid: null, thumbnailUrl: null } },
@@ -91,7 +105,7 @@ export async function GET(req: NextRequest) {
       );
     }
     return NextResponse.json(
-      { enabled: true, live: true, profile: publicProfile, stream, moderation: { hidden: true } },
+      { enabled: true, live: true, profile: publicProfile, stream, moderation: { hidden: true, restricted, own } },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   }
@@ -100,7 +114,7 @@ export async function GET(req: NextRequest) {
   // Po vysílání: odkaz na záznam (když ho tvůrce zveřejnil) - kdo přišel pozdě, pustí si ho.
   const lastRecording = stream.live ? null : await latestRecording(channel);
   return NextResponse.json(
-    { enabled: true, live: stream.live, profile: publicProfile, stream, tips, lastRecording },
+    { enabled: true, live: stream.live, profile: publicProfile, stream, tips, lastRecording, ...(restricted ? { moderation: { hidden: false, restricted } } : {}) },
     { headers: { 'Cache-Control': 'no-store' } }
   );
 }

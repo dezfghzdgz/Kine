@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
-import { isMissingTable, userFromRequest } from '@/lib/apiUser';
+import { isMissingTable, isStaffUser, userFromRequest } from '@/lib/apiUser';
 import { liveViewerCount, publicLive, syncLiveStreams, type LiveStreamRow } from '@/lib/liveStream';
-import { arrangeLiveNow, type LiveNowProfile } from '@/lib/liveNow';
+import { arrangeLiveNow, type LiveNowProfile, type LiveRestriction } from '@/lib/liveNow';
+import { liveHiddenNow } from '@/lib/nudityRules';
 import { runInBackground } from '@/lib/background';
+
+/** Proč přenos ostatní nevidí: kontrola obsahu (vidí majitel a tým Kine), zablokovaný účet, shadow-ban (jen tým Kine). */
+type LiveHiddenReason = 'moderation' | LiveRestriction;
 
 export const dynamic = 'force-dynamic';
 // Na pozadí může běžet kontrola obsahu (lib/nudityScan.ts) - funkce smí doběhnout až minutu.
@@ -53,7 +57,8 @@ async function cachedViewers(inputId: string | null): Promise<number | null> {
  * Kdo je teď živě (řada "Živě" na hlavní stránce a stránka /streams). Pořadí
  * a kdo se ukáže řeší lib/liveNow.ts: vlastní přenos první, pak odebírané
  * kanály, pak ostatní zamíchaní (malé kanály nezapadnou). Zablokované se
- * nevypisují, shadow-banované vidí jen jejich majitel.
+ * nevypisují, shadow-banované vidí jen jejich majitel; moderátoři a správci
+ * vidí všechno s popiskem (hidden), proč to ostatní nevidí.
  *
  * ?limit=N (1-60, výchozí 24), ?viewers=1 přidá počty diváků (Cloudflare),
  * ?countOnly=1 vrátí jen počet (tečka u odkazu Živě v menu - bez přihlášení
@@ -83,9 +88,8 @@ export async function GET(req: NextRequest) {
   runInBackground(import('@/lib/nudityScan').then((m) => m.scanLiveStreams()), 'kontrola obsahu přenosů');
 
   const viewer = req.headers.get('authorization') ? await userFromRequest(req) : null;
-  // Přenos skrytý kontrolou obsahu (čeká na moderátora) vidí v řadě jen jeho majitel.
-  const rows = ((data ?? []) as LiveStreamRow[]).filter((r) => !(r as any).moderation_hidden_at || r.owner_id === viewer?.id);
-  const ids = rows.map((r) => r.owner_id);
+  const live = (data ?? []) as LiveStreamRow[];
+  const ids = live.map((r) => r.owner_id);
   const [profiles, followed] = await Promise.all([
     loadProfiles(ids),
     (async () => {
@@ -96,23 +100,38 @@ export async function GET(req: NextRequest) {
       return set;
     })(),
   ]);
+  // Moderátoři a správci vidí v řadě i přenosy, které ostatní nevidí - s popiskem proč. Role se
+  // zjišťuje jen když je co skrývat (seznam se obnovuje každých 20 s - zbytečný dotaz navíc).
+  const somethingHidden =
+    live.some((r) => liveHiddenNow(r as any)) || [...profiles.values()].some((p) => p.is_banned || p.is_shadow_banned);
+  const staff = viewer && !countOnly && somethingHidden ? await isStaffUser(viewer.id) : false;
+  // Přenos skrytý kontrolou obsahu (čeká na moderátora) vidí v řadě jen jeho majitel a tým Kine.
+  // Skrytí platí jen pro přenos, při kterém vzniklo (lib/nudityRules.ts - liveHiddenNow).
+  const rows = live.filter((r) => !liveHiddenNow(r as any) || r.owner_id === viewer?.id || staff);
 
   // Všechny viditelné (kvůli počtu), do seznamu jen prvních `limit`.
-  const all = arrangeLiveNow(rows, profiles, { viewerId: viewer?.id ?? null, followed, limit: 60 });
+  const all = arrangeLiveNow(rows, profiles, { viewerId: viewer?.id ?? null, followed, limit: 60, staff }).map((entry) => ({
+    ...entry,
+    // Proč ho ostatní nevidí (popisek u karty) - jen pro majitele (kontrola obsahu) a tým Kine.
+    hidden: (liveHiddenNow(entry.row as any) ? 'moderation' : entry.restricted) as LiveHiddenReason | null,
+  }));
+  // Kolik přenosů vidí každý (číslo u Živě v menu - stejné jako bez přihlášení).
+  const publicCount = all.filter((e) => !e.hidden).length;
   if (countOnly) {
     return NextResponse.json(
-      { enabled: true, count: all.length },
+      { enabled: true, count: publicCount },
       { headers: { 'Cache-Control': viewer ? 'private, no-store' : 'public, s-maxage=15, stale-while-revalidate=30' } }
     );
   }
   const arranged = all.slice(0, limit);
   const streams = await Promise.all(
-    arranged.map(async ({ row, profile }) => ({
+    arranged.map(async ({ row, profile, hidden }) => ({
       ...(await publicLive(row)),
       followed: followed.has(row.owner_id),
       viewers: withViewers ? await cachedViewers(row.cf_input_id) : null,
+      hidden,
       profile: { id: profile.id, username: profile.username, displayName: profile.display_name, avatarUrl: profile.avatar_url, verificationTier: profile.verification_tier },
     }))
   );
-  return NextResponse.json({ enabled: true, streams, total: all.length }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ enabled: true, streams, total: all.length, publicTotal: publicCount }, { headers: { 'Cache-Control': 'no-store' } });
 }

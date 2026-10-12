@@ -107,5 +107,55 @@ test('přenos: staré snímky (víc než 10 min) a rozbitá data se zahodí, či
   assert.equal(R.addLiveStrike(Array.from({ length: 30 }, (_, i) => ({ at: now - i, level: 'suspect' })), 'suspect', now).length, 10);
 });
 
+test('přenos: skrytí platí jen pro přenos, při kterém vzniklo (pozdější přenos začíná načisto)', () => {
+  const iso = (ms) => new Date(ms).toISOString();
+  const start = Date.parse('2026-10-12T18:00:00Z');
+  const hidden = start + 5 * 60_000;
+  // skrytý během běžícího přenosu -> skrytý
+  assert.equal(R.liveHiddenNow({ started_at: iso(start), moderation_hidden_at: iso(hidden) }), true);
+  // skrytý v minulém přenosu, nový začal o hodinu později -> už ne (dřív zůstal kanál skrytý napořád)
+  assert.equal(R.liveHiddenNow({ started_at: iso(hidden + 60 * 60_000), moderation_hidden_at: iso(hidden) }), false);
+  // Ukončit + hned Vysílat (OBS jede dál) skrytí neobejde: přenos do půl hodiny po skrytí je skrytý taky
+  assert.equal(R.liveHiddenNow({ started_at: iso(hidden + 20_000), moderation_hidden_at: iso(hidden) }), true);
+  assert.equal(R.liveHiddenNow({ started_at: iso(hidden + R.LIVE_HIDE_CARRY_MS - 1000), moderation_hidden_at: iso(hidden) }), true);
+  assert.equal(R.liveHiddenNow({ started_at: iso(hidden + R.LIVE_HIDE_CARRY_MS + 1000), moderation_hidden_at: iso(hidden) }), false);
+  // bez skrytí / rozbitý čas -> ne; neznámý začátek -> radši skrytý
+  assert.equal(R.liveHiddenNow({ started_at: iso(start), moderation_hidden_at: null }), false);
+  assert.equal(R.liveHiddenNow({ started_at: iso(start), moderation_hidden_at: 'nesmysl' }), false);
+  assert.equal(R.liveHiddenNow({ started_at: null, moderation_hidden_at: iso(start) }), true);
+  assert.equal(R.liveHiddenNow(null), false);
+  assert.equal(R.liveHiddenNow(undefined), false);
+});
+
+test('přenos: moderátor pouští / nechává jen skrytí, které teď platí (ne pozdější přenos ze staršího hlášení)', () => {
+  const iso = (ms) => new Date(ms).toISOString();
+  const start = Date.parse('2026-10-12T18:00:00Z');
+  const hidden = start + 5 * 60_000;
+  const row = { started_at: iso(start), moderation_hidden_at: iso(hidden) };
+  // hlášení vzniklo hned po skrytí -> týká se ho
+  assert.equal(R.liveFlagIsCurrent(row, iso(hidden + 300)), true);
+  // staré hlášení (dřívější skrytí) -> netýká se teď platného skrytí
+  assert.equal(R.liveFlagIsCurrent(row, iso(hidden - 2 * 3600_000)), false);
+  // nic teď skryté není (pozdější přenos, nebo bez skrytí) -> netýká se
+  assert.equal(R.liveFlagIsCurrent({ started_at: iso(hidden + 2 * 3600_000), moderation_hidden_at: iso(hidden) }, iso(hidden + 300)), false);
+  assert.equal(R.liveFlagIsCurrent({ started_at: iso(start), moderation_hidden_at: null }, iso(hidden)), false);
+  assert.equal(R.liveFlagIsCurrent(null, iso(hidden)), false);
+  // hlášení bez času (starší data) -> bere se, že se týká
+  assert.equal(R.liveFlagIsCurrent(row, null), true);
+});
+
+test('přenos: podezřelé snímky z minulého přenosu se do nového nepočítají', () => {
+  const start = 100_000_000;
+  const old = [{ at: start - 60_000, level: 'severe' }, { at: start - 30_000, level: 'explicit' }];
+  const fresh = [{ at: start + 10_000, level: 'suspect' }];
+  const kept = R.liveStrikesSince([...old, ...fresh, null, { at: 'x', level: 'severe' }], new Date(start).toISOString());
+  assert.deepEqual(kept, fresh);
+  // jeden podezřelý snímek nového přenosu ho neskryje, i když minulý přenos skrytý byl
+  assert.equal(R.liveShouldHide(R.addLiveStrike(kept, 'suspect', start + 20_000), start + 20_000), false);
+  // bez začátku se nic nezahazuje
+  assert.equal(R.liveStrikesSince(old, null).length, 2);
+  assert.deepEqual(R.liveStrikesSince('nesmysl', null), []);
+});
+
 console.log(`\n${prosly} prošlo, ${padly} spadlo`);
 if (padly) process.exit(1);

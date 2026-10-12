@@ -1359,4 +1359,12 @@ export const sk: Record<DictKey, string> = {
   playerStatsIframeNote: 'Hrá záložný prehrávač Cloudflare (vlastný prehrávač tu nešiel) - podrobnosti nie sú k dispozícii.',
   playerStatsCopy: 'Kopírovať',
   playerStatsCopied: 'Skopírované',
+  sparksTapForSound: 'Ťukni pre zvuk',
+  liveHiddenWhy: 'Ostatní tento prenos teraz nevidia - vidíš ho len ty.',
+  liveHiddenModeration: 'Skryté kontrolou obsahu - čaká na moderátora',
+  liveHiddenBanned: 'Zablokovaný účet - vidí len tím Kine',
+  liveHiddenShadowBan: 'Shadow-ban - vidí len majiteľ a tím Kine',
+  liveRestrictedBannedNote: 'Tento účet je zablokovaný - prenos vidí len tím Kine (moderátori a správcovia).',
+  liveRestrictedShadowNote: 'Tento kanál má shadow-ban - prenos vidí len jeho majiteľ a tím Kine.',
+  liveHeldStaff: 'Prenos je skrytý z hlavnej stránky aj zo stránky Naživo - automatická kontrola v obraze opakovane našla možnú nahotu. Ostatní ho nevidia; pustiť ho ide v Nahláseniach.',
 };

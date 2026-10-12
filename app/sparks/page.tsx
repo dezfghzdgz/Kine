@@ -4,12 +4,37 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
-import SparksCard from '@/components/SparksCard';
+import SparksCard, { type SparkViewer } from '@/components/SparksCard';
 import CommentSection from '@/components/CommentSection';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import { useLanguage } from '@/lib/i18n';
 import { isSpark } from '@/lib/videoBlocks';
 import LoadFailed from '@/components/LoadFailed';
+import { canPlayVodNatively } from '@/lib/vodPlayer';
+import { chooseEngine } from '@/lib/vodPlayerCore';
+import { preloadHls, supportsNativeHls } from '@/lib/hlsAttach';
+import { customerCodeFromUrl } from '@/lib/streamSource';
+import { useMusicCommands } from '@/lib/musicPlayer';
+import { isTvMode } from '@/lib/tvMode';
+import { SPARK_WARM_FALLBACK_MS, sparkSlot, type SparkEngine } from '@/lib/sparksPlayback';
+
+const SPARK_FIELDS =
+  'id, title, description, cloudflare_video_id, thumbnail_url, duration_seconds, width, height, created_at, profiles!videos_owner_id_fkey(id, username, display_name, avatar_url, verification_tier)';
+
+/** Kód zákazníka Cloudflare z minula - spojení se serverem videí se naváže, ještě než přijde seznam Sparks. */
+const STREAM_CODE_KEY = 'kine-stream-code';
+
+function preconnectStream(code: string | null) {
+  if (!code || !/^[a-z0-9]+$/i.test(code) || typeof document === 'undefined') return;
+  const href = `https://customer-${code}.cloudflarestream.com`;
+  if (document.head.querySelector(`link[rel="preconnect"][href="${href}"]`)) return;
+  const link = document.createElement('link');
+  link.rel = 'preconnect';
+  link.href = href;
+  // hls.js stahuje přes CORS - spojení musí být "anonymní", jinak ho prohlížeč nepoužije.
+  link.crossOrigin = 'anonymous';
+  document.head.appendChild(link);
+}
 
 function SparksPageInner() {
   const { t } = useLanguage();
@@ -34,6 +59,48 @@ function SparksPageInner() {
   // přivedlo, obvykle stačí, aby to prohlížeč dovolil). Na false se přepne,
   // jen pokud si uživatel zvuk sám vypne.
   const soundEnabledRef = useRef(true);
+  // Kdo se dívá - jednou pro všechny karty (dřív si to každá z ~80 karet zjišťovala sama).
+  const [viewer, setViewer] = useState<SparkViewer>({ userId: null, ratingMode: 'like_dislike' });
+  // Vlastní přehrávač (HLS), nebo iframe Cloudflare - rozhodne se po načtení stránky v prohlížeči.
+  const [engine, setEngine] = useState<SparkEngine | null>(null);
+  // Rozjelo se první video? Do té doby se nic nepřednačítá (bralo by mu data).
+  const [warm, setWarm] = useState(false);
+  const [saveData, setSaveData] = useState(false);
+  const musicCommands = useMusicCommands();
+
+  useEffect(() => {
+    setEngine(chooseEngine({ nativeHls: supportsNativeHls(), mse: canPlayVodNatively(), forceCloudflare: searchParams.get('player') === 'cloudflare' }));
+    // hls.js se stahuje hned, souběžně se seznamem Sparks - ne až když je první video na řadě.
+    void preloadHls();
+    try {
+      preconnectStream(process.env.NEXT_PUBLIC_STREAM_CUSTOMER_CODE || localStorage.getItem(STREAM_CODE_KEY));
+    } catch {
+      // bez úložiště se spojí, až přijde seznam
+    }
+    setSaveData(!!(navigator as any).connection?.saveData);
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      const uid = data.session?.user?.id ?? null;
+      if (!uid) return;
+      const { data: profile } = await supabase.from('profiles').select('rating_mode').eq('id', uid).maybeSingle();
+      setViewer({ userId: uid, ratingMode: profile?.rating_mode === 'stars' ? 'stars' : 'like_dislike' });
+    })().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Hudba na pozadí ztichne, dokud jsou Sparks otevřené (stejně jako u videa).
+  useEffect(() => {
+    musicCommands.setVideoTakeover(true);
+    return () => musicCommands.setVideoTakeover(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Pojistka: když se první video nerozjede (pomalá síť, zákaz přehrávání), přednačítání začne i tak.
+  useEffect(() => {
+    if (warm || videos.length === 0 || !engine) return;
+    const timer = setTimeout(() => setWarm(true), SPARK_WARM_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [warm, videos.length, engine]);
 
   useEffect(() => {
     function updateArrowsPosition() {
@@ -75,7 +142,7 @@ function SparksPageInner() {
     const nowIso = new Date().toISOString();
     const { data, error } = await supabase
       .from('videos')
-      .select('id, title, description, cloudflare_video_id, duration_seconds, width, height, created_at, profiles!videos_owner_id_fkey(id, username, display_name, avatar_url, verification_tier)')
+      .select(SPARK_FIELDS)
       .eq('status', 'ready')
       .eq('visibility', 'public')
       // Sparks hrají samy - premiéra se tu objeví až ve chvíli, kdy začne.
@@ -91,7 +158,33 @@ function SparksPageInner() {
       return;
     }
 
-    const sparks = (data ?? []).filter(isSpark);
+    const sparks: any[] = (data ?? []).filter(isSpark);
+
+    // Odkaz na konkrétní Spark (?start=), který už není mezi nejnovějšími: přidá se na začátek -
+    // jinak by se místo něj pustilo úplně jiné video.
+    if (startId && !sparks.some((v) => v.id === startId)) {
+      const { data: one } = await supabase
+        .from('videos')
+        .select(SPARK_FIELDS)
+        .eq('id', startId)
+        .eq('status', 'ready')
+        .eq('visibility', 'public')
+        .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso}`)
+        .maybeSingle();
+      if (one && isSpark(one)) sparks.unshift(one);
+    }
+
+    // Spojení se serverem videí hned (a příště ještě dřív - kód si prohlížeč zapamatuje).
+    const code = sparks.map((v) => customerCodeFromUrl(v.thumbnail_url)).find(Boolean) ?? null;
+    if (code) {
+      preconnectStream(code);
+      try {
+        localStorage.setItem(STREAM_CODE_KEY, code);
+      } catch {
+        // nic
+      }
+    }
+
     setVideos(sparks);
 
     if (startId) {
@@ -131,6 +224,29 @@ function SparksPageInner() {
     itemRefs.current.forEach((el) => el && observer.observe(el));
     return () => observer.disconnect();
   }, [videos]);
+
+  // Šipky nahoru/dolů (a PageUp/PageDown) = předchozí/další Spark. V režimu televize šipky řídí výběr prvků.
+  useEffect(() => {
+    if (videos.length === 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || isTvMode()) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (target?.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      const dir = e.key === 'ArrowDown' || e.key === 'PageDown' ? 1 : e.key === 'ArrowUp' || e.key === 'PageUp' ? -1 : 0;
+      if (!dir) return;
+      const next = activeIndex + dir;
+      if (next < 0 || next >= videos.length) return;
+      e.preventDefault();
+      itemRefs.current[next]?.scrollIntoView({ behavior: 'smooth' });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [videos.length, activeIndex]);
+
+  function markWarm() {
+    setWarm(true);
+  }
 
   if (loading) {
     return <p style={{ color: 'var(--text-faint)', padding: 20 }}>{t('loading')}</p>;
@@ -192,10 +308,13 @@ function SparksPageInner() {
             <SparksCard
               video={video}
               active={i === activeIndex}
-              preload={i === activeIndex + 1}
+              {...sparkSlot(i, activeIndex, { engine, warm, saveData })}
+              engine={engine}
+              viewer={viewer}
               commentsOpen={commentsOpen}
               onToggleComments={() => setCommentsOpen((v) => !v)}
               soundEnabledRef={soundEnabledRef}
+              onStarted={i === activeIndex ? markWarm : undefined}
             />
           </div>
         ))}

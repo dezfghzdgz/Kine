@@ -19,6 +19,11 @@ export type LiveItem = {
   followed?: boolean;
   /** Kolik lidí se dívá (jen s ?viewers=1, jinak null). */
   viewers?: number | null;
+  /**
+   * Přenos ostatní nevidí - proč (jen majitel u kontroly obsahu a tým Kine;
+   * app/api/live/now): kontrola obsahu, zablokovaný účet, shadow-ban.
+   */
+  hidden?: 'moderation' | 'banned' | 'shadow-ban' | null;
   profile: { id: string; username: string; displayName: string | null; avatarUrl: string | null; verificationTier: string | null };
 };
 
@@ -51,8 +56,9 @@ export default function LiveNowRow() {
         if (!cancelled && res.ok && body && Array.isArray(body.streams)) {
           loadedAt = Date.now();
           setStreams(body.streams);
-          // Číslo u Živě v menu podle téhož seznamu - ať se nerozchází s tím, co je vidět.
-          announceLiveCount(typeof body.total === 'number' ? body.total : body.streams.length);
+          // Číslo u Živě v menu podle téhož seznamu - ať se nerozchází s tím, co je vidět
+          // (bez přenosů, které vidí jen majitel a tým Kine - číslo je stejné pro všechny).
+          announceLiveCount(typeof body.publicTotal === 'number' ? body.publicTotal : typeof body.total === 'number' ? body.total : body.streams.length);
         }
       } catch {
         // Bez sítě se řada prostě neukáže.
@@ -148,6 +154,11 @@ export function LiveCard({ item, now, showCategory = false }: { item: LiveItem; 
             {item.followed && <span className="live-card-followed"> · {t('streamsFollowed')}</span>}
           </p>
           {showCategory && item.category && <span className="live-card-category">{t(item.category as any)}</span>}
+          {item.hidden && (
+            <span className="live-card-hidden" title={t('liveHiddenWhy')}>
+              {item.hidden === 'moderation' ? t('liveHiddenModeration') : item.hidden === 'banned' ? t('liveHiddenBanned') : t('liveHiddenShadowBan')}
+            </span>
+          )}
         </div>
       </div>
     </Link>

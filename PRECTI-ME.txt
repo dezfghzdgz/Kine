@@ -1,3 +1,88 @@
+KINE - Sparks na vlastním přehrávači, Živě: přenos skrytý napořád (dodávka kine-sparks-zive-2026-10-12)
+======================================================================================================
+
+Jen web. Rozbal do kořene repa a přepiš, nahraj na GitHub (přetažením)
+a pusť node zkontroluj-soubory.mjs. Volitelně (doporučené, 10 s):
+Supabase -> SQL Editor -> New query -> vlož CELÝ obsah souboru
+supabase-migration-zive-4.sql -> Run (viz níž "BEZPEČNOST").
+
+PROČ BYLO "ŽIVĚ" PRÁZDNÉ, I KDYŽ APPKA HLÁSILA "KINE IS RECEIVING YOUR STREAM"
+- Automatická kontrola obsahu (každé ~2 min snímek z přenosu) přenos, kde
+  model opakovaně viděl "možnou nahotu", skryla z Živě - a to skrytí už
+  nikdy nezmizelo. Platilo pro kanál napořád, i pro všechny další přenosy,
+  dokud ho moderátor v Nahlášeních nepustil ("nechat skryté" ho skrylo
+  navždy). Přenos pak viděl jen jeho majitel, všichni ostatní "nikdo
+  nevysílá" a v menu žádné číslo. Appka o tom nevěděla.
+- Teď skrytí platí jen pro přenos, při kterém vzniklo (a pro přenos
+  spuštěný do půl hodiny po skrytí - jinak by šlo skrytí obejít tím, že
+  v appce klikneš Ukončit a hned Vysílat). Pozdější přenos začíná načisto,
+  i počítání podezřelých snímků. lib/nudityRules.ts - liveHiddenNow.
+- Pokud to bylo tímhle, tvůj kanál se při dalším vysílání ukáže normálně -
+  nic mazat nemusíš. Kdyby ne, uvidíš to teď na svém správcovském účtu:
+- Tým Kine (moderátoři, správci i účet správce webu - is_admin) vidí
+  v Živě (hlavní stránka i /streams) i přenosy, které ostatní nevidí,
+  s popiskem proč: "Skryté kontrolou obsahu", "Shadow-ban", "Zablokovaný
+  účet". Na stránce přenosu taky (upozornění nad přehrávačem). Majitel
+  u svého přenosu vidí jen "skryté kontrolou" (shadow-ban se mu neprozradí).
+- Když kontrola přenos skryje, tým Kine hned dostane oznámení s odkazem
+  na přenos (vidí ho i skrytý); pustit ho jde v Nahlášeních jedním klikem
+  (účet s rolí moderátor/admin). Přenos běží teď - omyl se má pustit,
+  dokud vysílání trvá.
+- Studio (/live) u skrytého přenosu ukáže varování. Appka se to dozví
+  v odpovědi na hlášení (hidden: "moderation") - ukazovat to bude až další
+  verze appky.
+- Hlášení ze staršího přenosu (v Nahlášeních) pustí / nechá skryté jen to
+  skrytí, ke kterému patří (ne pozdější přenos) a tvůrce dostane přesnou
+  zprávu.
+- Číslo u Živě v menu = přenosy, které vidí každý (stejné pro všechny).
+
+SPARKS (načítaly se déle než krátká videa)
+- Hrají vlastním přehrávačem jako videa (HLS - hls.js / Safari), už ne
+  iframem Cloudflare: ten si musel stáhnout vlastní stránku a skript
+  a pustit šel až přes SDK, které se načítalo až po celé stránce.
+- Přednačítání: jakmile se rozjede video, na které se díváš, stáhne se
+  první kus dalších dvou (pevný strop - ne celé video) a předchozí zůstane
+  napojené. Přejetí na další i návrat jsou okamžité. Při šetření dat jen
+  jedno dopředu. lib/sparksPlayback.ts (test tests/sparksPlayback.test.mjs).
+- Dřív si každá z ~80 karet hned po otevření stahovala přihlášení, profil,
+  lajky a komentáře (stovky dotazů naráz). Teď kdo se dívá jednou za
+  stránku a lajky / komentáře / odběr jen u karet poblíž.
+- Náhled karty hned, tenký proužek průběhu dole, kolečko při načítání,
+  ▶ při pauze. Když prohlížeč nepustí zvuk bez klepnutí, video hraje
+  potichu a nabídne "Klepni pro zvuk"; když nepustí ani to, ukáže ▶.
+- Klávesy: šipky nahoru/dolů = předchozí/další, mezerník nebo K = pauza,
+  M = zvuk. Hudba na pozadí ve Sparks ztichne, tlačítka médií (klávesnice,
+  sluchátka, zamčená obrazovka) ovládají spark.
+- Odkaz na starší Spark (?start=), který už není mezi 80 nejnovějšími,
+  pustí právě ten (dřív úplně jiné video).
+- Když vlastní přehrávač nejde, karta přepne na iframe Cloudflare jako dřív
+  (?player=cloudflare to vynutí). Pomalý rozjezd se nahlásí do /admin/errors
+  jako u videí (adresa /sparks).
+
+NÁHLED PO NAJETÍ NA KARTU VIDEA
+- Taky vlastní přehrávač místo iframu: rozjede se rychleji a bez černého
+  bliknutí (obrázek zůstane, dokud video nehraje). hls.js se začne
+  stahovat hned při najetí - i video po kliknutí pak startuje o kus dřív.
+
+BEZPEČNOST (supabase-migration-zive-4.sql, volitelné)
+- Tabulka live_streams byla přes veřejný klíč čitelná komukoli - šlo z ní
+  přečíst i video přenosu skrytého kontrolou a pustit si ho mimo Kine. Web
+  ani appka ji napřímo nečtou (všechno jde přes server), migrace jen ruší
+  veřejné čtení. Bez ní funguje všechno stejně.
+
+OVĚŘENO
+- tsc, next build, unit testy (nové: Sparks, skrytí jen pro jeden přenos
+  včetně Ukončit+Vysílat, hlášení ze staršího přenosu, Živě pro tým Kine),
+  testy v prohlížeči se skutečným HLS: Sparks (rozjezd, přednačtení jen
+  prvního kusu, přejetí, návrat, pauza, zastavení zvenku, zvuk, zákaz
+  zvuku i přehrávání, záloha na iframe, starý odkaz, mobil), náhled po
+  najetí, Živě s popisky, studio s varováním + starší testy stránek.
+
+==========================================================================================
+PŘEDCHOZÍ DODÁVKA (kine-prehravac-zive-2026-10-12) - už nahraná, nic z toho znovu
+nedělej.
+==========================================================================================
+
 KINE - vlastní přehrávač videí (rychlý start), Živě nebliká (dodávka kine-prehravac-zive-2026-10-12)
 ====================================================================================================
 
@@ -33,7 +118,7 @@ CO SE ZMĚNILO
   vysílání ukončilo - a pak se 90 s nesmělo vrátit. Teď živý přenos
   skončí až po minutě bez jediného potvrzení, Kine se navíc ptá na stav
   vstupu přes API Cloudflare (když lifecycle nejde) a přenos, který
-  Cloudflare jistě vidí, se vrátí hned (po Ukončit nejdřív za 30 s).
+  Cloudflare jistě vidí, se vrátí hned (po Ukončit nejdřív za 90 s).
   lib/liveSignal.ts - decideLive, testy v tests/security.test.mjs.
 - Číslo u Živě v menu se srovná s tím, co je na obrazovce (stránka Živě
   a řada Živě na hlavní stránce mu ho předají); jinak se počet obnovuje

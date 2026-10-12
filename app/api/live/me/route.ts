@@ -5,6 +5,7 @@ import { appLiveSignal, createLiveInput, deleteLiveInput, liveConfigured, public
 import { CATEGORY_KEYS } from '@/lib/categories';
 import { parseRecordingVisibility } from '@/lib/liveRecording';
 import { runInBackground } from '@/lib/background';
+import { liveHiddenNow } from '@/lib/nudityRules';
 
 export const dynamic = 'force-dynamic';
 // Na pozadí může běžet kontrola obsahu (lib/nudityScan.ts) - funkce smí doběhnout až minutu.
@@ -38,6 +39,8 @@ export async function GET(req: NextRequest) {
       ? { rtmpsUrl: input.data.rtmps_url, streamKey: input.data.stream_key, srtUrl: input.data.srt_url, createdAt: input.data.created_at }
       : null,
     stream: stream.data ? await publicLive(stream.data as LiveStreamRow) : null,
+    // Běžící přenos skrytý kontrolou obsahu (čeká na moderátora) - studio to řekne naplno.
+    moderation: { hidden: !!stream.data?.is_live && liveHiddenNow(stream.data as any) },
     // Co se záznamem po skončení (null = nechat ve studiu). Bez migrace sloupec chybí -> null.
     recordingVisibility: stream.data ? parseRecordingVisibility((stream.data as any).recording_visibility) : null,
     recordingAutoSupported: !!stream.data && Object.prototype.hasOwnProperty.call(stream.data, 'recording_visibility'),
@@ -66,7 +69,15 @@ export async function POST(req: NextRequest) {
     // Appka hlásí přenos pravidelně - snímek pro kontrolu obsahu se vezme i bez diváků.
     if (action !== 'stopped') runInBackground(import('@/lib/nudityScan').then((m) => m.scanLiveStreams()), 'kontrola obsahu přenosů');
     return NextResponse.json(
-      { ok: true, confirmed: result.confirmed, migrated: result.migrated, viewers: result.viewers, recording: result.recording ?? null },
+      {
+        ok: true,
+        confirmed: result.confirmed,
+        migrated: result.migrated,
+        viewers: result.viewers,
+        recording: result.recording ?? null,
+        // Přenos skrytý kontrolou obsahu (čeká na moderátora): appka nemá hlásit "vše v pořádku".
+        hidden: result.hidden ? 'moderation' : null,
+      },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   }

@@ -54,8 +54,9 @@ function StreamsInner() {
           setStreams(body.streams);
           setEnabled(body.enabled !== false);
           setFailed(false);
-          // Číslo u Živě v menu podle téhož seznamu - ať se nerozchází s tím, co je vidět.
-          announceLiveCount(typeof body.total === 'number' ? body.total : body.streams.length);
+          // Číslo u Živě v menu podle téhož seznamu - ať se nerozchází s tím, co je vidět
+          // (bez přenosů, které vidí jen majitel a tým Kine - číslo je stejné pro všechny).
+          announceLiveCount(typeof body.publicTotal === 'number' ? body.publicTotal : typeof body.total === 'number' ? body.total : body.streams.length);
         } else setFailed(true);
       } catch {
         if (!cancelled) setFailed(true);

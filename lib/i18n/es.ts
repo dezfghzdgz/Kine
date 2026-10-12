@@ -1359,4 +1359,12 @@ export const es: Record<DictKey, string> = {
   playerStatsIframeNote: 'Se está usando el reproductor de respaldo de Cloudflare (el reproductor de Kine no funcionó aquí): no hay detalles.',
   playerStatsCopy: 'Copiar',
   playerStatsCopied: 'Copiado',
+  sparksTapForSound: 'Toca para activar el sonido',
+  liveHiddenWhy: 'Los demás no ven esta emisión ahora: solo tú.',
+  liveHiddenModeration: 'Oculto por la revisión de contenido: esperando a un moderador',
+  liveHiddenBanned: 'Cuenta bloqueada: solo la ve el equipo de Kine',
+  liveHiddenShadowBan: 'Shadowban: solo la ven el propietario y el equipo de Kine',
+  liveRestrictedBannedNote: 'Esta cuenta está bloqueada: solo el equipo de Kine (moderadores y administradores) ve la emisión.',
+  liveRestrictedShadowNote: 'Este canal tiene shadowban: solo su propietario y el equipo de Kine ven la emisión.',
+  liveHeldStaff: 'La emisión está oculta en la página principal y en En directo: la revisión automática encontró varias veces posibles desnudos. Los demás no la ven; puedes liberarla en Denuncias.',
 };

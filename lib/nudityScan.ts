@@ -5,8 +5,10 @@ import { syncVideoProtection } from './streamProtection';
 import {
   addLiveStrike,
   framesFromPredictions,
+  liveHiddenNow,
   liveShouldHide,
   liveSnapshotLevel,
+  liveStrikesSince,
   nudityVerdict,
   pornScore,
   scanTimes,
@@ -285,11 +287,20 @@ export async function scanLiveStreams(): Promise<void> {
     const f = await classifyUrl(`${frameUrl(row.current_video_uid, null)}&t=${Date.now()}`).catch(() => null);
     if (!f) continue;
     const level = liveSnapshotLevel(f);
-    const strikes = addLiveStrike(row.moderation_strikes, level, Date.now());
-    const hide = !row.moderation_hidden_at && liveShouldHide(strikes, Date.now());
+    const at = Date.now();
+    // Skrytí i podezřelé snímky platí jen pro tenhle přenos (lib/nudityRules.ts - liveHiddenNow):
+    // pozdější přenos začíná načisto a staré skrytí se z řádku smaže.
+    const hiddenNow = liveHiddenNow(row);
+    const strikes = addLiveStrike(liveStrikesSince(row.moderation_strikes, row.started_at), level, at);
+    const hide = !hiddenNow && liveShouldHide(strikes, at);
+    const hiddenPatch = hide
+      ? { moderation_hidden_at: new Date(at).toISOString() }
+      : !hiddenNow && row.moderation_hidden_at
+        ? { moderation_hidden_at: null }
+        : {};
     await supabaseServer
       .from('live_streams')
-      .update({ moderation_strikes: strikes, ...(hide ? { moderation_hidden_at: new Date().toISOString() } : {}) })
+      .update({ moderation_strikes: strikes, ...hiddenPatch })
       .eq('owner_id', row.owner_id);
     if (!hide) continue;
     await openFlag({
@@ -303,9 +314,40 @@ export async function scanLiveStreams(): Promise<void> {
     await supabaseServer.from('notifications').insert({
       user_id: row.owner_id,
       type: 'moderation_warning',
-      message: '⚠️ Tvůj přenos je dočasně skrytý z hlavní stránky i ze stránky Živě - automatická kontrola v obrazu opakovaně našla možnou nahotu. Moderátor ho zkontroluje.',
+      message:
+        '⚠️ Tvůj přenos je dočasně skrytý z hlavní stránky i ze stránky Živě - automatická kontrola v obrazu opakovaně našla možnou nahotu. Moderátor ho zkontroluje. Skrytí platí pro tenhle přenos; přenos spuštěný aspoň půl hodiny po skrytí začne normálně.',
       link: `/live/${row.owner_id}`,
     });
+    await notifyStaffAboutHiddenLive(row.owner_id);
+  }
+}
+
+/**
+ * Tým Kine (moderátoři, správci i správce webu - is_admin) se o skrytém
+ * přenosu dozví hned - přenos běží teď a omyl (hra, kůže zblízka) se má
+ * pustit, dokud vysílání trvá. Odkaz vede na přenos (tým ho vidí i skrytý),
+ * pustit ho jde v Hlášeních jedním kliknutím.
+ */
+async function notifyStaffAboutHiddenLive(ownerId: string): Promise<void> {
+  try {
+    const staffQuery = await supabaseServer.from('profiles').select('id').or('role.in.(moderator,admin),is_admin.eq.true');
+    const staff = staffQuery.error
+      ? (await supabaseServer.from('profiles').select('id').in('role', ['moderator', 'admin'])).data
+      : staffQuery.data;
+    const recipients = (staff ?? []).filter((s: { id: string }) => s.id !== ownerId);
+    if (recipients.length === 0) return;
+    const { data: owner } = await supabaseServer.from('profiles').select('username').eq('id', ownerId).maybeSingle();
+    const name = owner?.username ? `@${owner.username}` : 'kanálu';
+    // Bez "type": povolené druhy oznámení hlídá databáze a tenhle mezi nimi není (stejně jako u autorských práv).
+    await supabaseServer.from('notifications').insert(
+      recipients.map((s: { id: string }) => ({
+        user_id: s.id,
+        message: `⚠️ Přenos ${name} je automaticky skrytý (možná nahota) - podívej se na něj; pustit ho jde v Nahlášeních.`,
+        link: `/live/${ownerId}`,
+      }))
+    );
+  } catch {
+    // Oznámení navíc - kontrola se kvůli němu nesmí rozbít.
   }
 }
 
@@ -346,9 +388,4 @@ export async function scanLiveThumbnail(ownerId: string, url: string): Promise<'
     });
   }
   return 'removed';
-}
-
-/** Je přenos skrytý kontrolou obsahu (a moderátor ho zatím nepustil)? */
-export function liveHiddenByModeration(row: Record<string, any> | null | undefined): boolean {
-  return !!row && !!row.moderation_hidden_at;
 }

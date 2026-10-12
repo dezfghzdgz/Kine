@@ -1359,4 +1359,12 @@ export const pl: Record<DictKey, string> = {
   playerStatsIframeNote: 'Gra zapasowy odtwarzacz Cloudflare (własny odtwarzacz tu nie zadziałał) - szczegóły niedostępne.',
   playerStatsCopy: 'Kopiuj',
   playerStatsCopied: 'Skopiowano',
+  sparksTapForSound: 'Stuknij, aby włączyć dźwięk',
+  liveHiddenWhy: 'Inni nie widzą teraz tej transmisji - widzisz ją tylko ty.',
+  liveHiddenModeration: 'Ukryte przez kontrolę treści - czeka na moderatora',
+  liveHiddenBanned: 'Zablokowane konto - widzi tylko zespół Kine',
+  liveHiddenShadowBan: 'Shadowban - widzi tylko właściciel i zespół Kine',
+  liveRestrictedBannedNote: 'To konto jest zablokowane - transmisję widzi tylko zespół Kine (moderatorzy i administratorzy).',
+  liveRestrictedShadowNote: 'Ten kanał ma shadowbana - transmisję widzi tylko jego właściciel i zespół Kine.',
+  liveHeldStaff: 'Transmisja jest ukryta na stronie głównej i na stronie Na żywo - automatyczna kontrola kilkakrotnie znalazła w obrazie możliwą nagość. Inni jej nie widzą; możesz ją przywrócić w Zgłoszeniach.',
 };

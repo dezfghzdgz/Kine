@@ -4,6 +4,7 @@ import { isMissingTable, userFromRequest } from '@/lib/apiUser';
 import { frameId, frameUrl } from '@/lib/nudityScan';
 import { syncVideoProtection } from '@/lib/streamProtection';
 import { notifySubscribers } from '@/lib/markVideoReady';
+import { liveFlagIsCurrent } from '@/lib/nudityRules';
 
 export const dynamic = 'force-dynamic';
 
@@ -148,23 +149,32 @@ export async function POST(req: NextRequest) {
       }
     }
   } else if (f.kind === 'live') {
+    const { data: row } = await supabaseServer.from('live_streams').select('*').eq('owner_id', f.channel_id).maybeSingle();
+    // Skrytí platí jen pro přenos, při kterém vzniklo (lib/nudityRules.ts - liveHiddenNow).
+    // Hlášení ze staršího skrytí nesmí pustit pozdější přenos, který kontrola skryla sama za sebe.
+    const current = liveFlagIsCurrent(row, f.created_at);
     if (action === 'approve') {
-      const { data: row } = await supabaseServer.from('live_streams').select('*').eq('owner_id', f.channel_id).maybeSingle();
-      await supabaseServer
-        .from('live_streams')
-        .update({ moderation_hidden_at: null, moderation_strikes: [], moderation_cleared_uid: f.live_video_uid ?? row?.current_video_uid ?? null })
-        .eq('owner_id', f.channel_id);
+      if (current) {
+        await supabaseServer
+          .from('live_streams')
+          .update({ moderation_hidden_at: null, moderation_strikes: [], moderation_cleared_uid: row?.current_video_uid ?? f.live_video_uid ?? null })
+          .eq('owner_id', f.channel_id);
+      }
       await supabaseServer.from('notifications').insert({
         user_id: f.channel_id,
         type: 'moderation_warning',
-        message: '✅ Tvůj přenos prošel kontrolou a je zase vidět na hlavní stránce i na stránce Živě.',
+        message: current
+          ? '✅ Tvůj přenos prošel kontrolou moderátora - už není skrytý a je vidět na hlavní stránce i na stránce Živě.'
+          : '✅ Moderátor zkontroloval tvůj dřívější přenos - byl v pořádku.',
         link: `/live/${f.channel_id}`,
       });
     } else {
       await supabaseServer.from('notifications').insert({
         user_id: f.channel_id,
         type: 'moderation_warning',
-        message: '⛔ Tvůj přenos zůstává skrytý - moderátor potvrdil nahotu nebo porno, což pravidla Kine nedovolují.',
+        message: current
+          ? '⛔ Moderátor potvrdil v tvém přenosu nahotu nebo porno, což pravidla Kine nedovolují - přenos zůstává skrytý.'
+          : '⛔ Moderátor potvrdil v tvém dřívějším přenosu nahotu nebo porno, což pravidla Kine nedovolují.',
         link: `/live/${f.channel_id}`,
       });
     }

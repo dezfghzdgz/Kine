@@ -1,4 +1,5 @@
 import { supabaseServer } from './supabaseServer';
+import { liveHiddenNow } from './nudityRules';
 
 /**
  * Údaje pro náhled odkazu na přenos (/live/<kanál>): kdo, jestli je živě,
@@ -46,9 +47,9 @@ export async function loadLivePreview(ownerId: string): Promise<LivePreview | nu
       title: (stream?.title ?? '').trim(),
       description: (stream?.description ?? '').trim(),
       // Přenos skrytý kontrolou obsahu: v náhledu odkazu žádný snímek z vysílání.
-      videoUid: stream?.is_live && !stream?.moderation_hidden_at ? stream?.current_video_uid ?? null : null,
+      videoUid: stream?.is_live && !liveHiddenNow(stream) ? stream?.current_video_uid ?? null : null,
       thumbnailUrl:
-        stream?.is_live && !stream?.moderation_hidden_at && typeof stream?.thumbnail_url === 'string' && /^https:\/\//.test(stream.thumbnail_url)
+        stream?.is_live && !liveHiddenNow(stream) && typeof stream?.thumbnail_url === 'string' && /^https:\/\//.test(stream.thumbnail_url)
           ? stream.thumbnail_url
           : null,
       startedAt: stream?.is_live ? stream?.started_at ?? null : null,

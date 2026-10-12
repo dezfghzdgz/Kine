@@ -65,5 +65,18 @@ test('bez profilu se přenos nevypíše, dvojí řádek jen jednou, strop 24', (
   assert.equal(out.includes('nobody'), false);
 });
 
+test('tým Kine (moderátoři, správci) vidí i zablokované a shadow-banované - s popiskem proč', () => {
+  const rows = [row('a', 5), row('ban', 3), row('shadow', 1)];
+  const map = profiles(prof('a'), prof('ban', { is_banned: true }), prof('shadow', { is_shadow_banned: true }));
+  const out = arrangeLiveNow(rows, map, { now: T0, staff: true });
+  assert.deepEqual(ids(out).sort(), ['a', 'ban', 'shadow']);
+  const why = Object.fromEntries(out.map((x) => [x.row.owner_id, x.restricted]));
+  assert.deepEqual(why, { a: null, ban: 'banned', shadow: 'shadow-ban' });
+  // majitel svůj shadow-ban nepozná (popisek nedostane), ostatní ho nevidí vůbec
+  const own = arrangeLiveNow(rows, map, { now: T0, viewerId: 'shadow' });
+  assert.equal(own.find((x) => x.row.owner_id === 'shadow').restricted, null);
+  assert.ok(arrangeLiveNow(rows, map, { now: T0 }).every((x) => x.restricted === null));
+});
+
 console.log(`\n${prosly} prošlo, ${padly} spadlo`);
 if (padly > 0) process.exit(1);

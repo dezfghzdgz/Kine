@@ -1359,4 +1359,12 @@ export const en: Record<DictKey, string> = {
   playerStatsIframeNote: 'The Cloudflare fallback player is playing (Kine\'s own player didn\'t work here) - no details available.',
   playerStatsCopy: 'Copy',
   playerStatsCopied: 'Copied',
+  sparksTapForSound: 'Tap for sound',
+  liveHiddenWhy: 'Others can\'t see this stream right now - only you can.',
+  liveHiddenModeration: 'Hidden by content check - waiting for a moderator',
+  liveHiddenBanned: 'Banned account - only the Kine team can see it',
+  liveHiddenShadowBan: 'Shadow-banned - only the owner and the Kine team can see it',
+  liveRestrictedBannedNote: 'This account is banned - only the Kine team (moderators and admins) can see the stream.',
+  liveRestrictedShadowNote: 'This channel is shadow-banned - only its owner and the Kine team can see the stream.',
+  liveHeldStaff: 'This stream is hidden from the home page and the Live page - the automatic check repeatedly found possible nudity in the picture. Others can\'t see it; you can release it in Reports.',
 };

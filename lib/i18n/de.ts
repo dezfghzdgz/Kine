@@ -1359,4 +1359,12 @@ export const de: Record<DictKey, string> = {
   playerStatsIframeNote: 'Es läuft der Ersatz-Player von Cloudflare (der eigene Player ging hier nicht) - keine Details verfügbar.',
   playerStatsCopy: 'Kopieren',
   playerStatsCopied: 'Kopiert',
+  sparksTapForSound: 'Für Ton tippen',
+  liveHiddenWhy: 'Andere sehen diesen Stream gerade nicht - nur du.',
+  liveHiddenModeration: 'Von der Inhaltsprüfung ausgeblendet - wartet auf Moderation',
+  liveHiddenBanned: 'Gesperrtes Konto - nur das Kine-Team sieht es',
+  liveHiddenShadowBan: 'Shadowban - nur der Inhaber und das Kine-Team sehen es',
+  liveRestrictedBannedNote: 'Dieses Konto ist gesperrt - den Stream sieht nur das Kine-Team (Moderatoren und Admins).',
+  liveRestrictedShadowNote: 'Dieser Kanal hat einen Shadowban - den Stream sehen nur der Inhaber und das Kine-Team.',
+  liveHeldStaff: 'Der Stream ist auf der Startseite und der Live-Seite ausgeblendet - die automatische Prüfung hat wiederholt mögliche Nacktheit gefunden. Andere sehen ihn nicht; freigeben kannst du ihn unter Meldungen.',
 };

@@ -66,6 +66,8 @@ export type VodHandle = {
   /** Zvolená kvalita: index úrovně, -1 = automaticky. */
   quality: () => number;
   setQuality: (index: number) => void;
+  /** Kolik vteřin dopředu stahovat a nejvýš kolik (přednačtené video, které se právě začalo přehrávat: víc). Safari si to řídí sám. */
+  setBufferAhead: (seconds: number, capSeconds?: number) => void;
   detach: () => void;
 };
 
@@ -76,7 +78,23 @@ export type VodOptions = {
   onFatal: (why: string, at: number) => void;
   /** Změnila se nabídka kvality nebo právě hraná kvalita. */
   onLevels?: () => void;
+  /**
+   * Kolik vteřin dopředu stahovat (výchozí 30) a nejvýš kolik (bufferCap,
+   * výchozí 120 - hls.js u nízké kvality stahuje dál až po tenhle strop).
+   * Přednačítané video (Sparks: další v řadě) jen pár vteřin s pevným
+   * stropem - první kus, ať se po přejetí rozjede hned a nebere data tomu,
+   * co právě hraje. Za běhu se mění setBufferAhead.
+   */
+  bufferAhead?: number;
+  bufferCap?: number;
+  /** Kolik vteřin za sebou držet (výchozí 30). Krátká videa ve smyčce (Sparks) celé - smyčka pak nic nestahuje znovu. */
+  backBuffer?: number;
 };
+
+/** Safari (HLS sám) se nedá říct "jen 4 s dopředu" - u přednačítaného videa aspoň preload=metadata. */
+function nativePreload(capSeconds: number): 'auto' | 'metadata' {
+  return capSeconds <= 10 ? 'metadata' : 'auto';
+}
 
 /** Načítání: zaseknutý kus se zkusí znovu po pár vteřinách, ne až po dvou minutách (výchozí hls.js). */
 const FRAGMENT_POLICY = {
@@ -126,6 +144,8 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
   };
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   const startAt = options.startAt && options.startAt > 0 ? options.startAt : null;
+  let bufferAhead = options.bufferAhead && options.bufferAhead > 0 ? options.bufferAhead : 30;
+  let bufferCap = options.bufferCap && options.bufferCap > 0 ? Math.max(options.bufferCap, bufferAhead) : Math.max(120, bufferAhead);
 
   let hls: any = null;
   let destroyed = false;
@@ -185,7 +205,9 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
     const onError = () => fatal(`native-hls ${video.error?.code ?? ''}`.trim());
     video.addEventListener('loadedmetadata', onMeta, { once: true });
     video.addEventListener('error', onError);
-    video.preload = 'auto';
+    // Safari si o tom, kolik stáhnout dopředu, rozhoduje sám - u přednačítaného videa
+    // (malý strop) aspoň jen začátek a údaje, ať nebere data tomu, co právě hraje.
+    video.preload = nativePreload(bufferCap);
     video.src = url;
     nativeCleanup = () => {
       video.removeEventListener('loadedmetadata', onMeta);
@@ -211,9 +233,9 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
         abrEwmaDefaultEstimate: startEstimate(rememberedBandwidth()),
         // Do malého okna se nestahuje 1080p; na celé obrazovce kvalita vyskočí.
         capLevelToPlayerSize: true,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 120,
-        backBufferLength: 30,
+        maxBufferLength: bufferAhead,
+        maxMaxBufferLength: bufferCap,
+        backBufferLength: options.backBuffer ?? 30,
         fragLoadPolicy: FRAGMENT_POLICY,
         manifestLoadPolicy: PLAYLIST_POLICY,
         playlistLoadPolicy: PLAYLIST_POLICY,
@@ -293,6 +315,17 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
         hls.nextLevel = -1;
       }
       options.onLevels?.();
+    },
+    setBufferAhead: (seconds: number, capSeconds?: number) => {
+      if (!Number.isFinite(seconds) || seconds <= 0) return;
+      bufferAhead = seconds;
+      bufferCap = capSeconds && capSeconds > 0 ? Math.max(capSeconds, seconds) : Math.max(120, seconds);
+      // hls.js čte nastavení při každém kroku načítání - změna platí hned (i před napojením: viz Hls výše).
+      if (hls?.config) {
+        hls.config.maxBufferLength = bufferAhead;
+        hls.config.maxMaxBufferLength = bufferCap;
+      }
+      if (stats.engine === 'native' && !destroyed) video.preload = nativePreload(bufferCap);
     },
     detach: () => {
       destroyed = true;

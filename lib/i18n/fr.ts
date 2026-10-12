@@ -1359,4 +1359,12 @@ export const fr: Record<DictKey, string> = {
   playerStatsIframeNote: 'Le lecteur de secours Cloudflare est utilisé (le lecteur de Kine n\'a pas fonctionné ici) : pas de détails.',
   playerStatsCopy: 'Copier',
   playerStatsCopied: 'Copié',
+  sparksTapForSound: 'Touche pour le son',
+  liveHiddenWhy: 'Les autres ne voient pas ce direct pour l\'instant : toi seul le vois.',
+  liveHiddenModeration: 'Masqué par le contrôle du contenu : en attente d\'un modérateur',
+  liveHiddenBanned: 'Compte bloqué : seule l\'équipe Kine le voit',
+  liveHiddenShadowBan: 'Shadowban : seuls le propriétaire et l\'équipe Kine le voient',
+  liveRestrictedBannedNote: 'Ce compte est bloqué : seule l\'équipe Kine (modérateurs et admins) voit le direct.',
+  liveRestrictedShadowNote: 'Cette chaîne a un shadowban : seuls son propriétaire et l\'équipe Kine voient le direct.',
+  liveHeldStaff: 'Ce direct est masqué de l\'accueil et de la page En direct : la vérification automatique a détecté plusieurs fois une possible nudité. Les autres ne le voient pas ; tu peux le rétablir dans Signalements.',
 };

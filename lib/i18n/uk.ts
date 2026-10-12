@@ -1359,4 +1359,12 @@ export const uk: Record<DictKey, string> = {
   playerStatsIframeNote: 'Працює резервний програвач Cloudflare (власний програвач Kine тут не спрацював) - подробиць немає.',
   playerStatsCopy: 'Копіювати',
   playerStatsCopied: 'Скопійовано',
+  sparksTapForSound: 'Торкнись, щоб увімкнути звук',
+  liveHiddenWhy: 'Інші зараз не бачать цю трансляцію - бачиш лише ти.',
+  liveHiddenModeration: 'Приховано перевіркою вмісту - чекає на модератора',
+  liveHiddenBanned: 'Заблокований акаунт - бачить лише команда Kine',
+  liveHiddenShadowBan: 'Shadow-ban - бачать лише власник і команда Kine',
+  liveRestrictedBannedNote: 'Цей акаунт заблоковано - трансляцію бачить лише команда Kine (модератори й адміністратори).',
+  liveRestrictedShadowNote: 'Цей канал має shadow-ban - трансляцію бачать лише його власник і команда Kine.',
+  liveHeldStaff: 'Трансляцію приховано з головної та сторінки Наживо - автоматична перевірка кілька разів знайшла можливу оголеність. Інші її не бачать; відновити її можна у Скаргах.',
 };

@@ -9,6 +9,9 @@ import VideoCardMenu from './VideoCardMenu';
 import { supabase } from '@/lib/supabaseClient';
 import { unhideVideo, unhideChannel } from '@/lib/hiddenContent';
 import { isUpcomingPremiere } from '@/lib/scheduling';
+import { attachVod, canPlayVodNatively } from '@/lib/vodPlayer';
+import { customerCodeFromUrl, manifestUrl } from '@/lib/streamSource';
+import { preloadHls } from '@/lib/hlsAttach';
 
 const HOVER_DELAY_MS = 150;
 const SOUND_PREF_KEY = 'kine-preview-sound-enabled';
@@ -48,6 +51,13 @@ function VideoCard({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<any>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Náhled po najetí hraje vlastní přehrávač (<video> + HLS, lib/vodPlayer.ts) - rozjede se
+  // hned a bez černého bliknutí (obrázek náhledu zůstane, dokud video nehraje). Iframe
+  // Cloudflare jen když to prohlížeč neumí nebo vlastní přehrávač selže.
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
+  const [nativeFailed, setNativeFailed] = useState(false);
+  const [previewPlaying, setPreviewPlaying] = useState(false);
+  const nativePreview = previewing && !nativeFailed && canPlayVodNatively();
 
   useEffect(() => {
     if (previewing) setMuted(!getSoundPref());
@@ -59,13 +69,58 @@ function VideoCard({
   // připravený, takže appka volbu vůbec neuložila.
   useEffect(() => {
     if (playerRef.current) playerRef.current.muted = muted;
+    if (previewVideoRef.current) previewVideoRef.current.muted = muted;
   }, [muted]);
+
+  // Vlastní přehrávač náhledu: kousek videa v nízké kvalitě, na smyčku.
+  useEffect(() => {
+    const el = previewVideoRef.current;
+    if (!nativePreview || !el || !video.cloudflare_video_id) return;
+    setPreviewPlaying(false);
+    el.loop = true;
+    el.muted = !getSoundPref();
+    const handle = attachVod(el, manifestUrl(video.cloudflare_video_id, customerCodeFromUrl(video.thumbnail_url)), {
+      startAt: null,
+      bufferAhead: 10,
+      bufferCap: 15,
+      backBuffer: 15,
+      onFatal: () => setNativeFailed(true),
+    });
+    let done = false;
+    const tryPlay = () => {
+      if (done || !el.paused) return;
+      el.play().catch((e: any) => {
+        // Se zvukem to prohlížeč bez klepnutí nepustí - náhled hraje aspoň potichu.
+        if (!done && e?.name === 'NotAllowedError' && !el.muted) {
+          el.muted = true;
+          setMuted(true);
+          el.play().catch(() => {});
+        }
+      });
+    };
+    const onPlaying = () => {
+      done = true;
+      setPreviewPlaying(true);
+    };
+    el.addEventListener('loadedmetadata', tryPlay);
+    el.addEventListener('canplay', tryPlay);
+    el.addEventListener('playing', onPlaying);
+    tryPlay();
+    return () => {
+      done = true;
+      el.removeEventListener('loadedmetadata', tryPlay);
+      el.removeEventListener('canplay', tryPlay);
+      el.removeEventListener('playing', onPlaying);
+      handle.detach();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nativePreview, video.cloudflare_video_id]);
 
   // Jakmile se náhled začne přehrávat, appka se napojí na přehrávač
   // (SDK se může chvíli načítat, proto to zkouší v krátké smyčce) a pustí
   // video na smyčku, potichu nebo se zvukem podle uložené preference.
   useEffect(() => {
-    if (!previewing || !video.cloudflare_video_id) return;
+    if (!previewing || nativePreview || !video.cloudflare_video_id) return;
     let cancelled = false;
     const interval = setInterval(() => {
       if (cancelled) return;
@@ -83,7 +138,7 @@ function VideoCard({
       clearInterval(interval);
       playerRef.current = null;
     };
-  }, [previewing, video.cloudflare_video_id]);
+  }, [previewing, nativePreview, video.cloudflare_video_id]);
 
   function startHover() {
     if (!video.cloudflare_video_id || upcomingPremiere) return;
@@ -91,12 +146,15 @@ function VideoCard({
     // tokenem (lib/streamProtection.ts) - náhled po najetí by skončil
     // chybou Cloudflare. Bez viditelnosti v datech se bere jako veřejné.
     if (video.visibility && video.visibility !== 'public') return;
+    // hls.js se začne stahovat hned (než uběhne prodleva) - náhled i stránka videa se pak rozjedou dřív.
+    void preloadHls();
     hoverTimerRef.current = setTimeout(() => setPreviewing(true), HOVER_DELAY_MS);
   }
 
   function stopHover() {
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     setPreviewing(false);
+    setPreviewPlaying(false);
   }
 
   function toggleMute(e: React.MouseEvent) {
@@ -158,10 +216,22 @@ function VideoCard({
     >
       <Link href={href} className="video-card-link">
         <div className={isSparks ? 'video-thumb video-thumb-vertical' : 'video-thumb'}>
-          {video.thumbnail_url && !previewing && (
+          {/* U vlastního přehrávače obrázek zůstává pod videem (žádné černé bliknutí, než se video rozjede). */}
+          {video.thumbnail_url && (!previewing || nativePreview) && (
             <Image src={video.thumbnail_url} alt={video.title} width={320} height={180} />
           )}
-          {previewing && (
+          {nativePreview && (
+            <video
+              ref={previewVideoRef}
+              className={`video-card-preview${previewPlaying ? ' playing' : ''}`}
+              muted
+              playsInline
+              loop
+              preload="auto"
+              aria-hidden="true"
+            />
+          )}
+          {previewing && !nativePreview && (
             <iframe
               ref={iframeRef}
               src={`https://iframe.videodelivery.net/${video.cloudflare_video_id}?controls=false`}

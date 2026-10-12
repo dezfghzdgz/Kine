@@ -35,6 +35,8 @@ type Setup = {
   recordingVisibility?: 'public' | 'subscribers' | 'private' | null;
   /** Databáze to umí (migrace supabase-migration-zive-2.sql). */
   recordingAutoSupported?: boolean;
+  /** Běžící přenos skrytý kontrolou obsahu - čeká na moderátora (app/api/live/me). */
+  moderation?: { hidden: boolean };
 };
 
 type Moderator = { userId: string; username: string | null };
@@ -364,6 +366,12 @@ export default function LiveStudioPage() {
                   {t('liveOpenPublicPage')} →
                 </Link>
               </div>
+              {stream?.live && setup.moderation?.hidden && (
+                <div className="moderation-hold-note" role="status" style={{ marginTop: 12, marginBottom: 0 }}>
+                  <span aria-hidden="true">⚠️</span>
+                  <span>{t('liveHeldOwner')}</span>
+                </div>
+              )}
               {stream?.live && (
                 <div className="player-wrap" style={{ aspectRatio: '16/9', marginTop: 12 }}>
                   <iframe

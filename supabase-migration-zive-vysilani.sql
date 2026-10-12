@@ -21,7 +21,9 @@ create table if not exists live_inputs (
 alter table live_inputs enable row level security;
 -- Schválně žádná politika: anon ani přihlášený k tabulce nesmí vůbec.
 
--- 2) Veřejný stav vysílání kanálu (jestli je živě, název, od kdy).
+-- 2) Stav vysílání kanálu (jestli je živě, název, od kdy). Ven ho vydává jen
+--    server (/api/live/...), který hlídá, co kdo smí vidět - prohlížeč
+--    k tabulce přímý přístup nemá (supabase-migration-zive-4.sql).
 create table if not exists live_streams (
   owner_id uuid primary key references profiles(id) on delete cascade,
   cf_input_id text not null,
@@ -38,9 +40,9 @@ create table if not exists live_streams (
   updated_at timestamptz not null default now()
 );
 alter table live_streams enable row level security;
-do $$ begin
-  create policy "Stav živého vysílání je veřejný" on live_streams for select using (true);
-exception when duplicate_object then null; end $$;
+-- Schválně žádná politika (dřív "Stav živého vysílání je veřejný" - šlo přes ni
+-- přečíst i přenos skrytý kontrolou obsahu).
+drop policy if exists "Stav živého vysílání je veřejný" on live_streams;
 create index if not exists live_streams_is_live_idx on live_streams (is_live) where is_live;
 
 -- 3) Chat: živé vysílání (room = 'channel:<id kanálu>') a premiéry

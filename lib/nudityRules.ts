@@ -128,3 +128,59 @@ export function liveShouldHide(strikes: LiveStrike[], now: number): boolean {
   if (recent.filter((s) => s.level !== 'suspect').length >= 2) return true;
   return recent.length >= 3;
 }
+
+function parseTime(value: string | null | undefined): number {
+  return value ? Date.parse(value) : NaN;
+}
+
+/**
+ * Přenos, který začne do takové doby po skrytí, je skrytý taky - jinak by
+ * stačilo v appce kliknout Ukončit a hned Vysílat (OBS jede dál) a skrytí
+ * by zmizelo. Kdo začne vysílat až po půl hodině, začíná načisto.
+ */
+export const LIVE_HIDE_CARRY_MS = 30 * 60 * 1000;
+
+/**
+ * Platí skrytí kontrolou obsahu pro přenos, který teď běží?
+ *
+ * Skrytí patří k přenosu, při kterém vzniklo (a k přenosu, který začne
+ * do LIVE_HIDE_CARRY_MS po skrytí). Pozdější přenos se posuzuje znovu od
+ * nuly. Dřív zůstal kanál skrytý napořád - dokud ho moderátor nepustil
+ * (a "nechat skryté" ho skrylo navždy), takže každý další přenos byl vidět
+ * jen majiteli a "Živě" zůstávalo prázdné.
+ */
+export function liveHiddenNow(row: { moderation_hidden_at?: string | null; started_at?: string | null } | null | undefined): boolean {
+  if (!row?.moderation_hidden_at) return false;
+  const hidden = parseTime(row.moderation_hidden_at);
+  if (!Number.isFinite(hidden)) return false;
+  const started = parseTime(row.started_at);
+  return !Number.isFinite(started) || started <= hidden + LIVE_HIDE_CARRY_MS;
+}
+
+/**
+ * Patří hlášení z fronty ke skrytí, které teď platí? Hlášení se zakládá
+ * hned po skrytí (do minuty). Starší hlášení nesmí pustit pozdější
+ * přenos, který kontrola skryla sama za sebe - a oznámení tvůrci podle
+ * toho mluví o "dřívějším přenosu".
+ */
+export function liveFlagIsCurrent(
+  row: { moderation_hidden_at?: string | null; started_at?: string | null } | null | undefined,
+  flaggedAt: string | null | undefined
+): boolean {
+  if (!liveHiddenNow(row)) return false;
+  const hidden = parseTime(row!.moderation_hidden_at);
+  const flagged = parseTime(flaggedAt);
+  return !Number.isFinite(flagged) || flagged >= hidden - 60 * 1000;
+}
+
+/** Snímky jen z běžícího přenosu - nový přenos nezdědí podezření z minulého. */
+export function liveStrikesSince(strikes: unknown, startedAt: string | null | undefined): LiveStrike[] {
+  const started = parseTime(startedAt);
+  return (Array.isArray(strikes) ? strikes : []).filter(
+    (s): s is LiveStrike =>
+      !!s &&
+      typeof s.at === 'number' &&
+      ['suspect', 'explicit', 'severe'].includes(s.level) &&
+      (!Number.isFinite(started) || s.at >= started)
+  );
+}

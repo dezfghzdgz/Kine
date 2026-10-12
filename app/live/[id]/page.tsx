@@ -22,8 +22,8 @@ type Status = {
   live: boolean;
   /** Přenos skrytý automatickou kontrolou obsahu - divák místo přehrávače vidí "čeká na kontrolu". */
   held?: boolean;
-  /** Jen majitel a moderátoři: přenos je skrytý kontrolou obsahu (přehrávač vidí s upozorněním). */
-  moderation?: { hidden: boolean };
+  /** Jen pro majitele a tým Kine: skryté kontrolou obsahu / zablokovaný účet / shadow-ban (ostatní přenos nevidí, přehrávač s upozorněním). */
+  moderation?: { hidden: boolean; restricted?: 'banned' | 'shadow-ban' | null; own?: boolean };
   /** Podpory ve vysílání (tlačítko 💛): kanál je umí přijmout. */
   tips?: { enabled: boolean; feePercent: number };
   /** Po vysílání: poslední zveřejněný záznam (kdo přišel pozdě, pustí si ho). */
@@ -263,7 +263,14 @@ export default function LivePage() {
         {status.moderation?.hidden && (
           <div className="moderation-hold-note" role="status">
             <span aria-hidden="true">⚠️</span>
-            <span>{t('liveHeldOwner')}</span>
+            {/* Majiteli "tvůj přenos", týmu Kine co se děje a kde ho pustit. */}
+            <span>{status.moderation.own === false ? t('liveHeldStaff') : t('liveHeldOwner')}</span>
+          </div>
+        )}
+        {status.moderation?.restricted && (
+          <div className="moderation-hold-note" role="status">
+            <span aria-hidden="true">⚠️</span>
+            <span>{status.moderation.restricted === 'banned' ? t('liveRestrictedBannedNote') : t('liveRestrictedShadowNote')}</span>
           </div>
         )}
         {tipNotice && (

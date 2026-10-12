@@ -2,6 +2,7 @@ import { supabaseServer } from './supabaseServer';
 import { appPingFresh, appSignalTrusted, connectedFromInputStatus, decideLive, revivedStartedAt, sameStreamReturns, staleWithoutCloudflare } from './liveSignal';
 import { autoPublishAfterStream } from './liveRecording';
 import { chatSessionSince } from './liveChat';
+import { liveHiddenNow } from './nudityRules';
 
 export { appPingFresh, appSignalTrusted, APP_PING_FRESH_MS, APP_UNCONFIRMED_MAX_MS } from './liveSignal';
 
@@ -440,6 +441,8 @@ export async function appLiveSignal(
   viewers: number | null;
   /** Po "skončil jsem": záznam zveřejněný automaticky (nastavení tvůrce), jinak null. */
   recording?: { videoId: string; status: 'ready' | 'processing' } | null;
+  /** Přenos běží, ale kontrola obsahu ho skryla z "Živě" (čeká na moderátora) - appka to má říct, ne hlásit "vše v pořádku". */
+  hidden?: boolean;
 } | null> {
   const { data } = await supabaseServer.from('live_streams').select('*').eq('owner_id', ownerId).maybeSingle();
   if (!data) return null;
@@ -501,7 +504,7 @@ export async function appLiveSignal(
   }
 
   const viewers = confirmed && after ? await liveViewerCount(after.cf_input_id) : null;
-  return { confirmed, migrated, viewers };
+  return { confirmed, migrated, viewers, hidden: !!after?.is_live && liveHiddenNow(after as any) };
 }
 
 /**

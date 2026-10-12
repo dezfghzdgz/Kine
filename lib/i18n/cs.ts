@@ -1365,6 +1365,14 @@ export const cs = {
   playerStatsIframeNote: 'Hraje záložní přehrávač Cloudflare (vlastní přehrávač tu nešel) - podrobnosti nejsou k dispozici.',
   playerStatsCopy: 'Kopírovat',
   playerStatsCopied: 'Zkopírováno',
+  sparksTapForSound: 'Klepni pro zvuk',
+  liveHiddenWhy: 'Ostatní tenhle přenos teď nevidí - vidíš ho jen ty.',
+  liveHiddenModeration: 'Skryté kontrolou obsahu - čeká na moderátora',
+  liveHiddenBanned: 'Zablokovaný účet - vidí jen tým Kine',
+  liveHiddenShadowBan: 'Shadow-ban - vidí jen majitel a tým Kine',
+  liveRestrictedBannedNote: 'Tenhle účet je zablokovaný - přenos vidí jen tým Kine (moderátoři a správci).',
+  liveRestrictedShadowNote: 'Tenhle kanál má shadow-ban - přenos vidí jen jeho majitel a tým Kine.',
+  liveHeldStaff: 'Přenos je skrytý z hlavní stránky i ze stránky Živě - automatická kontrola v obrazu opakovaně našla možnou nahotu. Ostatní ho nevidí; pustit ho jde v Nahlášeních.',
 } as const;
 
 export type DictKey = keyof typeof cs;
