@@ -19,6 +19,7 @@ import { useUserRole } from '@/lib/useUserRole';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import LiveBadge from '@/components/LiveBadge';
 import { visibleNowFilter } from '@/lib/scheduling';
+import { setAmbientSource } from '@/lib/appearance';
 
 type Tab = 'home' | 'videos' | 'sparks' | 'posts' | 'playlists';
 
@@ -51,6 +52,13 @@ function ChannelPageInner() {
   useEffect(() => {
     load();
   }, [channelId]);
+
+  // Skleněný vzhled "podle videa": na kanálu barvy z banneru (jinak z avataru).
+  const ambientImage: string | null = profile?.banner_url || profile?.avatar_url || null;
+  useEffect(() => {
+    setAmbientSource(ambientImage);
+  }, [ambientImage]);
+  useEffect(() => () => setAmbientSource(null), []);
 
   async function load() {
     setLoading(true);

@@ -8,6 +8,7 @@ import { useLanguage, Lang } from '@/lib/i18n';
 import ThemeSlider from './ThemeSlider';
 import ConfirmDialog from './ConfirmDialog';
 import { isTvMode, setTvPreference } from '@/lib/tvMode';
+import { APPEARANCE_EVENT, readTheme, saveTheme, type Theme } from '@/lib/appearance';
 
 const LANG_NAMES: Record<Lang, string> = {
   cs: 'Čeština',
@@ -19,8 +20,6 @@ const LANG_NAMES: Record<Lang, string> = {
   fr: 'Français',
   uk: 'Українська',
 };
-
-type Theme = 'dark' | 'gray' | 'light';
 
 export default function ProfileMenu({
   username,
@@ -43,9 +42,12 @@ export default function ProfileMenu({
   const router = useRouter();
 
   useEffect(() => {
-    const saved = (localStorage.getItem('kine-theme') as Theme) || 'dark';
-    setTheme(saved);
-    document.documentElement.setAttribute('data-theme', saved);
+    // Motiv nastavil už skript v <head> (lib/appearance.ts); tady jen stav přepínače.
+    // Změna v Nastavení -> Vzhled se sem promítne událostí.
+    const sync = () => setTheme(readTheme());
+    sync();
+    window.addEventListener(APPEARANCE_EVENT, sync);
+    return () => window.removeEventListener(APPEARANCE_EVENT, sync);
   }, []);
 
   useEffect(() => {
@@ -67,8 +69,7 @@ export default function ProfileMenu({
 
   function applyTheme(next: Theme) {
     setTheme(next);
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('kine-theme', next);
+    saveTheme(next);
   }
 
   async function handleSignOut() {
@@ -124,6 +125,9 @@ export default function ProfileMenu({
             <span className="theme-slider-label">{t('appearance')}: {THEME_LABELS[theme]}</span>
             <ThemeSlider theme={theme} onChange={applyTheme} />
           </div>
+          <Link href="/settings#appearance" className="profile-dropdown-item" onClick={() => setOpen(false)}>
+            ✨ {t('appearanceCustomize')}
+          </Link>
 
           <div style={{ position: 'relative' }}>
             <button

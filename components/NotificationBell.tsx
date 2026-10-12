@@ -159,10 +159,32 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   }
 
+  // "Smazat vše" je nahoře hned po ruce - proto na dvě kliknutí (první se zeptá), ať se to nestane omylem.
+  const [confirmClear, setConfirmClear] = useState(false);
+  useEffect(() => {
+    if (!confirmClear) return;
+    const timer = setTimeout(() => setConfirmClear(false), 4000);
+    return () => clearTimeout(timer);
+  }, [confirmClear]);
+  useEffect(() => {
+    if (!open) setConfirmClear(false);
+  }, [open]);
+
   async function clearAll() {
     if (!userId) return;
+    if (!confirmClear) {
+      setConfirmClear(true);
+      return;
+    }
+    setConfirmClear(false);
     await supabase.from('notifications').delete().eq('user_id', userId);
     setNotifications([]);
+  }
+
+  async function markAllRead() {
+    if (!userId) return;
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false);
   }
 
   async function respondToCollabInvite(n: Notification, accept: boolean) {
@@ -257,6 +279,20 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
 
       {open && (
         <div className="profile-dropdown notification-list-dropdown" style={{ width: 300, maxHeight: 360, overflowY: 'auto' }}>
+          {/* Hlavička nahoře (i při dlouhém seznamu): přečíst vše, smazat vše - dřív bylo mazání až úplně dole pod oznámeními. */}
+          {notifications.length > 0 && (
+            <div className="notification-list-head">
+              <span className="notification-list-title">{t('notifications')}</span>
+              {notifications.some((n) => !n.read) && (
+                <button type="button" className="notification-head-btn" onClick={markAllRead}>
+                  {t('markAllNotificationsRead')}
+                </button>
+              )}
+              <button type="button" className={`notification-head-btn ${confirmClear ? 'danger' : ''}`} onClick={clearAll} title={t('clearAllNotifications')}>
+                {confirmClear ? t('clearAllNotificationsConfirm') : t('clearAllShort')}
+              </button>
+            </div>
+          )}
           {notifications.length === 0 ? (
             <p style={{ fontSize: 13, color: 'var(--text-faint)', padding: 10 }}>{t('noNotificationsYet')}</p>
           ) : (
@@ -337,12 +373,6 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
                   </div>
                 )
               ))}
-              <button
-                onClick={clearAll}
-                style={{ background: 'none', color: 'var(--text-faint)', fontSize: 12, width: '100%', marginTop: 6, textDecoration: 'underline' }}
-              >
-                {t('clearAllNotifications')}
-              </button>
             </>
           )}
         </div>

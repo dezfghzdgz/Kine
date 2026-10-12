@@ -1,5 +1,6 @@
 import { supabaseServer } from './supabaseServer';
 import { appPingFresh, appSignalTrusted, revivedStartedAt } from './liveSignal';
+import { autoPublishAfterStream } from './liveRecording';
 
 export { appPingFresh, appSignalTrusted, APP_PING_FRESH_MS, APP_UNCONFIRMED_MAX_MS } from './liveSignal';
 
@@ -253,6 +254,8 @@ export async function syncLiveStreams(options: { force?: boolean } = {}): Promis
             .from('live_streams')
             .update({ is_live: false, ended_at: nowIso, checked_at: nowIso, updated_at: nowIso, ...(appPingFresh(row) ? { app_ping_at: null } : {}) })
             .eq('owner_id', row.owner_id);
+          // Vysílání skončilo (OBS, nebo appka bez rozloučení): záznam se zveřejní sám, když si to tvůrce zapnul.
+          await autoPublishAfterStream(row.owner_id);
         }
       }
     } catch (e) {
@@ -306,7 +309,13 @@ function isMissingPingColumn(error: { message?: string; code?: string } | null):
 export async function appLiveSignal(
   ownerId: string,
   action: 'started' | 'ping' | 'stopped'
-): Promise<{ confirmed: boolean; migrated: boolean; viewers: number | null } | null> {
+): Promise<{
+  confirmed: boolean;
+  migrated: boolean;
+  viewers: number | null;
+  /** Po "skončil jsem": záznam zveřejněný automaticky (nastavení tvůrce), jinak null. */
+  recording?: { videoId: string; status: 'ready' | 'processing' } | null;
+} | null> {
   const { data } = await supabaseServer.from('live_streams').select('*').eq('owner_id', ownerId).maybeSingle();
   if (!data) return null;
   const row = data as LiveStreamRow;
@@ -334,7 +343,9 @@ export async function appLiveSignal(
 
   if (action === 'stopped') {
     await write({ ...stopPatch, ended_at: row.is_live ? nowIso : row.ended_at });
-    return { confirmed: false, migrated, viewers: null };
+    // Záznam rovnou na Kine, když si to tvůrce zapnul (studio / appka).
+    const published = row.is_live ? await autoPublishAfterStream(ownerId) : null;
+    return { confirmed: false, migrated, viewers: null, recording: published?.ok ? { videoId: published.videoId, status: published.status } : null };
   }
 
   const wasLive = row.is_live;

@@ -46,9 +46,11 @@ import { resolvePlaybackId } from '@/lib/playbackToken';
 import { embedCode } from '@/lib/embed';
 import ClipPanel from '@/components/ClipPanel';
 import LiveChat from '@/components/LiveChat';
+import ChatReplay from '@/components/ChatReplay';
 import { videoRoom } from '@/lib/liveChat';
 import { formatCountdown, isHiddenScheduled, isUpcomingPremiere } from '@/lib/scheduling';
 import { effectiveChapters } from '@/lib/captions';
+import { setAmbientSource } from '@/lib/appearance';
 
 const THEATER_KEY = 'kine-theater';
 const AUTOPLAY_KEY = 'kine-autoplay';
@@ -169,6 +171,14 @@ function WatchPageInner() {
     load();
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
   }, [videoId]);
+
+  // Skleněný vzhled "podle videa": pozadí appky bere barvy z náhledu tohohle videa.
+  // Při přechodu na další video se pozadí plynule přelije; uklidí se, až stránka zmizí.
+  const ambientThumb: string | null = video?.thumbnail_url ?? null;
+  useEffect(() => {
+    setAmbientSource(ambientThumb);
+  }, [ambientThumb]);
+  useEffect(() => () => setAmbientSource(null), []);
 
   useEffect(() => {
     if (!playlistId) {
@@ -1498,6 +1508,10 @@ function WatchPageInner() {
                       </div>
                     )}
                   </div>
+                  {/* Ambientní světlo: rozmazaný náhled za přehrávačem - barvy videa prosvítají kolem (Nastavení -> Vzhled). */}
+                  {video.thumbnail_url && (
+                    <div className="player-ambient" aria-hidden="true" style={{ backgroundImage: `url("${String(video.thumbnail_url).replace(/["\\\n\r]/g, (c: string) => encodeURIComponent(c))}")` }} />
+                  )}
                 </div>
         )}
 
@@ -1847,6 +1861,12 @@ function WatchPageInner() {
       )}
 
       <div className="watch-comments-column">
+        {/* Video ze živého vysílání: chat se přehrává spolu s videem (components/ChatReplay.tsx). */}
+        {video.live_room && video.live_started_at && (
+          <div style={{ marginBottom: 20 }}>
+            <ChatReplay room={video.live_room} startedAt={video.live_started_at} durationSeconds={video.duration_seconds ?? null} player={playerReady ? playerRef.current : null} />
+          </div>
+        )}
         {premiereChat && (
           <div style={{ marginBottom: 20 }}>
             <p className="section-title">🎬 {t('premiereChatHeading')}</p>

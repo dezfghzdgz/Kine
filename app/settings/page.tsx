@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabaseClient';
 import Toast, { ToastType } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { validateUsername } from '@/lib/username';
+import AppearanceSettings from '@/components/AppearanceSettings';
 
 export default function SettingsPage() {
   const { t } = useLanguage();
@@ -291,10 +292,14 @@ export default function SettingsPage() {
   }
 
   if (!userId) {
+    // Vzhled jde nastavit i bez účtu (ukládá se do zařízení).
     return (
-      <div className="auth-gate">
-        <p>{t('loginToEditSettingsNote')}</p>
-        <Link href="/login">{t('loginLink')}</Link>
+      <div style={{ maxWidth: 640 }}>
+        <AppearanceSettings />
+        <div className="auth-gate">
+          <p>{t('loginToEditSettingsNote')}</p>
+          <Link href="/login">{t('loginLink')}</Link>
+        </div>
       </div>
     );
   }
@@ -302,6 +307,9 @@ export default function SettingsPage() {
   return (
     <div style={{ maxWidth: 640 }}>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* Vzhled: motiv, sklo, pozadí, průhlednost, světlo kolem videa, barva. */}
+      <AppearanceSettings />
 
       <div className="panel" style={{ marginBottom: 32 }}>
         <button

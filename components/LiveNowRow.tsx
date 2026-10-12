@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
 import { liveElapsed } from '@/lib/liveChat';
+import { authHeaders } from '@/lib/authHeaders';
 import VerifiedBadge from './VerifiedBadge';
 
 type LiveItem = {
@@ -16,7 +17,7 @@ type LiveItem = {
 
 /**
  * Řada "Živě" na hlavní stránce - kdo teď vysílá. Když nikdo, nevykreslí
- * se nic. Obnovuje se jednou za minutu.
+ * se nic. Obnovuje se každých 20 s.
  */
 export default function LiveNowRow() {
   const { t } = useLanguage();
@@ -27,7 +28,8 @@ export default function LiveNowRow() {
     let cancelled = false;
     async function load() {
       try {
-        const res = await fetch('/api/live/now', { cache: 'no-store' });
+        // S přihlášením: vlastní přenos a odebírané kanály jdou dopředu (lib/liveNow.ts).
+        const res = await fetch('/api/live/now', { cache: 'no-store', headers: await authHeaders() });
         const body = await res.json().catch(() => null);
         if (!cancelled && body && Array.isArray(body.streams)) setStreams(body.streams);
       } catch {

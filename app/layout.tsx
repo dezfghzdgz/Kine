@@ -10,6 +10,7 @@ import { MusicPlayerProvider } from '@/lib/musicPlayer';
 import { UploadProvider } from '@/lib/uploadManager';
 import './globals.css';
 import { SITE_URL } from '@/lib/linkPreview';
+import { APPEARANCE_BOOT_SCRIPT } from '@/lib/appearance';
 
 const siteUrl = SITE_URL;
 
@@ -58,14 +59,16 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
+  // Anglicky: náhled odkazu (Discord, X, Messenger) vidí lidé z celého
+  // světa a web je v základu anglicky. Obrázek náhledu je app/opengraph-image.tsx.
   title: {
-    default: 'Kine - video platforma pro tvůrce',
+    default: 'Kine - the video platform for creators',
     template: '%s | Kine',
   },
-  description: 'Kine je video platforma postavená na svobodě projevu - sleduj, tvoř a sdílej videa, Sparks i příspěvky.',
+  description: 'Kine is a video platform built on free expression - watch, create and share videos, Sparks, posts and live streams.',
   openGraph: {
     title: 'Kine',
-    description: 'Video platforma postavená na svobodě projevu.',
+    description: 'The video platform built on free expression. Videos, Sparks, live streams and clips.',
     url: siteUrl,
     siteName: 'Kine',
     type: 'website',
@@ -73,7 +76,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Kine',
-    description: 'Video platforma postavená na svobodě projevu.',
+    description: 'The video platform built on free expression. Videos, Sparks, live streams and clips.',
   },
 };
 
@@ -83,10 +86,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    // lang="cs" je výchozí; jakmile si člověk přepne jazyk, LanguageProvider
-    // atribut přepíše. Dřív tu natvrdo stálo "en", takže prohlížeč nabízel
-    // překlad české stránky do češtiny a čtečky ji četly anglickou výslovností.
-    <html lang="cs" className={inter.variable}>
+    // Výchozí jazyk webu je angličtina (LanguageProvider začíná na "en");
+    // jakmile si člověk přepne jazyk, LanguageProvider atribut přepíše.
+    // suppressHydrationWarning: skript v <head> nastaví <html> (motiv, sklo) ještě před Reactem.
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <head>
+        {/* Uložený vzhled (motiv, sklo, světlo kolem videa) hned při načtení - bez přebliknutí. */}
+        <script dangerouslySetInnerHTML={{ __html: APPEARANCE_BOOT_SCRIPT }} />
+      </head>
       <body>
         <LanguageProvider>
           <MobileNavProvider>

@@ -30,11 +30,11 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const profile = await loadProfile(params.id);
 
   if (!profile) {
-    return { title: 'Kanál', robots: { index: false, follow: false } };
+    return { title: 'Channel', robots: { index: false, follow: false } };
   }
 
-  const name = profile.display_name || profile.username || 'Kanál';
-  const description = shorten(profile.bio) ?? `${name} na Kine`;
+  const name = profile.display_name || profile.username || 'Channel';
+  const description = shorten(profile.bio) ?? `${name} on Kine - videos, Sparks and live streams.`;
   // Banner je na náhled lepší než avatar - je široký, takže ho sítě
   // ukážou celý místo aby ho ořízly.
   const image = profile.banner_url || profile.avatar_url || undefined;

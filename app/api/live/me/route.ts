@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabaseServer';
 import { isMissingTable, userFromRequest } from '@/lib/apiUser';
 import { appLiveSignal, createLiveInput, deleteLiveInput, liveConfigured, publicLive, syncLiveStreams, type LiveStreamRow } from '@/lib/liveStream';
 import { CATEGORY_KEYS } from '@/lib/categories';
+import { parseRecordingVisibility } from '@/lib/liveRecording';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,6 +35,9 @@ export async function GET(req: NextRequest) {
       ? { rtmpsUrl: input.data.rtmps_url, streamKey: input.data.stream_key, srtUrl: input.data.srt_url, createdAt: input.data.created_at }
       : null,
     stream: stream.data ? await publicLive(stream.data as LiveStreamRow) : null,
+    // Co se záznamem po skončení (null = nechat ve studiu). Bez migrace sloupec chybí -> null.
+    recordingVisibility: stream.data ? parseRecordingVisibility((stream.data as any).recording_visibility) : null,
+    recordingAutoSupported: !!stream.data && Object.prototype.hasOwnProperty.call(stream.data, 'recording_visibility'),
   });
 }
 
@@ -57,24 +61,37 @@ export async function POST(req: NextRequest) {
     const result = await appLiveSignal(user.id, action);
     if (!result) return NextResponse.json({ error: 'Nejdřív si založ klíč pro vysílání.' }, { status: 404 });
     return NextResponse.json(
-      { ok: true, confirmed: result.confirmed, migrated: result.migrated, viewers: result.viewers },
+      { ok: true, confirmed: result.confirmed, migrated: result.migrated, viewers: result.viewers, recording: result.recording ?? null },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   }
 
   if (action === 'details') {
-    const title = String(body?.title ?? '').trim().slice(0, 100);
-    const description = String(body?.description ?? '').trim().slice(0, 2000);
-    const category = typeof body?.category === 'string' && (CATEGORY_KEYS as readonly string[]).includes(body.category) ? body.category : null;
-    const { data, error } = await supabaseServer
-      .from('live_streams')
-      .update({ title, description, category, updated_at: new Date().toISOString() })
-      .eq('owner_id', user.id)
-      .select('*')
-      .maybeSingle();
+    // Mění se jen to, co přišlo: appka posílá při startu název/popis/kategorii,
+    // studio a záložka Živě zvlášť "co se záznamem po skončení".
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (body?.title !== undefined) patch.title = String(body.title ?? '').trim().slice(0, 100);
+    if (body?.description !== undefined) patch.description = String(body.description ?? '').trim().slice(0, 2000);
+    if (body?.category !== undefined) {
+      patch.category = typeof body.category === 'string' && (CATEGORY_KEYS as readonly string[]).includes(body.category) ? body.category : null;
+    }
+    const wantsRecording = body?.recordingVisibility !== undefined;
+    if (wantsRecording) patch.recording_visibility = parseRecordingVisibility(body.recordingVisibility);
+    let { data, error } = await supabaseServer.from('live_streams').update(patch).eq('owner_id', user.id).select('*').maybeSingle();
+    let recordingAutoSupported = true;
+    if (error && wantsRecording && /recording_visibility/.test(error.message ?? '')) {
+      // Bez migrace supabase-migration-zive-2.sql: název a popis se uloží, automatické zveřejnění záznamu ne.
+      recordingAutoSupported = false;
+      const { recording_visibility: _drop, ...rest } = patch;
+      ({ data, error } = await supabaseServer.from('live_streams').update(rest).eq('owner_id', user.id).select('*').maybeSingle());
+    }
     if (error) return NextResponse.json({ error: error.message }, { status: isMissingTable(error) ? 503 : 500 });
     if (!data) return NextResponse.json({ error: 'Nejdřív si založ klíč pro vysílání.' }, { status: 404 });
-    return NextResponse.json({ stream: await publicLive(data as LiveStreamRow) });
+    return NextResponse.json({
+      stream: await publicLive(data as LiveStreamRow),
+      recordingVisibility: parseRecordingVisibility((data as any).recording_visibility),
+      recordingAutoSupported: recordingAutoSupported && Object.prototype.hasOwnProperty.call(data, 'recording_visibility'),
+    });
   }
 
   if (action !== 'create' && action !== 'reset') {

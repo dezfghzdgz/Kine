@@ -23,7 +23,13 @@ type Setup = {
     endedAt: string | null;
     playerUrl: string;
   } | null;
+  /** Co se záznamem po skončení (null = nechat ve studiu). */
+  recordingVisibility?: 'public' | 'subscribers' | 'private' | null;
+  /** Databáze to umí (migrace supabase-migration-zive-2.sql). */
+  recordingAutoSupported?: boolean;
 };
+
+type Moderator = { userId: string; username: string | null };
 
 type Recording = {
   uid: string;
@@ -62,7 +68,11 @@ export default function LiveStudioPage() {
   const [category, setCategory] = useState<string>('catGaming');
   const [savingDetails, setSavingDetails] = useState(false);
   const [recordings, setRecordings] = useState<Recording[]>([]);
-  const [publishing, setPublishing] = useState<{ uid: string; title: string } | null>(null);
+  const [publishing, setPublishing] = useState<{ uid: string; title: string; visibility: 'public' | 'subscribers' | 'private' } | null>(null);
+  const [streamLive, setStreamLive] = useState(false);
+  const [moderators, setModerators] = useState<Moderator[]>([]);
+  const [newModerator, setNewModerator] = useState('');
+  const wasLiveRef = useRef(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const detailsTouchedRef = useRef(false);
@@ -107,15 +117,43 @@ export default function LiveStudioPage() {
     try {
       const body = await api('/api/live/recordings');
       setRecordings(Array.isArray(body.recordings) ? body.recordings : []);
+      setStreamLive(!!body.streamLive);
     } catch {
       // Záznamy nejsou k dispozici - sekce zůstane prázdná.
     }
   }
 
+  async function loadModerators() {
+    try {
+      const body = await api('/api/live/moderators');
+      setModerators(Array.isArray(body.moderators) ? body.moderators : []);
+    } catch {
+      // Bez migrace seznam moderátorů prostě není.
+    }
+  }
+
+  // Vysílání právě skončilo: záznam se objeví hned (Cloudflare ho ještě minutu
+  // uzavírá - zveřejnit jde už teď) a ještě jednou, až bude hotový.
+  useEffect(() => {
+    const live = !!setup?.stream?.live;
+    if (wasLiveRef.current && !live) {
+      const a = setTimeout(loadRecordings, 4000);
+      const b = setTimeout(loadRecordings, 75000);
+      wasLiveRef.current = live;
+      return () => {
+        clearTimeout(a);
+        clearTimeout(b);
+      };
+    }
+    wasLiveRef.current = live;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setup?.stream?.live]);
+
   useEffect(() => {
     if (!token) return;
     loadSetup();
     loadRecordings();
+    loadModerators();
     // Stav (živě / offline) každých 5 s - studio je otevřené hlavně při vysílání.
     const timer = setInterval(() => {
       if (document.visibilityState === 'visible') loadSetup();
@@ -175,7 +213,7 @@ export default function LiveStudioPage() {
     try {
       const body = await api('/api/live/recordings', {
         method: 'POST',
-        body: JSON.stringify({ videoUid: publishing.uid, title: publishing.title, description, visibility: 'public', language: lang }),
+        body: JSON.stringify({ videoUid: publishing.uid, title: publishing.title, description, visibility: publishing.visibility, language: lang }),
       });
       setRecordings((list) => list.map((r) => (r.uid === publishing.uid ? { ...r, videoId: body.videoId } : r)));
       setPublishing(null);
@@ -184,6 +222,26 @@ export default function LiveStudioPage() {
       setToast({ message: (e as Error).message, type: 'error' });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function saveAfterStream(value: string) {
+    try {
+      const body = await api('/api/live/me', { method: 'POST', body: JSON.stringify({ action: 'details', recordingVisibility: value === 'off' ? null : value }) });
+      setSetup((s) => (s ? { ...s, recordingVisibility: body.recordingVisibility ?? null, recordingAutoSupported: body.recordingAutoSupported !== false } : s));
+      setToast(body.recordingAutoSupported === false ? { message: t('liveAfterStreamNeedsMigration'), type: 'error' } : { message: t('liveSaved'), type: 'success' });
+    } catch (e) {
+      setToast({ message: (e as Error).message, type: 'error' });
+    }
+  }
+
+  async function changeModerators(payload: Record<string, unknown>) {
+    try {
+      const body = await api('/api/live/moderators', { method: 'POST', body: JSON.stringify(payload) });
+      setModerators(Array.isArray(body.moderators) ? body.moderators : []);
+      setNewModerator('');
+    } catch (e) {
+      setToast({ message: (e as Error).message, type: 'error' });
     }
   }
 
@@ -354,6 +412,21 @@ export default function LiveStudioPage() {
 
             <div className="panel">
               <p className="panel-heading">{t('liveRecordingsHeading')}</p>
+              {/* Jako YouTube: záznam se po skončení může zveřejnit sám - a na rozdíl od Twitche nikdy nezmizí. */}
+              <label className="live-field" style={{ marginBottom: 10 }}>
+                <span>{t('liveAfterStreamLabel')}</span>
+                <select
+                  value={setup.recordingVisibility ?? 'off'}
+                  onChange={(e) => saveAfterStream(e.target.value)}
+                  disabled={setup.recordingAutoSupported === false}
+                >
+                  <option value="off">{t('liveAfterStreamKeep')}</option>
+                  <option value="public">{t('liveAfterStreamPublic')}</option>
+                  <option value="subscribers">{t('liveAfterStreamSubscribers')}</option>
+                  <option value="private">{t('liveAfterStreamPrivate')}</option>
+                </select>
+              </label>
+              <p className="live-hint" style={{ marginTop: 0 }}>{t('liveAfterStreamHint')}</p>
               {recordings.length === 0 && <p className="live-hint">{t('liveRecordingsEmpty')}</p>}
               <div className="live-recordings">
                 {recordings.map((r) => (
@@ -364,24 +437,31 @@ export default function LiveStudioPage() {
                     </div>
                     <div className="live-recording-info">
                       <p className="live-recording-date">{r.created ? new Date(r.created).toLocaleString(DATE_LOCALES[lang]) : ''}</p>
-                      {r.state === 'live-inprogress' ? (
+                      {r.state === 'live-inprogress' && streamLive && !r.videoId ? (
                         <span className="live-pill">● {t('liveRecordingInProgress')}</span>
                       ) : r.videoId ? (
                         <Link href={`/watch/${r.videoId}`} className="live-studio-link">
                           ✓ {t('livePublished')} · {t('liveOpenVideo')} →
                         </Link>
-                      ) : !r.readyToStream ? (
-                        <span className="live-hint">{t('liveRecordingProcessing')}</span>
                       ) : publishing?.uid === r.uid ? (
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                           <input
                             type="text"
                             value={publishing.title}
                             maxLength={150}
-                            onChange={(e) => setPublishing({ uid: r.uid, title: e.target.value })}
+                            onChange={(e) => setPublishing({ ...publishing, title: e.target.value })}
                             aria-label={t('videoTitle')}
                             style={{ flex: 1, minWidth: 180 }}
                           />
+                          <select
+                            value={publishing.visibility}
+                            onChange={(e) => setPublishing({ ...publishing, visibility: e.target.value as 'public' | 'subscribers' | 'private' })}
+                            aria-label={t('liveAfterStreamLabel')}
+                          >
+                            <option value="public">{t('liveVisibilityPublic')}</option>
+                            <option value="subscribers">{t('liveVisibilitySubscribers')}</option>
+                            <option value="private">{t('liveVisibilityPrivate')}</option>
+                          </select>
                           <button type="button" onClick={publish} disabled={busy || !publishing.title.trim()}>
                             {t('livePublishRecording')}
                           </button>
@@ -390,20 +470,29 @@ export default function LiveStudioPage() {
                           </button>
                         </div>
                       ) : (
-                        <button
-                          type="button"
-                          className="live-small-btn"
-                          onClick={() =>
-                            setPublishing({
-                              uid: r.uid,
-                              title:
-                                (stream?.title || '').trim() ||
-                                t('liveDefaultRecordingTitle').replace('{date}', r.created ? new Date(r.created).toLocaleDateString(DATE_LOCALES[lang]) : ''),
-                            })
-                          }
-                        >
-                          {t('livePublishRecording')}
-                        </button>
+                        <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          {/* Po konci vysílání ho Cloudflare ještě minutu uzavírá / zpracovává - zveřejnit jde už teď. */}
+                          {r.state === 'live-inprogress' ? (
+                            <span className="live-hint">{t('liveRecordingFinishing')}</span>
+                          ) : !r.readyToStream ? (
+                            <span className="live-hint">{t('liveRecordingProcessing')}</span>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="live-small-btn"
+                            onClick={() =>
+                              setPublishing({
+                                uid: r.uid,
+                                visibility: setup.recordingVisibility ?? 'public',
+                                title:
+                                  (stream?.title || '').trim() ||
+                                  t('liveDefaultRecordingTitle').replace('{date}', r.created ? new Date(r.created).toLocaleDateString(DATE_LOCALES[lang]) : ''),
+                              })
+                            }
+                          >
+                            {t('livePublishRecording')}
+                          </button>
+                        </span>
                       )}
                     </div>
                   </div>
@@ -411,9 +500,58 @@ export default function LiveStudioPage() {
               </div>
               <p className="live-hint">{t('liveRecordingsNote')}</p>
             </div>
+
+            <div className="panel">
+              <p className="panel-heading">{t('liveChatToolsHeading')}</p>
+              {/* Chat jako průhledný překryv do OBS (Zdroj prohlížeče). */}
+              <div className="live-key-row">
+                <span className="live-key-label">{t('liveChatObsOverlay')}</span>
+                <code className="live-key-value">{`${typeof window !== 'undefined' ? window.location.origin : ''}/live/${userId}/chat?overlay=1`}</code>
+                <button type="button" className="live-small-btn" onClick={() => copy(`${window.location.origin}/live/${userId}/chat?overlay=1`)}>
+                  {t('liveCopy')}
+                </button>
+              </div>
+              <p className="live-hint">{t('liveChatObsOverlayHint')}</p>
+
+              <p className="panel-heading" style={{ marginTop: 14 }}>{t('liveChatModerators')}</p>
+              <p className="live-hint" style={{ marginTop: 0 }}>{t('liveChatModeratorsHint')}</p>
+              <form
+                style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (newModerator.trim()) changeModerators({ action: 'add', username: newModerator.trim() });
+                }}
+              >
+                <input
+                  type="text"
+                  value={newModerator}
+                  onChange={(e) => setNewModerator(e.target.value)}
+                  placeholder={t('liveChatModeratorPlaceholder')}
+                  aria-label={t('liveChatModeratorPlaceholder')}
+                  style={{ flex: 1, minWidth: 160 }}
+                />
+                <button type="submit" className="live-small-btn" disabled={!newModerator.trim()}>
+                  {t('liveChatAddModerator')}
+                </button>
+              </form>
+              {moderators.length === 0 ? (
+                <p className="live-hint">{t('liveChatNoModerators')}</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {moderators.map((m) => (
+                    <div key={m.userId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span>🛡 {m.username ?? '—'}</span>
+                      <button type="button" className="live-small-btn" onClick={() => changeModerators({ action: 'remove', userId: m.userId })}>
+                        {t('liveChatRemoveModerator')}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
-          <LiveChat room={channelRoom(userId)} canModerate className="live-side" />
+          <LiveChat room={channelRoom(userId)} canModerate className="live-side" popoutHref={`/live/${userId}/chat`} />
         </div>
       )}
     </div>

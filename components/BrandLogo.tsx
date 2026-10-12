@@ -10,6 +10,33 @@ import { applyBrandToDocument } from '@/lib/brandColor';
 const PRESET_COLORS = ['#00c9a7', '#4f8ef7', '#f7484f', '#f7b84f', '#a34ff7', '#f74fd6', '#4ff77c', '#ffffff'];
 const STORAGE_KEY = 'kine-brand-color';
 
+/** Barvy k výběru (logo, Nastavení -> Vzhled). */
+export const BRAND_PRESET_COLORS = PRESET_COLORS;
+
+/** Barva, kterou má tohle zařízení teď (nebo výchozí). */
+export function currentBrandColor(): string {
+  try {
+    return localStorage.getItem(STORAGE_KEY) || PRESET_COLORS[0];
+  } catch {
+    return PRESET_COLORS[0];
+  }
+}
+
+/** Změní barvu appky hned a uloží ji do zařízení i k účtu (přenese se na další zařízení a do appky Kine). */
+export async function saveBrandColor(color: string): Promise<void> {
+  // --brand i --brand-rgb (sklo potřebuje barvu s průhledností, viz lib/brandColor.ts).
+  applyBrandToDocument(color);
+  try {
+    localStorage.setItem(STORAGE_KEY, color);
+  } catch {
+    // soukromé okno - barva platí aspoň do zavření
+  }
+  const { data: authData } = await supabase.auth.getUser();
+  if (authData.user) {
+    await supabase.from('profiles').update({ brand_color: color }).eq('id', authData.user.id);
+  }
+}
+
 // Appka barvu nejdřív zkusí zobrazit rovnou z prohlížeče (rychlé, funguje
 // i odhlášeně), a pokud je uživatel přihlášený, hned poté ji dorovná podle
 // toho, co má uloženo na účtu - tím se barva přenese i na jiná zařízení.
@@ -93,14 +120,7 @@ export default function BrandLogo({ className, onNavigate }: { className?: strin
   }
 
   async function applyColor(color: string) {
-    // --brand i --brand-rgb (sklo potřebuje barvu s průhledností, viz lib/brandColor.ts).
-    applyBrandToDocument(color);
-    localStorage.setItem(STORAGE_KEY, color);
-
-    const { data: authData } = await supabase.auth.getUser();
-    if (authData.user) {
-      await supabase.from('profiles').update({ brand_color: color }).eq('id', authData.user.id);
-    }
+    await saveBrandColor(color);
   }
 
   return (

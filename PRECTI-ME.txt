@@ -1,89 +1,101 @@
-KINE - bezpečnost, titulky, vysílání z appky, mobil
-====================================================
+KINE - živé vysílání 2, náhledy odkazů, vzhled (sklo), oznámení
+================================================================
 
-Balíček se změněnými soubory (dodávka kine-bezpecnost-2026-10-11).
+Balíček se změněnými soubory (dodávka kine-zive-vzhled-2026-10-11).
 Rozbal do kořene repa a přepiš, pak:
 
   1. Nahraj na GitHub (přetažením, jako vždycky).
   2. Supabase -> SQL Editor -> New query -> vlož CELÝ obsah souboru
-     supabase-migration-bezpecnost-rijen.sql -> Run. Na konci vypíše
-     tabulku, co udělal. Dá se pustit i víckrát. Obsahuje i sloupec
-     z supabase-migration-live-app.sql, takže tu už pouštět nemusíš.
-     Web funguje i před spuštěním migrace - jen bez nových pojistek.
-  3. Soubor kine-web-live.patch můžeš na GitHubu smazat - je zapracovaný
-     přímo v kódu (nic nerozbije, ani když zůstane).
+     supabase-migration-zive-2.sql -> Run. Na konci vypíše tabulku, co
+     udělal. Dá se pustit i víckrát.
+     Jestli jsi ještě nepustil supabase-migration-bezpecnost-rijen.sql
+     z minulé dodávky, pusť nejdřív tu a pak tuhle.
+     Web funguje i bez migrace - jen bez pravidel chatu, automatického
+     zveřejnění záznamu a záznamu chatu u videí.
+  3. node zkontroluj-soubory.mjs - řekne, jestli všechno sedí. V repu
+     pořád zůstávají 4 staré soubory, které můžeš na GitHubu smazat
+     (nic nerozbijí): tests/username.test.mjs, kine-web-live.patch,
+     supabase-migration-zarizeni-chyby-jmena.sql, app/tests/playerStart.test.mjs.
 
 Žádná nová závislost, žádná nová proměnná na Vercelu.
 
 CO SE ZMĚNILO
 -------------
-TITULKY
-- Tlačítko CC přímo v přehrávači (i na mobilu) a klávesa C. Titulky jsou
-  napoprvé vypnuté; když je zapneš, zůstanou zapnuté u všech videí
-  (i po zavření prohlížeče), dokud je zase nevypneš.
+ŘADA "ŽIVĚ" NA HLAVNÍ STRÁNCE
+- Vysílání z appky se na hlavní stránce neukazovalo, i když stránka
+  přenosu fungovala. Řada se teď skládá jinak (přenosy a profily zvlášť,
+  se zálohou pro starší databázi) a vlastní přenos vidíš vždycky první.
+- Pořadí: tvůj přenos, kanály, které odebíráš, pak ostatní zamíchaní po
+  10 minutách - malé kanály nezapadnou pod velké (častá výtka na Twitch).
 
-VYSÍLÁNÍ Z APPKY (Kine Clipper / Kine do PC)
-- Web ukáže "živě" hned, jak appka začne vysílat - už ne "není živě",
-  zatímco appka vysílá. Stránka přenosu se obnovuje každých 6 s.
-- Appce web posílá i počet diváků (ukáže ho v záložce Živě).
-- Pojistky: oznámení odběratelům "X je živě" jde až ve chvíli, kdy
-  přenos opravdu vidí Cloudflare; kdo by jen předstíral vysílání, z řady
-  "Živě" za 3 minuty zmizí; zablokovaný kanál nevysílá ani neposílá
-  oznámení, shadow-banovaný se v "Živě" neukazuje.
+ZÁZNAM VYSÍLÁNÍ -> VIDEO
+- Po konci vysílání jde záznam zveřejnit hned (studio na webu i appka),
+  nemusí se čekat, až ho Cloudflare dokončí.
+- Volba "Po skončení vysílání": nechat ve studiu / zveřejnit hned
+  veřejně / jen odběratelům / soukromě. Platí pro web i appku.
+- Zveřejněný záznam zůstává napořád (Twitch záznamy maže po 7-60 dnech)
+  a u videa se přehrává i ZÁZNAM CHATU ve chvíli, kdy zprávy padly.
 
-BEZPEČNOST (z kontroly všech 42 API cest a celé databáze)
-- Oznámení: kdokoli mohl z konzole prohlížeče poslat komukoli oznámení
-  s odkazem na cizí web ("//nekde.jinde") - phishing pod značkou Kine.
-  Teď: odkaz jen na stránky Kine, odesílatel se zapíše a ve zvonečku je
-  vidět (@jméno), "systémová" oznámení z prohlížeče poslat nejde,
-  upozornění moderátora jen od moderátora, strop na počet.
-- Ankety: kdokoli přihlášený mohl přepsat cizí příspěvek. Hlasuje se
-  teď přes databázi (jeden hlas na člověka, počty sedí).
-- Komentáře: majitel videa mohl cizímu komentáři pod svým videem přepsat
-  text i autora. Teď jen připnout a dát srdíčko.
-- Strop rychlosti: komentáře (10/min), hlášení (5/min), odběry. Komentář
-  max. 2000 znaků. Při překročení appka ukáže "Moc rychle za sebou".
-- Přihlášení: zámek po 5 špatných heslech platí jen pro adresu, ze které
-  se hádá - dřív šlo kohokoli zamknout jen podle jeho e-mailu.
-- IP adresa se bere od Vercelu (dřív šla podvrhnout hlavičkou) -
-  přihlašování, počítání zhlédnutí, oznámení o autorských právech.
-- Dar (Podpořit Kine): odznak podporovatele dostane přihlášený dárce,
-  ne kdokoli, koho někdo napíše do požadavku.
-- Video: odkaz na soubor u Cloudflare a stav zpracování mění jen server.
-- Funkce s právy správce v databázi mají pevnou search_path.
-- Hledání: znaky % a _ se berou doslova.
-- .gitignore: tajné klíče (.env*) se do repa nikdy nedostanou.
+CHAT A MODERACE
+- Pomalý režim, jen odběratelé (i "aspoň 10 min / 1 h / 1 den"), zákaz
+  odkazů, zakázaná slova (pozná i obcházení typu "h4te" nebo "h a t e"),
+  minimální stáří účtu.
+- Štít jedním klikem proti náletu (pomalý režim, jen odběratelé, bez
+  odkazů a nových účtů) - jako Shield Mode na Twitchi.
+- Ztlumení (10 min) a zákaz psaní - smaže i zprávy toho člověka za
+  posledních 30 min. Seznam zákazů s tlačítkem Zrušit.
+- Moderátoři kanálu: přidáš je jménem ve studiu, můžou mazat a ztlumit.
+- Chat v samostatném okně (ikonka ⧉) a průhledný chat pro OBS
+  (/live/<kanál>/chat?overlay=1 - odkaz je ve studiu s tlačítkem Kopírovat).
 
-MOBIL
-- Stránka videa na telefonu jezdila do strany (videa s kapitolami).
-  Opraveno; prověřeno 22 stránek na šířce 390 px - nic nepřetéká.
-- Spodní lišta: nepřihlášený má místo prázdného místa Odběry.
-- Výběr (select) v tmavém režimu už není bílý text na bílém.
+NÁHLED ODKAZU (Discord, X, Messenger...)
+- Web je v náhledech anglicky. Odkaz na přenos ukáže "🔴 <kanál> is live:
+  <název>" a obrázek se snímkem z vysílání a odznakem LIVE (offline:
+  banner kanálu). Hlavní stránka a kanály mají vlastní obrázek a popis.
+  Discord si náhledy drží v mezipaměti - u odkazu, který už jednou
+  poslal, může chvíli ukazovat ten starý.
+
+VZHLED (Nastavení -> Vzhled, nebo nabídka profilu -> Přizpůsobit vzhled)
+- Styl Klasický / SKLO: průhledné plochy nad barevným rozmazaným
+  pozadím (jako upravený Spotify / YouTube na tvých fotkách).
+- Pozadí skla: Podle videa (barvy z videa, přenosu nebo kanálu, na který
+  se díváš), Moje barva, Noc, Západ slunce, Les, Oceán, Neon.
+- Posuvník průhlednosti, motiv tmavý / střední / světlý, barva Kine
+  (dřív jen po 5 klicích na logo), tlačítko Výchozí vzhled.
+- Ambientní světlo kolem přehrávače (barvy videa prosvítají kolem) -
+  jde vypnout, funguje i v klasickém stylu.
+- Pamatuje si to zařízení; platí hned a po načtení stránky nic
+  nepřebliká. Funguje i v Kine do PC (web v okně).
+
+OZNÁMENÍ
+- "Smazat vše" bylo až dole pod seznamem. Teď je nahoře v hlavičce
+  (drží nahoře i při rolování) spolu s "Přečíst vše". Smazání chce
+  druhé kliknutí ("Opravdu smazat?"), ať se to nestane omylem.
 
 OVĚŘENO
 -------
-- npx tsc --noEmit a next build prošly; testy webu prošly (nový
-  tests/security.test.mjs).
-- Migrace vyzkoušená na skutečném Postgresu 16 (napodobené Supabase):
-  dvakrát po sobě a 40 zkoušek - útoky odmítnuté, běžné věci (odběr,
-  komentář, pozvánka ke spolupráci, anketa, připnutí) fungují.
-- Stránky proklikané s napodobeným Supabase: titulky (vypnuté -> zapnout
-  -> obnovit stránku -> pořád zapnuté -> C vypne), zvoneček s odesílatelem,
-  odkaz ven se neotevře, 22 stránek na mobilu.
+- npx tsc --noEmit a next build prošly; všechny testy webu prošly
+  (nové: appearance, liveChatRules, liveNow, liveRecording).
+- Migrace zive-2 na skutečném Postgresu 16 dvakrát po sobě (po
+  bezpecnost-rijen).
+- Stránky proklikané s napodobeným Supabase: řada Živě, chat v okně
+  i pro OBS, moderování, studio, záznam chatu u videa, náhledy odkazů
+  (obrázky se vykreslí), sklo (nastavení, hlavní stránka, video podle
+  videa, světlý motiv), oznámení, mobil 390 px bez přetékání.
 
 SOUBORY
 -------
-  PRECTI-ME.txt, stav-souboru.json, .gitignore (NOVÝ)
-  supabase-migration-bezpecnost-rijen.sql (NOVÝ) - spustit v Supabase
-  supabase-migration-live-app.sql (NOVÝ) - nemusíš, je v té předchozí
-  lib/safeLink.ts, lib/clientIp.ts, lib/liveSignal.ts, lib/authHeaders.ts (NOVÉ)
-  lib/liveStream.ts
-  app/api/live/me, app/api/live/status, app/api/login-attempt,
-  app/api/videos/increment-view, app/api/copyright-notice,
-  app/api/donate/create-checkout-session (route.ts)
-  app/login/page.tsx, app/donate/page.tsx, app/search/page.tsx,
-  app/live/[id]/page.tsx, app/watch/[id]/page.tsx, app/globals.css
-  components: NotificationBell, PostCard, PostComments, CommentSection,
-  ReportModal, SubscribeButton, VideoReactions, SparksCard, LiveBadge,
-  LiveNowRow, ChapterTimeline, Sidebar
-  tests/security.test.mjs (NOVÝ)
+  PRECTI-ME.txt, stav-souboru.json
+  supabase-migration-zive-2.sql (NOVÝ) - spustit v Supabase
+  app/opengraph-image.tsx, app/live/[id]/opengraph-image.tsx,
+  app/live/[id]/layout.tsx, app/live/[id]/chat/page.tsx (NOVÉ)
+  app/api/live/chat/moderate/route.ts, app/api/live/moderators/route.ts (NOVÉ)
+  app/api/live/chat, me, now, recordings (route.ts)
+  app/layout.tsx, app/globals.css, app/settings/page.tsx, app/live/page.tsx,
+  app/live/[id]/page.tsx, app/watch/[id]/page.tsx, app/channel/[id]/page.tsx,
+  app/channel/[id]/layout.tsx
+  components: AppearanceBackdrop, AppearanceSettings, ChatReplay (NOVÉ),
+  AppShellChrome, BrandLogo, LiveChat, LiveNowRow, NotificationBell, ProfileMenu
+  lib: appearance, liveNow, livePreview, liveRecording, liveRecordingRules,
+  liveChatRules, liveChatModeration (NOVÉ), liveStream, i18n (8 jazyků)
+  tests: appearance, liveChatRules, liveNow, liveRecording (NOVÉ)

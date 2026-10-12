@@ -12,6 +12,7 @@ import LiveChat from '@/components/LiveChat';
 import SubscribeButton from '@/components/SubscribeButton';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import ExpandableText from '@/components/ExpandableText';
+import { setAmbientSource } from '@/lib/appearance';
 
 type Status = {
   enabled: boolean;
@@ -81,6 +82,14 @@ export default function LivePage() {
   const profile = status?.profile ?? null;
   const name = profile ? profile.display_name || profile.username : '';
 
+  // Skleněný vzhled "podle videa" a světlo kolem přehrávače: snímek z přenosu (jinak avatar kanálu).
+  const liveUid = status?.live ? status.stream?.videoUid ?? null : null;
+  const ambientThumb = liveUid ? `https://videodelivery.net/${liveUid}/thumbnails/thumbnail.jpg?height=270` : profile?.avatar_url ?? null;
+  useEffect(() => {
+    setAmbientSource(ambientThumb);
+  }, [ambientThumb]);
+  useEffect(() => () => setAmbientSource(null), []);
+
   useEffect(() => {
     if (!status) return;
     const title = status.live ? `🔴 ${status.stream?.title || name}` : name;
@@ -142,7 +151,7 @@ export default function LivePage() {
           </div>
           {channelRow}
         </div>
-        <LiveChat room={channelRoom(profile.id)} canModerate={isOwner} className="live-side" />
+        <LiveChat room={channelRoom(profile.id)} canModerate={isOwner} className="live-side" popoutHref={`/live/${profile.id}/chat`} />
       </div>
     );
   }
@@ -150,14 +159,17 @@ export default function LivePage() {
   return (
     <div className="live-layout">
       <div className="live-main">
-        <div className="player-wrap live-player" style={{ aspectRatio: '16/9' }}>
-          <iframe
-            src={playerUrl}
-            style={{ width: '100%', height: '100%', border: 'none' }}
-            allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen;"
-            allowFullScreen
-            title={stream?.title || name}
-          />
+        <div className="live-player-ambient-host" style={{ position: 'relative' }}>
+          <div className="player-wrap live-player" style={{ aspectRatio: '16/9' }}>
+            <iframe
+              src={playerUrl}
+              style={{ width: '100%', height: '100%', border: 'none' }}
+              allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen;"
+              allowFullScreen
+              title={stream?.title || name}
+            />
+          </div>
+          {liveUid && <div className="player-ambient" aria-hidden="true" style={{ backgroundImage: `url("https://videodelivery.net/${encodeURIComponent(liveUid)}/thumbnails/thumbnail.jpg?height=270")` }} />}
         </div>
         <h1 className="video-title" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span className="live-pill">● {t('liveBadge')}</span>
@@ -174,7 +186,7 @@ export default function LivePage() {
           </div>
         )}
       </div>
-      <LiveChat room={channelRoom(profile.id)} canModerate={isOwner} className="live-side" />
+      <LiveChat room={channelRoom(profile.id)} canModerate={isOwner} className="live-side" popoutHref={`/live/${profile.id}/chat`} />
     </div>
   );
 }

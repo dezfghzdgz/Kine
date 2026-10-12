@@ -5835,3 +5835,694 @@ select optgroup {
   background-color: var(--panel-raised);
   color: var(--text);
 }
+
+/* ---------- Chat přenosu: moderace, režimy, samostatné okno, překryv pro OBS ---------- */
+
+.live-chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.live-chat-head-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.live-chat-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm, 8px);
+  background: none;
+  color: var(--text-dim);
+  font-size: 16px;
+  padding: 0;
+  text-decoration: none;
+}
+
+.live-chat-icon-btn:hover,
+.live-chat-icon-btn.active {
+  background: var(--panel-raised);
+  color: var(--text);
+}
+
+.live-chat-modes {
+  padding: 6px 14px;
+  font-size: var(--fs-2xs, 11px);
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-raised);
+}
+
+.live-chat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  max-height: 55%;
+  overflow-y: auto;
+  font-size: var(--fs-sm);
+}
+
+.live-chat-panel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.live-chat-panel-row select {
+  max-width: 60%;
+}
+
+.live-chat-panel-check {
+  justify-content: flex-start;
+}
+
+.live-chat-panel-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.live-chat-panel-col textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.live-chat-panel-note {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-2xs, 11px);
+  line-height: 1.4;
+}
+
+.live-chat-panel-title {
+  margin: 4px 0 2px;
+  font-weight: 600;
+}
+
+.live-chat-shield {
+  background: var(--panel-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-weight: 700;
+}
+
+.live-chat-shield.on {
+  background: #e5262a;
+  border-color: #e5262a;
+  color: #fff;
+}
+
+.live-chat-bans {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.live-chat-ban {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.live-chat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.live-chat-actions button {
+  font-size: var(--fs-2xs, 11px);
+  padding: 4px 8px;
+  background: var(--panel-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.live-chat-actions button.danger {
+  color: #ff6b6b;
+}
+
+/* Samostatné okno: chat přes celé okno. */
+html.chat-popout-page,
+html.chat-popout-page body {
+  height: 100%;
+  overflow: hidden;
+}
+
+.live-chat.live-chat-popout {
+  height: 100vh;
+  min-height: 0;
+  border-radius: 0;
+  border: none;
+}
+
+/* Překryv pro OBS: průhledné pozadí, jen zprávy, čitelné přes hru. */
+html.chat-overlay-page,
+html.chat-overlay-page body {
+  background: transparent !important;
+  overflow: hidden;
+}
+
+.live-chat-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 12px;
+  overflow: hidden;
+  font-size: 18px;
+  line-height: 1.35;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9);
+}
+
+.live-chat-overlay-msg {
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 8px;
+  padding: 4px 10px;
+  overflow-wrap: anywhere;
+  animation: liveChatIn 0.25s ease-out;
+}
+
+.live-chat-overlay-msg .live-chat-user {
+  color: #5eead4;
+}
+
+@keyframes liveChatIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Záznam chatu u videa ze živého vysílání. */
+.live-chat.chat-replay {
+  height: 420px;
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .live-chat.chat-replay {
+    height: 300px;
+  }
+}
+
+/* =====================================================================
+   VZHLED: SKLO A AMBIENTNÍ SVĚTLO (Nastavení -> Vzhled, lib/appearance.ts)
+   =====================================================================
+   Sklo = průhledné plochy nad barevným rozmazaným pozadím, jako upravený
+   Spotify nebo YouTube s ambientním světlem. Pozadí kreslí jedna vrstva
+   (components/AppearanceBackdrop.tsx) - rozmazaná je jen ona, jednou;
+   plochy nad ní jsou jen průsvitné (bez backdrop-filter, ať to nebrzdí
+   telefon ani televizi).
+
+   Síla skla je --glass-k (0 = skoro plné plochy, 1 = hodně průhledné),
+   nastavuje ji skript v <head> a stránka nastavení. Barvy pozadí:
+   html[data-backdrop] - podle videa (auto), moje barva (brand), nebo
+   předvolby. Ambientní světlo kolem přehrávače: html[data-ambient="1"].
+   ===================================================================== */
+
+:root {
+  --glass-k: 0.55;
+  /* Moje barva: přechody v barvě u loga (a "podle videa", dokud se nedíváš na video). */
+  --kine-backdrop:
+    radial-gradient(70% 60% at 12% 8%, rgba(var(--brand-rgb), 0.55), transparent 72%),
+    radial-gradient(60% 55% at 88% 22%, rgba(var(--brand-rgb), 0.3), transparent 70%),
+    radial-gradient(85% 70% at 50% 108%, rgba(88, 52, 190, 0.4), transparent 72%);
+}
+
+html[data-backdrop="night"] {
+  --kine-backdrop:
+    radial-gradient(70% 60% at 15% 10%, rgba(37, 99, 235, 0.78), transparent 72%),
+    radial-gradient(60% 55% at 86% 18%, rgba(124, 58, 237, 0.62), transparent 70%),
+    radial-gradient(85% 70% at 50% 108%, rgba(14, 165, 233, 0.5), transparent 72%);
+}
+
+html[data-backdrop="sunset"] {
+  --kine-backdrop:
+    radial-gradient(70% 60% at 14% 12%, rgba(239, 68, 68, 0.78), transparent 72%),
+    radial-gradient(60% 55% at 86% 16%, rgba(162, 28, 175, 0.6), transparent 70%),
+    radial-gradient(85% 70% at 55% 108%, rgba(249, 115, 22, 0.6), transparent 72%);
+}
+
+html[data-backdrop="forest"] {
+  --kine-backdrop:
+    radial-gradient(70% 60% at 14% 10%, rgba(22, 163, 74, 0.7), transparent 72%),
+    radial-gradient(60% 55% at 86% 20%, rgba(13, 148, 136, 0.6), transparent 70%),
+    radial-gradient(85% 70% at 50% 108%, rgba(132, 204, 22, 0.42), transparent 72%);
+}
+
+html[data-backdrop="ocean"] {
+  --kine-backdrop:
+    radial-gradient(70% 60% at 14% 10%, rgba(6, 182, 212, 0.72), transparent 72%),
+    radial-gradient(60% 55% at 86% 18%, rgba(37, 99, 235, 0.62), transparent 70%),
+    radial-gradient(85% 70% at 50% 108%, rgba(20, 184, 166, 0.5), transparent 72%);
+}
+
+html[data-backdrop="neon"] {
+  --kine-backdrop:
+    radial-gradient(70% 60% at 14% 10%, rgba(236, 72, 153, 0.75), transparent 72%),
+    radial-gradient(60% 55% at 86% 18%, rgba(34, 211, 238, 0.6), transparent 70%),
+    radial-gradient(85% 70% at 50% 108%, rgba(168, 85, 247, 0.6), transparent 72%);
+}
+
+/* ---------- Vrstva pozadí ---------- */
+
+.kine-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.kine-backdrop-layer {
+  position: absolute;
+  inset: -12%;
+}
+
+.kine-backdrop-gradient {
+  background: var(--kine-backdrop);
+  opacity: calc(0.6 + var(--glass-k) * 0.4);
+}
+
+/* Náhled videa: hodně rozmazaný a sytý - zůstanou jen jeho barvy. */
+.kine-backdrop-image {
+  background-size: cover;
+  background-position: center;
+  filter: blur(72px) saturate(1.8) brightness(0.85);
+  transform: scale(1.15);
+  opacity: calc(0.55 + var(--glass-k) * 0.45);
+  animation: kine-backdrop-in 800ms var(--ease) both;
+}
+
+.kine-backdrop-image-out {
+  animation: kine-backdrop-out 800ms var(--ease) both;
+}
+
+@keyframes kine-backdrop-in {
+  from { opacity: 0; }
+}
+
+@keyframes kine-backdrop-out {
+  to { opacity: 0; }
+}
+
+/* Ztmavení kvůli čitelnosti textu - čím silnější sklo, tím méně. */
+.kine-backdrop-tint {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(5, 5, 8, calc(0.4 - var(--glass-k) * 0.22)) 0%,
+    rgba(5, 5, 8, calc(0.62 - var(--glass-k) * 0.24)) 100%
+  );
+}
+
+html[data-theme="light"] .kine-backdrop-image {
+  filter: blur(72px) saturate(1.6) brightness(1.1);
+}
+
+html[data-theme="light"] .kine-backdrop-tint {
+  background: linear-gradient(
+    180deg,
+    rgba(245, 245, 247, calc(0.62 - var(--glass-k) * 0.3)) 0%,
+    rgba(245, 245, 247, calc(0.78 - var(--glass-k) * 0.3)) 100%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kine-backdrop-image,
+  .kine-backdrop-image-out {
+    animation: none;
+  }
+}
+
+/* ---------- Plochy jako sklo ---------- */
+
+html[data-look="glass"] {
+  background: var(--bg);
+  --panel: rgba(16, 16, 22, calc(0.84 - var(--glass-k) * 0.46));
+  --panel-raised: rgba(30, 30, 38, calc(0.86 - var(--glass-k) * 0.42));
+  --border: rgba(255, 255, 255, calc(0.07 + var(--glass-k) * 0.05));
+  --glass-bg: rgba(16, 16, 22, calc(0.82 - var(--glass-k) * 0.3));
+  --glass-bg-strong: rgba(14, 14, 20, calc(0.9 - var(--glass-k) * 0.22));
+}
+
+html[data-look="glass"][data-theme="gray"] {
+  --panel: rgba(48, 48, 54, calc(0.84 - var(--glass-k) * 0.44));
+  --panel-raised: rgba(60, 60, 66, calc(0.86 - var(--glass-k) * 0.4));
+  --border: rgba(255, 255, 255, calc(0.09 + var(--glass-k) * 0.05));
+}
+
+html[data-look="glass"][data-theme="light"] {
+  --panel: rgba(255, 255, 255, calc(0.86 - var(--glass-k) * 0.42));
+  --panel-raised: rgba(255, 255, 255, calc(0.9 - var(--glass-k) * 0.36));
+  --border: rgba(20, 20, 30, 0.1);
+  --glass-bg: rgba(255, 255, 255, calc(0.82 - var(--glass-k) * 0.28));
+  --glass-bg-strong: rgba(255, 255, 255, calc(0.9 - var(--glass-k) * 0.2));
+}
+
+html[data-look="glass"] body {
+  background: transparent;
+}
+
+/* Boční menu: vlas světla nahoře, jemná hrana - sklo jako na fotce Spotify. */
+html[data-look="glass"] .sidebar {
+  background-color: var(--panel);
+  border-right-color: var(--border);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04);
+}
+
+/* Rámečky (nastavení, studio, chat): průsvitné, se světlem po horní hraně. */
+html[data-look="glass"] .panel,
+html[data-look="glass"] .live-chat {
+  background-color: var(--panel);
+  border-color: var(--border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+/* Panely, které jezdí přes obsah (komentáře u Sparks...), mají pod sebou
+   stránku - ty jediné rozmazávají. */
+html[data-look="glass"] .spark-side-panel {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+}
+
+/* Prohlížeč bez rozostření: plochy plnější, ať je text čitelný. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html[data-look="glass"] .spark-side-panel {
+    background: var(--panel-raised);
+  }
+}
+
+/* Kdo má v systému vypnutou průhlednost, dostane sklo jen jako barevné pozadí. */
+@media (prefers-reduced-transparency: reduce) {
+  html[data-look="glass"] {
+    --panel: rgba(16, 16, 22, 0.9);
+    --panel-raised: rgba(30, 30, 38, 0.92);
+  }
+}
+
+/* ---------- Ambientní světlo kolem přehrávače ---------- */
+
+/* Rozmazaný náhled videa za přehrávačem: barvy videa prosvítají kolem
+   něj (jako ambientní režim YouTube). Za rámečkem přehrávače, nic nezakrývá. */
+.player-ambient {
+  display: none;
+}
+
+html[data-ambient="1"] .player-dock:not(.player-dock-mini) > .player-ambient,
+html[data-ambient="1"] .live-player-ambient-host > .player-ambient {
+  display: block;
+  position: absolute;
+  left: -3%;
+  right: -3%;
+  top: -7%;
+  bottom: -10%;
+  z-index: -1;
+  border-radius: 48px;
+  background-size: cover;
+  background-position: center;
+  filter: blur(56px) saturate(1.8);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+html[data-ambient="1"][data-theme="light"] .player-ambient {
+  opacity: 0.38;
+}
+
+/* Na telefonu by světlo přesahující do stran posouvalo stránku do boku. */
+@media (max-width: 768px) {
+  html[data-ambient="1"] .player-dock:not(.player-dock-mini) > .player-ambient,
+  html[data-ambient="1"] .live-player-ambient-host > .player-ambient {
+    left: 0;
+    right: 0;
+    top: -4%;
+    bottom: -8%;
+    filter: blur(40px) saturate(1.7);
+  }
+}
+
+/* Režim kina a celá obrazovka: světlo pryč (přehrávač je přes celou šířku). */
+.player-wrap-maximized ~ .player-ambient,
+body.player-css-fullscreen .player-ambient {
+  display: none !important;
+}
+
+/* ---------- Nastavení vzhledu ---------- */
+
+.appearance-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.appearance-option {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px;
+  text-align: left;
+  border-radius: var(--radius-md);
+  background: var(--panel-raised);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.appearance-option.active {
+  box-shadow: inset 0 0 0 2px var(--brand), 0 0 0 3px var(--brand-soft);
+}
+
+.appearance-option-hint {
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--text-faint);
+}
+
+/* Malý náhled stylu: klasický = plné plochy, sklo = plochy nad barvami. */
+.appearance-preview {
+  position: relative;
+  height: 64px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #0b0b0e;
+}
+
+.appearance-preview-glass {
+  background:
+    radial-gradient(80% 90% at 15% 15%, rgba(var(--brand-rgb), 0.85), transparent 70%),
+    radial-gradient(70% 80% at 90% 30%, rgba(124, 58, 237, 0.7), transparent 70%),
+    radial-gradient(90% 80% at 50% 110%, rgba(14, 165, 233, 0.7), transparent 72%),
+    #0b0b0e;
+}
+
+.appearance-preview i {
+  position: absolute;
+  border-radius: 6px;
+  background: #17171c;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.appearance-preview-glass i {
+  background: rgba(16, 16, 22, 0.42);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.appearance-preview i:nth-child(1) { left: 6px; top: 6px; bottom: 6px; width: 22%; }
+.appearance-preview i:nth-child(2) { left: calc(22% + 12px); right: 6px; top: 6px; height: 38%; }
+.appearance-preview i:nth-child(3) { left: calc(22% + 12px); right: 6px; bottom: 6px; height: 34%; }
+
+.appearance-backdrops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.appearance-backdrop-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 6px;
+  min-height: 0;
+  border-radius: var(--radius-pill);
+  background: var(--panel-raised);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.appearance-backdrop-chip.active {
+  box-shadow: inset 0 0 0 2px var(--brand);
+}
+
+.appearance-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.appearance-swatch-auto { background: conic-gradient(from 200deg, #ef4444, #f59e0b, #22c55e, #06b6d4, #6366f1, #ec4899, #ef4444); }
+.appearance-swatch-brand { background: radial-gradient(circle at 30% 30%, rgba(var(--brand-rgb), 1), rgba(var(--brand-rgb), 0.35)); }
+.appearance-swatch-night { background: linear-gradient(135deg, #2563eb, #7c3aed 55%, #0ea5e9); }
+.appearance-swatch-sunset { background: linear-gradient(135deg, #ef4444, #a21caf 55%, #f97316); }
+.appearance-swatch-forest { background: linear-gradient(135deg, #16a34a, #0d9488 55%, #84cc16); }
+.appearance-swatch-ocean { background: linear-gradient(135deg, #06b6d4, #2563eb 55%, #14b8a6); }
+.appearance-swatch-neon { background: linear-gradient(135deg, #ec4899, #22d3ee 55%, #a855f7); }
+
+.appearance-range {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.appearance-range input[type="range"] {
+  flex: 1;
+  padding: 0;
+  box-shadow: none;
+  background: transparent;
+  accent-color: var(--brand);
+}
+
+.appearance-themes {
+  display: flex;
+  gap: 8px;
+}
+
+.appearance-themes button {
+  flex: 1;
+  background: var(--panel-raised);
+  background-image: none;
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.appearance-themes button.active {
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: none;
+}
+
+.appearance-label {
+  margin: 0 0 8px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.appearance-color {
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background-image: none;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.appearance-color[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text);
+}
+
+.appearance-color-custom {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-style: dashed;
+  color: var(--text-faint);
+  font-size: 14px;
+  background: transparent;
+}
+
+.appearance-color-custom input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+}
+
+.appearance-reset {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text-dim);
+}
+
+/* ---------- Oznámení: akce nahoře ----------
+   Smazat / přečíst vše bylo až úplně dole pod seznamem - u delšího
+   seznamu se k tomu muselo rolovat. Hlavička teď drží nahoře i při
+   rolování (sticky v rolující nabídce). */
+
+.notification-list-head {
+  position: sticky;
+  top: -10px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: -10px -10px 6px;
+  padding: 10px 10px 8px 14px;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.notification-list-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.notification-head-btn {
+  flex-shrink: 0;
+  min-height: 0;
+  padding: 4px 9px;
+  border-radius: var(--radius-pill);
+  background: none;
+  background-image: none;
+  box-shadow: none;
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.notification-head-btn:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--glass-fill-hover);
+}
+
+.notification-head-btn.danger {
+  color: #ff6b6b;
+  box-shadow: inset 0 0 0 1px rgba(255, 107, 107, 0.55);
+}
