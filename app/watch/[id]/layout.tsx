@@ -116,8 +116,13 @@ export default async function WatchLayout({
       }
     : null;
 
+  // Spojení se serverem Cloudflare, odkud přehrávač stahuje video (customer-<kód>…),
+  // se naváže hned při načtení stránky - ne až když si o seznam kvalit řekne přehrávač.
+  const streamCode = video ? customerCodeFromUrl(video.thumbnail_url) : null;
+
   return (
     <>
+      {streamCode && <link rel="preconnect" href={`https://customer-${streamCode}.cloudflarestream.com`} crossOrigin="anonymous" />}
       {jsonLd && (
         <script
           type="application/ld+json"

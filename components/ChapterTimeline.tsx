@@ -6,6 +6,7 @@ import { useLanguage } from '@/lib/i18n';
 import { PlayIcon, PauseIcon } from './MusicIcons';
 import { AUTO_HIDE_MS, clampSeek, decideTap, formatTime, tapSide, type Tap, type TapSide } from '@/lib/playerControls';
 import { OPEN_SHORTCUTS_EVENT } from './KeyboardShortcuts';
+import { qualityLabel, type QualityLevel } from '@/lib/vodPlayerCore';
 
 type Chapter = { time: number; title: string };
 
@@ -48,6 +49,11 @@ export default function ChapterTimeline({
   onToggleLoop,
   autoplay,
   onToggleAutoplay,
+  qualities = [],
+  quality = -1,
+  playingHeight = null,
+  onQuality,
+  onToggleStats,
 }: {
   chapters: Chapter[];
   duration: number;
@@ -71,6 +77,15 @@ export default function ChapterTimeline({
   /** Po konci pustit další video. */
   autoplay?: boolean;
   onToggleAutoplay?: () => void;
+  /** Volba kvality (vlastní přehrávač, lib/vodPlayer.ts); prázdné = kvalitu volí přehrávač sám. */
+  qualities?: QualityLevel[];
+  /** Zvolená kvalita (index úrovně), -1 = automaticky. */
+  quality?: number;
+  /** Co právě hraje (u Automaticky v závorce). */
+  playingHeight?: number | null;
+  onQuality?: (index: number) => void;
+  /** Statistiky přehrávání (components/PlaybackStats.tsx). */
+  onToggleStats?: () => void;
 }) {
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(true);
@@ -82,7 +97,7 @@ export default function ChapterTimeline({
   const [ripple, setRipple] = useState<{ side: TapSide; label: string; nonce: number } | null>(null);
   const lastTapRef = useRef<Tap | null>(null);
   const surfaceDownRef = useRef<number | null>(null);
-  const [settingsView, setSettingsView] = useState<'main' | 'speed' | 'sleep'>('main');
+  const [settingsView, setSettingsView] = useState<'main' | 'speed' | 'sleep' | 'quality'>('main');
   const [sleepMinutes, setSleepMinutes] = useState<number | null>(null);
   const sleepTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -616,6 +631,23 @@ export default function ChapterTimeline({
                       <span>{t('sleepTimerMenuLabel')}</span>
                       <span style={{ color: 'rgba(255,255,255,0.6)' }}>{sleepMinutes ? `${sleepMinutes} ${t('minutesShortLabel')}` : t('offLabel')}</span>
                     </button>
+                    {qualities.length > 1 && onQuality && (
+                      <button
+                        className="player-quality-btn"
+                        onClick={() => setSettingsView('quality')}
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
+                          color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
+                        }}
+                      >
+                        <span>{t('playerQualityMenu')}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>
+                          {quality >= 0
+                            ? qualityLabel(qualities.find((q) => q.index === quality)?.height)
+                            : `${t('playerQualityAuto')}${playingHeight ? ` (${qualityLabel(playingHeight)})` : ''}`}
+                        </span>
+                      </button>
+                    )}
                     <button
                       onClick={() => setSettingsView('speed')}
                       style={{
@@ -650,6 +682,22 @@ export default function ChapterTimeline({
                         <span style={{ color: 'rgba(255,255,255,0.6)' }}>{autoplay ? t('onLabel') : t('offLabel')}</span>
                       </button>
                     )}
+                    {onToggleStats && (
+                      <button
+                        className="player-stats-btn"
+                        onClick={() => {
+                          setSettingsOpen(false);
+                          setSettingsView('main');
+                          onToggleStats();
+                        }}
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
+                          color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
+                        }}
+                      >
+                        <span>{t('playerStatsMenu')}</span>
+                      </button>
+                    )}
                     {/* Přehled zkratek (components/KeyboardShortcuts.tsx) - pro
                         toho, kdo "?" nezná. Na dotyku klávesnice není. */}
                     {!touchUi && (
@@ -667,6 +715,40 @@ export default function ChapterTimeline({
                         <span style={{ color: 'rgba(255,255,255,0.6)' }}>?</span>
                       </button>
                     )}
+                  </div>
+                )}
+
+                {settingsView === 'quality' && (
+                  <div>
+                    <button
+                      onClick={() => setSettingsView('main')}
+                      style={{ background: 'none', border: 'none', color: '#fff', padding: '4px 4px 8px', cursor: 'pointer', fontSize: 12, textAlign: 'left', width: '100%' }}
+                    >
+                      {t('backButton')}
+                    </button>
+                    <div role="radiogroup" aria-label={t('playerQualityMenu')} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {[{ index: -1, label: t('playerQualityAuto') }, ...qualities.map((q) => ({ index: q.index, label: qualityLabel(q.height) }))].map((option) => (
+                        <button
+                          key={option.index}
+                          role="radio"
+                          aria-checked={quality === option.index}
+                          className="player-quality-option"
+                          onClick={() => {
+                            onQuality?.(option.index);
+                            setSettingsOpen(false);
+                            setSettingsView('main');
+                          }}
+                          style={{
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            background: quality === option.index ? 'rgba(255,255,255,0.14)' : 'none',
+                            border: 'none', borderRadius: 6, color: '#fff', padding: '6px 6px', cursor: 'pointer', fontSize: 12.5,
+                          }}
+                        >
+                          <span>{option.label}</span>
+                          {quality === option.index && <span aria-hidden="true">✓</span>}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
 

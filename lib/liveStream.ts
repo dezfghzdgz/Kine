@@ -1,5 +1,5 @@
 import { supabaseServer } from './supabaseServer';
-import { appPingFresh, appSignalTrusted, decideLive, revivedStartedAt, staleWithoutCloudflare } from './liveSignal';
+import { appPingFresh, appSignalTrusted, connectedFromInputStatus, decideLive, revivedStartedAt, sameStreamReturns, staleWithoutCloudflare } from './liveSignal';
 import { autoPublishAfterStream } from './liveRecording';
 import { chatSessionSince } from './liveChat';
 
@@ -227,6 +227,41 @@ export async function inputLifecycle(inputId: string): Promise<InputLifecycle | 
   return value;
 }
 
+/** Stav vstupu z API (záloha za lifecycle) - pár vteřin v paměti jako lifecycle. */
+const inputStatusCache = new Map<string, { at: number; value: boolean | null }>();
+
+async function inputStatusFromApi(inputId: string): Promise<boolean | null> {
+  const hit = inputStatusCache.get(inputId);
+  if (hit && Date.now() - hit.at < LIFECYCLE_TTL_MS) return hit.value;
+  let value: boolean | null = null;
+  try {
+    const result = await Promise.race([
+      cfFetch(`/live_inputs/${encodeURIComponent(inputId)}`),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+    ]);
+    value = result ? connectedFromInputStatus((result as any).status) : null;
+  } catch {
+    value = null;
+  }
+  inputStatusCache.set(inputId, { at: Date.now(), value });
+  if (inputStatusCache.size > 500) {
+    for (const [key, entry] of inputStatusCache) if (Date.now() - entry.at > LIFECYCLE_TTL_MS) inputStatusCache.delete(key);
+  }
+  return value;
+}
+
+/**
+ * Vysílá vstup? Lifecycle (to samé, podle čeho se řídí přehrávač), a když
+ * nejde zjistit, stav vstupu z API. live null = nevíme - pak rozhoduje
+ * seznam běžících přenosů (lib/liveSignal.ts, decideLive).
+ */
+export async function inputSeen(inputId: string): Promise<{ live: boolean | null; videoUid: string | null }> {
+  const life = await inputLifecycle(inputId);
+  if (life) return life;
+  if (!/^[a-z0-9]+$/i.test(inputId)) return { live: null, videoUid: null };
+  return { live: await inputStatusFromApi(inputId), videoUid: null };
+}
+
 /** Ukončí přenos v databázi (a zveřejní záznam, když si to tvůrce zapnul). */
 async function endStream(row: LiveStreamRow, nowIso: string): Promise<void> {
   // Čerstvé hlášení, kterému se už nevěří (Cloudflare přenos dlouho nevidí):
@@ -297,22 +332,28 @@ export async function syncLiveStreams(options: { force?: boolean } = {}): Promis
         .or(`is_live.eq.true${liveInputs.size > 0 ? `,cf_input_id.in.(${[...liveInputs.keys()].map((id) => `"${id}"`).join(',')})` : ''}`);
       const rows = (data ?? []) as LiveStreamRow[];
 
-      // Opravdu vysílají? (jen vstupy, které Cloudflare hlásí jako běžící - souběžně)
-      const lifecycles = new Map<string, InputLifecycle | null>();
+      // Opravdu vysílají? Vstupy, které Cloudflare hlásí jako běžící, i živé přenosy,
+      // které v seznamu zrovna chybí (seznam občas běžící přenos vynechá) - souběžně.
+      const seen = new Map<string, { live: boolean | null; videoUid: string | null }>();
       await Promise.all(
         rows
-          .filter((row) => liveInputs.has(row.cf_input_id))
-          .map(async (row) => lifecycles.set(row.cf_input_id, await inputLifecycle(row.cf_input_id)))
+          .filter((row) => liveInputs.has(row.cf_input_id) || row.is_live)
+          .map(async (row) => seen.set(row.cf_input_id, await inputSeen(row.cf_input_id)))
       );
 
       const nowIso = new Date().toISOString();
       for (const row of rows) {
         const video = liveInputs.get(row.cf_input_id);
-        const life = video ? lifecycles.get(row.cf_input_id) ?? null : null;
+        const life = seen.get(row.cf_input_id) ?? null;
         const decision = decideLive(row, { listed: !!video, connected: life ? life.live : null, videoCreatedAt: video?.created ?? null });
-        if (decision === 'confirm' && video) {
-          // Běžící video podle lifecycle (to, co hraje přehrávač), jinak první ze seznamu.
-          const uid = life?.live && life.videoUid ? life.videoUid : String(video.uid);
+        if (decision === 'confirm') {
+          const lifeUid = life?.live && life.videoUid ? life.videoUid : null;
+          // Návrat téhož přenosu (stejný záznam u Cloudflare): začátek zůstává - čas vysílání
+          // i chat jedou dál. Nový přenos začíná, kdy ho Cloudflare založil (lib/liveSignal.ts).
+          const resumed = sameStreamReturns(row, { lifeUid, videoCreatedAt: video?.created ?? null });
+          // Běžící video podle lifecycle (to, co hraje přehrávač), jinak první ze seznamu; jinak
+          // to, co už je u přenosu - ale jen u téhož přenosu (nový nesmí ukazovat starý záznam).
+          const uid = lifeUid || (video ? String(video.uid) : null) || (row.is_live || resumed ? row.current_video_uid ?? null : null);
           // Čas potvrzení od Cloudflare (jen když už sloupec v databázi je).
           const confirmedNow = Object.prototype.hasOwnProperty.call(row, 'cf_confirmed_at') ? { cf_confirmed_at: nowIso } : {};
           if (!row.is_live || row.current_video_uid !== uid) {
@@ -321,14 +362,14 @@ export async function syncLiveStreams(options: { force?: boolean } = {}): Promis
               .update({
                 is_live: true,
                 current_video_uid: uid,
-                started_at: row.is_live && row.started_at ? row.started_at : video.created ?? nowIso,
+                started_at: (row.is_live || resumed) && row.started_at ? row.started_at : video?.created ?? nowIso,
                 ended_at: null,
                 checked_at: nowIso,
                 ...confirmedNow,
                 updated_at: nowIso,
               })
               .eq('owner_id', row.owner_id);
-            await notifyGoingLive(row, uid);
+            if (uid) await notifyGoingLive(row, uid);
           } else {
             await supabaseServer.from('live_streams').update({ checked_at: nowIso, ...confirmedNow }).eq('owner_id', row.owner_id);
           }

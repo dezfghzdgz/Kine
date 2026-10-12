@@ -859,14 +859,26 @@ button:disabled {
   background: #000;
 }
 
-.player-wrap:fullscreen iframe {
+.player-wrap:fullscreen iframe,
+.player-wrap:fullscreen .player-video {
   width: 100% !important;
   height: 100% !important;
 }
 
-.player-wrap:-webkit-full-screen iframe {
+.player-wrap:-webkit-full-screen iframe,
+.player-wrap:-webkit-full-screen .player-video {
   width: 100% !important;
   height: 100% !important;
+}
+
+/* Vlastní přehrávač (lib/vodPlayer.ts): <video> místo iframu Cloudflare, stejně velký. */
+.player-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  object-fit: contain;
+  border: none;
 }
 
 .player-wrap::backdrop {
@@ -8091,4 +8103,96 @@ html[data-calm="1"] *:not([class*="spin"])::after {
 
 .sidebar-icon-donate {
   color: #f5c542;
+}
+
+/* Statistiky přehrávání (components/PlaybackStats.tsx) - jako "statistiky pro nerdy" na YouTube. */
+.playback-stats {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 9;
+  width: min(340px, calc(100% - 20px));
+  max-height: calc(100% - 70px);
+  overflow-y: auto;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(10, 10, 12, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.45;
+  backdrop-filter: blur(6px);
+}
+.playback-stats-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.playback-stats-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.playback-stats-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.playback-stats-rows {
+  margin: 0;
+  display: grid;
+  gap: 2px;
+}
+.playback-stats-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.playback-stats-row dt {
+  color: rgba(255, 255, 255, 0.62);
+  white-space: nowrap;
+}
+.playback-stats-row dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.playback-stats-recent {
+  display: grid;
+  gap: 1px;
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.62);
+}
+.playback-stats-recent code {
+  color: #fff;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.playback-stats-verdict {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.playback-stats-verdict-ok {
+  background: rgba(46, 160, 67, 0.22);
+}
+.playback-stats-verdict-slow-server,
+.playback-stats-verdict-slow-connection {
+  background: rgba(210, 153, 34, 0.24);
+}
+.playback-stats-copy {
+  background: rgba(255, 255, 255, 0.14);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
 }

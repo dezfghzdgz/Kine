@@ -118,7 +118,7 @@ test('Cloudflare: video "visí" v seznamu, ale vstup nevysílá - skončený př
   assert.equal(live.decideLive(endedRow, { listed: true, connected: null, videoCreatedAt: iso(T0 + 25 * MIN) }, T0 + 26 * MIN), 'confirm');
 });
 
-test('Cloudflare: po Ukončit se přenos neoživí ani dobíhajícím hlášením (minuta čekání Cloudflare)', () => {
+test('Cloudflare: po Ukončit se přenos neoživí dobíhajícím hlášením (minuta čekání Cloudflare)', () => {
   // přesně chyba "skončil jsem a v Živě visím dál s časem 9:53"
   for (const after of [5000, 30000, 60000, 85000]) {
     assert.equal(live.decideLive(endedRow, { listed: true, connected: true, videoCreatedAt: iso(T0) }, T0 + 20 * MIN + after), 'none', String(after));
@@ -136,8 +136,62 @@ test('Cloudflare: po Ukončit se přenos neoživí ani dobíhajícím hlášení
 test('Cloudflare: živý přenos, vstup krátce nepřipojený - minutu drží, pak konec', () => {
   assert.equal(live.decideLive(liveRow, { listed: true, connected: false }, T0 + 10 * MIN + 30000), 'keep');
   assert.equal(live.decideLive(liveRow, { listed: true, connected: false }, T0 + 11 * MIN + 1000), 'end');
-  // úplně zmizel ze seznamu = konec hned (jako dřív)
-  assert.equal(live.decideLive(liveRow, { listed: false, connected: null }, T0 + 10 * MIN + 30000), 'end');
+  // zmizel ze seznamu a lifecycle nejde zjistit: taky minutu drží, pak konec
+  assert.equal(live.decideLive(liveRow, { listed: false, connected: null }, T0 + 10 * MIN + 30000), 'keep');
+  assert.equal(live.decideLive(liveRow, { listed: false, connected: null }, T0 + 11 * MIN + 1000), 'end');
+});
+
+test('Cloudflare: přenos jednou chybí v seznamu - nezmizí (dřív "Živě" blikalo: je tam / není tam)', () => {
+  // přesně chyba "v Živě většinou nikdo, občas ano" (OBS, žádné hlášení z appky)
+  let row = liveRow;
+  const syncs = [
+    [T0 + 10 * MIN + 15000, { listed: false, connected: null }, 'keep'],
+    [T0 + 10 * MIN + 27000, { listed: true, connected: true }, 'confirm'],
+    [T0 + 10 * MIN + 40000, { listed: false, connected: true }, 'confirm'], // v seznamu chybí, ale vstup vysílá
+    [T0 + 10 * MIN + 52000, { listed: true, connected: null }, 'confirm'],
+  ];
+  for (const [at, cf, want] of syncs) {
+    assert.equal(live.decideLive(row, cf, at), want, new Date(at).toISOString());
+    if (want === 'confirm') row = { ...row, checked_at: iso(at), cf_confirmed_at: iso(at) };
+  }
+});
+
+test('Cloudflare: přenos ukončený bez potvrzení se vrátí, jakmile vstup jistě vysílá', () => {
+  // srovnání ho ukončilo (minutu bez potvrzení); Cloudflare pořád jede ve stejném záznamu
+  const endedBySync = { ...endedRow, ended_at: iso(T0 + 20 * MIN), cf_confirmed_at: iso(T0 + 19 * MIN) };
+  assert.equal(live.decideLive(endedBySync, { listed: true, connected: true, videoCreatedAt: iso(T0) }, T0 + 20 * MIN + 95000), 'confirm');
+  assert.equal(live.decideLive(endedBySync, { listed: false, connected: true, videoCreatedAt: null }, T0 + 20 * MIN + 95000), 'confirm');
+  // samotný seznam (bez jisté odpovědi) skončený záznam neoživí
+  assert.equal(live.decideLive(endedBySync, { listed: true, connected: null, videoCreatedAt: iso(T0) }, T0 + 25 * MIN), 'none');
+  // nový přenos po dlouhé době, Cloudflare ho ještě nemá v seznamu: hned
+  assert.equal(live.decideLive(endedBySync, { listed: false, connected: true, videoCreatedAt: null }, T0 + 3 * 60 * MIN), 'confirm');
+});
+
+test('Cloudflare: vrácený přenos si nechá začátek, jen když je to opravdu tentýž záznam', () => {
+  const ended = { is_live: false, started_at: iso(T0), ended_at: iso(T0 + 20 * MIN), current_video_uid: 'A' };
+  // lifecycle hlásí to samé video (A), nebo video ze seznamu vzniklo před koncem
+  assert.equal(live.sameStreamReturns(ended, { lifeUid: 'A' }, T0 + 22 * MIN), true);
+  assert.equal(live.sameStreamReturns(ended, { lifeUid: null, videoCreatedAt: iso(T0) }, T0 + 22 * MIN), true);
+  // OBS po 3 minutách znovu = nový záznam B, ještě není v seznamu: NE (dřív převzal začátek i záznam A)
+  assert.equal(live.sameStreamReturns(ended, { lifeUid: 'B', videoCreatedAt: null }, T0 + 23 * MIN), false);
+  assert.equal(live.sameStreamReturns(ended, { lifeUid: null, videoCreatedAt: null }, T0 + 23 * MIN), false);
+  assert.equal(live.sameStreamReturns(ended, { lifeUid: null, videoCreatedAt: iso(T0 + 21 * MIN) }, T0 + 23 * MIN), false);
+  // dlouho po konci, živý řádek, bez začátku: NE
+  assert.equal(live.sameStreamReturns(ended, { lifeUid: 'A' }, T0 + 31 * MIN), false);
+  assert.equal(live.sameStreamReturns({ ...ended, is_live: true }, { lifeUid: 'A' }, T0 + 22 * MIN), false);
+  assert.equal(live.sameStreamReturns({ ...ended, started_at: null }, { lifeUid: 'A' }, T0 + 22 * MIN), false);
+});
+
+test('Cloudflare: stav vstupu z API (záloha za lifecycle)', () => {
+  assert.equal(live.connectedFromInputStatus('connected'), true);
+  assert.equal(live.connectedFromInputStatus('reconnected'), true);
+  assert.equal(live.connectedFromInputStatus({ current: { state: 'connected' } }), true);
+  for (const off of ['client_disconnect', 'ttl_exceeded', 'failed_to_connect', 'failed_to_reconnect', { current: { reason: 'client_disconnect' } }]) {
+    assert.equal(live.connectedFromInputStatus(off), false, JSON.stringify(off));
+  }
+  for (const unknown of ['reconnecting', 'new_configuration_accepted', null, undefined, '', 42, {}]) {
+    assert.equal(live.connectedFromInputStatus(unknown), null, JSON.stringify(unknown));
+  }
 });
 
 test('Cloudflare: appka hlásí vysílání - drží se, dokud se jí věří', () => {

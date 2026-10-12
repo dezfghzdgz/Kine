@@ -53,6 +53,11 @@ import { effectiveChapters } from '@/lib/captions';
 import { FOLLOW_VIDEO_MS, preloadImage, setAmbientSource, videoFrameUrl } from '@/lib/appearance';
 import AmbientCanvas from '@/components/AmbientCanvas';
 import { useAppearance } from '@/lib/useAppearance';
+import { attachVod, canPlayVodNatively, mediaPlayer, reportSlowVideo, type VodHandle } from '@/lib/vodPlayer';
+import { chooseEngine, shouldReportSlowStart, statsReport, vodVerdict, type QualityLevel } from '@/lib/vodPlayerCore';
+import { customerCodeFromUrl, manifestUrl } from '@/lib/streamSource';
+import { preloadHls, supportsNativeHls } from '@/lib/hlsAttach';
+import PlaybackStats, { bufferedAhead } from '@/components/PlaybackStats';
 
 const THEATER_KEY = 'kine-theater';
 const AUTOPLAY_KEY = 'kine-autoplay';
@@ -150,6 +155,17 @@ function WatchPageInner() {
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<any>(null);
+  // Vlastní přehrávač (<video> + HLS, lib/vodPlayer.ts) - rychlý rozjezd i u dlouhých videí.
+  // Když v prohlížeči nejde nebo se rozbije, hraje iframe Cloudflare jako dřív ('iframe').
+  const videoElRef = useRef<HTMLVideoElement>(null);
+  const [engine, setEngine] = useState<'native' | 'iframe'>('native');
+  const vodRef = useRef<VodHandle | null>(null);
+  // Volba kvality (jen vlastní přehrávač mimo Safari): úrovně, zvolená (-1 = automaticky), právě hraná výška.
+  const [qualities, setQualities] = useState<QualityLevel[]>([]);
+  const [quality, setQuality] = useState(-1);
+  const [playingHeight, setPlayingHeight] = useState<number | null>(null);
+  // Statistiky přehrávání (⋮ -> Statistiky, nebo ?stats=1).
+  const [statsOpen, setStatsOpen] = useState(() => searchParams.get('stats') === '1');
   // Úklid rozjížděcí smyčky. Kdyby zůstala běžet po výměně přehrávače,
   // posílala by povely do něčeho, co už na obrazovce není.
   const playbackCleanupRef = useRef<(() => void) | null>(null);
@@ -352,7 +368,9 @@ function WatchPageInner() {
   const frameSource: string | null = video ? video.playback_id ?? video.cloudflare_video_id ?? null : null;
   useEffect(() => {
     setAmbientFrame(null);
-    if (!followFrames || !playerReady || !frameSource || mode === 'music') return;
+    // Až když se obraz opravdu rozjel - snímky nesmí brzdit první kus videa (a čas přehrávače
+    // před rozjetím ještě nemusí sedět).
+    if (!followFrames || !playerReady || !playbackStarted || !frameSource || mode === 'music') return;
     let last = '';
     let cancelled = false;
     const tick = async () => {
@@ -372,7 +390,7 @@ function WatchPageInner() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [followFrames, playerReady, frameSource, mode]);
+  }, [followFrames, playerReady, playbackStarted, frameSource, mode]);
 
   /**
    * Předání skladby trvalému přehrávači.
@@ -791,29 +809,37 @@ function WatchPageInner() {
     });
   }
 
-  function handlePlayerSdkReady() {
-    if (iframeRef.current && (window as any).Stream) {
-      playerRef.current = (window as any).Stream(iframeRef.current);
-      playerRef.current.muted = false;
-      playerRef.current.volume = 1;
-      setPlayerReady(true);
-      // Na televizi je po otevření vybraný přehrávač: OK hraje, šipky
-      // posouvají, dolů vede k názvu a komentářům.
-      if (isTvMode()) wrapRef.current?.focus({ preventScroll: true });
+  /**
+   * Přehrávač je napojený (vlastní <video>, nebo iframe Cloudflare přes jeho
+   * SDK - oba mají stejné ovládání): od teď ho ovládá stránka a rozjede ho.
+   * Tenhle přehrávač je jen pro obyčejná videa. Hudbu hraje jeden jediný
+   * přehrávač v kostře appky a stránka si ho jen promítne - viz
+   * components/MusicVideoSurface.tsx.
+   */
+  function attachPlayer(player: any, seekTo: number | null) {
+    playerRef.current = player;
+    player.muted = false;
+    player.volume = 1;
+    setPlayerReady(true);
+    // Na televizi je po otevření vybraný přehrávač: OK hraje, šipky
+    // posouvají, dolů vede k názvu a komentářům.
+    if (isTvMode()) wrapRef.current?.focus({ preventScroll: true });
+    // Bez odkazu na konkrétní okamžik naváže appka tam, kde divák naposledy skončil -
+    // klidně i z jiného zařízení (pozice je v databázi, ne jen v prohlížeči).
+    startPlayback(player, seekTo);
+    const start = startAtRef.current;
+    if (start?.resumed) {
+      const mm = Math.floor(start.seconds / 60);
+      const ss = String(start.seconds % 60).padStart(2, '0');
+      setToast({ message: t('resumingFromLabel').replace('{time}', `${mm}:${ss}`), type: 'success' });
+    }
+  }
 
-      // Tenhle přehrávač je odteď jen pro obyčejná videa. Hudbu hraje
-      // jeden jediný přehrávač v kostře appky a stránka si ho jen
-      // promítne - viz components/MusicVideoSurface.tsx.
-      // Začátek už zná i přehrávač (startTime v adrese) - tady jen pojistka, kdyby ho nevzal.
-      // Bez odkazu na konkrétní okamžik naváže appka tam, kde divák naposledy skončil -
-      // klidně i z jiného zařízení (pozice je v databázi, ne jen v prohlížeči).
+  function handlePlayerSdkReady() {
+    if (iframeRef.current && (window as any).Stream && !playerRef.current) {
+      // Začátek už zná i přehrávač Cloudflare (startTime v adrese) - tady jen pojistka, kdyby ho nevzal.
       const start = startAtRef.current;
-      startPlayback(playerRef.current, start ? start.seconds : null);
-      if (start?.resumed) {
-        const mm = Math.floor(start.seconds / 60);
-        const ss = String(start.seconds % 60).padStart(2, '0');
-        setToast({ message: t('resumingFromLabel').replace('{time}', `${mm}:${ss}`), type: 'success' });
-      }
+      attachPlayer((window as any).Stream(iframeRef.current), start ? start.seconds : null);
     }
   }
 
@@ -897,10 +923,60 @@ function WatchPageInner() {
     setPlaybackStarted(false);
     setNeedsPlayTap(false);
     setShowUpNext(false);
+    setQualities([]);
+    setQuality(-1);
+    setPlayingHeight(null);
 
     // U hudby stránka žádný vlastní přehrávač nemá - hraje ten v kostře
     // appky a stránka si ho jen promítne.
     if (mode === 'music') return;
+
+    if (engine === 'native') {
+      // Vlastní přehrávač: HLS od Cloudflare rovnou do <video> (lib/vodPlayer.ts).
+      // <video> se vykreslí, až stránka dojede s načítáním - do té doby se čeká
+      // (stejně jako na iframe Cloudflare níž).
+      let handle: VodHandle | null = null;
+      let cancelled = false;
+      const current = video;
+      const tryAttach = (): boolean => {
+        const el = videoElRef.current;
+        if (cancelled || handle || !el || !current) return !!handle;
+        const start = startAtRef.current;
+        const attached: VodHandle = attachVod(el, manifestUrl(current.playback_id ?? current.cloudflare_video_id, customerCodeFromUrl(current.thumbnail_url)), {
+          // Začátek (pokračování, ?t=) načte přehrávač rovnou - žádné přetáčení potom.
+          startAt: start?.seconds ?? null,
+          onFatal: (why, at) => {
+            console.warn('Kine: vlastní přehrávač nejde, hraje přehrávač Cloudflare', why);
+            // Cloudflare naváže tam, kde vlastní přehrávač skončil.
+            if (at > 1) startAtRef.current = { seconds: Math.floor(at), resumed: false };
+            setEngine('iframe');
+          },
+          onLevels: () => {
+            setQualities(attached.levels());
+            setQuality(attached.quality());
+            setPlayingHeight(attached.stats.height);
+          },
+        });
+        handle = attached;
+        vodRef.current = attached;
+        attachPlayer(mediaPlayer(el, () => setNeedsPlayTap(true)), null);
+        return true;
+      };
+      const waiting = tryAttach()
+        ? null
+        : setInterval(() => {
+            if (tryAttach() && waiting) clearInterval(waiting);
+          }, 100);
+      return () => {
+        cancelled = true;
+        if (waiting) clearInterval(waiting);
+        playbackCleanupRef.current?.();
+        playbackCleanupRef.current = null;
+        const h = handle as VodHandle | null;
+        h?.detach();
+        if (h && vodRef.current === h) vodRef.current = null;
+      };
+    }
 
     const interval = setInterval(() => {
       if (iframeRef.current && (window as any).Stream && !playerRef.current) {
@@ -915,7 +991,59 @@ function WatchPageInner() {
       playbackCleanupRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [video?.id, mode]);
+  }, [video?.id, mode, engine]);
+
+  // Tlačítka na klávesnici a sluchátkách, zamčená obrazovka a oznámení ovládají
+  // video (vlastní přehrávač je ve stejném dokumentu jako hudba - lib/musicPlayer.tsx).
+  useEffect(() => {
+    if (engine !== 'native' || !playerReady || !video || mode === 'music') return;
+    musicCommands.setVideoControls({
+      play: () => void playerRef.current?.play?.(),
+      pause: () => playerRef.current?.pause?.(),
+      seek: (seconds: number) => {
+        if (playerRef.current) playerRef.current.currentTime = Math.max(0, seconds);
+      },
+      currentTime: () => Number(playerRef.current?.currentTime) || 0,
+      title: String(video.title ?? ''),
+      creator: video.profiles?.display_name ?? video.profiles?.username ?? null,
+      thumbnail: video.thumbnail_url ?? null,
+    });
+    return () => musicCommands.setVideoControls(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, playerReady, video?.id, mode]);
+
+  // Pomalý rozjezd (nebo opakované zasekávání) vlastního přehrávače se jednou
+  // za zobrazení nahlásí do /admin/errors i se statistikami - je pak vidět,
+  // jestli zdržuje Cloudflare, nebo připojení. Karta na pozadí se nepočítá.
+  useEffect(() => {
+    if (engine !== 'native' || !playerReady || !video?.id) return;
+    let reported = false;
+    const timer = setInterval(() => {
+      const handle = vodRef.current;
+      if (!handle || reported) return;
+      const s = handle.stats;
+      if (performance.now() - s.attachedAt > 3 * 60 * 1000) return clearInterval(timer);
+      // Karta byla na pozadí, než se video rozjelo - prohlížeč ho schválně nepouštěl.
+      if (s.hiddenBeforeStart) return;
+      // Rozjezd se měří od chvíle, kdy přehrávání smělo začít (u zákazu bez klepnutí od klepnutí).
+      const waitingForTap = s.playRequestedAt === null;
+      const waitedMs = s.playRequestedAt === null ? 0 : performance.now() - s.playRequestedAt;
+      if (!shouldReportSlowStart({ firstFrameMs: s.firstFrameMs, waitedMs, stalls: s.stalls, waitingForTap })) return;
+      reported = true;
+      reportSlowVideo(
+        statsReport(s, {
+          videoId: video.id,
+          durationS: video.duration_seconds ?? null,
+          startAt: startAtRef.current?.seconds ?? null,
+          bufferedAheadS: bufferedAhead(videoElRef.current),
+          waitedMs,
+        }),
+        vodVerdict(s)
+      );
+    }, 2000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, playerReady, video?.id]);
 
   const playlistIndex = playlistVideos.findIndex((v) => v.id === videoId);
   const playlistNext = playlistIndex >= 0 ? playlistVideos[playlistIndex + 1] : null;
@@ -1067,6 +1195,8 @@ function WatchPageInner() {
     setLoading(true);
     setNotFound(false);
     setNotFoundReason(null);
+    // hls.js (vlastní přehrávač) se stahuje souběžně s údaji o videu - ať je po ruce hned.
+    void preloadHls();
 
     let { data, error } = await supabase
       .from('videos')
@@ -1100,6 +1230,14 @@ function WatchPageInner() {
     const [playbackId, startAt] = await Promise.all([resolvePlaybackId(data), startPoint(data)]);
     data.playback_id = playbackId;
     startAtRef.current = startAt;
+    // Vlastní přehrávač, kde to jde; ?player=cloudflare vynutí přehrávač Cloudflare (záchrana, srovnání).
+    setEngine(
+      chooseEngine({
+        nativeHls: supportsNativeHls(),
+        mse: canPlayVodNatively(),
+        forceCloudflare: searchParams.get('player') === 'cloudflare',
+      })
+    );
 
     setVideo(data);
     document.title = `${data.title} - Kine`;
@@ -1399,7 +1537,7 @@ function WatchPageInner() {
 
   return (
     <div className={`watch-layout ${theater && mode !== 'music' ? 'watch-layout-theater' : ''}`}>
-      <Script src="https://embed.cloudflarestream.com/embed/sdk.latest.js" onLoad={handlePlayerSdkReady} />
+      {engine === 'iframe' && <Script src="https://embed.cloudflarestream.com/embed/sdk.latest.js" onLoad={handlePlayerSdkReady} />}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <WatchHistoryTracker videoId={video.id} />
       <div className="watch-video-column">
@@ -1471,17 +1609,39 @@ function WatchPageInner() {
                         </button>
                       </div>
                     )}
-                    <iframe
-                      ref={iframeRef}
-                      // preload=auto: manifest a první kousky videa se stáhnou hned
-                      // při otevření stránky, ne až po kliknutí na Přehrát - u delších
-                      // videí se jinak po kliknutí dlouho čekalo.
-                      src={`https://iframe.videodelivery.net/${video.playback_id ?? video.cloudflare_video_id}?controls=false&preload=auto${startAtRef.current ? `&startTime=${startAtRef.current.seconds}` : ''}`}
-                      style={{ width: '100%', height: '100%', border: 'none' }}
-                      allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen;"
-                      allowFullScreen
-                      tabIndex={-1}
-                    />
+                    {engine === 'native' ? (
+                      <video
+                        key={video.id}
+                        ref={videoElRef}
+                        className="player-video"
+                        playsInline
+                        preload="auto"
+                        tabIndex={-1}
+                        controlsList="nodownload"
+                        onContextMenu={(e) => e.preventDefault()}
+                      />
+                    ) : (
+                      <iframe
+                        ref={iframeRef}
+                        // preload=auto: manifest a první kousky videa se stáhnou hned
+                        // při otevření stránky, ne až po kliknutí na Přehrát.
+                        src={`https://iframe.videodelivery.net/${video.playback_id ?? video.cloudflare_video_id}?controls=false&preload=auto${startAtRef.current ? `&startTime=${startAtRef.current.seconds}` : ''}`}
+                        style={{ width: '100%', height: '100%', border: 'none' }}
+                        allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen;"
+                        allowFullScreen
+                        tabIndex={-1}
+                      />
+                    )}
+                    {statsOpen && (
+                      <PlaybackStats
+                        stats={engine === 'native' ? vodRef.current?.stats ?? null : null}
+                        video={engine === 'native' ? videoElRef.current : null}
+                        videoId={video.id}
+                        durationS={video.duration_seconds ?? null}
+                        startAt={startAtRef.current?.seconds ?? null}
+                        onClose={() => setStatsOpen(false)}
+                      />
+                    )}
 
                     {keyHint && (
                       // key se mění s každým stiskem, takže React prvek nasadí znovu
@@ -1552,6 +1712,14 @@ function WatchPageInner() {
                         onToggleLoop={() => setLoop((v) => !v)}
                         autoplay={autoplay}
                         onToggleAutoplay={toggleAutoplay}
+                        qualities={engine === 'native' ? qualities : []}
+                        quality={quality}
+                        playingHeight={playingHeight}
+                        onQuality={(index) => {
+                          vodRef.current?.setQuality(index);
+                          setQuality(index);
+                        }}
+                        onToggleStats={() => setStatsOpen((v) => !v)}
                       />
                     )}
                     {playerReady && captions.length > 0 && captionsEnabled && (

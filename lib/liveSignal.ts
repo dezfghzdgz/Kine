@@ -74,17 +74,20 @@ export function revivedStartedAt(row: SignalRow, now: number = Date.now()): stri
 // ---- co říká Cloudflare -------------------------------------------------------------
 
 /**
- * Cloudflare přenos v seznamu běžících pořád má, ale vstup zrovna není
- * připojený (OBS / appka se připojuje znovu - Cloudflare na to čeká
- * minutu a pak záznam uzavře). Tak dlouho od posledního potvrzení zůstává
- * přenos v "Živě"; pak zmizí.
+ * Cloudflare živý přenos zrovna nepotvrdil: vstup není připojený (OBS /
+ * appka se připojuje znovu - Cloudflare na to čeká minutu a pak záznam
+ * uzavře), nebo přenos jednou chybí v seznamu běžících. Tak dlouho od
+ * posledního potvrzení zůstává přenos v "Živě"; pak zmizí.
  */
 export const CF_RECONNECT_GRACE_MS = 60 * 1000;
 
 /**
  * Skončený přenos (video vzniklo před koncem) smí Cloudflare "oživit" až po
- * téhle době: Cloudflare po odpojení minutu čeká na znovupřipojení a video
- * pořád hlásí jako běžící. Nové vysílání (nové video) se ukáže hned.
+ * téhle době - a jen když vstup opravdu vysílá (lifecycle). Po Ukončit
+ * (appka, studio) OBS nebo appka ještě chvíli posílá a Cloudflare navíc
+ * minutu čeká na znovupřipojení (timeoutSeconds 60) - kdyby to celou dobu
+ * hlásil jako vysílání, skončený přenos se nesmí vrátit. Nové vysílání
+ * (nové video) se ukáže hned.
  */
 export const CF_REVIVE_HOLDOFF_MS = 90 * 1000;
 
@@ -100,8 +103,8 @@ export type CloudflareSeen = {
   /** Má u vstupu video ve stavu live-inprogress (seznam běžících přenosů). */
   listed: boolean;
   /**
-   * Vstup opravdu přijímá vysílání (lifecycle - podle toho se řídí i
-   * přehrávač Cloudflare). null = nevíme (dotaz nevyšel).
+   * Vstup opravdu přijímá vysílání (lifecycle vstupu, záložně stav vstupu
+   * z API - podle toho se řídí i přehrávač Cloudflare). null = nevíme.
    */
   connected: boolean | null;
   /** Kdy vzniklo video, které Cloudflare hlásí (začátek přenosu u Cloudflare). */
@@ -120,36 +123,86 @@ export type LiveDecision = 'confirm' | 'keep' | 'end' | 'none';
  * Rozhodnutí pro jeden kanál při srovnání s Cloudflare. Stránka přenosu
  * i řada "Živě" pak čtou totéž z databáze, takže se nemůžou rozejít.
  *
- * Proč nestačí seznam běžících přenosů: Cloudflare v něm po konci vysílání
- * nechává video ve stavu "live-inprogress" ještě minutu (čeká, jestli se
- * vysílání nepřipojí znovu), a někdy i mnohem déle. Kanál pak visel
- * v "Živě", i když nikdo nevysílal - a po kliknutí stránka přenosu (a
- * přehrávač Cloudflare) řekla "teď nevysílá". Proto rozhoduje hlavně
- * lifecycle vstupu: jestli opravdu přijímá vysílání.
+ * Co Cloudflare řekne, má dvě síly:
+ *  - jistě: lifecycle vstupu (vysílá / nevysílá),
+ *  - nejistě (lifecycle nejde zjistit): seznam běžících přenosů. Ten po
+ *    konci vysílání nechává video "live-inprogress" ještě minutu i déle,
+ *    a naopak v něm běžící přenos jednou za čas chybí.
+ *
+ * Živý přenos se proto neukončí kvůli jedné odpovědi: skončí až po minutě
+ * bez jediného potvrzení (CF_RECONNECT_GRACE_MS) - dřív stačilo jedno
+ * srovnání, kde chyběl v seznamu, a přenos z "Živě" zmizel; pak se
+ * minutu i déle nesměl vrátit a "Živě" blikalo (je tam / není tam).
+ * Skončený přenos oživí jen jistá odpověď (vstup vysílá), u stejného
+ * záznamu až po CF_REVIVE_HOLDOFF_MS; nový záznam (nové video) hned.
  */
 export function decideLive(
   row: SignalRow & { is_live: boolean; ended_at?: string | null },
   cf: CloudflareSeen,
   now: number = Date.now()
 ): LiveDecision {
-  if (cf.listed && cf.connected !== false) {
-    if (row.is_live) return 'confirm';
-    const ended = ms(row.ended_at);
-    const created = ms(cf.videoCreatedAt);
-    // Video z přenosu, který už skončil (vzniklo před koncem, nebo nevíme kdy):
-    // to je přesně "skončil jsem, a v Živě visím dál". Oživí ho jen opravdu
-    // připojený vstup, a to až po minutě, kterou Cloudflare čeká na znovupřipojení.
-    const sameSession = Number.isFinite(ended) && (!Number.isFinite(created) || created <= ended);
-    if (sameSession && (cf.connected !== true || now - ended < CF_REVIVE_HOLDOFF_MS)) return 'none';
-    return 'confirm';
-  }
-  if (!row.is_live) return 'none';
-  if (appSignalTrusted(row, now)) return 'keep';
-  if (cf.listed) {
+  const sure = cf.connected !== null;
+  const streaming = sure ? cf.connected === true : cf.listed;
+
+  if (row.is_live) {
+    if (streaming) return 'confirm';
+    if (appSignalTrusted(row, now)) return 'keep';
     const confirmed = lastConfirmedAt(row);
     if (Number.isFinite(confirmed) && now - confirmed < CF_RECONNECT_GRACE_MS) return 'keep';
+    return 'end';
   }
-  return 'end';
+
+  if (!streaming) return 'none';
+  const ended = ms(row.ended_at);
+  const created = ms(cf.videoCreatedAt);
+  // Nové vysílání: kanál ještě nevysílal, nebo Cloudflare hlásí video, které vzniklo po konci.
+  if (!Number.isFinite(ended) || (Number.isFinite(created) && created > ended)) return 'confirm';
+  // Pořád ten skončený záznam. Seznam samotný ho neoživí (to byl ten "skončil
+  // jsem, a v Živě visím dál"); jistě vysílající vstup ano, po chvíli.
+  if (!sure) return 'none';
+  return now - ended >= CF_REVIVE_HOLDOFF_MS ? 'confirm' : 'none';
+}
+
+/** Přenos, který se do tolika po konci vrátí (stejný záznam u Cloudflare), pokračuje i se svým začátkem. */
+export const RESUME_SAME_STREAM_MS = 10 * 60 * 1000;
+
+/**
+ * Vrací se skončený přenos jako tentýž (stejný záznam u Cloudflare, do
+ * RESUME_SAME_STREAM_MS po konci)? Pak si nechá začátek (čas vysílání,
+ * chat) i video. Jen když to jde poznat: lifecycle hlásí to samé video,
+ * nebo video ze seznamu vzniklo před koncem. Nový přenos (nové video,
+ * nebo nevíme) začíná znovu - nesmí převzít čas ani záznam starého.
+ */
+export function sameStreamReturns(
+  row: { is_live: boolean; started_at: string | null; ended_at?: string | null; current_video_uid?: string | null },
+  seen: { lifeUid: string | null; videoCreatedAt?: string | null },
+  now: number = Date.now()
+): boolean {
+  if (row.is_live || !row.started_at) return false;
+  const ended = ms(row.ended_at);
+  if (!Number.isFinite(ended) || now - ended >= RESUME_SAME_STREAM_MS) return false;
+  if (seen.lifeUid && row.current_video_uid && seen.lifeUid === row.current_video_uid) return true;
+  const created = ms(seen.videoCreatedAt);
+  return Number.isFinite(created) && created <= ended;
+}
+
+/**
+ * Stav vstupu z API Cloudflare (GET live_inputs/<id>, pole status) ->
+ * vysílá / nevysílá / nevíme. Záloha, když lifecycle nejde zjistit. API
+ * vrací text ("connected"…), novější verze objekt s current.state.
+ */
+export function connectedFromInputStatus(status: unknown): boolean | null {
+  const raw =
+    typeof status === 'string'
+      ? status
+      : status && typeof status === 'object'
+        ? String((status as any).current?.state ?? (status as any).current?.reason ?? (status as any).state ?? '')
+        : '';
+  const state = raw.trim().toLowerCase();
+  if (state === 'connected' || state === 'reconnected') return true;
+  if (['client_disconnect', 'ttl_exceeded', 'failed_to_connect', 'failed_to_reconnect', 'disconnected'].includes(state)) return false;
+  // reconnecting, new_configuration_accepted, nic: nevíme.
+  return null;
 }
 
 /**

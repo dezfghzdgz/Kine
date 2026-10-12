@@ -97,13 +97,15 @@ export async function GET(req: NextRequest) {
     })(),
   ]);
 
-  const arranged = arrangeLiveNow(rows, profiles, { viewerId: viewer?.id ?? null, followed, limit: countOnly ? 60 : limit });
+  // Všechny viditelné (kvůli počtu), do seznamu jen prvních `limit`.
+  const all = arrangeLiveNow(rows, profiles, { viewerId: viewer?.id ?? null, followed, limit: 60 });
   if (countOnly) {
     return NextResponse.json(
-      { enabled: true, count: arranged.length },
-      { headers: { 'Cache-Control': viewer ? 'private, no-store' : 'public, s-maxage=30, stale-while-revalidate=60' } }
+      { enabled: true, count: all.length },
+      { headers: { 'Cache-Control': viewer ? 'private, no-store' : 'public, s-maxage=15, stale-while-revalidate=30' } }
     );
   }
+  const arranged = all.slice(0, limit);
   const streams = await Promise.all(
     arranged.map(async ({ row, profile }) => ({
       ...(await publicLive(row)),
@@ -112,5 +114,5 @@ export async function GET(req: NextRequest) {
       profile: { id: profile.id, username: profile.username, displayName: profile.display_name, avatarUrl: profile.avatar_url, verificationTier: profile.verification_tier },
     }))
   );
-  return NextResponse.json({ enabled: true, streams }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ enabled: true, streams, total: all.length }, { headers: { 'Cache-Control': 'no-store' } });
 }

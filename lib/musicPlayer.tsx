@@ -93,6 +93,13 @@ type MusicCommands = {
    * na Video by ho umlčelo.
    */
   setVideoTakeover: (active: boolean) => void;
+  /**
+   * Obyčejné video hraje vlastní přehrávač stránky (<video> v tomtéž
+   * dokumentu, lib/vodPlayer.ts): tlačítka na klávesnici a sluchátkách,
+   * zamčená obrazovka a oznámení (Media Session) pak ovládají to video,
+   * ne hudbu. null = zase hudba.
+   */
+  setVideoControls: (controls: VideoMediaControls | null) => void;
   /** Ztlumení. Druhé kliknutí vrátí hlasitost tam, kde byla před ztlumením. */
   toggleMute: () => void;
   next: () => void;
@@ -111,6 +118,17 @@ type MusicCommands = {
    * stala čistě vizuální věc - žádné druhé načítání.
    */
   showEngineOver: (rect: EngineRect | null) => void;
+};
+
+/** Ovládání a popis obyčejného videa pro Media Session (setVideoControls). */
+export type VideoMediaControls = {
+  play: () => void;
+  pause: () => void;
+  seek: (seconds: number) => void;
+  currentTime: () => number;
+  title: string;
+  creator: string | null;
+  thumbnail: string | null;
 };
 
 type MusicState = {
@@ -256,6 +274,9 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   volumeRef.current = volume;
   currentTimeRef.current = currentTime;
   takeoverRef.current = videoTakeover;
+  // Obyčejné video ve vlastním přehrávači stránky (setVideoControls) - Media Session ovládá jeho.
+  const videoControlsRef = useRef<VideoMediaControls | null>(null);
+  const [videoMedia, setVideoMedia] = useState<VideoMediaControls | null>(null);
 
   const activePlayer = useCallback((): HTMLMediaElement | null => playersRef.current[activeRef.current], []);
 
@@ -546,6 +567,10 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         setVideoTakeoverState(activeNow);
         if (activeNow) playersRef.current.forEach((p) => p?.pause());
       },
+      setVideoControls(controls) {
+        videoControlsRef.current = controls;
+        setVideoMedia(controls);
+      },
       stop() {
         playersRef.current.forEach((p) => p?.pause());
         // Prvky zmizí s prázdnými sloty a React zavolá bindSlot s null,
@@ -659,6 +684,21 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     const ms = typeof navigator !== 'undefined' ? (navigator as any).mediaSession : null;
     if (!ms) return;
     try {
+      // Hraje obyčejné video ve vlastním přehrávači stránky: na zamčené obrazovce a v oznámení je ono.
+      if (videoTakeover && videoMedia) {
+        const MediaMetadataCtor = (window as any).MediaMetadata;
+        if (MediaMetadataCtor) {
+          ms.metadata = new MediaMetadataCtor({
+            title: videoMedia.title,
+            artist: videoMedia.creator ?? 'Kine',
+            album: 'Kine',
+            artwork: videoMedia.thumbnail ? [{ src: videoMedia.thumbnail, sizes: '1280x720' }] : [],
+          });
+        }
+        // Stav (hraje / pauza) si prohlížeč vezme od <video> sám.
+        ms.playbackState = 'none';
+        return;
+      }
       if (!track) {
         ms.metadata = null;
         ms.playbackState = 'none';
@@ -684,20 +724,36 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     } catch {
       // Media Session je bonus - bez něj hudba hraje dál.
     }
-  }, [track?.id, track?.title, track?.creator, track?.thumbnail, track, playing]);
+  }, [track?.id, track?.title, track?.creator, track?.thumbnail, track, playing, videoTakeover, videoMedia]);
 
   useEffect(() => {
     const ms = typeof navigator !== 'undefined' ? (navigator as any).mediaSession : null;
     if (!ms || typeof ms.setActionHandler !== 'function') return;
 
+    // Během obyčejného videa ve vlastním přehrávači stránky (setVideoControls) patří tlačítka jemu -
+    // je ve stejném dokumentu jako hudba, takže by je jinak dostala (tichá) hudba.
+    const video = () => (takeoverRef.current ? videoControlsRef.current : null);
     const handlers: [string, (details?: any) => void][] = [
-      ['play', () => commands.resume()],
-      ['pause', () => commands.pause()],
-      ['previoustrack', () => commands.previous()],
-      ['nexttrack', () => commands.next()],
-      ['seekto', (d) => { if (typeof d?.seekTime === 'number') commands.seek(d.seekTime); }],
-      ['seekbackward', (d) => commands.seek(Math.max(0, currentTimeRef.current - (d?.seekOffset ?? 10)))],
-      ['seekforward', (d) => commands.seek(currentTimeRef.current + (d?.seekOffset ?? 10))],
+      ['play', () => { const v = video(); if (v) v.play(); else commands.resume(); }],
+      ['pause', () => { const v = video(); if (v) v.pause(); else commands.pause(); }],
+      ['previoustrack', () => { if (!video()) commands.previous(); }],
+      ['nexttrack', () => { if (!video()) commands.next(); }],
+      ['seekto', (d) => {
+        if (typeof d?.seekTime !== 'number') return;
+        const v = video();
+        if (v) v.seek(d.seekTime);
+        else commands.seek(d.seekTime);
+      }],
+      ['seekbackward', (d) => {
+        const v = video();
+        if (v) v.seek(Math.max(0, v.currentTime() - (d?.seekOffset ?? 10)));
+        else commands.seek(Math.max(0, currentTimeRef.current - (d?.seekOffset ?? 10)));
+      }],
+      ['seekforward', (d) => {
+        const v = video();
+        if (v) v.seek(v.currentTime() + (d?.seekOffset ?? 10));
+        else commands.seek(currentTimeRef.current + (d?.seekOffset ?? 10));
+      }],
     ];
 
     for (const [action, handler] of handlers) {
@@ -713,13 +769,15 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     const ms = typeof navigator !== 'undefined' ? (navigator as any).mediaSession : null;
     if (!ms || typeof ms.setPositionState !== 'function') return;
+    // Video ve vlastním přehrávači: pozici zná prohlížeč od <video> sám.
+    if (videoTakeover && videoMedia) return;
     if (!track || !(duration > 0)) return;
     try {
       ms.setPositionState({ duration, playbackRate: 1, position: Math.min(Math.max(0, currentTime), duration) });
     } catch {
       // Neplatná pozice (např. delší než skladba) - prohlížeč ji odmítne, nic víc.
     }
-  }, [track, duration, currentTime]);
+  }, [track, duration, currentTime, videoTakeover, videoMedia]);
 
   const state = useMemo<MusicState>(
     () => ({

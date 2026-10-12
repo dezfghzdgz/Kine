@@ -21,7 +21,8 @@ import { MAX_MESSAGE, MAX_STACK, MAX_URL } from '@/lib/errorReporter';
  */
 
 const PER_CLIENT_PER_MINUTE = 30;
-const ALLOWED_KINDS = new Set(['error', 'rejection']);
+// perf = pomalé video (lib/vodPlayer.ts - reportSlowVideo): statistiky přehrávání místo zásobníku.
+const ALLOWED_KINDS = new Set(['error', 'rejection', 'perf']);
 
 function cut(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null;

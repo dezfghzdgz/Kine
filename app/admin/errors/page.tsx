@@ -169,7 +169,7 @@ export default function AdminErrorsPage() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ margin: 0, fontWeight: 600, wordBreak: 'break-word' }}>{g.message}</p>
                     <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-faint)' }}>
-                      {g.kind === 'rejection' ? 'nezachycený promise' : 'chyba'} · naposled{' '}
+                      {g.kind === 'rejection' ? 'nezachycený promise' : g.kind === 'perf' ? 'pomalé video (statistiky níž)' : 'chyba'} · naposled{' '}
                       {new Date(g.lastSeen).toLocaleString('cs-CZ')} · poprvé{' '}
                       {new Date(g.firstSeen).toLocaleString('cs-CZ')}
                     </p>

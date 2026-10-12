@@ -1,3 +1,59 @@
+KINE - vlastní přehrávač videí (rychlý start), Živě nebliká (dodávka kine-prehravac-zive-2026-10-12)
+====================================================================================================
+
+Jen web, nic v Supabase ani na Vercelu nenastavuješ. Rozbal do kořene repa
+a přepiš, nahraj na GitHub (přetažením) a pusť node zkontroluj-soubory.mjs.
+
+CO SE ZMĚNILO
+- Videa hraje vlastní přehrávač Kine místo iframu Cloudflare: <video> s HLS
+  od Cloudflare (Safari sám, ostatní přes hls.js - stejně jako hudba).
+  lib/vodPlayer.ts, lib/vodPlayerCore.ts (test tests/vodPlayer.test.mjs).
+  - První kus videa v nižší kvalitě (malý - rozjede se hned), kvalita pak
+    sama vyskočí. S rychlým připojením se příště začíná výš (nejvýš ~720p).
+  - Pokračování uprostřed videa se načítá rovnou od toho místa.
+  - Kus, který Cloudflare nevydá, se po 8 s zkusí znovu (výchozí hls.js
+    čeká na kus až 2 minuty - podobně se nejspíš choval i přehrávač
+    Cloudflare a to bylo to "strašně dlouhé" načítání).
+  - ⋮ -> Kvalita (Automaticky / 1080p / 720p / ...) a ⋮ -> Statistiky
+    přehrávání (jako "statistiky pro nerdy" na YouTube): kvalita, odhad
+    připojení, rozjezd, první kus (první bajt, velikost), zaseknutí a
+    verdikt - zdržuje Cloudflare, nebo připojení. Jde i adresou ?stats=1.
+  - Pomalý rozjezd (přes 6 s) nebo opakované zasekávání se jednou za
+    zobrazení nahlásí do /admin/errors jako "pomalé video" i se
+    statistikami - je vidět, kde to vázne.
+  - Když vlastní přehrávač nejde (starý prohlížeč, chyba u Cloudflare),
+    stránka sama přepne na přehrávač Cloudflare od stejného místa.
+    ?player=cloudflare ho vynutí (srovnání).
+  - Spojení se serverem Cloudflare se navazuje hned při načtení stránky.
+  - Tlačítka médií (klávesnice, sluchátka) a zamčená obrazovka / oznámení
+    ovládají video a ukazují jeho název (dřív je u vlastního přehrávače
+    brala tichá hudba - lib/musicPlayer.tsx, setVideoControls).
+- Živě už nebliká ("většinou nikdo nevysílá, občas ano" a v menu u Živě 1):
+  stačilo jedno srovnání, kde Cloudflare přenos zrovna nevypsal, a Kine
+  vysílání ukončilo - a pak se 90 s nesmělo vrátit. Teď živý přenos
+  skončí až po minutě bez jediného potvrzení, Kine se navíc ptá na stav
+  vstupu přes API Cloudflare (když lifecycle nejde) a přenos, který
+  Cloudflare jistě vidí, se vrátí hned (po Ukončit nejdřív za 30 s).
+  lib/liveSignal.ts - decideLive, testy v tests/security.test.mjs.
+- Číslo u Živě v menu se srovná s tím, co je na obrazovce (stránka Živě
+  a řada Živě na hlavní stránce mu ho předají); jinak se počet obnovuje
+  každých 30 s. Když seznam přenosů nejde načíst, stránka Živě to napíše
+  (dřív po chvíli ukázala "Teď nikdo nevysílá").
+- Návod na vlastní doménu níž (VLASTNÍ DOMÉNA) doplněný o dnešní Vercel.
+
+OVĚŘENO
+- npx tsc --noEmit, next build, testy webu (nové: přehrávač, rozhodování
+  o živém vysílání včetně přesně téhle chyby), testy stránek v prohlížeči
+  se skutečným HLS videem: rozjezd od místa pokračování, malý první kus,
+  volba kvality, statistiky, zaseknutý kus (zkusí se znovu, nahlásí se),
+  přepnutí na Cloudflare, prohlížeč bez automatického přehrávání,
+  Živě (číslo v menu = seznam) + starší testy stránek.
+
+==========================================================================================
+PŘEDCHOZÍ DODÁVKA (kine-zive-vzhled-2026-10-12) - už nahraná, nic z toho znovu
+nedělej.
+==========================================================================================
+
 KINE - živě (chat po vysílání, visící přenos, náhled), vzhled, delší videa (dodávka kine-zive-vzhled-2026-10-12)
 ==============================================================================================================
 
@@ -242,13 +298,18 @@ O KINE (/about)
 - Klipovač se v češtině a slovenštině všude jmenuje Kine Clipper.
 
 VLASTNÍ DOMÉNA - JDE TO (i na Hobby, až 50 domén na projekt)
+  0. Zdarma jde i hezčí adresa na vercel.app (třeba kine-video.vercel.app,
+     když je volná): Settings -> Domains -> Add Domain -> napiš ji. Bez DNS.
+     Pak body 4-7 stejně jako u vlastní domény.
   1. Kup doménu (Forpsi, Wedos, Websupport, Cloudflare... nebo přímo na Vercelu).
   2. Vercel -> projekt -> Settings -> Domains -> Add Domain -> napiš
      např. kine.cz. Vercel nabídne přidat i www.kine.cz - nech ho.
-  3. U registrátora domény nastav DNS záznamy, které ti Vercel ukáže:
-     - kine.cz: záznam A na 76.76.21.21 (nebo hodnotu z karty domény),
+  3. U registrátora domény nastav DNS záznamy, které ti Vercel ukáže na
+     kartě domény (hodnoty jsou pro každý projekt jiné - opiš je odtud):
+     - kine.cz: záznam A (u starších projektů 76.76.21.21, u novějších
+       třeba 216.198.79.1); záznam AAAA u kine.cz smaž, pokud tam je,
      - www.kine.cz: záznam CNAME na adresu z karty domény
-       (něco jako xxxx.vercel-dns-0xx.com).
+       (něco jako xxxx.vercel-dns-017.com).
      Za pár minut (někdy hodin) Vercel napíše "Valid Configuration" a sám
      zařídí HTTPS certifikát. U www nastav přesměrování na kine.cz.
   4. Vercel -> Settings -> Environment Variables: NEXT_PUBLIC_SITE_URL =

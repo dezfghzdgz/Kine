@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
 import { liveElapsed } from '@/lib/liveChat';
 import { authHeaders } from '@/lib/authHeaders';
+import { announceLiveCount } from '@/lib/useLiveCount';
 import VerifiedBadge from './VerifiedBadge';
 
 export type LiveItem = {
@@ -50,6 +51,8 @@ export default function LiveNowRow() {
         if (!cancelled && res.ok && body && Array.isArray(body.streams)) {
           loadedAt = Date.now();
           setStreams(body.streams);
+          // Číslo u Živě v menu podle téhož seznamu - ať se nerozchází s tím, co je vidět.
+          announceLiveCount(typeof body.total === 'number' ? body.total : body.streams.length);
         }
       } catch {
         // Bez sítě se řada prostě neukáže.

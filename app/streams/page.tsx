@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n';
 import { authHeaders } from '@/lib/authHeaders';
+import { announceLiveCount } from '@/lib/useLiveCount';
 import { categoryLabel, isCategoryKey } from '@/lib/categories';
 import { LiveCard, type LiveItem } from '@/components/LiveNowRow';
 
@@ -53,6 +54,8 @@ function StreamsInner() {
           setStreams(body.streams);
           setEnabled(body.enabled !== false);
           setFailed(false);
+          // Číslo u Živě v menu podle téhož seznamu - ať se nerozchází s tím, co je vidět.
+          announceLiveCount(typeof body.total === 'number' ? body.total : body.streams.length);
         } else setFailed(true);
       } catch {
         if (!cancelled) setFailed(true);
@@ -62,9 +65,13 @@ function StreamsInner() {
     const refresh = setInterval(load, 20 * 1000);
     const tick = setInterval(() => {
       setNow(Date.now());
-      if (loadedAt && Date.now() - loadedAt > 90 * 1000) {
+      // Seznam se dlouho nepodařilo obnovit: starý se neukazuje (přenosy v něm už nemusí
+      // běžet), ale ani "nikdo nevysílá" - to by nemusela být pravda. Hláška, že se nenačetl.
+      // Karta na pozadí se neobnovuje schválně - to vyřeší návrat (onVisible).
+      if (!document.hidden && loadedAt && Date.now() - loadedAt > 90 * 1000) {
         loadedAt = 0;
-        setStreams([]);
+        setStreams(null);
+        setFailed(true);
       }
     }, 1000);
     const onVisible = () => {
@@ -72,6 +79,7 @@ function StreamsInner() {
       if (loadedAt && Date.now() - loadedAt > 20 * 1000) {
         loadedAt = 0;
         setStreams(null);
+        setFailed(false);
       }
       load();
     };
