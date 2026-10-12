@@ -15,6 +15,8 @@ import {
   type Theme,
 } from '@/lib/appearance';
 import { BRAND_PRESET_COLORS, currentBrandColor, saveBrandColor } from './BrandLogo';
+import UiIcon from './UiIcon';
+import { PanelHeading, WithHelp } from './HelpTip';
 
 const BACKDROP_LABELS: Record<Backdrop, DictKey> = {
   auto: 'appearanceBackdropAuto',
@@ -70,8 +72,7 @@ export default function AppearanceSettings() {
   return (
     <div className="panel appearance-panel" id="appearance" style={{ marginBottom: 32, display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div>
-        <p className="panel-heading" style={{ marginBottom: 4 }}>{t('appearanceHeading')}</p>
-        <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>{t('appearanceDeviceNote')}</p>
+        <PanelHeading icon="palette" title={t('appearanceHeading')} help={t('appearanceDeviceNote')} />
       </div>
 
       <div>
@@ -119,7 +120,9 @@ export default function AppearanceSettings() {
       {glass && (
         <>
           <div>
-            <p className="appearance-label">{t('appearanceBackdropLabel')}</p>
+            <WithHelp help={t('appearanceAutoHint')} className="appearance-label-help">
+              <p className="appearance-label">{t('appearanceBackdropLabel')}</p>
+            </WithHelp>
             <div className="appearance-backdrops" role="radiogroup" aria-label={t('appearanceBackdropLabel')}>
               {BACKDROPS.map((value) => (
                 <button
@@ -135,7 +138,7 @@ export default function AppearanceSettings() {
                 </button>
               ))}
             </div>
-            {appearance.backdrop === 'auto' && <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: '8px 0 0' }}>{t('appearanceAutoHint')}</p>}
+
           </div>
 
           <div>
@@ -155,33 +158,33 @@ export default function AppearanceSettings() {
             </label>
           </div>
 
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
-            <input type="checkbox" className="appearance-motion" style={{ width: 'auto', marginTop: 2 }} checked={appearance.motion} onChange={(e) => change({ motion: e.target.checked })} />
-            <span>
-              {t('appearanceMotion')}
-              <span style={{ display: 'block', fontSize: 12, color: 'var(--text-faint)' }}>{t('appearanceMotionHint')}</span>
-            </span>
-          </label>
+          <WithHelp help={t('appearanceMotionHint')} className="settings-option">
+            <label className="settings-check">
+              <input type="checkbox" className="appearance-motion" checked={appearance.motion} onChange={(e) => change({ motion: e.target.checked })} />
+              <UiIcon name="sparkle" size={16} />
+              <span>{t('appearanceMotion')}</span>
+            </label>
+          </WithHelp>
         </>
       )}
 
-      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
-        <input type="checkbox" style={{ width: 'auto', marginTop: 2 }} checked={appearance.ambient} onChange={(e) => change({ ambient: e.target.checked })} />
-        <span>
-          {t('appearanceAmbient')}
-          <span style={{ display: 'block', fontSize: 12, color: 'var(--text-faint)' }}>{t('appearanceAmbientHint')}</span>
-        </span>
-      </label>
+      <WithHelp help={t('appearanceAmbientHint')} className="settings-option">
+        <label className="settings-check">
+          <input type="checkbox" className="appearance-ambient" checked={appearance.ambient} onChange={(e) => change({ ambient: e.target.checked })} />
+          <UiIcon name="monitor" size={16} />
+          <span>{t('appearanceAmbient')}</span>
+        </label>
+      </WithHelp>
 
       {/* Pozadí a světlo sledují obraz videa / přenosu (ne jen náhled). Má smysl se světlem nebo se sklem "podle videa". */}
       {(appearance.ambient || (glass && appearance.backdrop === 'auto')) && (
-        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
-          <input type="checkbox" className="appearance-follow" style={{ width: 'auto', marginTop: 2 }} checked={appearance.follow} onChange={(e) => change({ follow: e.target.checked })} />
-          <span>
-            {t('appearanceFollow')}
-            <span style={{ display: 'block', fontSize: 12, color: 'var(--text-faint)' }}>{t('appearanceFollowHint')}</span>
-          </span>
-        </label>
+        <WithHelp help={t('appearanceFollowHint')} className="settings-option">
+          <label className="settings-check">
+            <input type="checkbox" className="appearance-follow" checked={appearance.follow} onChange={(e) => change({ follow: e.target.checked })} />
+            <UiIcon name="eye" size={16} />
+            <span>{t('appearanceFollow')}</span>
+          </label>
+        </WithHelp>
       )}
 
       <div>
@@ -214,7 +217,8 @@ export default function AppearanceSettings() {
             change({ ...DEFAULT_APPEARANCE });
           }}
         >
-          {t('appearanceReset')}
+          <UiIcon name="refresh" size={15} />
+          <span>{t('appearanceReset')}</span>
         </button>
       </div>
     </div>

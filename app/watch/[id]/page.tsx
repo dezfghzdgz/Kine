@@ -50,7 +50,8 @@ import ChatReplay from '@/components/ChatReplay';
 import { videoRoom } from '@/lib/liveChat';
 import { formatCountdown, isHiddenScheduled, isUpcomingPremiere } from '@/lib/scheduling';
 import { effectiveChapters } from '@/lib/captions';
-import { preloadImage, setAmbientSource, videoFrameUrl } from '@/lib/appearance';
+import { FOLLOW_VIDEO_MS, preloadImage, setAmbientSource, videoFrameUrl } from '@/lib/appearance';
+import AmbientCanvas from '@/components/AmbientCanvas';
 import { useAppearance } from '@/lib/useAppearance';
 
 const THEATER_KEY = 'kine-theater';
@@ -336,8 +337,9 @@ function WatchPageInner() {
   const showMusicStage = mode === 'music' && musicView === 'cover';
 
   // "Sleduje obraz" (Nastavení -> Vzhled): pozadí skla a světlo kolem přehrávače berou barvy
-  // ze snímku z místa, kde video právě hraje (Cloudflare umí náhled odkudkoli) - každé ~3 s,
-  // jen když video hraje a karta je vidět. Snímek se nejdřív načte, pak ukáže (bez přebliknutí).
+  // ze snímku z místa, kde video právě hraje (Cloudflare umí náhled odkudkoli) - každou sekundu,
+  // jen když video hraje a karta je vidět; další dva snímky se stáhnou dopředu. Snímek se
+  // nejdřív načte, pak ukáže, a plátno (AmbientCanvas) barvy plynule přelévá - žádné skoky.
   const followFrames = appearance.follow && (appearance.ambient || (appearance.look === 'glass' && appearance.backdrop === 'auto'));
   const frameSource: string | null = video ? video.playback_id ?? video.cloudflare_video_id ?? null : null;
   useEffect(() => {
@@ -348,13 +350,16 @@ function WatchPageInner() {
     const tick = async () => {
       const p = playerRef.current;
       if (!p || p.paused || document.visibilityState !== 'visible') return;
-      const url = videoFrameUrl(frameSource, Number(p.currentTime) || 0);
+      const at = Number(p.currentTime) || 0;
+      const url = videoFrameUrl(frameSource, at);
       if (url === last) return;
       last = url;
+      // Další snímky dopředu (do mezipaměti) - až na ně video dojede, jsou hned po ruce.
+      for (const ahead of [1, 2]) void preloadImage(videoFrameUrl(frameSource, at + ahead));
       if ((await preloadImage(url)) && !cancelled) setAmbientFrame(url);
     };
     void tick();
-    const timer = setInterval(() => void tick(), 3000);
+    const timer = setInterval(() => void tick(), FOLLOW_VIDEO_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
@@ -1540,7 +1545,9 @@ function WatchPageInner() {
                   </div>
                   {/* Ambientní světlo: rozmazaný náhled za přehrávačem - barvy videa prosvítají kolem (Nastavení -> Vzhled). */}
                   {(ambientFrame || video.thumbnail_url) && (
-                    <div className="player-ambient" aria-hidden="true" style={{ backgroundImage: `url("${String(ambientFrame ?? video.thumbnail_url).replace(/["\\\n\r]/g, (c: string) => encodeURIComponent(c))}")` }} />
+                    <div className="player-ambient" aria-hidden="true">
+                      <AmbientCanvas src={ambientFrame ?? video.thumbnail_url} />
+                    </div>
                   )}
                 </div>
         )}

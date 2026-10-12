@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { formatTipAmount } from '@/lib/liveTips';
+import { PanelHeading } from './HelpTip';
 
 type TipsInfo = {
   available: boolean;
@@ -70,12 +71,11 @@ export default function LiveTipsPanel({ token, userId, onCopy }: { token: string
 
   return (
     <div className="panel live-tips-panel">
-      <p className="panel-heading">💛 {t('tipsPanelTitle')}</p>
+      <PanelHeading icon="heart" title={t('tipsPanelTitle')} help={info.available ? t('tipsPanelIntro').replace('{fee}', String(info.feePercent ?? 15)) : undefined} />
       {!info.available ? (
         <p className="live-hint" style={{ marginTop: 0 }}>{t('tipsUnavailable')}</p>
       ) : (
         <>
-          <p className="live-hint" style={{ marginTop: 0 }}>{t('tipsPanelIntro').replace('{fee}', String(info.feePercent ?? 15))}</p>
           {info.reason === 'not-connected' ? (
             <p className="live-hint">
               {t('tipsNotConnected')} <Link href="/settings#earnings">{t('tipsConnectLink')} →</Link>

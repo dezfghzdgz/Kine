@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useLanguage } from '@/lib/i18n';
+import { useLanguage, type DictKey } from '@/lib/i18n';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
@@ -9,6 +9,30 @@ import Toast, { ToastType } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { validateUsername } from '@/lib/username';
 import AppearanceSettings from '@/components/AppearanceSettings';
+import UiIcon, { type UiIconName } from '@/components/UiIcon';
+import { PanelHeading, WithHelp } from '@/components/HelpTip';
+import { ThumbsDownIcon, ThumbsUpIcon } from '@/components/ReactionIcons';
+import { SETTINGS_SECTION_EVENT } from '@/lib/settingsNav';
+
+/**
+ * Nastavení po oddílech: nahoře řada ikon (profil, vzhled, domovská
+ * stránka, výdělky, účet), pod ní jen ten jeden oddíl. Oddíl je i v adrese
+ * (#appearance, #earnings…), takže odkazy z nabídky a odjinud vedou rovnou
+ * na místo. Vysvětlení jsou pod otazníčky.
+ */
+type Section = 'profile' | 'appearance' | 'home' | 'earnings' | 'account';
+const SECTIONS: { id: Section; icon: UiIconName; key: DictKey }[] = [
+  { id: 'profile', icon: 'user', key: 'settingsSecProfile' },
+  { id: 'appearance', icon: 'palette', key: 'appearanceHeading' },
+  { id: 'home', icon: 'home', key: 'settingsSecHome' },
+  { id: 'earnings', icon: 'coins', key: 'settingsSecEarnings' },
+  { id: 'account', icon: 'shield', key: 'settingsSecAccount' },
+];
+
+function sectionFromHash(hash: string): Section | null {
+  const id = hash.replace(/^#/, '');
+  return SECTIONS.some((x) => x.id === id) ? (id as Section) : null;
+}
 
 export default function SettingsPage() {
   const { t } = useLanguage();
@@ -40,6 +64,36 @@ export default function SettingsPage() {
   const [priceLoading, setPriceLoading] = useState(false);
   const [priceError, setPriceError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [section, setSection] = useState<Section>('profile');
+
+  // Oddíl z adresy (#appearance…), při změně zpátky do adresy (bez nového záznamu v historii).
+  useEffect(() => {
+    const fromHash = sectionFromHash(window.location.hash);
+    if (fromHash) setSection(fromHash);
+    const onHash = () => {
+      const next = sectionFromHash(window.location.hash);
+      if (next) setSection(next);
+    };
+    const onEvent = (e: Event) => {
+      const next = sectionFromHash(String((e as CustomEvent).detail ?? ''));
+      if (next) setSection(next);
+    };
+    window.addEventListener('hashchange', onHash);
+    window.addEventListener(SETTINGS_SECTION_EVENT, onEvent);
+    return () => {
+      window.removeEventListener('hashchange', onHash);
+      window.removeEventListener(SETTINGS_SECTION_EVENT, onEvent);
+    };
+  }, []);
+
+  function openSection(next: Section) {
+    setSection(next);
+    try {
+      window.history.replaceState(window.history.state, '', `#${next}`);
+    } catch {
+      // nevadí - oddíl se jen nezapíše do adresy
+    }
+  }
 
   useEffect(() => {
     load();
@@ -89,9 +143,9 @@ export default function SettingsPage() {
     setContentPreference(pref);
     const { error } = await supabase.from('profiles').update({ content_preference: pref }).eq('id', userId);
     if (error) {
-      setToast({ message: 'Změna se nepovedla: ' + error.message, type: 'error' });
+      setToast({ message: `${t('settingsChangeFailed')}: ${error.message}`, type: 'error' });
     } else {
-      setToast({ message: 'Preference domovské stránky byla změněna', type: 'success' });
+      setToast({ message: t('settingsHomepageChanged'), type: 'success' });
     }
   }
 
@@ -158,9 +212,9 @@ export default function SettingsPage() {
     setRatingMode(mode);
     const { error } = await supabase.from('profiles').update({ rating_mode: mode }).eq('id', userId);
     if (error) {
-      setToast({ message: 'Změna se nepovedla: ' + error.message, type: 'error' });
+      setToast({ message: `${t('settingsChangeFailed')}: ${error.message}`, type: 'error' });
     } else {
-      setToast({ message: 'Styl hodnocení videí byl změněn', type: 'success' });
+      setToast({ message: t('settingsRatingChanged'), type: 'success' });
     }
   }
 
@@ -176,7 +230,7 @@ export default function SettingsPage() {
       .upload(filePath, file, { upsert: true });
 
     if (uploadError) {
-      setToast({ message: 'Nahrání fotky se nepovedlo: ' + uploadError.message, type: 'error' });
+      setToast({ message: `${t('settingsPhotoFailed')}: ${uploadError.message}`, type: 'error' });
       setUploading(false);
       return;
     }
@@ -188,7 +242,7 @@ export default function SettingsPage() {
 
     setAvatarUrl(newAvatarUrl);
     setUploading(false);
-    setToast({ message: 'Profilová fotka byla aktualizována', type: 'success' });
+    setToast({ message: t('settingsPhotoUpdated'), type: 'success' });
   }
 
   async function handleBannerChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -201,7 +255,7 @@ export default function SettingsPage() {
     const { error: uploadError } = await supabase.storage.from('banners').upload(filePath, file, { upsert: true });
 
     if (uploadError) {
-      setToast({ message: 'Nahrání banneru se nepovedlo: ' + uploadError.message, type: 'error' });
+      setToast({ message: `${t('settingsBannerFailed')}: ${uploadError.message}`, type: 'error' });
       setUploadingBanner(false);
       return;
     }
@@ -213,7 +267,7 @@ export default function SettingsPage() {
 
     setBannerUrl(newBannerUrl);
     setUploadingBanner(false);
-    setToast({ message: 'Banner kanálu byl aktualizován', type: 'success' });
+    setToast({ message: t('settingsBannerUpdated'), type: 'success' });
   }
 
   async function handleExportData() {
@@ -281,10 +335,10 @@ export default function SettingsPage() {
     setSaving(false);
 
     if (error) {
-      setToast({ message: 'Uložení se nepovedlo: ' + error.message, type: 'error' });
+      setToast({ message: `${t('settingsSaveFailed')}: ${error.message}`, type: 'error' });
       return;
     }
-    setToast({ message: 'Profil byl uložen', type: 'success' });
+    setToast({ message: t('settingsProfileSaved'), type: 'success' });
   }
 
   if (checking) {
@@ -294,7 +348,8 @@ export default function SettingsPage() {
   if (!userId) {
     // Vzhled jde nastavit i bez účtu (ukládá se do zařízení).
     return (
-      <div style={{ maxWidth: 640 }}>
+      <div className="settings-page" style={{ maxWidth: 680 }}>
+        <h1 className="settings-title">{t('settings')}</h1>
         <AppearanceSettings />
         <div className="auth-gate">
           <p>{t('loginToEditSettingsNote')}</p>
@@ -304,273 +359,230 @@ export default function SettingsPage() {
     );
   }
 
+  const choice = (active: boolean) => `settings-choice${active ? ' active' : ''}`;
+
   return (
-    <div style={{ maxWidth: 640 }}>
+    <div className="settings-page" style={{ maxWidth: 680 }}>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      {/* Vzhled: motiv, sklo, pozadí, průhlednost, světlo kolem videa, barva. */}
-      <AppearanceSettings />
-
-      <div className="panel" style={{ marginBottom: 32 }}>
-        <button
-          type="button"
-          onClick={() => setConfirmSignOutSettings(true)}
-          style={{ background: 'var(--panel-raised)', color: '#ff6b6b', border: '1px solid var(--border)' }}
-        >
-          {t('signOut')}
-        </button>
-      </div>
-
-      <div className="panel" id="earnings" style={{ marginBottom: 32 }}>
-        <p className="panel-heading">{t('creatorEarningsTitle')}</p>
-
-        {!stripeOnboardingComplete ? (
-          <>
-            <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 12 }}>{t('creatorEarningsIntro')}</p>
-            <button type="button" onClick={startStripeOnboarding} disabled={connectLoading}>
-              {connectLoading ? t('processing') : t('connectStripeButton')}
-            </button>
-            {priceError && <p className="error-text" style={{ marginTop: 8 }}>{priceError}</p>}
-          </>
-        ) : (
-          <>
-            <p style={{ fontSize: 13, color: '#4dbb7a', marginBottom: 16 }}>✓ {t('stripeConnectedNote')}</p>
-            <form onSubmit={saveSubscriptionPrice}>
-              <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('subscriptionPriceLabel')}</label>
-              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  step="0.5"
-                  placeholder={subscriptionPrice || '5'}
-                  value={priceInput}
-                  onChange={(e) => setPriceInput(e.target.value)}
-                  style={{ flex: 1 }}
-                />
-                <button type="submit" disabled={priceLoading}>
-                  {priceLoading ? t('saving') : t('saveChanges')}
-                </button>
-              </div>
-              {subscriptionPrice && (
-                <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 8 }}>
-                  {t('currentPriceNote')} {subscriptionPrice} €/{t('perMonth')}
-                </p>
-              )}
-              {priceError && <p className="error-text" style={{ marginTop: 8 }}>{priceError}</p>}
-            </form>
-          </>
-        )}
-      </div>
-
-      <p className="section-title">{t('profileCustomizationTitle')}</p>
-
-      <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-        <div className="panel">
-          <p className="panel-heading">{t('channelBannerLabel')}</p>
-          <div
-            style={{
-              width: '100%', height: 140, borderRadius: 8, marginBottom: 14, overflow: 'hidden',
-              background: bannerUrl ? undefined : 'var(--panel-raised)', border: '1px solid var(--border)',
-            }}
+      <h1 className="settings-title">{t('settings')}</h1>
+      <nav className="settings-nav" aria-label={t('settings')}>
+        {SECTIONS.map((x) => (
+          <button
+            key={x.id}
+            type="button"
+            className={`settings-nav-item${section === x.id ? ' active' : ''}`}
+            aria-current={section === x.id ? 'page' : undefined}
+            data-section={x.id}
+            onClick={() => openSection(x.id)}
           >
-            {bannerUrl ? (
-              <img loading="lazy" decoding="async" src={bannerUrl} alt="banner" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            ) : null}
-          </div>
-          <label htmlFor="banner-upload" style={{ cursor: 'pointer' }}>
-            <span style={{
-              display: 'inline-block', background: 'var(--panel-raised)', border: '1px solid var(--border)',
-              padding: '9px 16px', borderRadius: 8, fontSize: 13,
-            }}>
-              {uploadingBanner ? t('uploadingBanner') : t('uploadBanner')}
-            </span>
-            <input
-              id="banner-upload"
-              type="file"
-              accept="image/*"
-              onChange={handleBannerChange}
-              disabled={uploadingBanner}
-              style={{ display: 'none' }}
-            />
-          </label>
-        </div>
+            <UiIcon name={x.icon} size={21} />
+            <span>{t(x.key)}</span>
+          </button>
+        ))}
+      </nav>
 
-        <div className="panel">
-          <p className="panel-heading">{t('profilePhotoLabel')}</p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-            <div className="creator-avatar" style={{ width: 72, height: 72, overflow: 'hidden' }}>
-              {avatarUrl ? (
-                <img loading="lazy" decoding="async" src={avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : null}
+      {/* Vzhled: motiv, sklo, pozadí, průhlednost, světlo kolem videa, barva. */}
+      {section === 'appearance' && <AppearanceSettings />}
+
+      {section === 'profile' && (
+        <form onSubmit={handleSaveProfile} className="settings-stack">
+          <div className="panel">
+            <PanelHeading icon="image" title={t('channelBannerLabel')} />
+            <div className="settings-banner">
+              {bannerUrl ? <img loading="lazy" decoding="async" src={bannerUrl} alt="" /> : null}
             </div>
-            <label htmlFor="avatar-upload" style={{ cursor: 'pointer' }}>
-              <span style={{
-                display: 'inline-block', background: 'var(--panel-raised)', border: '1px solid var(--border)',
-                padding: '9px 16px', borderRadius: 8, fontSize: 13,
-              }}>
-                {uploading ? t('uploadingPhoto') : t('uploadNewPhoto')}
-              </span>
-              <input
-                id="avatar-upload"
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarChange}
-                disabled={uploading}
-                style={{ display: 'none' }}
-              />
+            <label htmlFor="banner-upload" className="settings-file-button">
+              <UiIcon name="upload" size={16} />
+              <span>{uploadingBanner ? t('uploadingBanner') : t('uploadBanner')}</span>
+              <input id="banner-upload" type="file" accept="image/*" onChange={handleBannerChange} disabled={uploadingBanner} style={{ display: 'none' }} />
             </label>
           </div>
-        </div>
 
-        <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <p className="panel-heading" style={{ marginBottom: -4 }}>{t('profileDataHeading')}</p>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)', display: 'block', marginBottom: 6 }}>{t('displayNameLabel')}</label>
-            <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-          </div>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)', display: 'block', marginBottom: 6 }}>{t('usernameLabel')}</label>
-            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} />
-          </div>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)', display: 'block', marginBottom: 6 }}>{t('channelDescriptionLabel')}</label>
-            <textarea
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              rows={2}
-              placeholder={t('aboutYouPlaceholder')}
-              style={{ resize: 'vertical', minHeight: 60, maxHeight: 160, width: '100%' }}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)', display: 'block', marginBottom: 6 }}>{t('socialLinksLabel')}</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {socialLinks.map((link, i) => (
-                <div key={i} style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    type="text"
-                    placeholder={t('linkNamePlaceholder')}
-                    value={link.label}
-                    onChange={(e) => {
-                      const next = [...socialLinks];
-                      next[i] = { ...next[i], label: e.target.value };
-                      setSocialLinks(next);
-                    }}
-                    style={{ width: '40%' }}
-                  />
-                  <input
-                    type="text"
-                    placeholder="https://…"
-                    value={link.url}
-                    onChange={(e) => {
-                      const next = [...socialLinks];
-                      next[i] = { ...next[i], url: e.target.value };
-                      setSocialLinks(next);
-                    }}
-                    style={{ flex: 1 }}
-                  />
-                </div>
-              ))}
+          <div className="panel">
+            <PanelHeading icon="user" title={t('profilePhotoLabel')} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+              <div className="creator-avatar" style={{ width: 72, height: 72, overflow: 'hidden' }}>
+                {avatarUrl ? <img loading="lazy" decoding="async" src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+              </div>
+              <label htmlFor="avatar-upload" className="settings-file-button">
+                <UiIcon name="camera" size={16} />
+                <span>{uploading ? t('uploadingPhoto') : t('uploadNewPhoto')}</span>
+                <input id="avatar-upload" type="file" accept="image/*" onChange={handleAvatarChange} disabled={uploading} style={{ display: 'none' }} />
+              </label>
             </div>
           </div>
-        </div>
 
-        <div className="panel">
-          <p className="panel-heading">{t('ratingStyleHeading')}</p>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button
-              type="button"
-              onClick={() => changeRatingMode('like_dislike')}
-              style={{
-                flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
-                background: ratingMode === 'like_dislike' ? 'var(--text)' : 'var(--panel-raised)',
-                color: ratingMode === 'like_dislike' ? 'var(--bg)' : 'var(--text)',
-              }}
-            >
-              👍 👎 Lajk / Dislike
-            </button>
-            <button
-              type="button"
-              onClick={() => changeRatingMode('stars')}
-              style={{
-                flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
-                background: ratingMode === 'stars' ? 'var(--text)' : 'var(--panel-raised)',
-                color: ratingMode === 'stars' ? 'var(--bg)' : 'var(--text)',
-              }}
-            >
-              ★ Hvězdičky
-            </button>
+          <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <PanelHeading icon="pencil" title={t('profileDataHeading')} />
+            <div>
+              <label className="settings-label">{t('displayNameLabel')}</label>
+              <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+            </div>
+            <div>
+              <label className="settings-label">{t('usernameLabel')}</label>
+              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} />
+            </div>
+            <div>
+              <label className="settings-label">{t('channelDescriptionLabel')}</label>
+              <textarea
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                rows={2}
+                placeholder={t('aboutYouPlaceholder')}
+                style={{ resize: 'vertical', minHeight: 60, maxHeight: 160, width: '100%' }}
+              />
+            </div>
+            <div>
+              <label className="settings-label">
+                <UiIcon name="link" size={14} /> {t('socialLinksLabel')}
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {socialLinks.map((link, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      type="text"
+                      placeholder={t('linkNamePlaceholder')}
+                      value={link.label}
+                      onChange={(e) => {
+                        const next = [...socialLinks];
+                        next[i] = { ...next[i], label: e.target.value };
+                        setSocialLinks(next);
+                      }}
+                      style={{ width: '40%' }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="https://…"
+                      value={link.url}
+                      onChange={(e) => {
+                        const next = [...socialLinks];
+                        next[i] = { ...next[i], url: e.target.value };
+                        setSocialLinks(next);
+                      }}
+                      style={{ flex: 1 }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div className="panel">
-          <p className="panel-heading">{t('homepageHeading')}</p>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button
-              type="button"
-              onClick={() => changeContentPreference('long')}
-              style={{
-                flex: 1, background: contentPreference === 'long' ? 'var(--text)' : 'var(--panel-raised)',
-                color: contentPreference === 'long' ? 'var(--bg)' : 'var(--text)',
-              }}
-            >
-              {t('longVideosOption')}
-            </button>
-            <button
-              type="button"
-              onClick={() => changeContentPreference('short')}
-              style={{
-                flex: 1, background: contentPreference === 'short' ? 'var(--text)' : 'var(--panel-raised)',
-                color: contentPreference === 'short' ? 'var(--bg)' : 'var(--text)',
-              }}
-            >
-              {t('sparksOption')}
-            </button>
-          </div>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, fontSize: 13 }}>
-            <input
-              type="checkbox"
-              style={{ width: 'auto' }}
-              checked={disableShorts}
-              onChange={(e) => changeDisableShorts(e.target.checked)}
-            />
-            {t('disableShortsLabel')}
-          </label>
-          <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 4 }}>{t('disableShortsHint')}</p>
-        </div>
-
-        <button type="submit" disabled={saving} style={{ marginTop: 4 }}>
-          {saving ? t('saving') : t('saveChanges')}
-        </button>
-      </form>
-
-      <div className="panel" style={{ marginTop: 32 }}>
-        <p className="panel-heading">{t('twoFactorAuthHeading')}</p>
-        <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>
-          {t('twoFactorComingSoonNote')}
-        </p>
-      </div>
-
-      <div className="panel" style={{ marginTop: 32 }}>
-        <p className="panel-heading">{t('yourDataHeading')}</p>
-        <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 12 }}>
-          {t('gdprNote')}
-        </p>
-        <button type="button" onClick={handleExportData} disabled={exporting} style={{ marginBottom: 10 }}>
-          {exporting ? t('preparingLabel') : t('downloadMyDataButton')}
-        </button>
-        <div>
-          <button
-            type="button"
-            onClick={() => setConfirmDeleteAccount(true)}
-            style={{ background: 'var(--panel-raised)', color: '#ff6b6b', border: '1px solid var(--border)' }}
-          >
-            {t('permanentlyDeleteAccountButton')}
+          <button type="submit" disabled={saving} className="settings-save">
+            <UiIcon name="check" size={17} />
+            <span>{saving ? t('saving') : t('saveChanges')}</span>
           </button>
+        </form>
+      )}
+
+      {section === 'home' && (
+        <div className="settings-stack">
+          <div className="panel">
+            <PanelHeading icon="star" title={t('ratingStyleHeading')} />
+            <div className="settings-choices">
+              <button type="button" className={choice(ratingMode === 'like_dislike')} aria-pressed={ratingMode === 'like_dislike'} onClick={() => changeRatingMode('like_dislike')}>
+                <ThumbsUpIcon size={18} />
+                <ThumbsDownIcon size={18} />
+                <span>{t('ratingLikeDislike')}</span>
+              </button>
+              <button type="button" className={choice(ratingMode === 'stars')} aria-pressed={ratingMode === 'stars'} onClick={() => changeRatingMode('stars')}>
+                <UiIcon name="star" size={18} />
+                <span>{t('ratingStars')}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="panel">
+            <PanelHeading icon="home" title={t('homepageHeading')} />
+            <div className="settings-choices">
+              <button type="button" className={choice(contentPreference === 'long')} aria-pressed={contentPreference === 'long'} onClick={() => changeContentPreference('long')}>
+                <UiIcon name="film" size={18} />
+                <span>{t('longVideosOption')}</span>
+              </button>
+              <button type="button" className={choice(contentPreference === 'short')} aria-pressed={contentPreference === 'short'} onClick={() => changeContentPreference('short')}>
+                <UiIcon name="phone" size={18} />
+                <span>{t('sparksOption')}</span>
+              </button>
+            </div>
+            <WithHelp help={t('disableShortsHint')} className="settings-option">
+              <label className="settings-check">
+                <input type="checkbox" checked={disableShorts} onChange={(e) => changeDisableShorts(e.target.checked)} />
+                <span>{t('disableShortsLabel')}</span>
+              </label>
+            </WithHelp>
+          </div>
         </div>
-      </div>
+      )}
+
+      {section === 'earnings' && (
+        <div className="panel" id="earnings">
+          <PanelHeading icon="coins" title={t('creatorEarningsTitle')} help={t('creatorEarningsIntro')} />
+          {!stripeOnboardingComplete ? (
+            <>
+              <button type="button" onClick={startStripeOnboarding} disabled={connectLoading} className="settings-icon-button">
+                <UiIcon name="link" size={16} />
+                <span>{connectLoading ? t('processing') : t('connectStripeButton')}</span>
+              </button>
+              {priceError && <p className="error-text" style={{ marginTop: 8 }}>{priceError}</p>}
+            </>
+          ) : (
+            <>
+              <p className="settings-ok">
+                <UiIcon name="check" size={16} /> {t('stripeConnectedNote')}
+              </p>
+              <form onSubmit={saveSubscriptionPrice}>
+                <label className="settings-label">{t('subscriptionPriceLabel')}</label>
+                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    step="0.5"
+                    placeholder={subscriptionPrice || '5'}
+                    value={priceInput}
+                    onChange={(e) => setPriceInput(e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <button type="submit" disabled={priceLoading}>
+                    {priceLoading ? t('saving') : t('saveChanges')}
+                  </button>
+                </div>
+                {subscriptionPrice && (
+                  <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 8 }}>
+                    {t('currentPriceNote')} {subscriptionPrice} €/{t('perMonth')}
+                  </p>
+                )}
+                {priceError && <p className="error-text" style={{ marginTop: 8 }}>{priceError}</p>}
+              </form>
+            </>
+          )}
+        </div>
+      )}
+
+      {section === 'account' && (
+        <div className="settings-stack">
+          <div className="panel">
+            <PanelHeading icon="database" title={t('yourDataHeading')} help={t('gdprNote')} />
+            <div className="settings-actions">
+              <button type="button" onClick={handleExportData} disabled={exporting} className="settings-icon-button">
+                <UiIcon name="download" size={16} />
+                <span>{exporting ? t('preparingLabel') : t('downloadMyDataButton')}</span>
+              </button>
+              <button type="button" onClick={() => setConfirmDeleteAccount(true)} className="settings-icon-button settings-danger">
+                <UiIcon name="trash" size={16} />
+                <span>{t('permanentlyDeleteAccountButton')}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="panel">
+            <button type="button" onClick={() => setConfirmSignOutSettings(true)} className="settings-icon-button settings-danger">
+              <UiIcon name="logout" size={16} />
+              <span>{t('signOut')}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {confirmDeleteAccount && (
         <ConfirmDialog

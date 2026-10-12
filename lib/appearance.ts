@@ -36,7 +36,7 @@ export type Appearance = {
   strength: number;
   /** Ambientní světlo kolem přehrávače (barvy videa prosvítají kolem něj). */
   ambient: boolean;
-  /** Pozadí a světlo sledují obraz: snímky z místa, kde video / přenos právě je (každé ~3 s). */
+  /** Pozadí a světlo sledují obraz: snímky z místa, kde video / přenos právě je (video každou sekundu, přenos každé 2 s), plynule prolnuté. */
   follow: boolean;
   /** Barvy pozadí skla se pomalu přelévají. */
   motion: boolean;
@@ -185,13 +185,23 @@ export const APPEARANCE_BOOT_SCRIPT = `(function(){try{var d=document.documentEl
 
 /**
  * Snímek z videa v daném čase (Cloudflare umí náhled odkudkoli z videa) -
- * pro pozadí, které sleduje obraz. Malý (výška 90 px): z obrázku zůstanou
- * jen barvy, stahuje se jen pár kB. Čas po 3 s, ať se snímky dají
- * cachovat a nestahují se zbytečně znovu.
+ * pro pozadí, které sleduje obraz. Malý (výška 72 px): z obrázku zůstanou
+ * jen barvy, stahuje se jen pár kB. Po celých sekundách - snímek každou
+ * sekundu a plynulé prolínání (components/AmbientCanvas.tsx) dají barvy,
+ * které se s obrazem přelévají pořád, ne skokem jednou za čas. Stejná
+ * sekunda = stejná adresa, takže se snímek z mezipaměti nestahuje znovu.
  */
+export const FOLLOW_VIDEO_MS = 1000;
+export const FOLLOW_LIVE_MS = 2000;
+
 export function videoFrameUrl(videoIdOrToken: string, seconds: number): string {
-  const t = Math.max(0, Math.floor(seconds / 3) * 3);
-  return `https://videodelivery.net/${encodeURIComponent(videoIdOrToken)}/thumbnails/thumbnail.jpg?time=${t}s&height=90`;
+  const t = Math.max(0, Math.floor(seconds));
+  return `https://videodelivery.net/${encodeURIComponent(videoIdOrToken)}/thumbnails/thumbnail.jpg?time=${t}s&height=72`;
+}
+
+/** Poslední snímek živého přenosu (adresa se mění po FOLLOW_LIVE_MS, ať ho mezipaměť nedrží). */
+export function liveFrameUrl(liveUid: string, now: number): string {
+  return `https://videodelivery.net/${encodeURIComponent(liveUid)}/thumbnails/thumbnail.jpg?height=72&t=${Math.floor(now / FOLLOW_LIVE_MS)}`;
 }
 
 /** Obrázek se nejdřív načte, pak se ukáže - pozadí nikdy nepřebliká do prázdna. */

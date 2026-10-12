@@ -234,7 +234,8 @@ export default function Sidebar() {
         )}
         {user && (
           <Link href="/donate" className={`sidebar-link ${pathname === '/donate' ? 'active' : ''}`}>
-            💛 {t('donateSidebarLabel')}
+            <DonateIcon />
+            {t('donateSidebarLabel')}
           </Link>
         )}
         {isModerator && (
@@ -420,7 +421,8 @@ export default function Sidebar() {
           )}
           {user && (
             <Link href="/donate" className="sidebar-link" onClick={closeMobileNav}>
-              💛 {t('donateSidebarLabel')}
+              <DonateIcon />
+              {t('donateSidebarLabel')}
             </Link>
           )}
           {/* Appka do PC dává smysl jen na počítači - na telefonu se schová (CSS).
@@ -514,6 +516,15 @@ function SearchIcon() {
     <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
       <circle cx="11" cy="11" r="7" />
       <path d="M20 20l-4-4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Podpořit Kine: srdce (místo emoji 💛, ať je v řadě stejné jako ostatní ikony), v teplé barvě. */
+function DonateIcon() {
+  return (
+    <svg className="sidebar-icon sidebar-icon-donate" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

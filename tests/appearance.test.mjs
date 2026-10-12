@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { prelozit } from './prelozit.mjs';
 
 const kam = prelozit('lib/appearance.ts');
-const { sanitizeAppearance, appearanceAttributes, parseTheme, DEFAULT_APPEARANCE, APPEARANCE_BOOT_SCRIPT, setAmbientSource, currentAmbientSource, onAmbientSource, videoFrameUrl } = await import(
+const { sanitizeAppearance, appearanceAttributes, parseTheme, DEFAULT_APPEARANCE, APPEARANCE_BOOT_SCRIPT, setAmbientSource, currentAmbientSource, onAmbientSource, videoFrameUrl, liveFrameUrl, FOLLOW_VIDEO_MS, FOLLOW_LIVE_MS } = await import(
   join(kam, 'appearance.js')
 );
 
@@ -97,11 +97,20 @@ test('pozadí podle videa: jen http(s) adresy, posluchač dostane změny', () =>
   assert.equal(currentAmbientSource(), 'https://example.com/x.jpg');
 });
 
-test('snímek z videa v čase: po 3 s (cache), malý, i s podepsaným tokenem', () => {
-  assert.equal(videoFrameUrl('abc123', 0), 'https://videodelivery.net/abc123/thumbnails/thumbnail.jpg?time=0s&height=90');
-  assert.equal(videoFrameUrl('abc123', 7.9), 'https://videodelivery.net/abc123/thumbnails/thumbnail.jpg?time=6s&height=90');
-  assert.equal(videoFrameUrl('abc123', -5), 'https://videodelivery.net/abc123/thumbnails/thumbnail.jpg?time=0s&height=90');
+test('snímek z videa v čase: každou sekundu (stejná sekunda = stejná adresa), malý, i s podepsaným tokenem', () => {
+  assert.equal(videoFrameUrl('abc123', 0), 'https://videodelivery.net/abc123/thumbnails/thumbnail.jpg?time=0s&height=72');
+  assert.equal(videoFrameUrl('abc123', 7.9), 'https://videodelivery.net/abc123/thumbnails/thumbnail.jpg?time=7s&height=72');
+  assert.equal(videoFrameUrl('abc123', 7.1), videoFrameUrl('abc123', 7.9));
+  assert.equal(videoFrameUrl('abc123', -5), 'https://videodelivery.net/abc123/thumbnails/thumbnail.jpg?time=0s&height=72');
   assert.match(videoFrameUrl('eyJhbGc.x/y', 30), /eyJhbGc\.x%2Fy\/thumbnails/);
+  assert.equal(FOLLOW_VIDEO_MS, 1000);
+});
+
+test('snímek živého přenosu: nová adresa každé 2 s (mezipaměť ho nedrží)', () => {
+  assert.equal(FOLLOW_LIVE_MS, 2000);
+  assert.equal(liveFrameUrl('live1', 10_000), liveFrameUrl('live1', 11_999));
+  assert.notEqual(liveFrameUrl('live1', 11_999), liveFrameUrl('live1', 12_000));
+  assert.match(liveFrameUrl('a/b', 0), /^https:\/\/videodelivery\.net\/a%2Fb\/thumbnails\/thumbnail\.jpg\?height=72&t=0$/);
 });
 
 console.log(`\n${prosly} prošlo, ${padly} spadlo`);

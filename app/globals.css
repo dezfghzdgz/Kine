@@ -6521,6 +6521,23 @@ html[data-look="glass"] .spark-side-panel {
   }
 }
 
+/* Plátno s barvami z obrazu (components/AmbientCanvas.tsx): malé, roztažené přes vrstvu,
+   rozmazání dělá vrstva nad ním. Objeví se plynule, až má první snímek. */
+.ambient-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 700ms var(--ease);
+}
+
+.ambient-canvas[data-ready="1"] {
+  opacity: 1;
+}
+
 /* ---------- Ambientní světlo kolem přehrávače ---------- */
 
 /* Rozmazaný náhled videa za přehrávačem: barvy videa prosvítají kolem
@@ -6544,8 +6561,6 @@ html[data-ambient="1"] .live-player-ambient-host > .player-ambient {
   filter: blur(56px) saturate(1.8);
   opacity: 0.5;
   pointer-events: none;
-  /* "Sleduje obraz": nový snímek se do světla přelije, neskočí. */
-  transition: background-image 900ms var(--ease);
 }
 
 html[data-ambient="1"][data-theme="light"] .player-ambient {
@@ -7461,4 +7476,367 @@ body.player-css-fullscreen .player-ambient {
   .about-hero {
     padding: 40px 16px 34px;
   }
+}
+
+/* =====================================================================
+   IKONY, OTAZNÍČKY A NASTAVENÍ PO ODDÍLECH
+   ---------------------------------------------------------------------
+   Nabídka profilu a Nastavení: u každé položky ikona (components/UiIcon,
+   stejná sada jako Kine do PC a Kine Clipper), krátký popisek a
+   vysvětlení až pod otazníčkem (components/HelpTip). Nastavení má
+   nahoře řadu oddílů s ikonami a ukazuje vždy jen jeden.
+   ===================================================================== */
+
+.ui-icon {
+  display: inline-block;
+  flex: none;
+  vertical-align: -0.2em;
+}
+
+.help-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  background: transparent;
+  color: var(--text-faint);
+  box-shadow: none;
+}
+
+.help-btn:hover:not(:disabled),
+.help-btn.open {
+  color: var(--brand);
+  background: var(--glass-fill);
+}
+
+.help-text {
+  margin: 6px 0 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-dim);
+  background: var(--glass-fill);
+  box-shadow: inset 0 0 0 1px var(--glass-line);
+}
+
+.with-help-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.with-help-main {
+  min-width: 0;
+}
+
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.panel-title-text {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-md);
+  font-weight: 650;
+  letter-spacing: var(--track-snug);
+  color: var(--text);
+}
+
+.panel-title-text .ui-icon {
+  color: var(--brand);
+}
+
+.panel-title-row + .help-text {
+  margin: -4px 0 12px;
+}
+
+.panel-title-right {
+  margin-left: auto;
+}
+
+/* ---------- Nastavení: oddíly ---------- */
+
+.settings-title {
+  font-size: var(--fs-2xl);
+  font-weight: 650;
+  letter-spacing: var(--track-tight);
+  margin: 0 0 var(--sp-4);
+}
+
+.settings-nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.settings-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 70px;
+  padding: 10px 6px;
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+  font-weight: 550;
+  text-align: center;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.settings-nav-item span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-nav-item .ui-icon {
+  color: var(--text-faint);
+  transition: color var(--dur-2) var(--ease);
+}
+
+.settings-nav-item:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--glass-fill-strong);
+}
+
+.settings-nav-item:hover .ui-icon,
+.settings-nav-item.active .ui-icon {
+  color: var(--brand);
+}
+
+.settings-nav-item.active {
+  color: var(--text);
+  font-weight: 650;
+  background: rgba(var(--brand-rgb), 0.1);
+  box-shadow: inset 0 0 0 1px rgba(var(--brand-rgb), 0.6);
+}
+
+.settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-banner {
+  width: 100%;
+  height: 140px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+  overflow: hidden;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+}
+
+.settings-banner img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.settings-file-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 9px 16px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  color: var(--text);
+  background: var(--glass-fill-strong);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 0 0 1px var(--glass-line);
+}
+
+.settings-file-button:hover {
+  background: var(--glass-fill-strong-hover);
+}
+
+.settings-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.settings-save,
+.settings-icon-button,
+.settings-choice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.settings-save {
+  align-self: flex-start;
+}
+
+/* Vedlejší tlačítka v nastavení: sklo jako tlačítka bez třídy. */
+.settings-icon-button,
+.settings-choice {
+  color: var(--text);
+  background-color: var(--glass-fill-strong);
+  background-image: var(--glass-sheen);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 0 0 1px var(--glass-line);
+}
+
+.settings-icon-button:hover:not(:disabled),
+.settings-choice:hover:not(:disabled) {
+  background-color: var(--glass-fill-strong-hover);
+}
+
+.settings-danger {
+  color: #ff6b6b;
+}
+
+.settings-choices {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settings-choice {
+  flex: 1;
+  min-width: 140px;
+}
+
+.settings-choice.active {
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: none;
+}
+
+.settings-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.settings-check input {
+  width: auto;
+  margin: 0;
+}
+
+.settings-check .ui-icon {
+  color: var(--text-faint);
+  transition: color var(--dur-2) var(--ease);
+}
+
+.settings-check input:checked ~ .ui-icon {
+  color: var(--brand);
+}
+
+.settings-option {
+  margin-top: 4px;
+}
+
+.panel .settings-choices + .settings-option {
+  margin-top: 16px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settings-ok {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 16px;
+  font-size: var(--fs-sm);
+  color: #4dbb7a;
+}
+
+.appearance-label-help {
+  margin-bottom: 8px;
+}
+
+.appearance-label-help .appearance-label {
+  margin: 0;
+}
+
+.appearance-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------- Nabídka profilu: ikony u položek ---------- */
+
+.pdi-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pdi-label .ui-icon {
+  color: var(--text-faint);
+  transition: color var(--dur-1) var(--ease);
+}
+
+.profile-dropdown-item:hover .pdi-label .ui-icon {
+  color: var(--brand);
+}
+
+.profile-dropdown-signout:hover .pdi-label .ui-icon {
+  color: #ff8b8b;
+}
+
+.profile-dropdown-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.theme-slider-label .pdi-label {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+
+/* Kroky pro OBS pod otazníčkem v záložce Živě. */
+.help-text .live-guide {
+  color: var(--text-dim);
+}
+
+.live-moderators-head {
+  margin: 14px 0 6px;
+}
+
+.live-moderator-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.live-studio-link .ui-icon {
+  vertical-align: -0.15em;
+}
+
+.sidebar-icon-donate {
+  color: #f5c542;
 }

@@ -10,6 +10,8 @@ import LiveChat from '@/components/LiveChat';
 import LiveTipsPanel from '@/components/LiveTipsPanel';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import Toast, { ToastType } from '@/components/Toast';
+import { PanelHeading, WithHelp } from '@/components/HelpTip';
+import UiIcon from '@/components/UiIcon';
 
 type Setup = {
   configured: boolean;
@@ -323,7 +325,7 @@ export default function LiveStudioPage() {
             </div>
 
             <form className="panel" onSubmit={saveDetails} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <p className="panel-heading">{t('liveDetailsHeading')}</p>
+              <PanelHeading icon="info" title={t('liveDetailsHeading')} />
               <label className="live-field">
                 <span>{t('liveTitleLabel')}</span>
                 <input
@@ -372,7 +374,7 @@ export default function LiveStudioPage() {
             </form>
 
             <div className="panel">
-              <p className="panel-heading">{t('liveObsHeading')}</p>
+              <PanelHeading icon="sliders" title={t('liveObsHeading')} />
               <div className="live-key-row">
                 <span className="live-key-label">{t('liveServerLabel')}</span>
                 <code className="live-key-value">{input.rtmpsUrl}</code>
@@ -397,22 +399,28 @@ export default function LiveStudioPage() {
             </div>
 
             <div className="panel">
-              <p className="panel-heading">{t('liveGuideHeading')}</p>
-              {/* Bez OBS: appka Kine do PC / Kine Clipper má tlačítko Vysílat a klíč si vezme sama. */}
+              {/* Bez OBS: appka Kine do PC / Kine Clipper má tlačítko Vysílat a klíč si vezme sama.
+                  Kroky pro OBS jsou pod otazníčkem - kdo je nepotřebuje, nemusí je číst. */}
+              <PanelHeading
+                icon="broadcast"
+                title={t('liveGuideHeading')}
+                help={
+                  <ol className="live-guide">
+                    <li>{t('liveGuideStep1')}</li>
+                    <li>{t('liveGuideStep2')}</li>
+                    <li>{t('liveGuideStep3')}</li>
+                    <li>{t('liveGuideStep4')}</li>
+                  </ol>
+                }
+              />
               <p className="live-hint live-guide-app">
                 {t('liveGuideApp')}{' '}
                 <Link href="/download">{t('liveGuideAppLink')}</Link>
               </p>
-              <ol className="live-guide">
-                <li>{t('liveGuideStep1')}</li>
-                <li>{t('liveGuideStep2')}</li>
-                <li>{t('liveGuideStep3')}</li>
-                <li>{t('liveGuideStep4')}</li>
-              </ol>
             </div>
 
             <div className="panel">
-              <p className="panel-heading">{t('liveRecordingsHeading')}</p>
+              <PanelHeading icon="film" title={t('liveRecordingsHeading')} help={t('liveRecordingsNote')} />
               {/* Jako YouTube: záznam se po skončení může zveřejnit sám - a na rozdíl od Twitche nikdy nezmizí. */}
               <label className="live-field" style={{ marginBottom: 10 }}>
                 <span>{t('liveAfterStreamLabel')}</span>
@@ -442,7 +450,7 @@ export default function LiveStudioPage() {
                         <span className="live-pill">● {t('liveRecordingInProgress')}</span>
                       ) : r.videoId ? (
                         <Link href={`/watch/${r.videoId}`} className="live-studio-link">
-                          ✓ {t('livePublished')} · {t('liveOpenVideo')} →
+                          <UiIcon name="check" size={14} /> {t('livePublished')} · {t('liveOpenVideo')} →
                         </Link>
                       ) : publishing?.uid === r.uid ? (
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -499,14 +507,13 @@ export default function LiveStudioPage() {
                   </div>
                 ))}
               </div>
-              <p className="live-hint">{t('liveRecordingsNote')}</p>
             </div>
 
             {/* Podpory ve vysílání: zapnutí, poslední podpory, překryv pro OBS se čtením nahlas. */}
             <LiveTipsPanel token={token} userId={userId} onCopy={copy} />
 
             <div className="panel">
-              <p className="panel-heading">{t('liveChatToolsHeading')}</p>
+              <PanelHeading icon="chat" title={t('liveChatToolsHeading')} help={t('liveChatObsOverlayHint')} />
               {/* Chat jako průhledný překryv do OBS (Zdroj prohlížeče). */}
               <div className="live-key-row">
                 <span className="live-key-label">{t('liveChatObsOverlay')}</span>
@@ -515,10 +522,10 @@ export default function LiveStudioPage() {
                   {t('liveCopy')}
                 </button>
               </div>
-              <p className="live-hint">{t('liveChatObsOverlayHint')}</p>
 
-              <p className="panel-heading" style={{ marginTop: 14 }}>{t('liveChatModerators')}</p>
-              <p className="live-hint" style={{ marginTop: 0 }}>{t('liveChatModeratorsHint')}</p>
+              <WithHelp help={t('liveChatModeratorsHint')} className="live-moderators-head">
+                <p className="panel-heading" style={{ margin: 0 }}>{t('liveChatModerators')}</p>
+              </WithHelp>
               <form
                 style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}
                 onSubmit={(e) => {
@@ -544,7 +551,9 @@ export default function LiveStudioPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {moderators.map((m) => (
                     <div key={m.userId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <span>🛡 {m.username ?? '—'}</span>
+                      <span className="live-moderator-name">
+                        <UiIcon name="shield" size={15} /> {m.username ?? '—'}
+                      </span>
                       <button type="button" className="live-small-btn" onClick={() => changeModerators({ action: 'remove', userId: m.userId })}>
                         {t('liveChatRemoveModerator')}
                       </button>

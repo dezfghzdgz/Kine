@@ -394,7 +394,8 @@ export default function HomePage() {
       {sparkNotice === 'off' && (
         <div className="feed-notice">
           <span>{t('sparksOffNotice')}</span>
-          <Link className="feed-notice-action" href="/settings">
+          {/* Volba "Vypnout Sparks" je v Nastavení v oddílu Domovská. */}
+          <Link className="feed-notice-action" href="/settings#home">
             {t('sparksOffNoticeAction')}
           </Link>
         </div>

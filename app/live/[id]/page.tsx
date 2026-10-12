@@ -13,7 +13,8 @@ import LiveTipDialog from '@/components/LiveTipDialog';
 import SubscribeButton from '@/components/SubscribeButton';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import ExpandableText from '@/components/ExpandableText';
-import { preloadImage, setAmbientSource } from '@/lib/appearance';
+import { FOLLOW_LIVE_MS, liveFrameUrl, preloadImage, setAmbientSource } from '@/lib/appearance';
+import AmbientCanvas from '@/components/AmbientCanvas';
 import { useAppearance } from '@/lib/useAppearance';
 
 type Status = {
@@ -104,7 +105,7 @@ export default function LivePage() {
   const name = profile ? profile.display_name || profile.username : '';
 
   // Skleněný vzhled "podle videa" a světlo kolem přehrávače: snímek z přenosu (jinak avatar kanálu).
-  // "Sleduje obraz" (Nastavení -> Vzhled): snímek z přenosu se obnovuje každých ~10 s.
+  // "Sleduje obraz" (Nastavení -> Vzhled): snímek z přenosu každé 2 s, barvy se plynule přelévají (AmbientCanvas).
   const appearance = useAppearance();
   const liveUid = status?.live ? status.stream?.videoUid ?? null : null;
   const [liveFrame, setLiveFrame] = useState<string | null>(null);
@@ -115,10 +116,11 @@ export default function LivePage() {
     let cancelled = false;
     const tick = async () => {
       if (document.visibilityState !== 'visible') return;
-      const url = `https://videodelivery.net/${encodeURIComponent(liveUid)}/thumbnails/thumbnail.jpg?height=90&t=${Math.floor(Date.now() / 10000)}`;
+      const url = liveFrameUrl(liveUid, Date.now());
       if ((await preloadImage(url)) && !cancelled) setLiveFrame(url);
     };
-    const timer = setInterval(() => void tick(), 10000);
+    void tick();
+    const timer = setInterval(() => void tick(), FOLLOW_LIVE_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
@@ -255,7 +257,11 @@ export default function LivePage() {
               title={stream?.title || name}
             />
           </div>
-          {liveUid && <div className="player-ambient" aria-hidden="true" style={{ backgroundImage: `url("${liveFrame ?? liveStill}")` }} />}
+          {liveUid && (
+            <div className="player-ambient" aria-hidden="true">
+              <AmbientCanvas src={liveFrame ?? liveStill} />
+            </div>
+          )}
         </div>
         <h1 className="video-title" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span className="live-pill">● {t('liveBadge')}</span>

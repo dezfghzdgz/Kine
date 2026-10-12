@@ -1,3 +1,41 @@
+KINE - nastavení a nabídka profilu s ikonami, plynulé barvy z obrazu (dodávka kine-ikony-plynule-barvy-2026-10-12)
+==================================================================================================================
+
+Jen web, nic na Vercelu ani v Supabase nenastavuješ. Rozbal do kořene repa
+a přepiš, nahraj na GitHub (přetažením) a pusť node zkontroluj-soubory.mjs.
+
+CO SE ZMĚNILO
+- Nastavení: nahoře pět ikon (Profil, Vzhled, Domovská, Výdělky, Účet
+  a data) a pod nimi vždy jen jeden oddíl - žádná dlouhá stěna. Oddíl je
+  i v adrese (/settings#appearance, #earnings…), odkazy odjinud vedou
+  rovnou na něj (i "Zapnout zpět" u hlášky o vypnutých Sparks na Domů
+  vede rovnou na oddíl Domovská). Delší vysvětlení jsou pod otazníčkem
+  (components/HelpTip).
+  Hlášky (fotka nahrána, profil uložen…) jsou nově přeložené do 8 jazyků
+  (dřív jen česky). Panel "dvoufázové ověření - brzy" zmizel.
+- Nabídka po kliknutí na profil: každá položka má ikonu (components/UiIcon -
+  stejná sada jako v Kine do PC a Kine Clipper), žádná emoji (✦ ✨),
+  jazyk se šipkou, "Přizpůsobit vzhled" přepne rovnou na oddíl Vzhled.
+- Živě (studio): nadpisy s ikonami, kroky pro OBS a vysvětlivky pod
+  otazníčky.
+- Barvy z obrazu (Nastavení -> Vzhled -> Sledovat obraz videa): snímek
+  z místa přehrávání každou sekundu (u živého přenosu každé 2 s, dřív 3 s
+  a 10 s) a barvy se plynule přelévají - pozadí skla i světlo kolem
+  přehrávače (components/AmbientCanvas.tsx: malé plátno, exponenciální
+  průměr snímků, kreslí se jen během přelévání).
+- O Kine, Stáhnout a ostatní důležité stránky beze změny.
+
+OVĚŘENO
+- npx tsc --noEmit, next build, testy webu (i nové: plátno s barvami se
+  přelévá plynule a po doběhnutí nekreslí; snímky videa po sekundách,
+  přenosu po 2 s; Nastavení po oddílech na počítači i mobilu ve světlém
+  i tmavém motivu; nabídka profilu s ikonami).
+
+==========================================================================================
+PŘEDCHOZÍ DODÁVKA (kine-smart-app-control-2026-10-12) - už nahraná, nic z toho znovu
+nedělej.
+==========================================================================================
+
 KINE - Smart App Control na stránce Stáhnout (dodávka kine-smart-app-control-2026-10-12)
 =========================================================================================
 

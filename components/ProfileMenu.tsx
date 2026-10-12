@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
@@ -9,6 +9,18 @@ import ThemeSlider from './ThemeSlider';
 import ConfirmDialog from './ConfirmDialog';
 import { isTvMode, setTvPreference } from '@/lib/tvMode';
 import { APPEARANCE_EVENT, readTheme, saveTheme, type Theme } from '@/lib/appearance';
+import UiIcon, { type UiIconName } from './UiIcon';
+import { goToSettingsSection } from '@/lib/settingsNav';
+
+/** Položka nabídky: ikona a krátký text (vpravo případně hodnota) - jde se podle ikon. */
+function ItemLabel({ icon, children }: { icon: UiIconName; children: ReactNode }) {
+  return (
+    <span className="pdi-label">
+      <UiIcon name={icon} size={17} />
+      <span>{children}</span>
+    </span>
+  );
+}
 
 const LANG_NAMES: Record<Lang, string> = {
   cs: 'Čeština',
@@ -106,36 +118,44 @@ export default function ProfileMenu({
           <div className="profile-dropdown-divider" />
 
           <Link href="/settings" className="profile-dropdown-item" onClick={() => setOpen(false)}>
-            {t('settings')}
+            <ItemLabel icon="sliders">{t('settings')}</ItemLabel>
           </Link>
 
           <Link href="/channel-stats" className="profile-dropdown-item" onClick={() => setOpen(false)}>
-            {t('channelStats')}
+            <ItemLabel icon="chart">{t('channelStats')}</ItemLabel>
           </Link>
 
           <Link href="/download" className="profile-dropdown-item sidebar-desktop-only" onClick={() => setOpen(false)}>
-            {t('desktopAppLink')}
+            <ItemLabel icon="desktop">{t('desktopAppLink')}</ItemLabel>
           </Link>
 
           <Link href="/plus" className="profile-dropdown-item" onClick={() => setOpen(false)}>
-            ✦ {t('plusPageTitle')}
+            <ItemLabel icon="sparkle">{t('plusPageTitle')}</ItemLabel>
           </Link>
 
+          <div className="profile-dropdown-divider" />
+
           <div className="theme-slider-row">
-            <span className="theme-slider-label">{t('appearance')}: {THEME_LABELS[theme]}</span>
+            <span className="theme-slider-label">
+              <ItemLabel icon={theme === 'light' ? 'sun' : 'moon'}>{THEME_LABELS[theme]}</ItemLabel>
+            </span>
             <ThemeSlider theme={theme} onChange={applyTheme} />
           </div>
-          <Link href="/settings#appearance" className="profile-dropdown-item" onClick={() => setOpen(false)}>
-            ✨ {t('appearanceCustomize')}
+          <Link href="/settings#appearance" className="profile-dropdown-item" onClick={() => { setOpen(false); goToSettingsSection('appearance'); }}>
+            <ItemLabel icon="palette">{t('appearanceCustomize')}</ItemLabel>
           </Link>
 
           <div style={{ position: 'relative' }}>
             <button
               className="profile-dropdown-item"
               onClick={() => setLangMenuOpen((v) => !v)}
+              aria-expanded={langMenuOpen}
             >
-              <span>{t('language')}</span>
-              <span className="profile-dropdown-value">{LANG_NAMES[lang]}</span>
+              <ItemLabel icon="globe">{t('language')}</ItemLabel>
+              <span className="profile-dropdown-value">
+                {LANG_NAMES[lang]}
+                <UiIcon name="chevronRight" size={14} />
+              </span>
             </button>
             {langMenuOpen && (
               <div
@@ -149,7 +169,8 @@ export default function ProfileMenu({
                     onClick={() => { setLang(code); setLangMenuOpen(false); }}
                     style={{ fontWeight: lang === code ? 700 : 400 }}
                   >
-                    {LANG_NAMES[code]} {lang === code ? '✓' : ''}
+                    <span>{LANG_NAMES[code]}</span>
+                    {lang === code ? <UiIcon name="check" size={15} /> : null}
                   </button>
                 ))}
               </div>
@@ -166,11 +187,11 @@ export default function ProfileMenu({
               setTvOn(next === 'on');
             }}
           >
-            <span>{t('tvModeLabel')}</span>
+            <ItemLabel icon="tv">{t('tvModeLabel')}</ItemLabel>
             <span className="profile-dropdown-value">{tvOn ? t('onLabel') : t('offLabel')}</span>
           </button>
 
-          <div className="profile-dropdown-divider" style={{ marginTop: 10 }} />
+          <div className="profile-dropdown-divider" />
 
           {/* Odhlásit se v nabídce chybělo. Potvrzovací okno i obsluha tu
               byly napsané celou dobu, jen na ně nikde nevedlo tlačítko -
@@ -179,7 +200,7 @@ export default function ProfileMenu({
             className="profile-dropdown-item profile-dropdown-signout"
             onClick={() => { setOpen(false); setConfirmSignOut(true); }}
           >
-            {t('signOut')}
+            <ItemLabel icon="logout">{t('signOut')}</ItemLabel>
           </button>
 
           <div className="profile-dropdown-divider" />
