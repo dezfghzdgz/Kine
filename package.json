@@ -9,10 +9,13 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.4",
     "@supabase/auth-helpers-nextjs": "^0.10.0",
+    "@supabase/supabase-js": "^2.45.4",
+    "@tensorflow/tfjs": "4.22.0",
     "hls.js": "^1.6.13",
+    "jpeg-js": "0.4.4",
     "next": "14.2.5",
+    "nsfwjs": "4.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.12.7",

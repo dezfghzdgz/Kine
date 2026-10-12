@@ -30,7 +30,8 @@ export async function loadLivePreview(ownerId: string): Promise<LivePreview | nu
         .select('id, username, display_name, avatar_url, banner_url, is_banned, is_shadow_banned')
         .eq('id', ownerId)
         .maybeSingle(),
-      supabaseServer.from('live_streams').select('title, description, is_live, current_video_uid, started_at').eq('owner_id', ownerId).maybeSingle(),
+      // select('*'): sloupec kontroly obsahu (moderation_hidden_at) je jen s novou migrací.
+      supabaseServer.from('live_streams').select('*').eq('owner_id', ownerId).maybeSingle(),
     ]);
     if (!profile || profile.is_banned || profile.is_shadow_banned) return null;
     return {
@@ -42,7 +43,8 @@ export async function loadLivePreview(ownerId: string): Promise<LivePreview | nu
       live: !!stream?.is_live,
       title: (stream?.title ?? '').trim(),
       description: (stream?.description ?? '').trim(),
-      videoUid: stream?.is_live ? stream?.current_video_uid ?? null : null,
+      // Přenos skrytý kontrolou obsahu: v náhledu odkazu žádný snímek z vysílání.
+      videoUid: stream?.is_live && !stream?.moderation_hidden_at ? stream?.current_video_uid ?? null : null,
       startedAt: stream?.is_live ? stream?.started_at ?? null : null,
     };
   } catch {

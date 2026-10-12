@@ -3,6 +3,9 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { markVideoReady } from '@/lib/markVideoReady';
 
+// Na pozadí může běžet kontrola obsahu (lib/nudityScan.ts) - funkce smí doběhnout až minutu.
+export const maxDuration = 60;
+
 /**
  * Cloudflare se ozve, až je video zpracované.
  *

@@ -5,6 +5,9 @@ import { hasKinePlus, KINE_PLUS_UPLOAD_MULTIPLIER } from '@/lib/plus';
 import { sweepProcessing } from '@/lib/markVideoReady';
 import { sanitizeCaptions, sanitizeChapters } from '@/lib/captions';
 
+// Na pozadí může běžet kontrola obsahu (lib/nudityScan.ts) - funkce smí doběhnout až minutu.
+export const maxDuration = 60;
+
 // Poté, co prohlížeč dokončí upload videa přímo do Cloudflare,
 // zavolá tenhle endpoint, aby se video zapsalo do naší databáze.
 export async function POST(req: NextRequest) {
@@ -23,7 +26,7 @@ export async function POST(req: NextRequest) {
   }
 
   const {
-    title, description, cloudflareVideoId, madeForKids, hasPaidPromotion, isAiGenerated,
+    title, description, cloudflareVideoId, madeForKids, hasPaidPromotion, isAiGenerated, isArtistic,
     language, category, visibility, isPremiere, scheduledAt, width, height, chapters, captions, hashtags,
   } = await req.json();
 
@@ -80,34 +83,38 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { data, error } = await supabaseServer
-    .from('videos')
-    .insert({
-      owner_id: userData.user.id,
-      title,
-      description,
-      cloudflare_video_id: cloudflareVideoId,
-      status: 'processing',
-      made_for_kids: madeForKids ?? false,
-      has_paid_promotion: hasPaidPromotion ?? false,
-      is_ai_generated: isAiGenerated ?? false,
-      language: language ?? 'cs',
-      category: category ?? null,
-      visibility: visibility ?? 'public',
-      is_premiere: isPremiere ?? false,
-      scheduled_at: scheduledAt || null,
-      width: width ?? null,
-      height: height ?? null,
-      // Od klienta (web, appka) se bere jen to, co dává smysl - rozbité kapitoly by shodily stránku videa.
-      chapters: sanitizeChapters(chapters),
-      captions: sanitizeCaptions(captions),
-      hashtags: hashtags ?? [],
-    })
-    .select()
-    .single();
+  const row: Record<string, unknown> = {
+    owner_id: userData.user.id,
+    title,
+    description,
+    cloudflare_video_id: cloudflareVideoId,
+    status: 'processing',
+    made_for_kids: madeForKids ?? false,
+    has_paid_promotion: hasPaidPromotion ?? false,
+    is_ai_generated: isAiGenerated ?? false,
+    language: language ?? 'cs',
+    category: category ?? null,
+    visibility: visibility ?? 'public',
+    is_premiere: isPremiere ?? false,
+    scheduled_at: scheduledAt || null,
+    width: width ?? null,
+    height: height ?? null,
+    // Od klienta (web, appka) se bere jen to, co dává smysl - rozbité kapitoly by shodily stránku videa.
+    chapters: sanitizeChapters(chapters),
+    captions: sanitizeCaptions(captions),
+    hashtags: hashtags ?? [],
+  };
+  // Umělecká nahota (automatická kontrola takové video neskryje, jen ho pošle
+  // ke kontrole) - sloupec je až s migrací podpory-kontrola; bez ní se vynechá.
+  if (isArtistic === true) row.artistic = true;
+  let { data, error } = await supabaseServer.from('videos').insert(row).select().single();
+  if (error && row.artistic && /artistic/i.test(error.message ?? '')) {
+    delete row.artistic;
+    ({ data, error } = await supabaseServer.from('videos').insert(row).select().single());
+  }
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error || !data) {
+    return NextResponse.json({ error: error?.message ?? 'Video se nepodařilo uložit.' }, { status: 500 });
   }
 
   // Neveřejné video dostane u Cloudflare podepsané adresy hned, ať se

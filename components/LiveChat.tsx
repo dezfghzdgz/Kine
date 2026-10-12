@@ -6,14 +6,31 @@ import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 import { CHAT_MAX_LENGTH } from '@/lib/liveChat';
 import { FOLLOW_MINUTES_OPTIONS, SLOW_MODE_OPTIONS } from '@/lib/liveChatRules';
+import { formatTipAmount } from '@/lib/liveTips';
+import { ChatSpeaker, TTS_MODES, readTtsMode, saveTtsMode, speechText, type TtsMode } from '@/lib/chatSpeech';
 
 type Message = {
   id: number;
   user_id: string;
   body: string;
   created_at: string;
+  /** 'tip' = podpora ve vysílání (zvýrazněná, s částkou). Bez migrace chybí. */
+  kind?: string | null;
+  tip_amount_cents?: number | null;
+  tip_currency?: string | null;
   profiles?: { username: string | null; avatar_url: string | null } | null;
 };
+
+const BASE_FIELDS = 'id, user_id, body, created_at, profiles(username, avatar_url)';
+const TIP_FIELDS = 'id, user_id, body, created_at, kind, tip_amount_cents, tip_currency, profiles(username, avatar_url)';
+/** Má databáze sloupce pro podpory? (null = ještě nevíme) - zjistí se při prvním načtení. */
+let tipColumns: boolean | null = null;
+
+/** Podpora: částka (podle jazyka webu). */
+function tipLabel(m: Message, lang: string): string | null {
+  if (m.kind !== 'tip' || !m.tip_amount_cents || !m.tip_currency) return null;
+  return formatTipAmount(m.tip_amount_cents, m.tip_currency, lang);
+}
 
 type Rules = {
   available: boolean;
@@ -42,6 +59,7 @@ export default function LiveChat({
   className = '',
   variant = 'panel',
   popoutHref,
+  tts: ttsFromUrl,
 }: {
   room: string;
   /** Majitel kanálu / videa (rozhodne stejně server - tohle jen ukáže tlačítka hned). */
@@ -50,6 +68,8 @@ export default function LiveChat({
   variant?: 'panel' | 'popout' | 'overlay';
   /** Odkaz na chat v samostatném okně (ikonka v hlavičce). */
   popoutHref?: string;
+  /** Překryv pro OBS: čtení nahlas z adresy (?tts=tips / ?tts=all). */
+  tts?: TtsMode;
 }) {
   const { t, lang } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -66,6 +86,56 @@ export default function LiveChat({
   const stickToBottomRef = useRef(true);
   const overlay = variant === 'overlay';
   const mod = !!rules?.canModerate || canModerate;
+  // Čtení nahlas (lib/chatSpeech.ts): režim, předčítač a kam až se už četlo.
+  const [ttsMode, setTtsMode] = useState<TtsMode>('off');
+  const [ttsMenu, setTtsMenu] = useState(false);
+  const [ttsSupported, setTtsSupported] = useState(true);
+  const speakerRef = useRef<ChatSpeaker | null>(null);
+  const spokenUpToRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setTtsSupported(ChatSpeaker.supported());
+    setTtsMode(overlay ? ttsFromUrl ?? 'off' : readTtsMode());
+  }, [overlay, ttsFromUrl]);
+
+  useEffect(() => {
+    if (ttsMode === 'off') {
+      speakerRef.current?.stop();
+      return;
+    }
+    speakerRef.current ??= new ChatSpeaker(lang);
+    speakerRef.current.setLang(lang);
+  }, [ttsMode, lang]);
+
+  useEffect(() => () => speakerRef.current?.stop(), []);
+
+  // Nové zprávy -> přečíst (jen ty, co přišly po zapnutí; vlastní ne).
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const maxId = messages[messages.length - 1].id;
+    const from = spokenUpToRef.current;
+    spokenUpToRef.current = Math.max(from ?? 0, maxId);
+    if (from === null || ttsMode === 'off' || !speakerRef.current) return;
+    const templates = { tip: t('ttsTip'), tipNoMessage: t('ttsTipNoMessage'), chat: t('ttsChat'), link: t('ttsLinkWord') };
+    for (const m of messages) {
+      if (m.id <= from || m.user_id === userId) continue;
+      const text = speechText({ kind: m.kind, name: m.profiles?.username ?? '?', body: m.body, amount: tipLabel(m, lang) }, ttsMode, templates);
+      if (text) speakerRef.current.say(text);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages]);
+
+  function changeTts(next: TtsMode) {
+    // Zapnutí nečte, co už v chatu je - jen nové.
+    if (messages.length > 0) spokenUpToRef.current = messages[messages.length - 1].id;
+    setTtsMode(next);
+    saveTtsMode(next);
+    if (next !== 'off') {
+      speakerRef.current ??= new ChatSpeaker(lang);
+      // Krátké potvrzení - prohlížeč tím zároveň dostane od kliknutí svolení mluvit.
+      speakerRef.current.say(next === 'tips' ? t('ttsOnTips') : t('ttsOnAll'));
+    }
+  }
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
@@ -78,12 +148,21 @@ export default function LiveChat({
   }
 
   async function refresh() {
-    const { data, error: loadError } = await supabase
-      .from('live_chat_messages')
-      .select('id, user_id, body, created_at, profiles(username, avatar_url)')
-      .eq('room', room)
-      .order('id', { ascending: false })
-      .limit(overlay ? 30 : 80);
+    const load = (fields: string) =>
+      supabase
+        .from('live_chat_messages')
+        .select(fields)
+        .eq('room', room)
+        .order('id', { ascending: false })
+        .limit(overlay ? 30 : 80);
+    let { data, error: loadError } = await load(tipColumns === false ? BASE_FIELDS : TIP_FIELDS);
+    if (loadError && tipColumns !== false && /kind|tip_amount|tip_currency|column/i.test(loadError.message ?? '')) {
+      // Databáze bez sloupců pro podpory (migrace podpory-kontrola) - chat jede dál bez nich.
+      tipColumns = false;
+      ({ data, error: loadError } = await load(BASE_FIELDS));
+    } else if (!loadError) {
+      tipColumns = tipColumns ?? true;
+    }
     if (loadError) {
       setUnavailable(true);
       return;
@@ -239,12 +318,16 @@ export default function LiveChat({
   if (overlay) {
     return (
       <div className={`live-chat-overlay ${className}`} ref={listRef}>
-        {messages.slice(-20).map((m) => (
-          <div key={m.id} className="live-chat-overlay-msg">
-            <span className="live-chat-user">{m.profiles?.username ?? '—'}</span>
-            {m.body}
-          </div>
-        ))}
+        {messages.slice(-20).map((m) => {
+          const tip = tipLabel(m, lang);
+          return (
+            <div key={m.id} className={`live-chat-overlay-msg ${tip ? 'tip' : ''}`}>
+              <span className="live-chat-user">{m.profiles?.username ?? '—'}</span>
+              {tip && <span className="live-chat-tip-amount">💛 {tip}</span>}
+              {tip && m.body === '💛' ? null : m.body}
+            </div>
+          );
+        })}
       </div>
     );
   }
@@ -254,6 +337,45 @@ export default function LiveChat({
       <div className="live-chat-head">
         <span>{t('liveChatHeading')}</span>
         <span className="live-chat-head-actions">
+          <span className="live-chat-tts">
+            <button
+              type="button"
+              className={`live-chat-icon-btn ${ttsMode !== 'off' ? 'active' : ''}`}
+              onClick={() => setTtsMenu((v) => !v)}
+              title={t('ttsButton')}
+              aria-label={t('ttsButton')}
+              aria-expanded={ttsMenu}
+            >
+              {ttsMode === 'off' ? '🔈' : '🔊'}
+            </button>
+            {ttsMenu && (
+              <span className="live-chat-tts-menu" role="menu">
+                {!ttsSupported && <span className="live-chat-panel-note">{t('ttsUnsupported')}</span>}
+                {TTS_MODES.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={ttsMode === m}
+                    className={ttsMode === m ? 'active' : ''}
+                    disabled={!ttsSupported && m !== 'off'}
+                    onClick={() => {
+                      changeTts(m);
+                      setTtsMenu(false);
+                    }}
+                  >
+                    {m === 'off' ? t('ttsOff') : m === 'tips' ? t('ttsTips') : t('ttsAll')}
+                  </button>
+                ))}
+                {ttsMode !== 'off' && (
+                  <button type="button" onClick={() => speakerRef.current?.skip()}>
+                    ⏭ {t('ttsSkip')}
+                  </button>
+                )}
+                <span className="live-chat-panel-note">{t('ttsHint')}</span>
+              </span>
+            )}
+          </span>
           {popoutHref && (
             <a
               href={popoutHref}
@@ -369,14 +491,16 @@ export default function LiveChat({
         {!unavailable && messages.length === 0 && <p className="live-chat-empty">{t('liveChatEmpty')}</p>}
         {messages.map((m) => {
           const own = m.user_id === userId;
+          const tip = tipLabel(m, lang);
           return (
-            <div key={m.id} className="live-chat-msg">
+            <div key={m.id} className={`live-chat-msg ${tip ? 'tip' : ''}`}>
               <span className="live-chat-avatar" aria-hidden="true">
                 {m.profiles?.avatar_url ? <img src={m.profiles.avatar_url} alt="" loading="lazy" decoding="async" /> : null}
               </span>
               <span className="live-chat-text">
                 <span className="live-chat-user">{m.profiles?.username ?? '—'}</span>
-                {m.body}
+                {tip && <span className="live-chat-tip-amount">💛 {tip}</span>}
+                {tip && m.body === '💛' ? null : m.body}
                 {actionsFor === m.id && mod && !own && (
                   <span className="live-chat-actions">
                     <button type="button" onClick={() => remove(m.id)}>

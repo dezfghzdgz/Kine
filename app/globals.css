@@ -5136,6 +5136,267 @@ input:focus, textarea:focus, select:focus {
   border-radius: 4px;
 }
 
+/* Diváci na kartě přenosu (stránka Živě). */
+.live-card-viewers {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.live-card-body {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.live-card-face {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--panel-raised);
+  color: var(--text-dim);
+  font-weight: 700;
+  box-shadow: 0 0 0 2px #e5262a;
+}
+
+.live-card-face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.live-card-followed {
+  color: var(--text-faint);
+}
+
+.live-card-category {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: var(--fs-2xs);
+}
+
+/* Řada Živě: nadpis s odkazem na všechny přenosy. */
+.live-now-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.live-now-all {
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.live-now-all:hover {
+  color: var(--text);
+}
+
+/* ---------- Stránka Živě (/streams) ---------- */
+
+.streams-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.streams-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--fs-2xl, 26px);
+  letter-spacing: var(--track-tight, -0.02em);
+}
+
+.streams-count {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: #fff;
+  background: #e5262a;
+  border-radius: var(--radius-pill);
+  padding: 2px 9px;
+}
+
+.streams-sub {
+  margin: 6px 0 0;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+  max-width: 620px;
+}
+
+.streams-go-live,
+.streams-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.streams-go-live:hover,
+.streams-btn:hover {
+  border-color: rgba(229, 38, 42, 0.6);
+}
+
+.streams-btn.primary {
+  background: #e5262a;
+  border-color: #e5262a;
+  color: #fff;
+}
+
+.streams-btn.primary:hover {
+  background: #f03a3e;
+}
+
+.streams-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.streams-chip-count {
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+  margin-left: 2px;
+}
+
+.streams-grid {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.streams-skeleton {
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-md);
+  background: linear-gradient(100deg, var(--panel) 30%, var(--panel-raised) 50%, var(--panel) 70%);
+  background-size: 300% 100%;
+  animation: streams-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes streams-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streams-skeleton { animation: none; }
+}
+
+.streams-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 40px 20px;
+}
+
+.streams-empty-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(229, 38, 42, 0.12);
+  color: #ff5a5e;
+}
+
+.streams-empty-icon .sidebar-live-icon {
+  width: 30px;
+  height: 30px;
+  border-width: 3px;
+}
+
+.streams-empty-icon .sidebar-live-icon::after {
+  width: 12px;
+  height: 12px;
+}
+
+.streams-empty-title {
+  margin: 4px 0 0;
+  font-size: var(--fs-lg, 18px);
+  font-weight: 700;
+}
+
+.streams-empty-text {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+  max-width: 480px;
+}
+
+.streams-empty-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.streams-how {
+  margin-top: 32px;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+  max-width: 760px;
+}
+
+.streams-how summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.streams-how p {
+  margin: 8px 0 0;
+  line-height: 1.55;
+}
+
+/* Odkaz Živě v menu: počet přenosů v červeném kolečku. */
+.sidebar-live-count {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: #e5262a;
+  color: #fff;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .live-banner {
   display: inline-flex;
   align-items: center;
@@ -6162,9 +6423,32 @@ html[data-theme="light"] .kine-backdrop-tint {
   );
 }
 
+/* Pohyb barev (Nastavení -> Vzhled): přechody pomalu plují a dýchají. Jen transform -
+   kreslí to grafická karta, stránku to nebrzdí. */
+html[data-motion="1"] .kine-backdrop-gradient {
+  animation: kine-backdrop-drift 38s ease-in-out infinite alternate;
+}
+
+html[data-motion="1"] .kine-backdrop-image:not(.kine-backdrop-image-out) {
+  animation: kine-backdrop-in 800ms var(--ease) both, kine-backdrop-breathe 22s ease-in-out 800ms infinite alternate;
+}
+
+@keyframes kine-backdrop-drift {
+  0% { transform: translate3d(-4%, -3%, 0) scale(1) rotate(0deg); }
+  50% { transform: translate3d(3%, 2%, 0) scale(1.08) rotate(4deg); }
+  100% { transform: translate3d(-2%, 4%, 0) scale(1.04) rotate(-3deg); }
+}
+
+@keyframes kine-backdrop-breathe {
+  from { transform: scale(1.15); }
+  to { transform: scale(1.28) translate3d(2%, -2%, 0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .kine-backdrop-image,
-  .kine-backdrop-image-out {
+  .kine-backdrop-image-out,
+  html[data-motion="1"] .kine-backdrop-gradient,
+  html[data-motion="1"] .kine-backdrop-image:not(.kine-backdrop-image-out) {
     animation: none;
   }
 }
@@ -6259,6 +6543,8 @@ html[data-ambient="1"] .live-player-ambient-host > .player-ambient {
   filter: blur(56px) saturate(1.8);
   opacity: 0.5;
   pointer-events: none;
+  /* "Sleduje obraz": nový snímek se do světla přelije, neskočí. */
+  transition: background-image 900ms var(--ease);
 }
 
 html[data-ambient="1"][data-theme="light"] .player-ambient {
@@ -6525,4 +6811,653 @@ body.player-css-fullscreen .player-ambient {
 .notification-head-btn.danger {
   color: #ff6b6b;
   box-shadow: inset 0 0 0 1px rgba(255, 107, 107, 0.55);
+}
+
+/* ---------- Automatická kontrola obsahu (fronta v /reports) ---------- */
+.content-check-count {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: #e5262a;
+  color: #fff;
+  font-size: var(--fs-2xs);
+  text-align: center;
+  vertical-align: middle;
+}
+
+.content-check-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: var(--panel-raised);
+}
+
+.content-check-item.done {
+  opacity: 0.65;
+}
+
+.content-check-head {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.content-check-badge {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.content-check-badge.hidden {
+  background: rgba(229, 38, 42, 0.15);
+  border-color: rgba(229, 38, 42, 0.5);
+  color: #ff7b7e;
+}
+
+.content-check-badge.review {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.45);
+  color: #fbbf24;
+}
+
+.content-check-badge.art {
+  color: #c4b5fd;
+  border-color: rgba(167, 139, 250, 0.45);
+}
+
+.content-check-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.content-check-meta {
+  margin: 2px 0 8px;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.content-check-frames {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  margin: 0 0 8px;
+  background: none;
+  background-image: none;
+  box-shadow: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.content-check-frame {
+  position: relative;
+  width: 168px;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: #000;
+}
+
+.content-check-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(18px) saturate(0.6);
+  transform: scale(1.15);
+  transition: filter var(--dur-2) var(--ease), transform var(--dur-2) var(--ease);
+}
+
+.content-check-frames.shown .content-check-frame img {
+  filter: none;
+  transform: none;
+}
+
+.content-check-score {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+}
+
+.content-check-reveal {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+
+.content-check-remove {
+  color: #ff7b7e;
+}
+
+/* Video skryté kontrolou obsahu - upozornění pro autora na stránce videa. */
+.moderation-hold-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  margin: 0 0 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.moderation-hold-note.removed {
+  border-color: rgba(229, 38, 42, 0.5);
+  background: rgba(229, 38, 42, 0.1);
+}
+
+/* Přenos skrytý kontrolou obsahu - místo přehrávače pro diváky. */
+.live-held {
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 24px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-lg);
+  background: radial-gradient(circle at 50% 40%, #2a1a0b, #0b0b0e 70%);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.live-held p {
+  margin: 6px 0 0;
+  color: var(--text-dim);
+  max-width: 460px;
+}
+
+/* ---------- Podpory ve vysílání (💛) ---------- */
+.live-chat-msg.tip {
+  padding: 8px 10px;
+  margin: 2px 0;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.16), rgba(244, 114, 182, 0.12));
+  border: 1px solid rgba(250, 204, 21, 0.45);
+}
+
+.live-chat-tip-amount {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(10, 8, 0, 0.55);
+  border: 1px solid rgba(250, 204, 21, 0.7);
+  color: #fde047;
+  font-weight: 800;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.live-chat-overlay-msg.tip {
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.55), rgba(244, 114, 182, 0.45));
+  border: 2px solid #facc15;
+  font-weight: 600;
+}
+
+/* Čtení nahlas: nabídka u ikonky 🔊 v hlavičce chatu. */
+.live-chat-tts {
+  position: relative;
+  display: inline-flex;
+}
+
+.live-chat-tts-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+  padding: 6px;
+  border-radius: var(--radius-md);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg, 0 18px 40px rgba(0, 0, 0, 0.45));
+}
+
+.live-chat-tts-menu button {
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: none;
+  background-image: none;
+  box-shadow: none;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+
+.live-chat-tts-menu button:hover:not(:disabled),
+.live-chat-tts-menu button.active {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.live-chat-tts-menu button.active::before {
+  content: '✓ ';
+}
+
+.live-chat-tts-menu .live-chat-panel-note {
+  padding: 4px 10px 2px;
+  font-size: var(--fs-2xs);
+  line-height: 1.4;
+}
+
+.live-tip-btn {
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(135deg, #facc15, #fb7185);
+  color: #1a1400;
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  box-shadow: 0 6px 18px rgba(250, 204, 21, 0.25);
+}
+
+.live-tip-btn:hover {
+  filter: brightness(1.06);
+}
+
+.tip-notice {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  border: 1px solid rgba(250, 204, 21, 0.45);
+  background: rgba(250, 204, 21, 0.12);
+}
+
+.tip-notice.cancel {
+  border-color: var(--border);
+  background: var(--panel-raised);
+  color: var(--text-dim);
+}
+
+.tip-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(5, 5, 8, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.tip-dialog {
+  width: min(440px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.tip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.tip-title {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 700;
+}
+
+.tip-close {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--panel-raised);
+  color: var(--text-dim);
+}
+
+.tip-form,
+.tip-login {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tip-login p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+}
+
+.tip-currencies {
+  display: flex;
+  gap: 6px;
+}
+
+.tip-presets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.tip-preset {
+  padding: 10px 6px;
+  border-radius: var(--radius-md);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-weight: 700;
+  font-size: var(--fs-sm);
+}
+
+.tip-preset.active {
+  border-color: #facc15;
+  background: rgba(250, 204, 21, 0.16);
+}
+
+.tip-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+.tip-field small {
+  color: var(--text-faint);
+  font-size: var(--fs-2xs);
+}
+
+.tip-field small.tip-invalid {
+  color: #ff6b6b;
+}
+
+.tip-note {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
+.tip-pay {
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #facc15, #fb7185);
+  color: #1a1400;
+  font-weight: 800;
+}
+
+@media (max-width: 420px) {
+  .tip-presets {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Studio: panel Podpory. */
+.tips-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.tips-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: var(--fs-sm);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+}
+
+.tips-row-amount {
+  flex: none;
+  font-weight: 800;
+  color: #facc15;
+  font-variant-numeric: tabular-nums;
+}
+
+.tips-row-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-dim);
+}
+
+.tips-row-time {
+  flex: none;
+  font-size: var(--fs-2xs);
+  color: var(--text-faint);
+}
+
+/* ---------- O Kine (/about) ---------- */
+.about-page {
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+.about-hero {
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  padding: 56px 20px 48px;
+  margin-bottom: 28px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(70% 90% at 15% 0%, rgba(var(--brand-rgb), 0.28), transparent 70%),
+    radial-gradient(60% 80% at 90% 10%, rgba(124, 58, 237, 0.22), transparent 70%),
+    var(--panel);
+}
+
+.about-hero-glow {
+  position: absolute;
+  inset: auto 0 -60% 0;
+  height: 120%;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(var(--brand-rgb), 0.18), transparent 70%);
+  pointer-events: none;
+}
+
+.about-kicker {
+  position: relative;
+  margin: 0 0 10px;
+  color: var(--brand);
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.about-hero h1 {
+  position: relative;
+  margin: 0 0 12px;
+  font-size: clamp(30px, 5vw, 48px);
+  letter-spacing: var(--track-tight);
+  line-height: 1.08;
+}
+
+.about-tagline {
+  position: relative;
+  max-width: 640px;
+  margin: 0 auto;
+  color: var(--text-dim);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.about-cta {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 22px;
+}
+
+/* Hlavní tlačítka O Kine v barvě appky (ať je barva jakákoli, text zůstane čitelný). */
+.about-page .streams-btn.primary {
+  background: rgba(var(--brand-rgb), 0.22);
+  border-color: rgba(var(--brand-rgb), 0.65);
+  color: var(--text);
+}
+
+.about-page .streams-btn.primary:hover {
+  background: rgba(var(--brand-rgb), 0.32);
+}
+
+.about-section {
+  margin: 0 0 32px;
+}
+
+.about-section h2 {
+  margin: 0 0 12px;
+  font-size: var(--fs-2xl);
+  letter-spacing: var(--track-tight);
+}
+
+.about-lead {
+  margin: 0;
+  max-width: 760px;
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.about-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.about-feature {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.about-feature-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(var(--brand-rgb), 0.14);
+  color: var(--brand);
+  margin-bottom: 4px;
+}
+
+.about-feature-title {
+  margin: 0;
+  font-weight: 700;
+}
+
+.about-feature-text {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+
+.about-apps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 14px;
+}
+
+.about-app {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.about-app.primary {
+  border-color: rgba(var(--brand-rgb), 0.45);
+  box-shadow: 0 0 0 3px var(--brand-soft, rgba(0, 201, 167, 0.12)), var(--hairline, none);
+}
+
+.about-app-mark {
+  margin-bottom: 4px;
+}
+
+.about-app-name {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: var(--track-tight);
+}
+
+.about-app-kind {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.about-app-text {
+  flex: 1;
+  margin: 2px 0 10px;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+
+.about-note {
+  margin: 12px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-faint);
+}
+
+.about-beta p {
+  margin: 0 0 14px;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+.about-links {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.about-legal {
+  font-size: var(--fs-xs);
+}
+
+.about-legal a {
+  color: var(--text-faint);
+}
+
+@media (max-width: 600px) {
+  .about-hero {
+    padding: 40px 16px 34px;
+  }
 }

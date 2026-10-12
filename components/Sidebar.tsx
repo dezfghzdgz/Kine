@@ -13,6 +13,7 @@ import NotificationBell from './NotificationBell';
 import SparksNavButton from './SparksNavButton';
 import { useUserRole } from '@/lib/useUserRole';
 import { isInDesktopApp } from '@/lib/desktopRelease';
+import { useLiveCount } from '@/lib/useLiveCount';
 import {
   FireIcon, SparkleIcon, DiceIcon,
   CarIcon, PlaneIcon, FilmIcon, GamepadIcon, MusicIcon, ComedyIcon, BlogIcon,
@@ -79,6 +80,8 @@ export default function Sidebar() {
   const { isModerator, isAdmin } = useUserRole();
   const [exploreOpen, setExploreOpen] = useState(false);
   const { open: mobileNavOpen, close: closeMobileNav } = useMobileNav();
+  // Kolik kanálů teď vysílá (odkaz Živě v menu).
+  const liveCount = useLiveCount();
 
   // Rozbalený Explore na nižším okně: menu roluje, tak ať je seznam hned vidět.
   useEffect(() => {
@@ -181,6 +184,17 @@ export default function Sidebar() {
           </div>
         )}
 
+        {/* Všechny přenosy, které teď běží - číslo = kolik kanálů vysílá. */}
+        <Link href="/streams" className={`sidebar-link ${pathname === '/streams' ? 'active' : ''}`}>
+          <LiveNowIcon />
+          {t('navLive')}
+          {liveCount > 0 && (
+            <span className="sidebar-live-count" title={t('navLiveCount').replace('{count}', String(liveCount))}>
+              {liveCount}
+            </span>
+          )}
+        </Link>
+
         {user && (
           <>
             <div className="sidebar-divider" />
@@ -238,6 +252,11 @@ export default function Sidebar() {
             🐞 {t('clientErrorsLabel')}
           </Link>
         )}
+        {/* Co je Kine a naše appky - pro každého, i nepřihlášeného. */}
+        <Link href="/about" className={`sidebar-link sidebar-about ${pathname === '/about' ? 'active' : ''}`}>
+          <AboutIcon />
+          {t('aboutLink')}
+        </Link>
       </nav>
 
       {!loading && (
@@ -363,6 +382,12 @@ export default function Sidebar() {
             </div>
           )}
 
+          <Link href="/streams" className="sidebar-link" onClick={closeMobileNav}>
+            <LiveNowIcon />
+            {t('navLive')}
+            {liveCount > 0 && <span className="sidebar-live-count">{liveCount}</span>}
+          </Link>
+
           {user && (
             <>
               <div className="sidebar-divider" />
@@ -438,6 +463,10 @@ export default function Sidebar() {
               ✦ {t('adminPlusLabel')}
             </Link>
           )}
+          <Link href="/about" className="sidebar-link" onClick={closeMobileNav}>
+            <AboutIcon />
+            {t('aboutLink')}
+          </Link>
 
           {!loading && (
             <div style={{ marginTop: 'auto' }}>
@@ -494,6 +523,27 @@ function HomeIcon() {
     <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
       <path d="M3 11.5L12 4l9 7.5" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M5.5 10v9a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** O Kine: písmeno i v kroužku. */
+function AboutIcon() {
+  return (
+    <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5.5M12 7.6v.4" />
+    </svg>
+  );
+}
+
+/** Živě: anténa s vlnami. */
+function LiveNowIcon() {
+  return (
+    <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="2" />
+      <path d="M8.2 15.8a5.4 5.4 0 0 1 0-7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6" />
+      <path d="M5.3 18.7a9.5 9.5 0 0 1 0-13.4M18.7 5.3a9.5 9.5 0 0 1 0 13.4" />
     </svg>
   );
 }

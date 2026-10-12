@@ -41,6 +41,8 @@ export type UploadJob = {
   madeForKids: boolean;
   hasPaidPromotion: boolean;
   isAiGenerated: boolean;
+  /** Umělecká nahota (akt, malba, socha): automatická kontrola video neskryje, jen ho pošle ke kontrole. */
+  isArtistic?: boolean;
   language: string;
   category: string;
   visibility: string;
@@ -319,6 +321,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           madeForKids: job.madeForKids,
           hasPaidPromotion: job.hasPaidPromotion,
           isAiGenerated: job.isAiGenerated,
+          isArtistic: job.isArtistic ?? false,
           language: job.language,
           category: job.category,
           visibility: job.visibility,

@@ -1,6 +1,7 @@
 import { supabaseServer } from './supabaseServer';
 import { shouldBeProtected, syncVideoProtection } from './streamProtection';
 import { requestAutoCaptions, sweepCaptions } from './autoCaptions';
+import { runInBackground } from './background';
 
 /**
  * "Video je zpracované" - jedno místo pro obě cesty, kterými se to appka
@@ -72,9 +73,27 @@ export async function markVideoReady(
   // odběratelům se nehlásí. Naplánované video a premiéra se hlásí až ve
   // chvíli zveřejnění (sweepScheduled) - dřív to odběratelé dostali hned
   // po nahrání a klikli na video, které ještě nemělo být venku.
-  if (video.visibility !== 'public' || video.clipped_from_video_id) return;
-  if (video.scheduled_at && new Date(video.scheduled_at).getTime() > Date.now()) return;
-  await notifySubscribers(video);
+  const notify =
+    video.visibility === 'public' &&
+    !video.clipped_from_video_id &&
+    !(video.scheduled_at && new Date(video.scheduled_at).getTime() > Date.now());
+
+  // Nejdřív automatická kontrola nahoty a porna (lib/nudityScan.ts) - na
+  // pozadí, ať odpověď Cloudflare / prohlížeči nečeká. Skryté video se
+  // odběratelům nehlásí (ohlásí se, až ho moderátor pustí).
+  runInBackground(checkThenNotify(videoId, notify ? video : null), 'kontrola obsahu videa');
+}
+
+async function checkThenNotify(videoId: string, notifyVideo: { id: string; owner_id: string; title: string } | null): Promise<void> {
+  let held = false;
+  try {
+    const { scanVideo } = await import('./nudityScan');
+    const result = await scanVideo(videoId);
+    held = result.outcome === 'checked' && result.verdict.action === 'hold';
+  } catch (err) {
+    console.error('Kine: kontrola obsahu videa', err instanceof Error ? err.message : err);
+  }
+  if (!held && notifyVideo) await notifySubscribers(notifyVideo);
 }
 
 /**
@@ -232,6 +251,11 @@ export async function sweepProcessing(options: { max?: number; force?: boolean }
       // a převzetí hotových automatických titulků.
       await sweepScheduled().catch(() => 0);
       await sweepCaptions().catch(() => 0);
+      // A na pozadí kontrola obsahu jednoho dvou starších videí (nejvýš jednou za 5 min).
+      runInBackground(
+        import('./nudityScan').then(({ sweepNudity }) => sweepNudity({ max: 2 })),
+        'kontrola obsahu starších videí'
+      );
     } catch {
       // Úklid nesmí shodit dotaz, ze kterého se volá.
     }

@@ -54,6 +54,7 @@ export default function UploadPage() {
   const [madeForKids, setMadeForKids] = useState(false);
   const [hasPaidPromotion, setHasPaidPromotion] = useState(false);
   const [isAiGenerated, setIsAiGenerated] = useState(false);
+  const [isArtistic, setIsArtistic] = useState(false);
   const [language, setLanguage] = useState('cs');
   const [category, setCategory] = useState('');
   const [playlists, setPlaylists] = useState<{ id: string; title: string }[]>([]);
@@ -251,6 +252,7 @@ export default function UploadPage() {
       madeForKids,
       hasPaidPromotion,
       isAiGenerated,
+      isArtistic,
       language,
       category,
       visibility: selectedCollaborators.length > 0 ? 'private' : visibility,
@@ -722,6 +724,13 @@ export default function UploadPage() {
             <input type="checkbox" style={{ width: 'auto' }} checked={isAiGenerated} onChange={(e) => setIsAiGenerated(e.target.checked)} />
             {t('aiContentLabel')}
             <FieldHint text={t('aiContentHint')} />
+          </label>
+
+          {/* Automatická kontrola nahoty (lib/nudityRules.ts): umělecké video neskryje, jen ho dá ke kontrole moderátorům. */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-dim)' }}>
+            <input type="checkbox" className="upload-artistic" style={{ width: 'auto' }} checked={isArtistic} onChange={(e) => setIsArtistic(e.target.checked)} />
+            {t('artisticNudityLabel')}
+            <FieldHint text={t('artisticNudityHint')} />
           </label>
         </div>
 

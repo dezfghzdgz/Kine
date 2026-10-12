@@ -185,6 +185,7 @@ export default function ProfileMenu({
           <div className="profile-dropdown-divider" />
 
           <div className="profile-dropdown-legal">
+            <Link href="/about">{t('aboutLink')}</Link>
             <Link href="/terms">{t('termsLink')}</Link>
             <Link href="/privacy">{t('privacyLink')}</Link>
             <Link href="/rules">{t('rulesLink')}</Link>

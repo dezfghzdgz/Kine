@@ -9,14 +9,22 @@ import { authHeaders } from '@/lib/authHeaders';
 import { channelRoom, liveElapsed } from '@/lib/liveChat';
 import { categoryLabel } from '@/lib/categories';
 import LiveChat from '@/components/LiveChat';
+import LiveTipDialog from '@/components/LiveTipDialog';
 import SubscribeButton from '@/components/SubscribeButton';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import ExpandableText from '@/components/ExpandableText';
-import { setAmbientSource } from '@/lib/appearance';
+import { preloadImage, setAmbientSource } from '@/lib/appearance';
+import { useAppearance } from '@/lib/useAppearance';
 
 type Status = {
   enabled: boolean;
   live: boolean;
+  /** Přenos skrytý automatickou kontrolou obsahu - divák místo přehrávače vidí "čeká na kontrolu". */
+  held?: boolean;
+  /** Jen majitel a moderátoři: přenos je skrytý kontrolou obsahu (přehrávač vidí s upozorněním). */
+  moderation?: { hidden: boolean };
+  /** Podpory ve vysílání (tlačítko 💛): kanál je umí přijmout. */
+  tips?: { enabled: boolean; feePercent: number };
   profile: { id: string; username: string; display_name: string | null; avatar_url: string | null; verification_tier: string | null } | null;
   stream: {
     title: string;
@@ -45,6 +53,19 @@ export default function LivePage() {
   const [now, setNow] = useState(() => Date.now());
   // Adresa přehrávače se drží, dokud přenos běží - změna src by iframe načetla znovu.
   const [playerUrl, setPlayerUrl] = useState<string | null>(null);
+  const [tipOpen, setTipOpen] = useState(false);
+  // Návrat z platby Stripe (?tip=thanks / ?tip=cancel).
+  const [tipNotice, setTipNotice] = useState<'thanks' | 'cancel' | null>(null);
+
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get('tip');
+    if (result === 'thanks' || result === 'cancel') {
+      setTipNotice(result);
+      window.history.replaceState(null, '', window.location.pathname);
+      const timer = setTimeout(() => setTipNotice(null), 9000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setViewerId(data.user?.id ?? null));
@@ -83,8 +104,28 @@ export default function LivePage() {
   const name = profile ? profile.display_name || profile.username : '';
 
   // Skleněný vzhled "podle videa" a světlo kolem přehrávače: snímek z přenosu (jinak avatar kanálu).
+  // "Sleduje obraz" (Nastavení -> Vzhled): snímek z přenosu se obnovuje každých ~10 s.
+  const appearance = useAppearance();
   const liveUid = status?.live ? status.stream?.videoUid ?? null : null;
-  const ambientThumb = liveUid ? `https://videodelivery.net/${liveUid}/thumbnails/thumbnail.jpg?height=270` : profile?.avatar_url ?? null;
+  const [liveFrame, setLiveFrame] = useState<string | null>(null);
+  const followLive = appearance.follow && !!liveUid;
+  useEffect(() => {
+    setLiveFrame(null);
+    if (!followLive || !liveUid) return;
+    let cancelled = false;
+    const tick = async () => {
+      if (document.visibilityState !== 'visible') return;
+      const url = `https://videodelivery.net/${encodeURIComponent(liveUid)}/thumbnails/thumbnail.jpg?height=90&t=${Math.floor(Date.now() / 10000)}`;
+      if ((await preloadImage(url)) && !cancelled) setLiveFrame(url);
+    };
+    const timer = setInterval(() => void tick(), 10000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [followLive, liveUid]);
+  const liveStill = liveUid ? `https://videodelivery.net/${encodeURIComponent(liveUid)}/thumbnails/thumbnail.jpg?height=270` : null;
+  const ambientThumb = liveFrame ?? liveStill ?? profile?.avatar_url ?? null;
   useEffect(() => {
     setAmbientSource(ambientThumb);
   }, [ambientThumb]);
@@ -131,10 +172,44 @@ export default function LivePage() {
             {t('liveStudioTitle')}
           </Link>
         )}
+        {!isOwner && status.live && status.tips?.enabled && (
+          <button type="button" className="live-tip-btn" onClick={() => setTipOpen(true)}>
+            💛 {t('tipButton')}
+          </button>
+        )}
         <SubscribeButton channelId={profile.id} />
       </div>
+      {tipOpen && (
+        <LiveTipDialog
+          channelId={profile.id}
+          channelName={name}
+          feePercent={status.tips?.feePercent ?? 15}
+          loggedIn={!!viewerId}
+          onClose={() => setTipOpen(false)}
+        />
+      )}
     </div>
   );
+
+  if (status.live && status.held) {
+    return (
+      <div className="live-layout">
+        <div className="live-main">
+          <div className="live-held" role="status">
+            <div>
+              <p style={{ fontSize: 28, margin: 0 }} aria-hidden="true">
+                ⏸
+              </p>
+              <p style={{ fontWeight: 700, color: 'var(--text)', fontSize: 'var(--fs-lg)' }}>{t('liveHeldTitle')}</p>
+              <p>{t('liveHeldText')}</p>
+            </div>
+          </div>
+          {channelRow}
+        </div>
+        <LiveChat room={channelRoom(profile.id)} canModerate={isOwner} className="live-side" popoutHref={`/live/${profile.id}/chat`} />
+      </div>
+    );
+  }
 
   if (!status.live || !playerUrl) {
     return (
@@ -159,6 +234,17 @@ export default function LivePage() {
   return (
     <div className="live-layout">
       <div className="live-main">
+        {status.moderation?.hidden && (
+          <div className="moderation-hold-note" role="status">
+            <span aria-hidden="true">⚠️</span>
+            <span>{t('liveHeldOwner')}</span>
+          </div>
+        )}
+        {tipNotice && (
+          <div className={`tip-notice ${tipNotice}`} role="status">
+            {tipNotice === 'thanks' ? `💛 ${t('tipThanks')}` : t('tipCancelled')}
+          </div>
+        )}
         <div className="live-player-ambient-host" style={{ position: 'relative' }}>
           <div className="player-wrap live-player" style={{ aspectRatio: '16/9' }}>
             <iframe
@@ -169,7 +255,7 @@ export default function LivePage() {
               title={stream?.title || name}
             />
           </div>
-          {liveUid && <div className="player-ambient" aria-hidden="true" style={{ backgroundImage: `url("https://videodelivery.net/${encodeURIComponent(liveUid)}/thumbnails/thumbnail.jpg?height=270")` }} />}
+          {liveUid && <div className="player-ambient" aria-hidden="true" style={{ backgroundImage: `url("${liveFrame ?? liveStill}")` }} />}
         </div>
         <h1 className="video-title" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span className="live-pill">● {t('liveBadge')}</span>

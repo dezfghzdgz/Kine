@@ -8,7 +8,7 @@ import { SITE_URL } from '@/lib/linkPreview';
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = SITE_URL;
 
-  const staticRoutes = ['', '/explore', '/login', '/signup', '/terms', '/privacy', '/rules', '/copyright', '/download', '/plus'].map((path) => ({
+  const staticRoutes = ['', '/explore', '/streams', '/about', '/login', '/signup', '/terms', '/privacy', '/rules', '/copyright', '/download', '/plus'].map((path) => ({
     url: `${baseUrl}${path}`,
     lastModified: new Date(),
   }));

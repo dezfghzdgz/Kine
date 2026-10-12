@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { refreshFromCloudflare, sweepProcessing } from '@/lib/markVideoReady';
 
+// Na pozadí může běžet kontrola obsahu (lib/nudityScan.ts) - funkce smí doběhnout až minutu.
+export const maxDuration = 60;
+
 // Zeptá se Cloudflare Stream, jestli je video už zpracované, a pokud ano,
 // aktualizuje záznam v naší databázi (status, náhledový obrázek, délka).
 //

@@ -9,6 +9,7 @@ import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import LoadFailed from '@/components/LoadFailed';
 import { SkeletonRows } from '@/components/Skeleton';
 import CopyrightQueue from '@/components/CopyrightQueue';
+import ContentCheckQueue from '@/components/ContentCheckQueue';
 
 type Filter = 'open' | 'done' | 'all';
 type Sort = 'count' | 'recent';
@@ -189,6 +190,9 @@ export default function ModerationReportsPage() {
       {/* Oznámení držitelů práv (formulář /copyright) - jiná fronta než
           hlášení diváků: má jméno a e-mail oznamovatele a zákonnou lhůtu. */}
       <CopyrightQueue />
+
+      {/* Automatická kontrola nahoty a porna (lib/nudityScan.ts): co model skryl nebo poslal ke kontrole. */}
+      <ContentCheckQueue />
 
       {loadFailed && <LoadFailed onRetry={load} />}
 

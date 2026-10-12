@@ -4,6 +4,7 @@ import { Suspense, useEffect } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import LiveChat from '@/components/LiveChat';
 import { channelRoom } from '@/lib/liveChat';
+import { parseTtsMode } from '@/lib/chatSpeech';
 
 /**
  * Chat přenosu v samostatném okně (tlačítko ⧉ u chatu, appka Kine) a jako
@@ -25,6 +26,8 @@ function LiveChatPopout() {
   const search = useSearchParams();
   const channelId = String(params.id ?? '');
   const overlay = search.get('overlay') === '1';
+  // Překryv pro OBS umí číst podpory / zprávy nahlas: ?overlay=1&tts=tips (nebo tts=all).
+  const tts = parseTtsMode(search.get('tts'));
 
   useEffect(() => {
     // OBS i okno chatu: bez posuvníků stránky a v překryvu průhledné pozadí.
@@ -33,5 +36,5 @@ function LiveChatPopout() {
   }, [overlay]);
 
   if (!/^[0-9a-f-]{36}$/i.test(channelId)) return null;
-  return <LiveChat room={channelRoom(channelId)} variant={overlay ? 'overlay' : 'popout'} />;
+  return <LiveChat room={channelRoom(channelId)} variant={overlay ? 'overlay' : 'popout'} tts={overlay ? tts : undefined} />;
 }

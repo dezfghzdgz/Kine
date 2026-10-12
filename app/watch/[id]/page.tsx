@@ -50,7 +50,8 @@ import ChatReplay from '@/components/ChatReplay';
 import { videoRoom } from '@/lib/liveChat';
 import { formatCountdown, isHiddenScheduled, isUpcomingPremiere } from '@/lib/scheduling';
 import { effectiveChapters } from '@/lib/captions';
-import { setAmbientSource } from '@/lib/appearance';
+import { preloadImage, setAmbientSource, videoFrameUrl } from '@/lib/appearance';
+import { useAppearance } from '@/lib/useAppearance';
 
 const THEATER_KEY = 'kine-theater';
 const AUTOPLAY_KEY = 'kine-autoplay';
@@ -172,13 +173,16 @@ function WatchPageInner() {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
   }, [videoId]);
 
-  // Skleněný vzhled "podle videa": pozadí appky bere barvy z náhledu tohohle videa.
-  // Při přechodu na další video se pozadí plynule přelije; uklidí se, až stránka zmizí.
+  // Skleněný vzhled "podle videa": pozadí appky bere barvy z náhledu tohohle videa
+  // (nebo ze snímku z místa přehrávání - viz "sleduje obraz" níž). Při přechodu na
+  // další video se pozadí plynule přelije; uklidí se, až stránka zmizí.
   const ambientThumb: string | null = video?.thumbnail_url ?? null;
+  const [ambientFrame, setAmbientFrame] = useState<string | null>(null);
   useEffect(() => {
-    setAmbientSource(ambientThumb);
-  }, [ambientThumb]);
+    setAmbientSource(ambientFrame ?? ambientThumb);
+  }, [ambientFrame, ambientThumb]);
   useEffect(() => () => setAmbientSource(null), []);
+  const appearance = useAppearance();
 
   useEffect(() => {
     if (!playlistId) {
@@ -330,6 +334,32 @@ function WatchPageInner() {
 
   const mode = playbackMode(video);
   const showMusicStage = mode === 'music' && musicView === 'cover';
+
+  // "Sleduje obraz" (Nastavení -> Vzhled): pozadí skla a světlo kolem přehrávače berou barvy
+  // ze snímku z místa, kde video právě hraje (Cloudflare umí náhled odkudkoli) - každé ~3 s,
+  // jen když video hraje a karta je vidět. Snímek se nejdřív načte, pak ukáže (bez přebliknutí).
+  const followFrames = appearance.follow && (appearance.ambient || (appearance.look === 'glass' && appearance.backdrop === 'auto'));
+  const frameSource: string | null = video ? video.playback_id ?? video.cloudflare_video_id ?? null : null;
+  useEffect(() => {
+    setAmbientFrame(null);
+    if (!followFrames || !playerReady || !frameSource || mode === 'music') return;
+    let last = '';
+    let cancelled = false;
+    const tick = async () => {
+      const p = playerRef.current;
+      if (!p || p.paused || document.visibilityState !== 'visible') return;
+      const url = videoFrameUrl(frameSource, Number(p.currentTime) || 0);
+      if (url === last) return;
+      last = url;
+      if ((await preloadImage(url)) && !cancelled) setAmbientFrame(url);
+    };
+    void tick();
+    const timer = setInterval(() => void tick(), 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [followFrames, playerReady, frameSource, mode]);
 
   /**
    * Předání skladby trvalému přehrávači.
@@ -1509,8 +1539,8 @@ function WatchPageInner() {
                     )}
                   </div>
                   {/* Ambientní světlo: rozmazaný náhled za přehrávačem - barvy videa prosvítají kolem (Nastavení -> Vzhled). */}
-                  {video.thumbnail_url && (
-                    <div className="player-ambient" aria-hidden="true" style={{ backgroundImage: `url("${String(video.thumbnail_url).replace(/["\\\n\r]/g, (c: string) => encodeURIComponent(c))}")` }} />
+                  {(ambientFrame || video.thumbnail_url) && (
+                    <div className="player-ambient" aria-hidden="true" style={{ backgroundImage: `url("${String(ambientFrame ?? video.thumbnail_url).replace(/["\\\n\r]/g, (c: string) => encodeURIComponent(c))}")` }} />
                   )}
                 </div>
         )}
@@ -1653,6 +1683,13 @@ function WatchPageInner() {
                 {t('playlistNextButton')} →
               </Link>
             </div>
+          </div>
+        )}
+        {/* Automatická kontrola obsahu video skryla (lib/nudityScan.ts) - vidí ho jen autor. */}
+        {ownerView && video.moderation_hold && (
+          <div className={`moderation-hold-note ${video.moderation_hold === 'removed' ? 'removed' : ''}`} role="status">
+            <span aria-hidden="true">{video.moderation_hold === 'removed' ? '⛔' : '⚠️'}</span>
+            <span>{video.moderation_hold === 'removed' ? t('moderationHoldRemoved') : t('moderationHoldNote')}</span>
           </div>
         )}
         <h1 className="video-title">{video.title}</h1>

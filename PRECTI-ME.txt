@@ -1,101 +1,179 @@
-KINE - živé vysílání 2, náhledy odkazů, vzhled (sklo), oznámení
-================================================================
+KINE - stránka Živě, podpory ve vysílání, kontrola nahoty, O Kine, barvy podle obrazu
+==================================================================================
 
-Balíček se změněnými soubory (dodávka kine-zive-vzhled-2026-10-11).
+Balíček se změněnými soubory (dodávka kine-zive-podpory-2026-10-12).
 Rozbal do kořene repa a přepiš, pak:
 
-  1. Nahraj na GitHub (přetažením, jako vždycky).
+  1. Nahraj na GitHub (přetažením, jako vždycky). Jsou v tom i package.json
+     a package-lock.json - Vercel si podle nich sám stáhne tři nové balíčky
+     pro kontrolu nahoty (nsfwjs, @tensorflow/tfjs, jpeg-js). Nic neinstaluješ.
   2. Supabase -> SQL Editor -> New query -> vlož CELÝ obsah souboru
-     supabase-migration-zive-2.sql -> Run. Na konci vypíše tabulku, co
-     udělal. Dá se pustit i víckrát.
-     Jestli jsi ještě nepustil supabase-migration-bezpecnost-rijen.sql
-     z minulé dodávky, pusť nejdřív tu a pak tuhle.
-     Web funguje i bez migrace - jen bez pravidel chatu, automatického
-     zveřejnění záznamu a záznamu chatu u videí.
-  3. node zkontroluj-soubory.mjs - řekne, jestli všechno sedí. V repu
-     pořád zůstávají 4 staré soubory, které můžeš na GitHubu smazat
+     supabase-migration-podpory-kontrola.sql -> Run. Na konci vypíše
+     tabulku, co udělal. Dá se pustit i víckrát. (Předchozí migrace
+     bezpecnost-rijen a zive-2 musí být puštěné - jestli nejsou, nejdřív ty.)
+     Web funguje i bez migrace - jen bez podpor a bez kontroly nahoty.
+  3. Stripe -> Developers -> Webhooks -> tvůj webhook (/api/donate/webhook)
+     -> přidej událost checkout.session.async_payment_succeeded (nepovinné,
+     karty fungují i bez ní - jen pomalé platby typu převod).
+  4. node zkontroluj-soubory.mjs - řekne, jestli všechno sedí. V repu
+     pořád zůstávají 5 starých souborů, které můžeš na GitHubu smazat
      (nic nerozbijí): tests/username.test.mjs, kine-web-live.patch,
-     supabase-migration-zarizeni-chyby-jmena.sql, app/tests/playerStart.test.mjs.
+     supabase-migration-zarizeni-chyby-jmena.sql, app/tests/playerStart.test.mjs,
+     CTI-ME.txt.
 
-Žádná nová závislost, žádná nová proměnná na Vercelu.
+Nepovinná proměnná na Vercelu: LIVE_TIP_FEE_PERCENT = poplatek Kine
+z podpor v procentech (výchozí 15, rozsah 0-50).
+
+!! DŮLEŽITÉ - VERCEL HOBBY A PLATBY !!
+Plán Hobby je podle pravidel Vercelu jen pro nekomerční použití. Jakékoli
+přijímání plateb od návštěvníků (předplatné tvůrců, Kine Plus, podpory ve
+vysílání) je komerční použití a potřebuje plán Pro (20 $ měsíčně). Dary
+appce (/donate) komerční nejsou. Než spustíš placené věci naostro,
+přepni projekt na Pro (Vercel -> Settings -> Billing).
 
 CO SE ZMĚNILO
 -------------
-ŘADA "ŽIVĚ" NA HLAVNÍ STRÁNCE
-- Vysílání z appky se na hlavní stránce neukazovalo, i když stránka
-  přenosu fungovala. Řada se teď skládá jinak (přenosy a profily zvlášť,
-  se zálohou pro starší databázi) a vlastní přenos vidíš vždycky první.
-- Pořadí: tvůj přenos, kanály, které odebíráš, pak ostatní zamíchaní po
-  10 minutách - malé kanály nezapadnou pod velké (častá výtka na Twitch).
+VZHLED - NEJEN STATICKÉ SKLO (Nastavení -> Vzhled)
+- "Barvy podle obrazu": světlo kolem přehrávače a skleněné pozadí "podle
+  videa" sledují, co se zrovna přehrává - u videa nový snímek každé ~3 s
+  (z Cloudflare, malé obrázky z mezipaměti), u přenosu každých ~10 s.
+  Barvy se mění plynule.
+- "Pohyblivé barvy": barvy skleněného pozadí se pomalu přelévají. Když má
+  počítač vypnuté animace (omezení pohybu), stojí.
+- Obojí je vypnuté, dokud si to člověk nezapne. Pamatuje si to zařízení.
 
-ZÁZNAM VYSÍLÁNÍ -> VIDEO
-- Po konci vysílání jde záznam zveřejnit hned (studio na webu i appka),
-  nemusí se čekat, až ho Cloudflare dokončí.
-- Volba "Po skončení vysílání": nechat ve studiu / zveřejnit hned
-  veřejně / jen odběratelům / soukromě. Platí pro web i appku.
-- Zveřejněný záznam zůstává napořád (Twitch záznamy maže po 7-60 dnech)
-  a u videa se přehrává i ZÁZNAM CHATU ve chvíli, kdy zprávy padly.
+ŽIVĚ - VLASTNÍ STRÁNKA (/streams)
+- V menu nový odkaz "Živě" s počtem kanálů, které právě vysílají.
+- Stránka se všemi přenosy: počet diváků, jak dlouho běží, kategorie
+  (Hry 2, Hudba 1...), řazení Pro tebe / Nejvíc diváků / Právě začali,
+  obnovuje se sama. Prázdná stránka nabídne začít vysílat (i bez OBS
+  přes Kine Clipper). Volby jsou v adrese - odkaz jde poslat.
+- Hlavní stránka: řada Živě ukáže nejvýš 8 přenosů a odkaz "Všechny přenosy".
+- Jak se přenos ověřuje (je to i na stránce v "Jak se přenos dostane sem"):
+  objeví se, jakmile appka/OBS posílá obraz; Kine si u Cloudflare ověří,
+  že obraz opravdu chodí - odběratelé dostanou oznámení až po tom a
+  přenos, který Cloudflare nevidí, se sám ukončí. Zablokované kanály
+  nikde nejsou. Nově se obraz přenosů kontroluje na nahotu (níž).
+- Číslo v menu jde z mezipaměti CDN (30 s) - menu nezatěžuje databázi.
 
-CHAT A MODERACE
-- Pomalý režim, jen odběratelé (i "aspoň 10 min / 1 h / 1 den"), zákaz
-  odkazů, zakázaná slova (pozná i obcházení typu "h4te" nebo "h a t e"),
-  minimální stáří účtu.
-- Štít jedním klikem proti náletu (pomalý režim, jen odběratelé, bez
-  odkazů a nových účtů) - jako Shield Mode na Twitchi.
-- Ztlumení (10 min) a zákaz psaní - smaže i zprávy toho člověka za
-  posledních 30 min. Seznam zákazů s tlačítkem Zrušit.
-- Moderátoři kanálu: přidáš je jménem ve studiu, můžou mazat a ztlumit.
-- Chat v samostatném okně (ikonka ⧉) a průhledný chat pro OBS
-  (/live/<kanál>/chat?overlay=1 - odkaz je ve studiu s tlačítkem Kopírovat).
+PODPORY (DONATY) VE VYSÍLÁNÍ
+- U přenosu tlačítko "💛 Podpořit": částka (50/100/200/500 Kč nebo
+  2/5/10/20 €, vlastní 50-10 000 Kč / 2-400 €) a vzkaz do 200 znaků.
+  Platí se kartou přes Stripe a peníze jdou PŘÍMO na Stripe účet tvůrce
+  (stejně jako předplatné kanálu - tvůrce si musí v Nastavení propojit
+  Stripe). Kine si nechá 15 %, ale aspoň 8 Kč / 0,30 € - z toho se platí
+  poplatek Stripe za platbu, jinak by Kine na malých podporách prodělávalo.
+- Po zaplacení se vzkaz objeví v chatu zvýrazněný se zlatou částkou
+  (i v okně chatu, v překryvu pro OBS a v záznamu chatu u videa)
+  a tvůrce dostane oznámení. Vzkaz hlídají pravidla chatu kanálu
+  (zakázaná slova, zákaz psaní) a odkazy v něm nejdou.
+- Studio (/live) -> panel "Podpory ve vysílání": zapnout/vypnout,
+  posledních 50 podpor se vzkazy, součty za 24 h a odkaz na překryv pro OBS.
+- ČTENÍ NAHLAS: v chatu ikonka 🔈 -> "Jen podpory" nebo "Všechny nové
+  zprávy" (+ Přeskočit). Hlasem z prohlížeče, nic se nikam neposílá.
+  Čtou se jen nové zprávy, odkazy se nečtou, spam (opakované znaky,
+  emoji) se zkrátí, dlouhé zprávy uříznou. Pro OBS: Zdroj prohlížeče
+  s adresou /live/<kanál>/chat?overlay=1&tts=tips (je ve studiu
+  s tlačítkem Kopírovat). V Kine Clipperu v okně chatu kliknout na 🔈.
 
-NÁHLED ODKAZU (Discord, X, Messenger...)
-- Web je v náhledech anglicky. Odkaz na přenos ukáže "🔴 <kanál> is live:
-  <název>" a obrázek se snímkem z vysílání a odznakem LIVE (offline:
-  banner kanálu). Hlavní stránka a kanály mají vlastní obrázek a popis.
-  Discord si náhledy drží v mezipaměti - u odkazu, který už jednou
-  poslal, může chvíli ukazovat ten starý.
+AUTOMATICKÁ KONTROLA NAHOTY A PORNA
+- Každé video se po zpracování zkontroluje: 4-6 snímků z videa (a vlastní
+  náhled) projde model nsfwjs přímo na serveru - zdarma, bez klíčů,
+  obrázky nikam neodcházejí. Starší videa se zkontrolují postupně
+  (pár při běžném provozu, víc v nočním úklidu).
+- Porno -> video se hned skryje (soukromé), odběratelům se nehlásí a autor
+  dostane oznámení. Nahota -> taky skryté, ale video označené při
+  nahrávání "Umělecká nahota (akt, malba, socha…)" zůstane venku a jen
+  jde ke kontrole. Slabší signál (plavky, zápas...) -> video zůstane
+  venku a jde ke kontrole.
+- Skryté video si autor sám zveřejnit nemůže (hlídá to databáze) - vidí
+  u něj upozornění. Nový vlastní náhled = nová kontrola.
+- Živé přenosy: snímek každé ~2 minuty. Po opakované nahotě (nebo jednom
+  velmi jistém pornu) přenos zmizí z hlavní stránky i ze stránky Živě a
+  divákům se místo přehrávače ukáže "čeká na kontrolu". Streamer to vidí
+  s upozorněním.
+- Moderátoři: /reports -> "Automatická kontrola obsahu". Snímky jsou
+  rozmazané, dokud na ně neklikneš, u každého je "porno x % · nahota y %".
+  "Pustit - je to v pořádku" (omyl, umění) vrátí video/přenos a teprve
+  pak se odběratelům ohlásí; "Nechat skryté" ho nechá skryté a autor
+  dostane oznámení.
+- Model se může plést (kůže zblízka, plavky) - proto se automaticky skrývá
+  jen při silném nebo opakovaném signálu a vždycky to pak vidí člověk.
 
-VZHLED (Nastavení -> Vzhled, nebo nabídka profilu -> Přizpůsobit vzhled)
-- Styl Klasický / SKLO: průhledné plochy nad barevným rozmazaným
-  pozadím (jako upravený Spotify / YouTube na tvých fotkách).
-- Pozadí skla: Podle videa (barvy z videa, přenosu nebo kanálu, na který
-  se díváš), Moje barva, Noc, Západ slunce, Les, Oceán, Neon.
-- Posuvník průhlednosti, motiv tmavý / střední / světlý, barva Kine
-  (dřív jen po 5 klicích na logo), tlačítko Výchozí vzhled.
-- Ambientní světlo kolem přehrávače (barvy videa prosvítají kolem) -
-  jde vypnout, funguje i v klasickém stylu.
-- Pamatuje si to zařízení; platí hned a po načtení stránky nic
-  nepřebliká. Funguje i v Kine do PC (web v okně).
+O KINE (/about)
+- Veřejná stránka pro kohokoli: co je Kine, co děláme (6 bodů) a naše
+  appky - Kine (web), Kine do PC a Kine Clipper - s tlačítky ke stažení.
+  Odkaz je v menu (O Kine), v nabídce profilu dole a na stránce Stáhnout.
+  V náhledu odkazu anglicky ("About Kine"). Je i v sitemapě.
+- Klipovač se v češtině a slovenštině všude jmenuje Kine Clipper.
 
-OZNÁMENÍ
-- "Smazat vše" bylo až dole pod seznamem. Teď je nahoře v hlavičce
-  (drží nahoře i při rolování) spolu s "Přečíst vše". Smazání chce
-  druhé kliknutí ("Opravdu smazat?"), ať se to nestane omylem.
+VLASTNÍ DOMÉNA - JDE TO (i na Hobby, až 50 domén na projekt)
+  1. Kup doménu (Forpsi, Wedos, Websupport, Cloudflare... nebo přímo na Vercelu).
+  2. Vercel -> projekt -> Settings -> Domains -> Add Domain -> napiš
+     např. kine.cz. Vercel nabídne přidat i www.kine.cz - nech ho.
+  3. U registrátora domény nastav DNS záznamy, které ti Vercel ukáže:
+     - kine.cz: záznam A na 76.76.21.21 (nebo hodnotu z karty domény),
+     - www.kine.cz: záznam CNAME na adresu z karty domény
+       (něco jako xxxx.vercel-dns-0xx.com).
+     Za pár minut (někdy hodin) Vercel napíše "Valid Configuration" a sám
+     zařídí HTTPS certifikát. U www nastav přesměrování na kine.cz.
+  4. Vercel -> Settings -> Environment Variables: NEXT_PUBLIC_SITE_URL =
+     https://kine.cz (nebo proměnnou smaž - Vercel pak sám vezme vlastní
+     doménu) -> Deployments -> Redeploy.
+  5. Supabase -> Authentication -> URL Configuration: Site URL =
+     https://kine.cz a do Redirect URLs přidej https://kine.cz/**
+     (starou adresu tam zatím nech).
+  6. Starou adresu kine-lac.vercel.app ZATÍM NEPŘESMĚROVÁVEJ: běží na ní
+     webhooky Stripe a Cloudflare a starší verze appky. Appka Kine do PC /
+     Kine Clipper od verze 0.9.8 přejde na novou adresu sama (do dne nebo
+     po restartu). Až budeš chtít starou adresu přesměrovat, nejdřív
+     ve Stripe (Webhooks) a v Cloudflare (webhook Stream - příkaz je
+     v app/api/videos/cloudflare-webhook/route.ts) změň adresu na novou
+     a u Cloudflare dej do CLOUDFLARE_WEBHOOK_SECRET nové tajemství.
+  7. Lidé se na nové adrese přihlásí znovu (přihlášení v prohlížeči patří
+     k adrese).
 
 OVĚŘENO
 -------
-- npx tsc --noEmit a next build prošly; všechny testy webu prošly
-  (nové: appearance, liveChatRules, liveNow, liveRecording).
-- Migrace zive-2 na skutečném Postgresu 16 dvakrát po sobě (po
-  bezpecnost-rijen).
-- Stránky proklikané s napodobeným Supabase: řada Živě, chat v okně
-  i pro OBS, moderování, studio, záznam chatu u videa, náhledy odkazů
-  (obrázky se vykreslí), sklo (nastavení, hlavní stránka, video podle
-  videa, světlý motiv), oznámení, mobil 390 px bez přetékání.
+- npx tsc --noEmit a next build prošly; testy webu prošly (nové:
+  nudityRules, liveTips, chatSpeech; appearance rozšířený). Starý
+  tests/username.test.mjs padá dál - testuje funkci, která už v kódu není
+  (patří mezi soubory ke smazání).
+- Migrace podpory-kontrola na skutečném Postgresu 16 dvakrát po sobě,
+  na databázi se vším i na holé databázi bez chatu a přenosů. Testy:
+  autor skryté video nezveřejní ani nezruší skrytí, nové video
+  z prohlížeče je "nezkontrolované", podporu (ani falešnou podporu v chatu)
+  z prohlížeče zapsat nejde, podpory vidí jen příjemce a odesílatel,
+  frontu kontroly nikdo z prohlížeče.
+- Model nsfwjs: ověřeno, že funkce na Vercelu dostanou všechny potřebné
+  soubory (sestavení -> jen soubory, které Vercel nahraje -> model
+  se načte a ohodnotí snímek).
+- Stránky proklikané s napodobeným Supabase: Živě (řazení, kategorie,
+  adresa, prázdná, mobil 390 px), řada Živě a číslo v menu, O Kine
+  (počítač i mobil), podpora (okno, chyba odkazu, přesměrování na
+  platbu, nepřihlášený, poděkování po návratu), podpora v chatu
+  a čtení nahlas (panel i překryv OBS), skrytý přenos (divák i majitel),
+  fronta kontroly v /reports (rozmazání, odkrytí, pustit), skryté video
+  (autor), studio - panel Podpory (bez Stripe i se Stripe), Nastavení ->
+  Vzhled (barvy podle obrazu, pohyb), nahrávání (umělecká nahota).
+  Staré testy (domovská stránka, video, chat, studio, sklo, oznámení)
+  prošly dál.
 
 SOUBORY
 -------
-  PRECTI-ME.txt, stav-souboru.json
-  supabase-migration-zive-2.sql (NOVÝ) - spustit v Supabase
-  app/opengraph-image.tsx, app/live/[id]/opengraph-image.tsx,
-  app/live/[id]/layout.tsx, app/live/[id]/chat/page.tsx (NOVÉ)
-  app/api/live/chat/moderate/route.ts, app/api/live/moderators/route.ts (NOVÉ)
-  app/api/live/chat, me, now, recordings (route.ts)
-  app/layout.tsx, app/globals.css, app/settings/page.tsx, app/live/page.tsx,
-  app/live/[id]/page.tsx, app/watch/[id]/page.tsx, app/channel/[id]/page.tsx,
-  app/channel/[id]/layout.tsx
-  components: AppearanceBackdrop, AppearanceSettings, ChatReplay (NOVÉ),
-  AppShellChrome, BrandLogo, LiveChat, LiveNowRow, NotificationBell, ProfileMenu
-  lib: appearance, liveNow, livePreview, liveRecording, liveRecordingRules,
-  liveChatRules, liveChatModeration (NOVÉ), liveStream, i18n (8 jazyků)
-  tests: appearance, liveChatRules, liveNow, liveRecording (NOVÉ)
+  PRECTI-ME.txt, stav-souboru.json, package.json, package-lock.json, next.config.js
+  supabase-migration-podpory-kontrola.sql (NOVÝ) - spustit v Supabase
+  app/streams/page.tsx, app/streams/layout.tsx, app/about/page.tsx,
+  app/about/layout.tsx (NOVÉ)
+  app/api/live/tip, app/api/live/tips, app/api/moderation/content (NOVÉ)
+  app/api/live/me, now, status; app/api/donate/webhook;
+  app/api/videos/cloudflare-webhook, confirm, status, sweep (route.ts)
+  app/globals.css, app/live/page.tsx, app/live/[id]/page.tsx,
+  app/live/[id]/chat/page.tsx, app/watch/[id]/page.tsx, app/reports/page.tsx,
+  app/upload/page.tsx, app/settings/page.tsx, app/download/page.tsx, app/sitemap.ts
+  components: ContentCheckQueue, LiveTipDialog, LiveTipsPanel (NOVÉ),
+  AppearanceSettings, ChatReplay, LiveChat, LiveNowRow, ProfileMenu, Sidebar
+  lib: background, chatSpeech, liveTips, liveTipsServer, nudityRules,
+  nudityScan, useAppearance, useLiveCount (NOVÉ), appearance, livePreview,
+  markVideoReady, uploadManager, i18n (8 jazyků)
+  tests: chatSpeech, liveTips, nudityRules (NOVÉ), appearance

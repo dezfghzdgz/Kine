@@ -7,6 +7,7 @@ import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { CATEGORY_KEYS } from '@/lib/categories';
 import { channelRoom, liveElapsed } from '@/lib/liveChat';
 import LiveChat from '@/components/LiveChat';
+import LiveTipsPanel from '@/components/LiveTipsPanel';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import Toast, { ToastType } from '@/components/Toast';
 
@@ -500,6 +501,9 @@ export default function LiveStudioPage() {
               </div>
               <p className="live-hint">{t('liveRecordingsNote')}</p>
             </div>
+
+            {/* Podpory ve vysílání: zapnutí, poslední podpory, překryv pro OBS se čtením nahlas. */}
+            <LiveTipsPanel token={token} userId={userId} onCopy={copy} />
 
             <div className="panel">
               <p className="panel-heading">{t('liveChatToolsHeading')}</p>

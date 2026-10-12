@@ -2,15 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripeServer } from '@/lib/stripeServer';
 import { isPaidTier, tierFromStripePriceId, type PaidTier } from '@/lib/plus';
 import { supabaseServer } from '@/lib/supabaseServer';
+import { recordLiveTip } from '@/lib/liveTipsServer';
 
 // Appka poslouchá na "checkout.session.completed" - to je jediná chvíle,
 // kdy appka může s jistotou vědět, že platba opravdu proběhla (nestačí
 // jen appce věřit, že se úspěšně vrátil na "thank-you" stránku - to jde
 // obejít).
 //
-// Jeden webhook pro všechny platby: dary, Kine Plus a předplatné tvůrců.
-// Ve Stripe (Developers -> Webhooks) adresa https://<web>/api/donate/webhook
-// a události checkout.session.completed, customer.subscription.updated,
+// Jeden webhook pro všechny platby: dary, Kine Plus, předplatné tvůrců
+// a podpory ve vysílání. Ve Stripe (Developers -> Webhooks) adresa
+// https://<web>/api/donate/webhook a události checkout.session.completed,
+// checkout.session.async_payment_succeeded, customer.subscription.updated,
 // customer.subscription.deleted; podpisový klíč (whsec_…) do
 // STRIPE_WEBHOOK_SECRET. Když zápis do databáze selže, vrátí se 500 a Stripe
 // to zkusí znovu (všechny zápisy jde bezpečně opakovat).
@@ -27,6 +29,17 @@ export async function POST(req: NextRequest) {
     event = stripeServer.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!);
   } catch (err: any) {
     return NextResponse.json({ error: `Ověření podpisu selhalo: ${err.message}` }, { status: 400 });
+  }
+
+  // Podpora ve vysílání (app/api/live/tip) - jde tvůrci, ne appce: nesmí se
+  // zapsat jako dar Kine (dřív se každá jednorázová platba brala jako dar).
+  if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
+    const session = event.data.object as any;
+    if (session.mode === 'payment' && session.metadata?.kind === 'live-tip') {
+      const result = await recordLiveTip(event.type === 'checkout.session.async_payment_succeeded' ? { ...session, payment_status: 'paid' } : session);
+      if (!result.ok) return retryLater(result.error);
+      return NextResponse.json({ received: true });
+    }
   }
 
   if (event.type === 'checkout.session.completed') {

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sweepProcessing } from '@/lib/markVideoReady';
+import { sweepNudity } from '@/lib/nudityScan';
 
 export const dynamic = 'force-dynamic';
+// Kontrola obsahu starších videí potřebuje pár desítek sekund (model běží na procesoru).
+export const maxDuration = 60;
 
 /**
  * Úklid zaseklých videí na zavolání (viz lib/markVideoReady.ts,
@@ -19,5 +22,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Nemáš oprávnění.' }, { status: 401 });
   }
   const result = await sweepProcessing({ max: 25, force: true });
-  return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } });
+  // Nezkontrolovaná videa (nahraná před zapnutím kontroly nahoty) - po pár kouscích.
+  // Bez ověřeného cronu nejvýš jednou za 5 minut, ať se tudy nedá pálit výkon serveru.
+  const nudityChecked = await sweepNudity({ max: 6, budgetMs: 40_000, force: !!secret }).catch(() => 0);
+  return NextResponse.json({ ...result, nudityChecked }, { headers: { 'Cache-Control': 'no-store' } });
 }

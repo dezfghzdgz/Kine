@@ -7,17 +7,24 @@ import { liveElapsed } from '@/lib/liveChat';
 import { authHeaders } from '@/lib/authHeaders';
 import VerifiedBadge from './VerifiedBadge';
 
-type LiveItem = {
+export type LiveItem = {
   ownerId: string;
   title: string;
+  category?: string | null;
   startedAt: string | null;
   videoUid: string | null;
+  followed?: boolean;
+  /** Kolik lidí se dívá (jen s ?viewers=1, jinak null). */
+  viewers?: number | null;
   profile: { id: string; username: string; displayName: string | null; avatarUrl: string | null; verificationTier: string | null };
 };
 
+/** Na hlavní stránce nejvýš tolik přenosů - všechny jsou na stránce Živě (/streams). */
+const HOME_LIMIT = 8;
+
 /**
  * Řada "Živě" na hlavní stránce - kdo teď vysílá. Když nikdo, nevykreslí
- * se nic. Obnovuje se každých 20 s.
+ * se nic. Obnovuje se každých 20 s (jen když je karta prohlížeče vidět).
  */
 export default function LiveNowRow() {
   const { t } = useLanguage();
@@ -27,6 +34,7 @@ export default function LiveNowRow() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      if (document.hidden) return;
       try {
         // S přihlášením: vlastní přenos a odebírané kanály jdou dopředu (lib/liveNow.ts).
         const res = await fetch('/api/live/now', { cache: 'no-store', headers: await authHeaders() });
@@ -50,11 +58,16 @@ export default function LiveNowRow() {
 
   return (
     <section className="live-now" aria-label={t('liveNowHeading')}>
-      <p className="section-title">
-        <span className="live-dot" aria-hidden="true" /> {t('liveNowHeading')}
-      </p>
+      <div className="live-now-head">
+        <p className="section-title" style={{ margin: 0 }}>
+          <span className="live-dot" aria-hidden="true" /> {t('liveNowHeading')}
+        </p>
+        <Link href="/streams" className="live-now-all">
+          {streams.length > HOME_LIMIT ? t('liveNowSeeAllCount').replace('{count}', String(streams.length)) : t('liveNowSeeAll')} →
+        </Link>
+      </div>
       <div className="live-now-grid">
-        {streams.map((s) => (
+        {streams.slice(0, HOME_LIMIT).map((s) => (
           <LiveCard key={s.ownerId} item={s} now={now} />
         ))}
       </div>
@@ -62,7 +75,8 @@ export default function LiveNowRow() {
   );
 }
 
-function LiveCard({ item, now }: { item: LiveItem; now: number }) {
+/** Karta přenosu: náhled (každou minutu nový), LIVE, diváci, jak dlouho běží, kanál. */
+export function LiveCard({ item, now, showCategory = false }: { item: LiveItem; now: number; showCategory?: boolean }) {
   const { t } = useLanguage();
   const [thumbFailed, setThumbFailed] = useState(false);
   const name = item.profile.displayName || item.profile.username;
@@ -77,13 +91,31 @@ function LiveCard({ item, now }: { item: LiveItem; now: number }) {
           <span className="live-card-avatar">{item.profile.avatarUrl ? <img src={item.profile.avatarUrl} alt="" /> : null}</span>
         )}
         <span className="live-pill">● {t('liveBadge')}</span>
+        {typeof item.viewers === 'number' && (
+          <span className="live-card-viewers" title={t('streamsViewersTitle')}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            {item.viewers}
+          </span>
+        )}
         {item.startedAt && <span className="live-card-elapsed">{liveElapsed(item.startedAt, now)}</span>}
       </div>
-      <p className="video-card-title">{item.title || name}</p>
-      <p className="video-card-meta">
-        {name}
-        <VerifiedBadge tier={item.profile.verificationTier as any} />
-      </p>
+      <div className="live-card-body">
+        <span className="live-card-face" aria-hidden="true">
+          {item.profile.avatarUrl ? <img src={item.profile.avatarUrl} alt="" loading="lazy" decoding="async" /> : name.slice(0, 1).toUpperCase()}
+        </span>
+        <div style={{ minWidth: 0 }}>
+          <p className="video-card-title">{item.title || name}</p>
+          <p className="video-card-meta">
+            {name}
+            <VerifiedBadge tier={item.profile.verificationTier as any} />
+            {item.followed && <span className="live-card-followed"> · {t('streamsFollowed')}</span>}
+          </p>
+          {showCategory && item.category && <span className="live-card-category">{t(item.category as any)}</span>}
+        </div>
+      </div>
     </Link>
   );
 }

@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { prelozit } from './prelozit.mjs';
 
 const kam = prelozit('lib/appearance.ts');
-const { sanitizeAppearance, appearanceAttributes, parseTheme, DEFAULT_APPEARANCE, APPEARANCE_BOOT_SCRIPT, setAmbientSource, currentAmbientSource, onAmbientSource } = await import(
+const { sanitizeAppearance, appearanceAttributes, parseTheme, DEFAULT_APPEARANCE, APPEARANCE_BOOT_SCRIPT, setAmbientSource, currentAmbientSource, onAmbientSource, videoFrameUrl } = await import(
   join(kam, 'appearance.js')
 );
 
@@ -42,7 +42,8 @@ test('výchozí vzhled: klasický, pozadí podle videa, světlo kolem videa zapn
 });
 
 test('rozbitá nebo cizí data -> platný vzhled (síla 0-100, známé hodnoty)', () => {
-  assert.deepEqual(sanitizeAppearance({ look: 'glass', backdrop: 'sunset', strength: 250, ambient: false }), { look: 'glass', backdrop: 'sunset', strength: 100, ambient: false });
+  assert.deepEqual(sanitizeAppearance({ look: 'glass', backdrop: 'sunset', strength: 250, ambient: false, follow: true, motion: true }), { look: 'glass', backdrop: 'sunset', strength: 100, ambient: false, follow: true, motion: true });
+  assert.equal(sanitizeAppearance({ follow: 'ano', motion: 1 }).follow, false, 'jen skutečné true/false');
   assert.deepEqual(sanitizeAppearance({ look: 'neon', backdrop: '<script>', strength: 'x', ambient: 'ano' }), DEFAULT_APPEARANCE);
   assert.equal(sanitizeAppearance({ strength: -5 }).strength, 0);
   assert.equal(sanitizeAppearance({ strength: 42.6 }).strength, 43);
@@ -51,8 +52,8 @@ test('rozbitá nebo cizí data -> platný vzhled (síla 0-100, známé hodnoty)'
 });
 
 test('atributy pro <html>: sklo jen když je zapnuté, síla jako --glass-k', () => {
-  const glass = appearanceAttributes('gray', { look: 'glass', backdrop: 'ocean', strength: 80, ambient: false });
-  assert.deepEqual(glass.attrs, { 'data-theme': 'gray', 'data-look': 'glass', 'data-backdrop': 'ocean', 'data-ambient': '0' });
+  const glass = appearanceAttributes('gray', { look: 'glass', backdrop: 'ocean', strength: 80, ambient: false, follow: true, motion: true });
+  assert.deepEqual(glass.attrs, { 'data-theme': 'gray', 'data-look': 'glass', 'data-backdrop': 'ocean', 'data-ambient': '0', 'data-motion': '1' });
   assert.equal(glass.glassK, '0.8');
   const classic = appearanceAttributes('dark', DEFAULT_APPEARANCE);
   assert.equal(classic.attrs['data-look'], null);
@@ -60,7 +61,8 @@ test('atributy pro <html>: sklo jen když je zapnuté, síla jako --glass-k', ()
 });
 
 test('skript v <head>: uložený vzhled se nastaví hned (bez přebliknutí)', () => {
-  const { attrs, vars } = fakeDocument({ 'kine-theme': 'light', 'kine-appearance': JSON.stringify({ look: 'glass', backdrop: 'neon', strength: 30, ambient: false }) });
+  const { attrs, vars } = fakeDocument({ 'kine-theme': 'light', 'kine-appearance': JSON.stringify({ look: 'glass', backdrop: 'neon', strength: 30, ambient: false, motion: true }) });
+  assert.equal(attrs.get('data-motion'), '1');
   assert.equal(attrs.get('data-theme'), 'light');
   assert.equal(attrs.get('data-look'), 'glass');
   assert.equal(attrs.get('data-backdrop'), 'neon');
@@ -93,6 +95,13 @@ test('pozadí podle videa: jen http(s) adresy, posluchač dostane změny', () =>
   setAmbientSource('https://example.com/x.jpg');
   assert.deepEqual(seen, ['https://videodelivery.net/abc/thumbnails/thumbnail.jpg', null]);
   assert.equal(currentAmbientSource(), 'https://example.com/x.jpg');
+});
+
+test('snímek z videa v čase: po 3 s (cache), malý, i s podepsaným tokenem', () => {
+  assert.equal(videoFrameUrl('abc123', 0), 'https://videodelivery.net/abc123/thumbnails/thumbnail.jpg?time=0s&height=90');
+  assert.equal(videoFrameUrl('abc123', 7.9), 'https://videodelivery.net/abc123/thumbnails/thumbnail.jpg?time=6s&height=90');
+  assert.equal(videoFrameUrl('abc123', -5), 'https://videodelivery.net/abc123/thumbnails/thumbnail.jpg?time=0s&height=90');
+  assert.match(videoFrameUrl('eyJhbGc.x/y', 30), /eyJhbGc\.x%2Fy\/thumbnails/);
 });
 
 console.log(`\n${prosly} prošlo, ${padly} spadlo`);

@@ -154,6 +154,14 @@ export default function AppearanceSettings() {
               <span>{t('appearanceStrengthHigh')}</span>
             </label>
           </div>
+
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
+            <input type="checkbox" className="appearance-motion" style={{ width: 'auto', marginTop: 2 }} checked={appearance.motion} onChange={(e) => change({ motion: e.target.checked })} />
+            <span>
+              {t('appearanceMotion')}
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--text-faint)' }}>{t('appearanceMotionHint')}</span>
+            </span>
+          </label>
         </>
       )}
 
@@ -164,6 +172,17 @@ export default function AppearanceSettings() {
           <span style={{ display: 'block', fontSize: 12, color: 'var(--text-faint)' }}>{t('appearanceAmbientHint')}</span>
         </span>
       </label>
+
+      {/* Pozadí a světlo sledují obraz videa / přenosu (ne jen náhled). Má smysl se světlem nebo se sklem "podle videa". */}
+      {(appearance.ambient || (glass && appearance.backdrop === 'auto')) && (
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
+          <input type="checkbox" className="appearance-follow" style={{ width: 'auto', marginTop: 2 }} checked={appearance.follow} onChange={(e) => change({ follow: e.target.checked })} />
+          <span>
+            {t('appearanceFollow')}
+            <span style={{ display: 'block', fontSize: 12, color: 'var(--text-faint)' }}>{t('appearanceFollowHint')}</span>
+          </span>
+        </label>
+      )}
 
       <div>
         <p className="appearance-label">{t('appearanceColorLabel')}</p>

@@ -321,7 +321,7 @@ export default function SettingsPage() {
         </button>
       </div>
 
-      <div className="panel" style={{ marginBottom: 32 }}>
+      <div className="panel" id="earnings" style={{ marginBottom: 32 }}>
         <p className="panel-heading">{t('creatorEarningsTitle')}</p>
 
         {!stripeOnboardingComplete ? (

@@ -8,7 +8,10 @@
  *  - pozadí skla: podle videa (barvy toho, na co se díváš), moje barva
  *    (barva u loga), nebo předvolba (Noc, Západ slunce, Les, Oceán, Neon),
  *  - síla skla (jak moc je vidět pozadí),
- *  - ambientní světlo kolem přehrávače (funguje v obou stylech).
+ *  - ambientní světlo kolem přehrávače (funguje v obou stylech),
+ *  - "sleduje obraz": pozadí a světlo se mění s tím, co je ve videu nebo
+ *    přenosu právě vidět (snímky z místa přehrávání, ne jen náhled),
+ *  - pohyb barev: barevné pozadí skla se pomalu přelévá.
  *
  * Ukládá se do zařízení (localStorage), ne k účtu - jako na YouTube: na
  * televizi chceš možná jiný vzhled než na telefonu. Kine do PC má web
@@ -19,7 +22,7 @@
  * (APPEARANCE_BOOT_SCRIPT). Všechno ostatní dělají atributy na <html>
  * a CSS (app/globals.css, oddíl VZHLED):
  *   data-theme="gray|light", data-look="glass", data-backdrop="...",
- *   data-ambient="1|0" a proměnná --glass-k (síla skla 0-1).
+ *   data-ambient="1|0", data-motion="1" a proměnná --glass-k (síla skla 0-1).
  */
 
 export type Theme = 'dark' | 'gray' | 'light';
@@ -33,6 +36,10 @@ export type Appearance = {
   strength: number;
   /** Ambientní světlo kolem přehrávače (barvy videa prosvítají kolem něj). */
   ambient: boolean;
+  /** Pozadí a světlo sledují obraz: snímky z místa, kde video / přenos právě je (každé ~3 s). */
+  follow: boolean;
+  /** Barvy pozadí skla se pomalu přelévají. */
+  motion: boolean;
 };
 
 export const THEMES: readonly Theme[] = ['dark', 'gray', 'light'];
@@ -44,7 +51,7 @@ export const APPEARANCE_KEY = 'kine-appearance';
 /** Událost na window, když se vzhled změní (nabídka profilu, pozadí, nastavení). */
 export const APPEARANCE_EVENT = 'kine-appearance';
 
-export const DEFAULT_APPEARANCE: Appearance = { look: 'classic', backdrop: 'auto', strength: 55, ambient: true };
+export const DEFAULT_APPEARANCE: Appearance = { look: 'classic', backdrop: 'auto', strength: 55, ambient: true, follow: false, motion: false };
 
 export function parseTheme(value: unknown): Theme {
   return THEMES.includes(value as Theme) ? (value as Theme) : 'dark';
@@ -59,6 +66,8 @@ export function sanitizeAppearance(raw: unknown): Appearance {
     backdrop: BACKDROPS.includes(r.backdrop as Backdrop) ? (r.backdrop as Backdrop) : DEFAULT_APPEARANCE.backdrop,
     strength: Number.isFinite(strength) ? Math.round(Math.max(0, Math.min(100, strength))) : DEFAULT_APPEARANCE.strength,
     ambient: typeof r.ambient === 'boolean' ? r.ambient : DEFAULT_APPEARANCE.ambient,
+    follow: typeof r.follow === 'boolean' ? r.follow : DEFAULT_APPEARANCE.follow,
+    motion: typeof r.motion === 'boolean' ? r.motion : DEFAULT_APPEARANCE.motion,
   };
 }
 
@@ -71,6 +80,7 @@ export function appearanceAttributes(theme: Theme, a: Appearance): { attrs: Reco
       'data-look': a.look === 'glass' ? 'glass' : null,
       'data-backdrop': a.backdrop,
       'data-ambient': a.ambient ? '1' : '0',
+      'data-motion': a.motion ? '1' : null,
     },
     glassK: String(a.strength / 100),
   };
@@ -171,4 +181,33 @@ export function onAmbientSource(fn: (url: string | null) => void): () => void {
  * ještě před prvním vykreslením. Schválně samostatný a malý - nesmí nic
  * importovat a při jakékoli chybě nechá výchozí vzhled.
  */
-export const APPEARANCE_BOOT_SCRIPT = `(function(){try{var d=document.documentElement,s=window.localStorage;var t=s.getItem('${THEME_KEY}');if(t==='gray'||t==='light'||t==='dark')d.setAttribute('data-theme',t);var a=null;try{a=JSON.parse(s.getItem('${APPEARANCE_KEY}')||'null')}catch(e){}a=a&&typeof a==='object'?a:{};if(a.look==='glass')d.setAttribute('data-look','glass');var b=${JSON.stringify(BACKDROPS)};d.setAttribute('data-backdrop',b.indexOf(a.backdrop)>=0?a.backdrop:'auto');d.setAttribute('data-ambient',a.ambient===false?'0':'1');var k=Number(a.strength);d.style.setProperty('--glass-k',String((isFinite(k)?Math.max(0,Math.min(100,k)):${DEFAULT_APPEARANCE.strength})/100))}catch(e){}})();`;
+export const APPEARANCE_BOOT_SCRIPT = `(function(){try{var d=document.documentElement,s=window.localStorage;var t=s.getItem('${THEME_KEY}');if(t==='gray'||t==='light'||t==='dark')d.setAttribute('data-theme',t);var a=null;try{a=JSON.parse(s.getItem('${APPEARANCE_KEY}')||'null')}catch(e){}a=a&&typeof a==='object'?a:{};if(a.look==='glass')d.setAttribute('data-look','glass');var b=${JSON.stringify(BACKDROPS)};d.setAttribute('data-backdrop',b.indexOf(a.backdrop)>=0?a.backdrop:'auto');d.setAttribute('data-ambient',a.ambient===false?'0':'1');if(a.motion===true)d.setAttribute('data-motion','1');var k=Number(a.strength);d.style.setProperty('--glass-k',String((isFinite(k)?Math.max(0,Math.min(100,k)):${DEFAULT_APPEARANCE.strength})/100))}catch(e){}})();`;
+
+/**
+ * Snímek z videa v daném čase (Cloudflare umí náhled odkudkoli z videa) -
+ * pro pozadí, které sleduje obraz. Malý (výška 90 px): z obrázku zůstanou
+ * jen barvy, stahuje se jen pár kB. Čas po 3 s, ať se snímky dají
+ * cachovat a nestahují se zbytečně znovu.
+ */
+export function videoFrameUrl(videoIdOrToken: string, seconds: number): string {
+  const t = Math.max(0, Math.floor(seconds / 3) * 3);
+  return `https://videodelivery.net/${encodeURIComponent(videoIdOrToken)}/thumbnails/thumbnail.jpg?time=${t}s&height=90`;
+}
+
+/** Obrázek se nejdřív načte, pak se ukáže - pozadí nikdy nepřebliká do prázdna. */
+export function preloadImage(url: string, timeoutMs = 6000): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof Image === 'undefined') return resolve(false);
+    const img = new Image();
+    const timer = setTimeout(() => resolve(false), timeoutMs);
+    img.onload = () => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    img.onerror = () => {
+      clearTimeout(timer);
+      resolve(false);
+    };
+    img.src = url;
+  });
+}

@@ -115,7 +115,9 @@ export default function DownloadPage() {
   return (
     <div className="form-container" style={{ maxWidth: 860 }}>
       <h1>{t('downloadTitle')}</h1>
-      <p style={{ color: 'var(--text-dim)', fontSize: 15, lineHeight: 1.6, marginTop: -6 }}>{t('downloadIntro')}</p>
+      <p style={{ color: 'var(--text-dim)', fontSize: 15, lineHeight: 1.6, marginTop: -6 }}>
+        {t('downloadIntro')} <Link href="/about">{t('aboutLink')} →</Link>
+      </p>
 
       {inApp ? (
         <div className="panel">

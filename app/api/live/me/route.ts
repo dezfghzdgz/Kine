@@ -4,8 +4,11 @@ import { isMissingTable, userFromRequest } from '@/lib/apiUser';
 import { appLiveSignal, createLiveInput, deleteLiveInput, liveConfigured, publicLive, syncLiveStreams, type LiveStreamRow } from '@/lib/liveStream';
 import { CATEGORY_KEYS } from '@/lib/categories';
 import { parseRecordingVisibility } from '@/lib/liveRecording';
+import { runInBackground } from '@/lib/background';
 
 export const dynamic = 'force-dynamic';
+// Na pozadí může běžet kontrola obsahu (lib/nudityScan.ts) - funkce smí doběhnout až minutu.
+export const maxDuration = 60;
 
 /**
  * Studio živého vysílání (stránka /live): klíč pro OBS, název a popis
@@ -60,6 +63,8 @@ export async function POST(req: NextRequest) {
     }
     const result = await appLiveSignal(user.id, action);
     if (!result) return NextResponse.json({ error: 'Nejdřív si založ klíč pro vysílání.' }, { status: 404 });
+    // Appka hlásí přenos pravidelně - snímek pro kontrolu obsahu se vezme i bez diváků.
+    if (action !== 'stopped') runInBackground(import('@/lib/nudityScan').then((m) => m.scanLiveStreams()), 'kontrola obsahu přenosů');
     return NextResponse.json(
       { ok: true, confirmed: result.confirmed, migrated: result.migrated, viewers: result.viewers, recording: result.recording ?? null },
       { headers: { 'Cache-Control': 'no-store' } }
