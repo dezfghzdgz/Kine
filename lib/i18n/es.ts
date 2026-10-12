@@ -1279,4 +1279,5 @@ export const es: Record<DictKey, string> = {
   aboutBetaText: 'Kine es un proyecto independiente que crece cada semana según lo que la gente echa de menos en las grandes plataformas. ¿Tienes una idea o algo no funciona? Escríbenos: lo leemos todo.',
   aboutContact: 'Escríbenos',
   aboutSupportKine: 'Apoyar a Kine',
+  downloadSmartAppControl: 'Si Windows dice «Se ha bloqueado parte de esta aplicación», es Smart App Control: bloquea las aplicaciones que aún no están firmadas digitalmente y, mientras esté activado, Kine no se puede instalar. Desactívalo en Seguridad de Windows → Control de aplicaciones y navegador → Configuración de Smart App Control y vuelve a ejecutar el instalador (tus clips y ajustes se conservan). Puedes volver a activarlo más tarde, pero entonces podría bloquear partes de Kine hasta que Kine esté firmado.',
 };

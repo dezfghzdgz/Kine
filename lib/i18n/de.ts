@@ -1279,4 +1279,5 @@ export const de: Record<DictKey, string> = {
   aboutBetaText: 'Kine ist ein unabhängiges Projekt, das jede Woche wächst - danach, was Leuten auf den großen Plattformen fehlt. Eine Idee oder funktioniert etwas nicht? Schreib uns - wir lesen alles.',
   aboutContact: 'Schreib uns',
   aboutSupportKine: 'Kine unterstützen',
+  downloadSmartAppControl: 'Meldet Windows „Ein Teil dieser App wurde blockiert“, ist das die intelligente App-Steuerung (Smart App Control) - sie blockiert Apps, die noch nicht digital signiert sind, und solange sie an ist, lässt sich Kine nicht installieren. Schalte sie in Windows-Sicherheit → App- & Browsersteuerung → Einstellungen der intelligenten App-Steuerung aus und starte den Installer erneut (Clips und Einstellungen bleiben). Du kannst sie später wieder einschalten, dann kann sie aber Teile von Kine blockieren, bis Kine signiert ist.',
 };

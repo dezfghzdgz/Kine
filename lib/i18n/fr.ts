@@ -1279,4 +1279,5 @@ export const fr: Record<DictKey, string> = {
   aboutBetaText: 'Kine est un projet indépendant qui grandit chaque semaine selon ce qui manque aux gens sur les grandes plateformes. Une idée, ou quelque chose ne marche pas ? Écris-nous - on lit tout.',
   aboutContact: 'Nous écrire',
   aboutSupportKine: 'Soutenir Kine',
+  downloadSmartAppControl: 'Si Windows indique « Une partie de cette application a été bloquée », c’est Smart App Control : il bloque les applications qui ne sont pas encore signées numériquement et, tant qu’il est activé, Kine ne peut pas être installé. Désactive-le dans Sécurité Windows → Contrôle des applications et du navigateur → Paramètres de Smart App Control, puis relance l’installateur (tes clips et réglages restent). Tu pourras le réactiver plus tard, mais il risque alors de bloquer des parties de Kine tant que Kine n’est pas signé.',
 };

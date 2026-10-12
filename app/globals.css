@@ -4959,6 +4959,7 @@ input:focus, textarea:focus, select:focus {
   font-size: 13px; line-height: 1.6; color: var(--text-dim);
 }
 .dl-note svg { flex: none; margin-top: 2px; color: var(--text-faint); }
+.dl-note-sac { display: block; margin-top: 8px; }
 
 /* ---- Předplatné /plus: nabídka pro zákazníka (app/plus/page.tsx) ---- */
 .plus-hero { text-align: center; margin: 6px auto 26px; max-width: 640px; }

@@ -1279,4 +1279,5 @@ export const en: Record<DictKey, string> = {
   aboutBetaText: 'Kine is an independent project that grows every week based on what people miss on the big platforms. Got an idea, or is something broken? Write to us - we read everything.',
   aboutContact: 'Write to us',
   aboutSupportKine: 'Support Kine',
+  downloadSmartAppControl: 'If Windows says “Part of this app has been blocked”, that is Smart App Control - it blocks apps that are not digitally signed yet, and while it is on, Kine cannot be installed. Turn it off in Windows Security → App & browser control → Smart App Control settings and run the installer again (your clips and settings stay). You can turn it back on later, but it may then block parts of Kine until Kine is signed.',
 };

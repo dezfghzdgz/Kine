@@ -1279,4 +1279,5 @@ export const pl: Record<DictKey, string> = {
   aboutBetaText: 'Kine to niezależny projekt, który rośnie co tydzień według tego, czego ludziom brakuje na dużych platformach. Masz pomysł albo coś nie działa? Napisz do nas - czytamy wszystko.',
   aboutContact: 'Napisz do nas',
   aboutSupportKine: 'Wesprzyj Kine',
+  downloadSmartAppControl: 'Jeśli Windows napisze „Część tej aplikacji została zablokowana”, to Inteligentna kontrola aplikacji (Smart App Control) - blokuje aplikacje, które nie są jeszcze podpisane cyfrowo, i dopóki jest włączona, Kine nie da się zainstalować. Wyłącz ją w Zabezpieczeniach Windows → Kontrola aplikacji i przeglądarki → Ustawienia Inteligentnej kontroli aplikacji i uruchom instalator ponownie (klipy i ustawienia zostaną). Później możesz ją znów włączyć, ale wtedy może blokować części Kine, dopóki Kine nie będzie podpisane.',
 };

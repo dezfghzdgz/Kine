@@ -1279,4 +1279,5 @@ export const sk: Record<DictKey, string> = {
   aboutBetaText: 'Kine je nezávislý projekt, ktorý rastie každý týždeň podľa toho, čo ľuďom chýba na veľkých platformách. Máš nápad, alebo ti niečo nefunguje? Napíš nám - čítame všetko.',
   aboutContact: 'Napísať nám',
   aboutSupportKine: 'Podporiť Kine',
+  downloadSmartAppControl: 'Keď Windows napíše „Časť tejto aplikácie bola zablokovaná“, je to Smart App Control - blokuje aplikácie, ktoré ešte nie sú digitálne podpísané, a kým je zapnutý, Kine sa nedá nainštalovať. Vypni ho v Zabezpečení Windows → Ovládanie aplikácií a prehliadača → Nastavenia Smart App Control a spusti inštalátor znova (klipy aj nastavenia zostanú). Neskôr ho môžeš zase zapnúť, len potom môže časti Kine blokovať, kým Kine nebude podpísané.',
 };

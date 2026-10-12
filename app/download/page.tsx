@@ -137,7 +137,11 @@ export default function DownloadPage() {
               <path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7z" />
               <path d="M12 9v4M12 16.5v.5" />
             </svg>
-            <span>{t('downloadUnsigned')}</span>
+            <span>
+              {t('downloadUnsigned')}
+              {/* Windows 11 Smart App Control: "Část této aplikace byla zablokována" - instalátor tam neprojde. */}
+              <span className="dl-note-sac">{t('downloadSmartAppControl')}</span>
+            </span>
           </div>
         </>
       )}

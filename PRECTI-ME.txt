@@ -1,3 +1,31 @@
+KINE - Smart App Control na stránce Stáhnout (dodávka kine-smart-app-control-2026-10-12)
+=========================================================================================
+
+Malý balíček - jen web, nic na Vercelu ani v Supabase nenastavuješ:
+  app/download/page.tsx, app/globals.css, lib/i18n/*.ts (8 jazyků),
+  PRECTI-ME.txt, stav-souboru.json
+Rozbal do kořene repa a přepiš, nahraj na GitHub (přetažením) a pusť
+node zkontroluj-soubory.mjs.
+
+CO SE ZMĚNILO
+- Stránka Stáhnout: pod upozorněním na nepodepsaný instalátor (SmartScreen)
+  je nově i Smart App Control ve Windows 11. Když Windows napíše "Část této
+  aplikace byla zablokována", blokuje nepodepsané aplikace a Kine se,
+  dokud je zapnutý, nenainstaluje - stránka řekne, kde ho vypnout, že klipy
+  i nastavení zůstanou a že ho jde zase zapnout (jen pak může části Kine
+  blokovat, dokud Kine nebude podepsané). V 8 jazycích.
+- Souvisí s appkou Kine do PC / Kine Clipper 0.9.9 (zvlášť balíček):
+  instalátor už při zablokování nesmaže starou verzi.
+
+OVĚŘENO
+- npx tsc --noEmit, next build, stránka /download (počítač i mobil 390 px)
+  ve všech 8 jazycích; testy webu.
+
+==========================================================================================
+PŘEDCHOZÍ DODÁVKA (kine-zive-podpory-2026-10-12) - když ji už máš nahranou a migraci
+puštěnou, nic z toho znovu nedělej. Návod níž platí dál (vlastní doména, Vercel Pro).
+==========================================================================================
+
 KINE - stránka Živě, podpory ve vysílání, kontrola nahoty, O Kine, barvy podle obrazu
 ==================================================================================
 

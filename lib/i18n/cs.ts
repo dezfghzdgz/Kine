@@ -1285,6 +1285,7 @@ export const cs = {
   aboutBetaText: 'Kine je nezávislý projekt, který roste každý týden podle toho, co lidem chybí na velkých platformách. Máš nápad, nebo ti něco nefunguje? Napiš nám - čteme všechno.',
   aboutContact: 'Napsat nám',
   aboutSupportKine: 'Podpořit Kine',
+  downloadSmartAppControl: 'Když Windows napíše „Část této aplikace byla zablokována“, je to Smart App Control - blokuje aplikace, které ještě nejsou digitálně podepsané, a dokud je zapnutý, Kine nejde nainstalovat. Vypni ho v Zabezpečení Windows → Řízení aplikací a prohlížeče → Nastavení Smart App Control a spusť instalátor znovu (klipy i nastavení zůstanou). Později ho můžeš zase zapnout, jen pak může části Kine blokovat, dokud Kine nebude podepsané.',
 } as const;
 
 export type DictKey = keyof typeof cs;
