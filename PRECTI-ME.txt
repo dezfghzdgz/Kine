@@ -1,3 +1,71 @@
+KINE - živě (chat po vysílání, visící přenos, náhled), vzhled, delší videa (dodávka kine-zive-vzhled-2026-10-12)
+==============================================================================================================
+
+Obsahuje i předchozí malou dodávku (kine-podpis - text o Inteligentním řízení
+aplikací na stránce Stáhnout), kterou jsi nenahrával. Postup:
+
+  1. Rozbal do kořene repa a přepiš, nahraj na GitHub (přetažením).
+  2. Supabase -> SQL Editor -> New query -> vlož CELÝ obsah souboru
+     supabase-migration-zive-3.sql -> Run (přidá jeden sloupec pro vlastní
+     náhled přenosu). Bez migrace funguje všechno ostatní, jen nahrání
+     náhledu přenosu napíše, že chybí migrace.
+  3. node zkontroluj-soubory.mjs
+
+CO SE ZMĚNILO
+- Chat u živého vysílání patří k jednomu vysílání: během vysílání zprávy od
+  jeho začátku (2 min předstih), po konci se chat vyčistí ("Vysílání
+  skončilo - chat začíná nanovo") a další vysílání začne prázdné. Platí na
+  stránce přenosu, ve studiu, v okně chatu (i v appce) i v překryvu pro OBS.
+  Zprávy se nemažou - záznam vysílání je dál přehrává (lib/liveChat.ts,
+  chatSessionSince).
+- Skončený přenos už nevisí v řadě Živě ani na stránce Živě: Kine se
+  u Cloudflare navíc ptá "lifecycle" vstupu (jestli opravdu přijímá
+  vysílání - podle toho se řídí i přehrávač). Cloudflare totiž po konci
+  nechává video ve stavu "běží" ještě minutu i déle a Kine ho oživovalo.
+  Skončený přenos teď oživí jen opravdu připojený vstup, a to nejdřív
+  90 s po konci (nové vysílání se ukáže hned). Když Cloudflare
+  neodpovídá, přenos bez potvrzení zmizí po 10 minutách.
+  Řada Živě se po návratu do karty prohlížeče hned obnoví (lib/liveSignal.ts
+  - decideLive, testy v tests/security.test.mjs).
+- Vlastní náhled přenosu: Studio -> Náhled přenosu (nebo appka, záložka
+  Živě). Obrázek se ořízne na 16:9 (1280x720 JPEG), uloží do úložiště Kine
+  (bucket thumbnails, složka live/<kanál>/ - tam zapisuje jen server, takže
+  ho nikdo nepodstrčí mimo kontrolu) a ukáže se v řadě Živě, na stránce
+  Živě a v náhledu odkazu (Discord). Bez něj snímek z vysílání. Server bere
+  jen JPEG do 1280x720, který přečte i kontrola nahoty; ta ho projde jako
+  náhledy videí a zachycený obrázek smaže i z úložiště
+  (app/api/live/thumbnail, lib/liveThumbnail.ts).
+- Po vysílání stránka kanálu nabídne záznam posledního vysílání (když je
+  zveřejněný - i když se ještě zpracovává).
+- Vzhled (Nastavení -> Vzhled): velikost písma, rohy, velikost karet videí,
+  klidný režim bez animací a "Můj obrázek" za sklem s rozmazáním.
+- Delší videa: nahrávání po kusech se přizpůsobí rychlosti (8-64 MiB,
+  na rychlém připojení i optice méně čekání), proužek se hýbe i uvnitř kusu
+  a ukazuje "zbývá asi X min"; během zpracování u Cloudflare procenta
+  (proužek i stránka videa). Přehrávač naváže rovnou na místě, kde jsi
+  skončil (startTime - dřív načetl začátek a pak přetáčel), do rozjetí
+  ukazuje náhled s kolečkem místo černé plochy, spojení s Cloudflare se
+  navazuje hned při načtení stránky.
+- Stránka Stáhnout: text o Inteligentním řízení aplikací (z dodávky
+  kine-podpis).
+
+OVĚŘENO
+- npx tsc --noEmit, next build, testy webu (nové: chat po vysílání, náhled
+  přenosu, rozhodování o živém vysílání, odhad času nahrávání, kusy
+  nahrávání), testy stránek v prohlížeči (stránka přenosu offline/online,
+  okno chatu, překryv OBS, studio s náhledem, Živě, vzhled, navázání videa,
+  procenta zpracování) + starší testy stránek beze změny.
+- Nezávislá kontrola změn (druhý průchod kódem) a opravy z ní: náhled
+  přenosu mimo složku uživatele, jen do 1280x720, smazání zachyceného
+  souboru; odkaz na záznam podle začátku vysílání; studio po uložení
+  náhledu na 5 s neukáže ten starý; procenta zpracování se po přechodu
+  na jiné video nepletou.
+
+==========================================================================================
+PŘEDCHOZÍ DODÁVKA (kine-ikony-plynule-barvy-2026-10-12) - už nahraná, nic z toho znovu
+nedělej.
+==========================================================================================
+
 KINE - nastavení a nabídka profilu s ikonami, plynulé barvy z obrazu (dodávka kine-ikony-plynule-barvy-2026-10-12)
 ==================================================================================================================
 

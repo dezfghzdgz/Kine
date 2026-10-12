@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { uploadResumable } from './tusUpload';
+import { uploadEtaSeconds } from './uploadEta';
 
 /**
  * Nahrávání, které přežije odchod ze stránky.
@@ -64,6 +65,10 @@ export type UploadState = {
   phase: UploadPhase;
   /** 0-100, jen ve fázi nahrávání souboru. */
   percent: number;
+  /** Odhad, kolik vteřin nahrávání ještě potrvá (null = zatím nevíme). */
+  etaSeconds: number | null;
+  /** Kolik procent má Cloudflare zpracováno (jen ve fázi zpracování, když to ví). */
+  processingPercent: number | null;
   title: string;
   videoId: string | null;
   error: string | null;
@@ -91,6 +96,8 @@ type UploadCommands = {
 const EMPTY: UploadState = {
   phase: 'idle',
   percent: 0,
+  etaSeconds: null,
+  processingPercent: null,
   title: '',
   videoId: null,
   error: null,
@@ -167,7 +174,7 @@ function rozvrhDotazu(): number[] {
 }
 
 /** Čeká, až Cloudflare video zpracuje. Vrací, jestli se to stihlo. */
-async function waitUntilReady(videoId: string, token: string | undefined): Promise<boolean> {
+async function waitUntilReady(videoId: string, token: string | undefined, onPercent?: (percent: number) => void): Promise<boolean> {
   for (const pauza of rozvrhDotazu()) {
     try {
       const res = await fetch('/api/videos/status', {
@@ -177,6 +184,7 @@ async function waitUntilReady(videoId: string, token: string | undefined): Promi
       });
       const data = await res.json();
       if (data.status === 'ready') return true;
+      if (typeof data.percent === 'number') onPercent?.(data.percent);
     } catch {
       // Výpadek při dotazu na stav není důvod hlásit chybu - video už je
       // nahrané a zpracovává se dál i bez nás.
@@ -223,6 +231,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       phase: 'uploading',
       percent: 0,
+      etaSeconds: null,
+      processingPercent: null,
       title: job.title,
       videoId: null,
       error: null,
@@ -299,17 +309,20 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       const urlData = await urlRes.json();
       if (!urlRes.ok) throw new Error(urlData.error || 'Nepodařilo se připravit upload.');
 
+      // Průběh + odhad, kolik ještě zbývá (u dlouhých videí se nahrává i desítky minut).
+      const zacatek = Date.now();
+      const prubeh = (p: number) => uprav({ percent: p, etaSeconds: uploadEtaSeconds(p, Date.now() - zacatek) });
       if (urlData.mode === 'tus') {
         await uploadResumable({
           url: urlData.uploadURL,
           file: job.file,
-          onProgress: (p) => uprav({ percent: p }),
+          onProgress: prubeh,
         });
       } else {
-        await uploadBasic(urlData.uploadURL, job.file, (p) => uprav({ percent: p }));
+        await uploadBasic(urlData.uploadURL, job.file, prubeh);
       }
 
-      uprav({ phase: 'saving', percent: 100 });
+      uprav({ phase: 'saving', percent: 100, etaSeconds: null });
 
       const confirmRes = await fetch('/api/videos/confirm', {
         method: 'POST',
@@ -406,7 +419,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       uprav({ phase: 'processing' });
       // Ve frontě se na zpracování nečeká - další soubor má jít nahoru
       // hned. Zpracování hlídá webhook / doptávání v Moje videa.
-      if (queueRef.current.length === 0) await waitUntilReady(newVideoId, token);
+      if (queueRef.current.length === 0) await waitUntilReady(newVideoId, token, (p) => uprav({ processingPercent: p }));
 
       finishJob('done', {
         failedInvites: failed.length > 0 ? { videoId: newVideoId, names: failed } : null,

@@ -42,7 +42,15 @@ test('výchozí vzhled: klasický, pozadí podle videa, světlo kolem videa zapn
 });
 
 test('rozbitá nebo cizí data -> platný vzhled (síla 0-100, známé hodnoty)', () => {
-  assert.deepEqual(sanitizeAppearance({ look: 'glass', backdrop: 'sunset', strength: 250, ambient: false, follow: true, motion: true }), { look: 'glass', backdrop: 'sunset', strength: 100, ambient: false, follow: true, motion: true });
+  assert.deepEqual(sanitizeAppearance({ look: 'glass', backdrop: 'sunset', strength: 250, ambient: false, follow: true, motion: true }), {
+    ...DEFAULT_APPEARANCE,
+    look: 'glass',
+    backdrop: 'sunset',
+    strength: 100,
+    ambient: false,
+    follow: true,
+    motion: true,
+  });
   assert.equal(sanitizeAppearance({ follow: 'ano', motion: 1 }).follow, false, 'jen skutečné true/false');
   assert.deepEqual(sanitizeAppearance({ look: 'neon', backdrop: '<script>', strength: 'x', ambient: 'ano' }), DEFAULT_APPEARANCE);
   assert.equal(sanitizeAppearance({ strength: -5 }).strength, 0);
@@ -52,12 +60,54 @@ test('rozbitá nebo cizí data -> platný vzhled (síla 0-100, známé hodnoty)'
 });
 
 test('atributy pro <html>: sklo jen když je zapnuté, síla jako --glass-k', () => {
-  const glass = appearanceAttributes('gray', { look: 'glass', backdrop: 'ocean', strength: 80, ambient: false, follow: true, motion: true });
-  assert.deepEqual(glass.attrs, { 'data-theme': 'gray', 'data-look': 'glass', 'data-backdrop': 'ocean', 'data-ambient': '0', 'data-motion': '1' });
+  const glass = appearanceAttributes('gray', { ...DEFAULT_APPEARANCE, look: 'glass', backdrop: 'ocean', strength: 80, ambient: false, follow: true, motion: true });
+  assert.deepEqual(glass.attrs, {
+    'data-theme': 'gray',
+    'data-look': 'glass',
+    'data-backdrop': 'ocean',
+    'data-ambient': '0',
+    'data-motion': '1',
+    'data-text': null,
+    'data-corners': null,
+    'data-cards': null,
+    'data-calm': null,
+  });
   assert.equal(glass.glassK, '0.8');
   const classic = appearanceAttributes('dark', DEFAULT_APPEARANCE);
   assert.equal(classic.attrs['data-look'], null);
   assert.equal(classic.attrs['data-ambient'], '1');
+});
+
+test('nové volby: písmo, rohy, karty, klidný režim, můj obrázek a jeho rozmazání', () => {
+  const a = sanitizeAppearance({ backdrop: 'image', blur: 130, text: 'l', corners: 'round', cards: 's', calm: true });
+  assert.equal(a.backdrop, 'image');
+  assert.equal(a.blur, 100);
+  assert.deepEqual([a.text, a.corners, a.cards, a.calm], ['l', 'round', 's', true]);
+  // cizí hodnoty -> výchozí
+  const b = sanitizeAppearance({ blur: 'x', text: 'xl', corners: 'oval', cards: 7, calm: 'ano' });
+  assert.deepEqual([b.blur, b.text, b.corners, b.cards, b.calm], [40, 'm', 'normal', 'm', false]);
+  // výchozí hodnoty bez atributů, odchylky jako atributy
+  const attrs = appearanceAttributes('dark', a);
+  assert.equal(attrs.attrs['data-text'], 'l');
+  assert.equal(attrs.attrs['data-corners'], 'round');
+  assert.equal(attrs.attrs['data-cards'], 's');
+  assert.equal(attrs.attrs['data-calm'], '1');
+  assert.equal(attrs.blurK, '1');
+  const plain = appearanceAttributes('dark', DEFAULT_APPEARANCE);
+  assert.deepEqual([plain.attrs['data-text'], plain.attrs['data-corners'], plain.attrs['data-cards'], plain.attrs['data-calm']], [null, null, null, null]);
+  // skript v <head> to nastaví hned
+  const { attrs: html, vars } = fakeDocument({ 'kine-appearance': JSON.stringify({ text: 's', corners: 'sharp', cards: 'l', calm: true, blur: 10, backdrop: 'image' }) });
+  assert.equal(html.get('data-text'), 's');
+  assert.equal(html.get('data-corners'), 'sharp');
+  assert.equal(html.get('data-cards'), 'l');
+  assert.equal(html.get('data-calm'), '1');
+  assert.equal(html.get('data-backdrop'), 'image');
+  assert.equal(vars.get('--blur-k'), '0.1');
+  const weird = fakeDocument({ 'kine-appearance': JSON.stringify({ text: '<b>', corners: 1, cards: 'xl' }) });
+  assert.equal(weird.attrs.get('data-text'), undefined);
+  assert.equal(weird.attrs.get('data-corners'), undefined);
+  assert.equal(weird.attrs.get('data-cards'), undefined);
+  assert.equal(weird.vars.get('--blur-k'), String(DEFAULT_APPEARANCE.blur / 100));
 });
 
 test('skript v <head>: uložený vzhled se nastaví hned (bez přebliknutí)', () => {

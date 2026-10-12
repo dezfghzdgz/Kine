@@ -1,4 +1,5 @@
 import { supabaseServer } from './supabaseServer';
+import { liveThumbnailPath } from './liveThumbnail';
 import { SERVER_FETCH_TOKEN_TTL_S, createStreamToken, signingKeyFromEnv } from './streamToken';
 import { syncVideoProtection } from './streamProtection';
 import {
@@ -306,6 +307,45 @@ export async function scanLiveStreams(): Promise<void> {
       link: `/live/${row.owner_id}`,
     });
   }
+}
+
+/**
+ * Vlastní náhled přenosu (app/api/live/thumbnail): když v něm kontrola
+ * najde nahotu nebo porno, náhled se nepoužije - v řadě "Živě" zůstane
+ * snímek z vysílání - a tvůrce dostane oznámení. Mezitím nahraný jiný
+ * náhled se nemaže.
+ */
+export async function scanLiveThumbnail(ownerId: string, url: string): Promise<'ok' | 'removed' | 'failed'> {
+  // Čerstvě nahraný obrázek: když ho úložiště ještě nevydá, zkusí se to znovu
+  // (dekodér ho přečte - route app/api/live/thumbnail to ověřila předem).
+  let f: FrameScores | null = null;
+  for (let attempt = 0; attempt < 3 && !f; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 3000));
+    f = await classifyUrl(url).catch(() => null);
+  }
+  if (!f) {
+    console.error('Kine: náhled přenosu se nepodařilo zkontrolovat', ownerId);
+    return 'failed';
+  }
+  if (nudityVerdict([f]).action !== 'hold') return 'ok';
+  // Soubor pryč i z úložiště - jinak by byl dál k vidění přes svou adresu.
+  const path = liveThumbnailPath(url, ownerId);
+  if (path) await supabaseServer.storage.from('thumbnails').remove([path]).then(() => undefined, () => undefined);
+  const { data } = await supabaseServer
+    .from('live_streams')
+    .update({ thumbnail_url: null })
+    .eq('owner_id', ownerId)
+    .eq('thumbnail_url', url)
+    .select('owner_id');
+  if (data && data.length > 0) {
+    await supabaseServer.from('notifications').insert({
+      user_id: ownerId,
+      type: 'moderation_warning',
+      message: '⚠️ Náhled přenosu se nepoužije - automatická kontrola v něm našla možnou nahotu. V řadě Živě se místo něj ukazuje snímek z vysílání; můžeš nahrát jiný.',
+      link: '/live',
+    });
+  }
+  return 'removed';
 }
 
 /** Je přenos skrytý kontrolou obsahu (a moderátor ho zatím nepustil)? */

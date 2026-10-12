@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useUploadCommands, useUploadState } from '@/lib/uploadManager';
 import { useLanguage } from '@/lib/i18n';
+import { etaParts } from '@/lib/uploadEta';
 
 /**
  * Proužek nahrávání, který jde s tvůrcem po celé appce.
@@ -13,11 +14,24 @@ import { useLanguage } from '@/lib/i18n';
  * hotovo, dá odkaz na video.
  */
 export default function UploadProgressBar() {
-  const { phase, percent, title, videoId, error, failedInvites, queued, batchDone, batchTotal, batchFailed } = useUploadState();
+  const { phase, percent, etaSeconds, processingPercent, title, videoId, error, failedInvites, queued, batchDone, batchTotal, batchFailed } = useUploadState();
   const { dismiss } = useUploadCommands();
   const { t } = useLanguage();
 
   if (phase === 'idle') return null;
+
+  // "zbývá asi 4 min" - u dlouhých videí se nahrává i desítky minut, ať je vidět, kolik ještě.
+  let eta = '';
+  if (phase === 'uploading' && etaSeconds !== null) {
+    const p = etaParts(etaSeconds);
+    const time =
+      p.unit === 's'
+        ? t('etaSeconds').replace('{n}', String(p.n))
+        : p.unit === 'min'
+          ? t('etaMinutes').replace('{n}', String(p.n))
+          : t('etaHours').replace('{h}', String(p.h)).replace('{m}', String(p.m));
+    eta = ` · ${t('uploadEta').replace('{time}', time)}`;
+  }
 
   // Dávka (hromadné nahrání): "3/12" před názvem a na konci souhrn.
   const batch = batchTotal > 1;
@@ -25,11 +39,13 @@ export default function UploadProgressBar() {
 
   const popis =
     phase === 'uploading'
-      ? `${t('uploadingLabel')} ${percent}%`
+      ? `${t('uploadingLabel')} ${percent}%${eta}`
       : phase === 'saving'
         ? t('savingLabel')
         : phase === 'processing'
-          ? t('processingLabel')
+          ? processingPercent !== null
+            ? `${t('processingLabel')} ${processingPercent}%`
+            : t('processingLabel')
           : phase === 'done'
             ? batch
               ? t('uploadBatchDone').replace('{done}', String(batchDone - batchFailed)).replace('{total}', String(batchTotal))
@@ -59,6 +75,11 @@ export default function UploadProgressBar() {
         {phase === 'uploading' && (
           <div className="upload-bar-track">
             <div className="upload-bar-fill" style={{ width: `${percent}%` }} />
+          </div>
+        )}
+        {phase === 'processing' && processingPercent !== null && (
+          <div className="upload-bar-track upload-bar-track-processing">
+            <div className="upload-bar-fill" style={{ width: `${processingPercent}%` }} />
           </div>
         )}
       </div>

@@ -3614,6 +3614,38 @@ body.has-music-bar .content-area-fullbleed {
 /* Tlačítko, které se objeví, když se přehrávač sám nerozjede.
    Iframe od Cloudflare jede bez vlastního ovládání, takže bez tohohle
    zůstal černý obdélník, se kterým nešlo hnout. */
+/* Než se obraz rozjede: kolečko nad náhledem videa (stránka videa). */
+.player-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.player-loading-spinner {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  box-shadow: 0 0 24px rgba(0, 0, 0, 0.35);
+  animation: player-loading-spin 0.9s linear infinite;
+}
+
+@keyframes player-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player-loading-spinner {
+    animation-duration: 2.4s;
+  }
+}
+
 .player-tap-to-play {
   position: absolute;
   left: 50%;
@@ -3927,6 +3959,11 @@ body.has-music-bar .upload-bar {
   background: var(--brand);
   border-radius: var(--radius-pill);
   transition: width var(--dur-3) var(--ease);
+}
+
+/* Zpracování u Cloudflare (po nahrání): tlumenější než nahrávání - jde to samo, nic se neposílá. */
+.upload-bar-track-processing .upload-bar-fill {
+  background: var(--text-dim);
 }
 
 .upload-bar-actions {
@@ -5461,6 +5498,53 @@ input:focus, textarea:focus, select:focus {
   margin: 0 0 14px;
 }
 
+/* Po vysílání: záznam (když ho tvůrce zveřejnil) - pro ty, kdo přišli pozdě. */
+.live-offline-recording {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 420px;
+  margin: 0 auto 14px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  text-align: left;
+  color: var(--text);
+}
+
+.live-offline-recording:hover {
+  border-color: var(--brand);
+}
+
+.live-offline-recording img {
+  width: 112px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.live-offline-recording > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.live-offline-recording-label {
+  color: var(--brand);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.live-offline-recording-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .live-chat {
   display: flex;
   flex-direction: column;
@@ -5493,6 +5577,19 @@ input:focus, textarea:focus, select:focus {
   font-size: var(--fs-sm);
   text-align: center;
   margin: auto 0;
+}
+
+/* Řádek nahoře v chatu: "vysílání skončilo, chat začíná nanovo" (každé vysílání má svůj chat). */
+.live-chat-note {
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+  text-align: center;
+  line-height: 1.4;
 }
 
 .live-chat-msg {
@@ -5699,6 +5796,52 @@ input:focus, textarea:focus, select:focus {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* Studio: vlastní náhled přenosu (jinak snímek z vysílání). */
+.live-thumb-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.live-thumb-preview {
+  width: 224px;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.live-thumb-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.live-thumb-auto {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  text-align: center;
+}
+
+.live-thumb-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .live-recording-duration {
@@ -6401,6 +6544,20 @@ html[data-backdrop="neon"] {
   to { opacity: 0; }
 }
 
+/* Můj obrázek za sklem (Nastavení -> Vzhled): jako tapeta - rozmazaný tak, jak si kdo nastaví
+   (--blur-k 0 = ostrý, 1 = jen barvy). Při rozmazání se trochu zvětší, ať nejsou vidět okraje. */
+.kine-backdrop-custom {
+  background-size: cover;
+  background-position: center;
+  filter: blur(calc(var(--blur-k, 0.4) * 56px)) saturate(1.12) brightness(0.92);
+  transform: scale(calc(1 + var(--blur-k, 0.4) * 0.14));
+  animation: kine-backdrop-in 600ms var(--ease) both;
+}
+
+html[data-theme="light"] .kine-backdrop-custom {
+  filter: blur(calc(var(--blur-k, 0.4) * 56px)) saturate(1.08) brightness(1.04);
+}
+
 /* Ztmavení kvůli čitelnosti textu - čím silnější sklo, tím méně. */
 .kine-backdrop-tint {
   position: absolute;
@@ -6689,6 +6846,101 @@ body.player-css-fullscreen .player-ambient {
 .appearance-swatch-forest { background: linear-gradient(135deg, #16a34a, #0d9488 55%, #84cc16); }
 .appearance-swatch-ocean { background: linear-gradient(135deg, #06b6d4, #2563eb 55%, #14b8a6); }
 .appearance-swatch-neon { background: linear-gradient(135deg, #ec4899, #22d3ee 55%, #a855f7); }
+.appearance-error {
+  margin: 8px 0 0;
+  color: #ff8b8b;
+  font-size: var(--fs-sm);
+}
+
+.appearance-wallpaper {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+}
+
+.appearance-swatch-image {
+  background: linear-gradient(135deg, var(--panel-raised), var(--border));
+  background-size: cover;
+  background-position: center;
+  display: inline-grid;
+  place-items: center;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ---------- Velikost písma, zaoblení, karty, klidný režim (Nastavení -> Vzhled) ---------- */
+
+html[data-text="s"] {
+  --fs-2xs: 10px;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+  --fs-xl: 17px;
+  --fs-2xl: 21px;
+  --fs-3xl: 27px;
+}
+
+html[data-text="l"] {
+  --fs-2xs: 12px;
+  --fs-xs: 13.5px;
+  --fs-sm: 14.5px;
+  --fs-md: 16px;
+  --fs-lg: 18px;
+  --fs-xl: 21px;
+  --fs-2xl: 26px;
+  --fs-3xl: 33px;
+}
+
+html[data-corners="sharp"] {
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius: 5px;
+}
+
+html[data-corners="round"] {
+  --radius-xs: 9px;
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --radius: 20px;
+}
+
+/* Karty videí: menší = víc v řádku, větší = méně a větší náhledy. min() - na telefonu nic nepřeteče. */
+html[data-cards="s"] .video-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
+  gap: 16px;
+}
+
+html[data-cards="l"] .video-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(400px, 100%), 1fr));
+  gap: 28px;
+}
+
+html[data-cards="s"] .live-now-grid,
+html[data-cards="s"] .streams-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr));
+}
+
+html[data-cards="l"] .live-now-grid,
+html[data-cards="l"] .streams-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
+}
+
+/* Klidný režim: žádné animace ani přechody (kolečka "načítám" se točí dál - jinak by vypadala zamrzle). */
+html[data-calm="1"] *:not([class*="spin"]),
+html[data-calm="1"] *:not([class*="spin"])::before,
+html[data-calm="1"] *:not([class*="spin"])::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
 
 .appearance-range {
   display: flex;

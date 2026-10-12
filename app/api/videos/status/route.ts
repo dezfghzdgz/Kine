@@ -17,7 +17,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Chybí videoId.' }, { status: 400 });
   }
 
-  const vysledek = await refreshFromCloudflare(videoId);
+  const prubeh = { percent: null as number | null };
+  const vysledek = await refreshFromCloudflare(videoId, prubeh);
 
   // Když se už někdo ptá, projdou se při té příležitosti i ostatní zaseklá
   // videa (nejvýš jednou za minutu a půl; viz sweepProcessing).
@@ -27,5 +28,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Video nenalezeno.' }, { status: 404 });
   }
 
-  return NextResponse.json({ status: vysledek });
+  // percent: jak daleko je zpracování u Cloudflare (jen během zpracování, když to Cloudflare ví).
+  return NextResponse.json(vysledek === 'processing' && prubeh.percent !== null ? { status: vysledek, percent: prubeh.percent } : { status: vysledek });
 }

@@ -13,6 +13,8 @@ export type LiveItem = {
   category?: string | null;
   startedAt: string | null;
   videoUid: string | null;
+  /** Vlastní náhled přenosu (studio / appka); jinak snímek z vysílání. */
+  thumbnailUrl?: string | null;
   followed?: boolean;
   /** Kolik lidí se dívá (jen s ?viewers=1, jinak null). */
   viewers?: number | null;
@@ -21,6 +23,9 @@ export type LiveItem = {
 
 /** Na hlavní stránce nejvýš tolik přenosů - všechny jsou na stránce Živě (/streams). */
 const HOME_LIMIT = 8;
+
+/** Seznam starší než tohle (nejde obnovit) se schová - přenosy v něm už nemusí běžet. */
+const STALE_AFTER_MS = 90 * 1000;
 
 /**
  * Řada "Živě" na hlavní stránce - kdo teď vysílá. Když nikdo, nevykreslí
@@ -33,24 +38,46 @@ export default function LiveNowRow() {
 
   useEffect(() => {
     let cancelled = false;
+    // Kdy přišel poslední platný seznam. Starý seznam se neukazuje - jinak tu po návratu
+    // do karty (třeba z appky, kde vysílání skončilo) visel přenos, který už neběží.
+    let loadedAt = 0;
     async function load() {
       if (document.hidden) return;
       try {
         // S přihlášením: vlastní přenos a odebírané kanály jdou dopředu (lib/liveNow.ts).
         const res = await fetch('/api/live/now', { cache: 'no-store', headers: await authHeaders() });
         const body = await res.json().catch(() => null);
-        if (!cancelled && body && Array.isArray(body.streams)) setStreams(body.streams);
+        if (!cancelled && res.ok && body && Array.isArray(body.streams)) {
+          loadedAt = Date.now();
+          setStreams(body.streams);
+        }
       } catch {
         // Bez sítě se řada prostě neukáže.
       }
     }
     load();
     const refresh = setInterval(load, 20 * 1000);
-    const tick = setInterval(() => setNow(Date.now()), 1000);
+    const tick = setInterval(() => {
+      setNow(Date.now());
+      if (loadedAt && Date.now() - loadedAt > STALE_AFTER_MS) {
+        loadedAt = 0;
+        setStreams([]);
+      }
+    }, 1000);
+    const onVisible = () => {
+      if (document.hidden) return;
+      if (loadedAt && Date.now() - loadedAt > 20 * 1000) {
+        loadedAt = 0;
+        setStreams([]);
+      }
+      load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       cancelled = true;
       clearInterval(refresh);
       clearInterval(tick);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
 
@@ -75,18 +102,22 @@ export default function LiveNowRow() {
   );
 }
 
-/** Karta přenosu: náhled (každou minutu nový), LIVE, diváci, jak dlouho běží, kanál. */
+/** Karta přenosu: náhled (vlastní, nebo každou minutu nový snímek), LIVE, diváci, jak dlouho běží, kanál. */
 export function LiveCard({ item, now, showCategory = false }: { item: LiveItem; now: number; showCategory?: boolean }) {
   const { t } = useLanguage();
   const [thumbFailed, setThumbFailed] = useState(false);
+  const [customFailed, setCustomFailed] = useState(false);
   const name = item.profile.displayName || item.profile.username;
-  // Náhled běžícího přenosu od Cloudflare; když ho nedá, zůstane avatar na tmavém pozadí.
-  const thumb = item.videoUid && !thumbFailed ? `https://videodelivery.net/${item.videoUid}/thumbnails/thumbnail.jpg?height=360&t=${Math.floor(now / 60000)}` : null;
+  // Vlastní náhled tvůrce; jinak snímek z běžícího přenosu od Cloudflare (každou minutu nový);
+  // když nejde ani ten, zůstane avatar na tmavém pozadí.
+  const custom = item.thumbnailUrl && !customFailed ? item.thumbnailUrl : null;
+  const frame = item.videoUid && !thumbFailed ? `https://videodelivery.net/${item.videoUid}/thumbnails/thumbnail.jpg?height=360&t=${Math.floor(now / 60000)}` : null;
+  const thumb = custom ?? frame;
   return (
     <Link href={`/live/${item.ownerId}`} className="live-card">
       <div className="live-card-thumb">
         {thumb ? (
-          <img src={thumb} alt="" loading="lazy" decoding="async" onError={() => setThumbFailed(true)} />
+          <img src={thumb} alt="" loading="lazy" decoding="async" onError={() => (custom ? setCustomFailed(true) : setThumbFailed(true))} />
         ) : (
           <span className="live-card-avatar">{item.profile.avatarUrl ? <img src={item.profile.avatarUrl} alt="" /> : null}</span>
         )}

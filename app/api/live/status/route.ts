@@ -24,6 +24,32 @@ async function tipsEnabled(channel: string): Promise<boolean> {
 }
 
 /**
+ * Záznam posledního vysílání kanálu (veřejné video vzniklé ze záznamu); bez
+ * migrace zive-2 nic. Podle začátku vysílání, ne podle zveřejnění, a i když
+ * se ještě zpracovává (hned po konci) - jinak by odkaz vedl na předchozí
+ * vysílání. Minutu v paměti.
+ */
+const recordingCache = new Map<string, { at: number; value: { id: string; title: string; thumbnailUrl: string | null } | null }>();
+async function latestRecording(channel: string): Promise<{ id: string; title: string; thumbnailUrl: string | null } | null> {
+  const hit = recordingCache.get(channel);
+  if (hit && Date.now() - hit.at < 60 * 1000) return hit.value;
+  const { data, error } = await supabaseServer
+    .from('videos')
+    .select('id, title, thumbnail_url')
+    .eq('owner_id', channel)
+    .in('status', ['ready', 'processing'])
+    .eq('visibility', 'public')
+    .not('live_started_at', 'is', null)
+    .order('live_started_at', { ascending: false })
+    .limit(1);
+  const row = !error && data && data[0] ? data[0] : null;
+  const value = row ? { id: String(row.id), title: String(row.title ?? ''), thumbnailUrl: typeof row.thumbnail_url === 'string' ? row.thumbnail_url : null } : null;
+  recordingCache.set(channel, { at: Date.now(), value });
+  if (recordingCache.size > 2000) recordingCache.clear();
+  return value;
+}
+
+/**
  * Je kanál živě? Stránka přenosu (/live/[id]) a odznak na kanálu se ptají
  * odsud. Stav se srovná s Cloudflare (nejvýš jednou za pár vteřin pro
  * všechny kanály naráz - lib/liveStream.ts).
@@ -60,7 +86,7 @@ export async function GET(req: NextRequest) {
     }
     if (!privileged) {
       return NextResponse.json(
-        { enabled: true, live: true, held: true, profile: publicProfile, stream: { ...stream, playerUrl: null, inputId: null, videoUid: null } },
+        { enabled: true, live: true, held: true, profile: publicProfile, stream: { ...stream, playerUrl: null, inputId: null, videoUid: null, thumbnailUrl: null } },
         { headers: { 'Cache-Control': 'no-store' } }
       );
     }
@@ -71,8 +97,10 @@ export async function GET(req: NextRequest) {
   }
   // Podpory ve vysílání (tlačítko 💛 u přenosu): jen když kanál běží a umí je přijmout.
   const tips = stream.live ? { enabled: await tipsEnabled(channel), feePercent: tipFeePercent(process.env.LIVE_TIP_FEE_PERCENT) } : { enabled: false, feePercent: 0 };
+  // Po vysílání: odkaz na záznam (když ho tvůrce zveřejnil) - kdo přišel pozdě, pustí si ho.
+  const lastRecording = stream.live ? null : await latestRecording(channel);
   return NextResponse.json(
-    { enabled: true, live: stream.live, profile: publicProfile, stream, tips },
+    { enabled: true, live: stream.live, profile: publicProfile, stream, tips, lastRecording },
     { headers: { 'Cache-Control': 'no-store' } }
   );
 }

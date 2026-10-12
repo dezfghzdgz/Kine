@@ -16,6 +16,8 @@ export type LivePreview = {
   title: string;
   description: string;
   videoUid: string | null;
+  /** Vlastní náhled přenosu (jen když je živě a není skrytý kontrolou obsahu). */
+  thumbnailUrl: string | null;
   startedAt: string | null;
 };
 
@@ -45,6 +47,10 @@ export async function loadLivePreview(ownerId: string): Promise<LivePreview | nu
       description: (stream?.description ?? '').trim(),
       // Přenos skrytý kontrolou obsahu: v náhledu odkazu žádný snímek z vysílání.
       videoUid: stream?.is_live && !stream?.moderation_hidden_at ? stream?.current_video_uid ?? null : null,
+      thumbnailUrl:
+        stream?.is_live && !stream?.moderation_hidden_at && typeof stream?.thumbnail_url === 'string' && /^https:\/\//.test(stream.thumbnail_url)
+          ? stream.thumbnail_url
+          : null,
       startedAt: stream?.is_live ? stream?.started_at ?? null : null,
     };
   } catch {

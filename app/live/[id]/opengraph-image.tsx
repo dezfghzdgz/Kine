@@ -2,7 +2,7 @@ import { ImageResponse } from 'next/og';
 import { liveThumbnailUrl, loadLivePreview } from '@/lib/livePreview';
 
 /**
- * Obrázek náhledu odkazu na přenos: snímek z vysílání (od Cloudflare),
+ * Obrázek náhledu odkazu na přenos: vlastní náhled tvůrce nebo snímek z vysílání (od Cloudflare),
  * přes něj odznak LIVE, název a kanál. Když kanál zrovna nevysílá, jeho
  * banner nebo avatar a "Offline". Stejně to dělá Twitch - kdo dostane
  * odkaz do Discordu, hned vidí, co se vysílá.
@@ -36,7 +36,10 @@ function clip(text: string, max: number): string {
 export default async function LiveOpenGraphImage({ params }: { params: { id: string } }) {
   const preview = await loadLivePreview(params.id);
   const [background, avatar] = await Promise.all([
-    inline(preview?.live && preview.videoUid ? liveThumbnailUrl(preview.videoUid) : preview?.bannerUrl ?? null),
+    // Vlastní náhled přenosu, jinak snímek z vysílání; offline banner kanálu.
+    (async () =>
+      (preview?.live && preview.thumbnailUrl ? await inline(preview.thumbnailUrl) : null) ??
+      (await inline(preview?.live && preview.videoUid ? liveThumbnailUrl(preview.videoUid) : preview?.bannerUrl ?? null)))(),
     inline(preview?.avatarUrl ?? null),
   ]);
   const live = !!preview?.live;

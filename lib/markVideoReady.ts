@@ -168,7 +168,15 @@ export async function sweepScheduled(max = 10): Promise<number> {
 }
 
 /** Zeptá se Cloudflare na stav videa a případně ho přepne na hotové. */
-export async function refreshFromCloudflare(videoId: string): Promise<ReadyResult> {
+/** Kolik procent má Cloudflare zpracováno (status.pctComplete, chodí jako text "45.5"); null = neví. */
+export function processingPercent(cf: { status?: { pctComplete?: unknown; state?: unknown } } | null | undefined): number | null {
+  const raw = cf?.status?.pctComplete;
+  const n = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN;
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(99, Math.floor(n)));
+}
+
+export async function refreshFromCloudflare(videoId: string, progress?: { percent: number | null }): Promise<ReadyResult> {
   const { data: video } = await supabaseServer
     .from('videos')
     .select('id, cloudflare_video_id, status')
@@ -187,7 +195,11 @@ export async function refreshFromCloudflare(videoId: string): Promise<ReadyResul
   );
   const cfData = await cfRes.json().catch(() => ({ success: false }));
 
-  if (!cfData.success || !cfData.result?.readyToStream) return 'processing';
+  if (!cfData.success || !cfData.result?.readyToStream) {
+    // Jak daleko Cloudflare je - u dlouhého videa ať tvůrce vidí, že se to hýbe.
+    if (progress) progress.percent = processingPercent(cfData.result);
+    return 'processing';
+  }
 
   await markVideoReady(videoId, cfData.result);
   return 'ready';

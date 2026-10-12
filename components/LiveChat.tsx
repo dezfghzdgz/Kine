@@ -60,6 +60,8 @@ export default function LiveChat({
   variant = 'panel',
   popoutHref,
   tts: ttsFromUrl,
+  since = null,
+  note = null,
 }: {
   room: string;
   /** Majitel kanálu / videa (rozhodne stejně server - tohle jen ukáže tlačítka hned). */
@@ -70,6 +72,13 @@ export default function LiveChat({
   popoutHref?: string;
   /** Překryv pro OBS: čtení nahlas z adresy (?tts=tips / ?tts=all). */
   tts?: TtsMode;
+  /**
+   * Jen zprávy od téhle chvíle (ISO) - chat vysílání patří k jednomu vysílání
+   * (lib/liveChat.ts - chatSessionSince). null = všechny.
+   */
+  since?: string | null;
+  /** Řádek nahoře v chatu (třeba "vysílání skončilo, chat začíná nanovo"). */
+  note?: string | null;
 }) {
   const { t, lang } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -148,13 +157,12 @@ export default function LiveChat({
   }
 
   async function refresh() {
-    const load = (fields: string) =>
-      supabase
-        .from('live_chat_messages')
-        .select(fields)
-        .eq('room', room)
-        .order('id', { ascending: false })
-        .limit(overlay ? 30 : 80);
+    const load = (fields: string) => {
+      let query = supabase.from('live_chat_messages').select(fields).eq('room', room);
+      if (since) query = query.gte('created_at', since);
+      return query.order('id', { ascending: false }).limit(overlay ? 30 : 80);
+    };
+    const asked = `${room}|${since ?? ''}`;
     let { data, error: loadError } = await load(tipColumns === false ? BASE_FIELDS : TIP_FIELDS);
     if (loadError && tipColumns !== false && /kind|tip_amount|tip_currency|column/i.test(loadError.message ?? '')) {
       // Databáze bez sloupců pro podpory (migrace podpory-kontrola) - chat jede dál bez nich.
@@ -163,6 +171,8 @@ export default function LiveChat({
     } else if (!loadError) {
       tipColumns = tipColumns ?? true;
     }
+    // Mezitím začalo / skončilo vysílání (jiný chat) - odpověď patří starému.
+    if (asked !== sessionRef.current) return;
     if (loadError) {
       setUnavailable(true);
       return;
@@ -183,6 +193,14 @@ export default function LiveChat({
     }
   }
 
+  // Nové vysílání (nebo jeho konec) = nový chat: staré zprávy hned pryč, ne až po načtení.
+  const sessionRef = useRef(`${room}|${since ?? ''}`);
+  if (sessionRef.current !== `${room}|${since ?? ''}`) {
+    sessionRef.current = `${room}|${since ?? ''}`;
+    stickToBottomRef.current = true;
+    if (messages.length > 0) setMessages([]);
+  }
+
   useEffect(() => {
     let cancelled = false;
     refresh();
@@ -201,7 +219,7 @@ export default function LiveChat({
       if (rulesTimer) clearInterval(rulesTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room, userId]);
+  }, [room, userId, since]);
 
   // Nové zprávy dole - ale jen když divák nečte starší (neodroloval nahoru).
   useEffect(() => {
@@ -487,6 +505,7 @@ export default function LiveChat({
       )}
 
       <div ref={listRef} className="live-chat-list" onScroll={onScroll} aria-live="polite">
+        {note && <p className="live-chat-note">{note}</p>}
         {unavailable && <p className="live-chat-empty">{t('liveChatUnavailable')}</p>}
         {!unavailable && messages.length === 0 && <p className="live-chat-empty">{t('liveChatEmpty')}</p>}
         {messages.map((m) => {

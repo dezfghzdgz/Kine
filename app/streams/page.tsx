@@ -39,6 +39,8 @@ function StreamsInner() {
 
   useEffect(() => {
     let cancelled = false;
+    // Kdy přišel poslední platný seznam - starý (přenosy v něm už nemusí běžet) se neukazuje.
+    let loadedAt = 0;
     async function load() {
       if (document.hidden) return;
       try {
@@ -46,7 +48,8 @@ function StreamsInner() {
         const res = await fetch('/api/live/now?limit=60&viewers=1', { cache: 'no-store', headers: await authHeaders() });
         const body = await res.json().catch(() => null);
         if (cancelled) return;
-        if (body && Array.isArray(body.streams)) {
+        if (res.ok && body && Array.isArray(body.streams)) {
+          loadedAt = Date.now();
           setStreams(body.streams);
           setEnabled(body.enabled !== false);
           setFailed(false);
@@ -57,9 +60,20 @@ function StreamsInner() {
     }
     load();
     const refresh = setInterval(load, 20 * 1000);
-    const tick = setInterval(() => setNow(Date.now()), 1000);
+    const tick = setInterval(() => {
+      setNow(Date.now());
+      if (loadedAt && Date.now() - loadedAt > 90 * 1000) {
+        loadedAt = 0;
+        setStreams([]);
+      }
+    }, 1000);
     const onVisible = () => {
-      if (!document.hidden) load();
+      if (document.hidden) return;
+      if (loadedAt && Date.now() - loadedAt > 20 * 1000) {
+        loadedAt = 0;
+        setStreams(null);
+      }
+      load();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => {

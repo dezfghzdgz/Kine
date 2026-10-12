@@ -96,5 +96,68 @@ test('vysílání: opakované "začal jsem" bez potvrzení neprodlužuje důvěr
   assert.equal(live.revivedStartedAt({ started_at: null, checked_at: null, cf_confirmed_at: null }, T0), iso(T0));
 });
 
+// Srovnání s Cloudflare (decideLive): co je živě, rozhoduje lifecycle vstupu, ne jen seznam běžících videí.
+const liveRow = { is_live: true, ended_at: null, app_ping_at: null, started_at: iso(T0), checked_at: iso(T0 + 10 * MIN), cf_confirmed_at: iso(T0 + 10 * MIN) };
+const endedRow = { is_live: false, ended_at: iso(T0 + 20 * MIN), app_ping_at: null, started_at: iso(T0), checked_at: iso(T0 + 20 * MIN), cf_confirmed_at: iso(T0 + 19 * MIN) };
+
+test('Cloudflare: běžící a připojený vstup = živě', () => {
+  assert.equal(live.decideLive(liveRow, { listed: true, connected: true }, T0 + 11 * MIN), 'confirm');
+  assert.equal(live.decideLive({ ...endedRow, ended_at: null, is_live: false }, { listed: true, connected: true }, T0 + 30 * MIN), 'confirm');
+  // lifecycle nejde zjistit - živý přenos se drží podle seznamu
+  assert.equal(live.decideLive(liveRow, { listed: true, connected: null }, T0 + 11 * MIN), 'confirm');
+});
+
+test('Cloudflare: video "visí" v seznamu, ale vstup nevysílá - skončený přenos se neoživí', () => {
+  // přesně chyba "pořád jsem v Živě, po kliknutí teď nevysílá"
+  for (const at of [T0 + 21 * MIN, T0 + 60 * MIN, T0 + 14 * 60 * MIN]) {
+    assert.equal(live.decideLive(endedRow, { listed: true, connected: false, videoCreatedAt: iso(T0) }, at), 'none');
+  }
+  // ani když lifecycle nejde zjistit: video vzniklo před koncem přenosu
+  assert.equal(live.decideLive(endedRow, { listed: true, connected: null, videoCreatedAt: iso(T0) }, T0 + 60 * MIN), 'none');
+  // nové video po konci (nový přenos) ano
+  assert.equal(live.decideLive(endedRow, { listed: true, connected: null, videoCreatedAt: iso(T0 + 25 * MIN) }, T0 + 26 * MIN), 'confirm');
+});
+
+test('Cloudflare: po Ukončit se přenos neoživí ani dobíhajícím hlášením (minuta čekání Cloudflare)', () => {
+  // přesně chyba "skončil jsem a v Živě visím dál s časem 9:53"
+  for (const after of [5000, 30000, 60000, 85000]) {
+    assert.equal(live.decideLive(endedRow, { listed: true, connected: true, videoCreatedAt: iso(T0) }, T0 + 20 * MIN + after), 'none', String(after));
+  }
+  // OBS se připojil zpátky do stejného záznamu a opravdu vysílá - po čekání zase živě
+  assert.equal(live.decideLive(endedRow, { listed: true, connected: true, videoCreatedAt: iso(T0) }, T0 + 20 * MIN + 95000), 'confirm');
+  // nové vysílání (nové video po konci) hned
+  assert.equal(live.decideLive(endedRow, { listed: true, connected: true, videoCreatedAt: iso(T0 + 20 * MIN + 3000) }, T0 + 20 * MIN + 5000), 'confirm');
+  // nevíme, kdy video vzniklo: bere se jako to skončené
+  assert.equal(live.decideLive(endedRow, { listed: true, connected: null, videoCreatedAt: null }, T0 + 20 * MIN + 5 * MIN), 'none');
+  // kanál, který ještě nevysílal (bez konce): nový přenos hned
+  assert.equal(live.decideLive({ ...endedRow, ended_at: null }, { listed: true, connected: null, videoCreatedAt: iso(T0) }, T0 + 25 * MIN), 'confirm');
+});
+
+test('Cloudflare: živý přenos, vstup krátce nepřipojený - minutu drží, pak konec', () => {
+  assert.equal(live.decideLive(liveRow, { listed: true, connected: false }, T0 + 10 * MIN + 30000), 'keep');
+  assert.equal(live.decideLive(liveRow, { listed: true, connected: false }, T0 + 11 * MIN + 1000), 'end');
+  // úplně zmizel ze seznamu = konec hned (jako dřív)
+  assert.equal(live.decideLive(liveRow, { listed: false, connected: null }, T0 + 10 * MIN + 30000), 'end');
+});
+
+test('Cloudflare: appka hlásí vysílání - drží se, dokud se jí věří', () => {
+  const app = { ...liveRow, app_ping_at: iso(T0 + 11 * MIN) };
+  assert.equal(live.decideLive(app, { listed: false, connected: null }, T0 + 11 * MIN + 10000), 'keep');
+  assert.equal(live.decideLive(app, { listed: true, connected: false }, T0 + 11 * MIN + 10000), 'keep');
+  // appka zmlkla
+  assert.equal(live.decideLive(app, { listed: false, connected: null }, T0 + 12 * MIN), 'end');
+  // neživý řádek nic nedrží
+  assert.equal(live.decideLive({ ...endedRow, app_ping_at: iso(T0 + 21 * MIN) }, { listed: false, connected: null }, T0 + 21 * MIN), 'none');
+});
+
+test('Cloudflare neodpovídá: nepotvrzený přenos po 10 minutách zmizí', () => {
+  assert.equal(live.staleWithoutCloudflare(liveRow, T0 + 19 * MIN), false);
+  assert.equal(live.staleWithoutCloudflare(liveRow, T0 + 21 * MIN), true);
+  assert.equal(live.staleWithoutCloudflare(endedRow, T0 + 99 * MIN), false);
+  // nikdy nepotvrzený přenos se počítá od začátku
+  assert.equal(live.staleWithoutCloudflare({ ...liveRow, cf_confirmed_at: null }, T0 + 9 * MIN), false);
+  assert.equal(live.staleWithoutCloudflare({ ...liveRow, cf_confirmed_at: null }, T0 + 11 * MIN), true);
+});
+
 console.log(`\n${prosly} prošlo, ${padly} spadlo`);
 if (padly > 0) process.exit(1);

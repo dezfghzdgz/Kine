@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { prelozit } from './prelozit.mjs';
 
 const kam = prelozit('lib/tusUpload.ts');
-const { uploadResumable, TusError, TUS_CHUNK_SIZE, RESUMABLE_FROM_BYTES, base64Ascii } = await import(
+const { uploadResumable, TusError, TUS_CHUNK_SIZE, RESUMABLE_FROM_BYTES, base64Ascii, nextChunkSize, smallerChunk, TUS_MIN_CHUNK, TUS_MAX_CHUNK } = await import(
   join(kam, 'tusUpload.js')
 );
 
@@ -113,7 +113,8 @@ await test('malý soubor projde jedním kusem', async () => {
 await test('velký soubor se rozdělí a dojde celý', async () => {
   const s = server();
   const velikost = TUS_CHUNK_SIZE * 3 + 12345;
-  await uploadResumable({ url: 'u', file: soubor(velikost), fetchImpl: s.doFetch, sleep: hnedTed });
+  // pevná velikost kusu (bez přizpůsobení rychlosti) - ať je počet kusů jistý
+  await uploadResumable({ url: 'u', file: soubor(velikost), chunkSize: TUS_CHUNK_SIZE, fetchImpl: s.doFetch, sleep: hnedTed });
   assert.equal(s.stav.offset, velikost, 'musí dojít úplně všechno');
   assert.equal(s.stav.patch, 4);
 });
@@ -123,10 +124,20 @@ await test('kusy jdou v pořadí a nic se nepřeskočí', async () => {
   await uploadResumable({
     url: 'u',
     file: soubor(TUS_CHUNK_SIZE * 3),
+    chunkSize: TUS_CHUNK_SIZE,
     fetchImpl: s.doFetch,
     sleep: hnedTed,
   });
   assert.deepEqual(s.stav.prijatePorady, [0, TUS_CHUNK_SIZE, TUS_CHUNK_SIZE * 2]);
+});
+
+await test('rychlé připojení: kusy rostou, jdou v pořadí a dojde všechno', async () => {
+  const s = server();
+  const velikost = TUS_CHUNK_SIZE * 3 + 777;
+  await uploadResumable({ url: 'u', file: soubor(velikost), fetchImpl: s.doFetch, sleep: hnedTed });
+  assert.equal(s.stav.offset, velikost, 'musí dojít úplně všechno');
+  // první kus výchozí, celý za chvilku -> další dvojnásobný (a víc už nezbývá)
+  assert.deepEqual(s.stav.prijatePorady, [0, TUS_CHUNK_SIZE, TUS_CHUNK_SIZE * 3]);
 });
 
 await test('výpadek uprostřed: pokračuje se, ne od začátku', async () => {
@@ -215,6 +226,30 @@ await test('velikost kusu splňuje podmínky Cloudflare', () => {
   assert.ok(TUS_CHUNK_SIZE >= 5242880, 'nejméně 5 MiB');
   assert.equal(TUS_CHUNK_SIZE % (256 * 1024), 0, 'dělitelné 256 KiB');
   assert.ok(TUS_CHUNK_SIZE <= 209715200, 'nejvýš 200 MiB');
+});
+
+await test('velikost kusu podle rychlosti: rychlé připojení větší kusy, vždy podle pravidel Cloudflare', () => {
+  const MiB = 1024 * 1024;
+  // 20 MiB za 2 s (≈ 84 Mb/s) -> dvojnásobek (víc najednou nejde)
+  assert.equal(nextChunkSize(20 * MiB, 20 * MiB, 2000), 40 * MiB);
+  // a pak strop 64 MiB
+  assert.equal(nextChunkSize(40 * MiB, 40 * MiB, 2000), TUS_MAX_CHUNK);
+  // pomalé připojení (20 MiB za 40 s) -> polovina, ale ne pod 8 MiB
+  assert.equal(nextChunkSize(20 * MiB, 20 * MiB, 40000), 10 * MiB);
+  assert.equal(nextChunkSize(10 * MiB, 10 * MiB, 60000), TUS_MIN_CHUNK);
+  // krátké měření (test, malý kus) nic nemění
+  assert.equal(nextChunkSize(20 * MiB, 1000, 3), 20 * MiB);
+  // celý kus za míň než půl vteřiny (optika) -> roste i tak, až na strop
+  assert.equal(nextChunkSize(TUS_MIN_CHUNK, TUS_MIN_CHUNK, 300), 2 * TUS_MIN_CHUNK);
+  assert.equal(nextChunkSize(TUS_MAX_CHUNK, TUS_MAX_CHUNK, 0), TUS_MAX_CHUNK);
+  // po výpadku menší
+  assert.equal(smallerChunk(40 * MiB), 20 * MiB);
+  assert.equal(smallerChunk(9 * MiB), TUS_MIN_CHUNK);
+  for (const [c, b, ms] of [[20 * MiB, 20 * MiB, 3333], [20 * MiB, 7 * MiB, 9999], [64 * MiB, 64 * MiB, 777]]) {
+    const n = nextChunkSize(c, b, ms);
+    assert.equal(n % (256 * 1024), 0, 'dělitelné 256 KiB');
+    assert.ok(n >= 5 * MiB && n <= 200 * MiB);
+  }
 });
 
 await test('práh pro dělení je pod limitem 200 MB', () => {

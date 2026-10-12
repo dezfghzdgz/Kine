@@ -39,6 +39,20 @@ test('jak dlouho přenos běží', () => {
   assert.equal(chat.liveElapsed(null), '');
 });
 
+test('chat: každé vysílání má svůj chat (po konci začíná nanovo)', () => {
+  const start = '2026-10-11T20:00:00.000Z';
+  const end = '2026-10-11T22:54:00.000Z';
+  // během vysílání: od začátku, s dvouminutovým předstihem
+  assert.equal(chat.chatSessionSince({ live: true, startedAt: start, endedAt: null }), '2026-10-11T19:58:00.000Z');
+  // po konci: od konce - zprávy z vysílání v chatu nezůstanou
+  assert.equal(chat.chatSessionSince({ live: false, startedAt: start, endedAt: end }), end);
+  // kanál, který ještě nevysílal / bez údajů: všechno
+  assert.equal(chat.chatSessionSince({ live: false, startedAt: null, endedAt: null }), null);
+  assert.equal(chat.chatSessionSince({ live: true, startedAt: null, endedAt: null }), null);
+  assert.equal(chat.chatSessionSince(null), null);
+  assert.equal(chat.chatSessionSince({ live: false, startedAt: start, endedAt: 'nesmysl' }), null);
+});
+
 test('naplánované video je skryté, premiéra vidět s odpočtem', () => {
   const now = Date.parse('2026-09-24T10:00:00Z');
   const future = '2026-09-24T12:00:00Z';

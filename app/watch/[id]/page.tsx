@@ -96,6 +96,14 @@ function WatchPageInner() {
   const [inWatchLater, setInWatchLater] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
+  // Obraz se opravdu rozjel (událost playing). Do té doby náhled videa a kolečko místo černé plochy.
+  const [playbackStarted, setPlaybackStarted] = useState(false);
+  // Kde přehrávání začne: odkaz s ?t=, nebo kde divák minule skončil. Rozhodne se dřív, než se
+  // vykreslí přehrávač - Cloudflare pak rovnou načte to místo (startTime), ne začátek videa
+  // a potom přetáčení (u delších videí to bylo znát).
+  const startAtRef = useRef<{ seconds: number; resumed: boolean } | null>(null);
+  // Jak daleko je zpracování u Cloudflare (video, které ještě není hotové).
+  const [processingPercent, setProcessingPercent] = useState<number | null>(null);
   // Přehrávač se nerozjel a je potřeba do něj kliknout. Bez tohohle
   // zůstal černý obdélník bez ovládání a nedalo se s ním nic dělat.
   const [needsPlayTap, setNeedsPlayTap] = useState(false);
@@ -796,45 +804,46 @@ function WatchPageInner() {
       // Tenhle přehrávač je odteď jen pro obyčejná videa. Hudbu hraje
       // jeden jediný přehrávač v kostře appky a stránka si ho jen
       // promítne - viz components/MusicVideoSurface.tsx.
-      const t = searchParams.get('t');
-      if (t) {
-        const seconds = Number(t);
-        startPlayback(playerRef.current, Number.isNaN(seconds) ? null : seconds);
-      } else {
-        // Bez odkazu na konkrétní okamžik naváže appka tam, kde divák
-        // naposledy skončil - klidně i z jiného zařízení, protože pozice
-        // se ukládá do databáze, ne jen do prohlížeče.
-        startPlayback(playerRef.current);
-        resumeFromSavedProgress();
+      // Začátek už zná i přehrávač (startTime v adrese) - tady jen pojistka, kdyby ho nevzal.
+      // Bez odkazu na konkrétní okamžik naváže appka tam, kde divák naposledy skončil -
+      // klidně i z jiného zařízení (pozice je v databázi, ne jen v prohlížeči).
+      const start = startAtRef.current;
+      startPlayback(playerRef.current, start ? start.seconds : null);
+      if (start?.resumed) {
+        const mm = Math.floor(start.seconds / 60);
+        const ss = String(start.seconds % 60).padStart(2, '0');
+        setToast({ message: t('resumingFromLabel').replace('{time}', `${mm}:${ss}`), type: 'success' });
       }
     }
   }
 
-  async function resumeFromSavedProgress() {
-    const { data: authData } = await supabase.auth.getUser();
-    if (!authData.user) return;
-
-    const { data: history } = await supabase
-      .from('watch_history')
-      .select('progress_seconds, completed')
-      .eq('user_id', authData.user.id)
-      .eq('video_id', videoId)
-      .single();
-
-    if (
-      history?.progress_seconds &&
-      !history.completed &&
-      history.progress_seconds > 10
-    ) {
-      setTimeout(() => {
-        if (playerRef.current) {
-          playerRef.current.currentTime = history.progress_seconds;
-          playerRef.current.play();
-          const mm = Math.floor(history.progress_seconds / 60);
-          const ss = String(history.progress_seconds % 60).padStart(2, '0');
-          setToast({ message: t('resumingFromLabel').replace('{time}', `${mm}:${ss}`), type: 'success' });
-        }
-      }, 300);
+  /**
+   * Kde přehrávání začne: ?t= z odkazu, jinak kde divák minule skončil
+   * (nedokoukané video, víc než 10 s, ne úplně na konci).
+   */
+  async function startPoint(data: any): Promise<{ seconds: number; resumed: boolean } | null> {
+    const fromLink = searchParams.get('t');
+    if (fromLink) {
+      const seconds = Number(fromLink);
+      return Number.isFinite(seconds) && seconds > 0 ? { seconds: Math.floor(seconds), resumed: false } : null;
+    }
+    if (data?.status !== 'ready') return null;
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const uid = sessionData.session?.user?.id;
+      if (!uid) return null;
+      const { data: history } = await supabase
+        .from('watch_history')
+        .select('progress_seconds, completed')
+        .eq('user_id', uid)
+        .eq('video_id', data.id)
+        .maybeSingle();
+      const progress = Math.floor(Number(history?.progress_seconds) || 0);
+      const duration = Number(data.duration_seconds) || 0;
+      if (!history || history.completed || progress <= 10 || (duration > 0 && progress >= duration - 5)) return null;
+      return { seconds: progress, resumed: true };
+    } catch {
+      return null;
     }
   }
 
@@ -885,6 +894,7 @@ function WatchPageInner() {
     playbackCleanupRef.current = null;
     playerRef.current = null;
     setPlayerReady(false);
+    setPlaybackStarted(false);
     setNeedsPlayTap(false);
     setShowUpNext(false);
 
@@ -940,6 +950,28 @@ function WatchPageInner() {
 
   // Po dohrání videa nabídneme další doporučené (nebo další video z
   // playlistu, pokud appku sledujete v playlistu), s automatickým odpočtem
+  // Obraz se rozjel: náhled a kolečko pryč. Událost 'playing' od přehrávače; záloha je
+  // posun času během přehrávání a nejpozději po 30 s (náhled nesmí zakrýt běžící video).
+  useEffect(() => {
+    if (!playerReady || !playerRef.current || playbackStarted) return;
+    const player = playerRef.current;
+    let firstTime: number | null = null;
+    const started = () => setPlaybackStarted(true);
+    const onTime = () => {
+      const now = Number(player.currentTime) || 0;
+      if (firstTime === null) firstTime = now;
+      else if (Math.abs(now - firstTime) > 0.2 && !player.paused) started();
+    };
+    player.addEventListener?.('playing', started);
+    player.addEventListener?.('timeupdate', onTime);
+    const fallback = setTimeout(started, 30000);
+    return () => {
+      player.removeEventListener?.('playing', started);
+      player.removeEventListener?.('timeupdate', onTime);
+      clearTimeout(fallback);
+    };
+  }, [playerReady, playbackStarted]);
+
   useEffect(() => {
     if (!playerReady || !playerRef.current) return;
     const player = playerRef.current;
@@ -970,6 +1002,8 @@ function WatchPageInner() {
   // stránka Tvá videa. Jakmile je hotové, stránka si ho načte znovu -
   // divák nemusí obnovovat.
   useEffect(() => {
+    // Procenta patří jednomu videu - po přechodu na jiné se nesmí ukazovat ta stará.
+    setProcessingPercent(null);
     if (!video || video.status === 'ready') return;
     let cancelled = false;
     const timer = setInterval(async () => {
@@ -981,6 +1015,7 @@ function WatchPageInner() {
         });
         const body = await res.json().catch(() => ({}));
         if (!cancelled && body?.status === 'ready') load();
+        else if (!cancelled && typeof body?.percent === 'number') setProcessingPercent(body.percent);
       } catch {
         // Síť zrovna nešla - zkusí se to za chvíli znovu.
       }
@@ -1062,7 +1097,9 @@ function WatchPageInner() {
     // (lib/playbackToken.ts). Zjistí se DŘÍV, než se přehrávač vykreslí -
     // změna adresy iframu by ho načetla znovu a napojení by shořelo.
     // U veřejného videa je to id samo, bez dotazu.
-    data.playback_id = await resolvePlaybackId(data);
+    const [playbackId, startAt] = await Promise.all([resolvePlaybackId(data), startPoint(data)]);
+    data.playback_id = playbackId;
+    startAtRef.current = startAt;
 
     setVideo(data);
     document.title = `${data.title} - Kine`;
@@ -1439,7 +1476,7 @@ function WatchPageInner() {
                       // preload=auto: manifest a první kousky videa se stáhnou hned
                       // při otevření stránky, ne až po kliknutí na Přehrát - u delších
                       // videí se jinak po kliknutí dlouho čekalo.
-                      src={`https://iframe.videodelivery.net/${video.playback_id ?? video.cloudflare_video_id}?controls=false&preload=auto`}
+                      src={`https://iframe.videodelivery.net/${video.playback_id ?? video.cloudflare_video_id}?controls=false&preload=auto${startAtRef.current ? `&startTime=${startAtRef.current.seconds}` : ''}`}
                       style={{ width: '100%', height: '100%', border: 'none' }}
                       allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen;"
                       allowFullScreen
@@ -1453,14 +1490,21 @@ function WatchPageInner() {
                         {keyHint.text}
                       </div>
                     )}
-                    {!playerReady && video.thumbnail_url && (
+                    {/* Než se obraz rozjede: náhled videa (ne černá plocha) a kolečko. */}
+                    {!playbackStarted && video.thumbnail_url && (
                       <div
+                        className="player-poster"
                         style={{
                           position: 'absolute', inset: 0, zIndex: 5,
                           backgroundImage: `url(${video.thumbnail_url})`,
                           backgroundSize: 'cover', backgroundPosition: 'center',
                         }}
                       />
+                    )}
+                    {!playbackStarted && !needsPlayTap && video.status === 'ready' && (
+                      <div className="player-loading" role="status" aria-label={t('loading')}>
+                        <span className="player-loading-spinner" aria-hidden="true" />
+                      </div>
                     )}
                     {/* Záchranná brzda. Přehrávač jede bez vlastního
                         ovládání, takže když se sám nerozjede, nedalo se
@@ -1727,7 +1771,10 @@ function WatchPageInner() {
           </div>
         )}
         {video.status !== 'ready' && (
-          <p className="clip-origin" aria-live="polite">{t('processingVideoNote')}</p>
+          <p className="clip-origin" aria-live="polite">
+            {t('processingVideoNote')}
+            {processingPercent !== null ? ` ${processingPercent}%` : ''}
+          </p>
         )}
         {clipOrigin && (
           <p className="clip-origin">

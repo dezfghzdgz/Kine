@@ -35,3 +35,20 @@ export function liveElapsed(startedAt: string | null | undefined, now = Date.now
   const mm = h > 0 ? String(m).padStart(2, '0') : String(m);
   return `${h > 0 ? `${h}:` : ''}${mm}:${String(s).padStart(2, '0')}`;
 }
+
+/** O kolik dřív před začátkem vysílání chat ještě ukazuje ("už to začíná?"). */
+export const CHAT_PREROLL_MS = 2 * 60 * 1000;
+
+/**
+ * Od kdy ukazovat chat kanálu - každé vysílání má svůj chat. Během
+ * vysílání zprávy od jeho začátku (s malým předstihem), po konci od konce:
+ * po skončení vysílání chat začíná nanovo a další vysílání nezačne se
+ * zprávami z minula. null = bez omezení (kanál ještě nevysílal).
+ *
+ * Zprávy se nemažou - záznam vysílání je přehrává (components/ChatReplay.tsx).
+ */
+export function chatSessionSince(stream: { live: boolean; startedAt: string | null; endedAt: string | null } | null | undefined): string | null {
+  if (!stream) return null;
+  const at = stream.live ? Date.parse(stream.startedAt ?? '') - CHAT_PREROLL_MS : Date.parse(stream.endedAt ?? '');
+  return Number.isFinite(at) ? new Date(at).toISOString() : null;
+}

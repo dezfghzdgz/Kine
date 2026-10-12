@@ -12,6 +12,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import Toast, { ToastType } from '@/components/Toast';
 import { PanelHeading, WithHelp } from '@/components/HelpTip';
 import UiIcon from '@/components/UiIcon';
+import { liveThumbnailJpeg } from '@/lib/liveThumbnail';
 
 type Setup = {
   configured: boolean;
@@ -25,6 +26,10 @@ type Setup = {
     startedAt: string | null;
     endedAt: string | null;
     playerUrl: string;
+    /** Od kdy ukazovat chat - každé vysílání má svůj (lib/liveChat.ts). */
+    chatSince?: string | null;
+    /** Vlastní náhled přenosu (null = snímek z vysílání). */
+    thumbnailUrl?: string | null;
   } | null;
   /** Co se záznamem po skončení (null = nechat ve studiu). */
   recordingVisibility?: 'public' | 'subscribers' | 'private' | null;
@@ -79,6 +84,10 @@ export default function LiveStudioPage() {
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const detailsTouchedRef = useRef(false);
+  const [thumbBusy, setThumbBusy] = useState(false);
+  const thumbInputRef = useRef<HTMLInputElement>(null);
+  /** Kolikrát se ve studiu něco uložilo - starší odpovědi pravidelného dotazu se zahodí. */
+  const setupWriteRef = useRef(0);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -102,8 +111,12 @@ export default function LiveStudioPage() {
   }
 
   async function loadSetup() {
+    const asked = setupWriteRef.current;
     try {
       const body: Setup = await api('/api/live/me');
+      // Mezitím se ve studiu něco uložilo (náhled, údaje, klíč): tahle odpověď je starší
+      // a přepsala by to na 5 s zpátky - další dotaz přinese čerstvý stav.
+      if (asked !== setupWriteRef.current) return;
       setSetup(body);
       setLoadError(null);
       if (body.stream && !detailsTouchedRef.current) {
@@ -175,6 +188,7 @@ export default function LiveStudioPage() {
     setBusy(true);
     try {
       const body = await api('/api/live/me', { method: 'POST', body: JSON.stringify({ action }) });
+      setupWriteRef.current += 1;
       setSetup((s) => (s ? { ...s, input: body.input, stream: body.stream ?? s.stream } : s));
       setShowKey(false);
       if (action === 'reset') setToast({ message: t('liveKeyResetDone'), type: 'success' });
@@ -191,6 +205,7 @@ export default function LiveStudioPage() {
     setSavingDetails(true);
     try {
       const body = await api('/api/live/me', { method: 'POST', body: JSON.stringify({ action: 'details', title, description, category }) });
+      setupWriteRef.current += 1;
       setSetup((s) => (s ? { ...s, stream: body.stream } : s));
       detailsTouchedRef.current = false;
       setToast({ message: t('liveSaved'), type: 'success' });
@@ -198,6 +213,44 @@ export default function LiveStudioPage() {
       setToast({ message: (err as Error).message, type: 'error' });
     } finally {
       setSavingDetails(false);
+    }
+  }
+
+  /** Vlastní náhled přenosu: zmenší se na 1280×720 (JPEG) a hned uloží - bez tlačítka Uložit. */
+  async function uploadThumbnail(file: File) {
+    setThumbBusy(true);
+    try {
+      const jpeg = await liveThumbnailJpeg(file);
+      if (!jpeg) throw new Error(t('liveThumbUnreadable'));
+      const res = await fetch('/api/live/thumbnail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'image/jpeg', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: jpeg,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`);
+      setupWriteRef.current += 1;
+      setSetup((s) => (s && s.stream ? { ...s, stream: { ...s.stream, thumbnailUrl: body.thumbnailUrl ?? null } } : s));
+      setToast({ message: t('liveThumbSaved'), type: 'success' });
+    } catch (e) {
+      setToast({ message: (e as Error).message, type: 'error' });
+    } finally {
+      setThumbBusy(false);
+      if (thumbInputRef.current) thumbInputRef.current.value = '';
+    }
+  }
+
+  async function removeThumbnail() {
+    setThumbBusy(true);
+    try {
+      await api('/api/live/thumbnail', { method: 'DELETE' });
+      setupWriteRef.current += 1;
+      setSetup((s) => (s && s.stream ? { ...s, stream: { ...s.stream, thumbnailUrl: null } } : s));
+      setToast({ message: t('liveThumbRemoved'), type: 'success' });
+    } catch (e) {
+      setToast({ message: (e as Error).message, type: 'error' });
+    } finally {
+      setThumbBusy(false);
     }
   }
 
@@ -372,6 +425,43 @@ export default function LiveStudioPage() {
                 </button>
               </div>
             </form>
+
+            {/* Náhled přenosu: vlastní obrázek, jinak snímek z vysílání (jako na YouTube / Twitchi). */}
+            <div className="panel">
+              <PanelHeading icon="image" title={t('liveThumbHeading')} help={t('liveThumbHint')} />
+              <div className="live-thumb-row">
+                <div className="live-thumb-preview">
+                  {stream?.thumbnailUrl ? (
+                    <img src={stream.thumbnailUrl} alt="" decoding="async" />
+                  ) : (
+                    <span className="live-thumb-auto">
+                      <UiIcon name="broadcast" size={18} />
+                      {t('liveThumbAuto')}
+                    </span>
+                  )}
+                </div>
+                <div className="live-thumb-actions">
+                  <input
+                    ref={thumbInputRef}
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void uploadThumbnail(file);
+                    }}
+                  />
+                  <button type="button" className="live-small-btn" onClick={() => thumbInputRef.current?.click()} disabled={thumbBusy || !stream}>
+                    {thumbBusy ? t('liveThumbSaving') : stream?.thumbnailUrl ? t('liveThumbChange') : t('liveThumbUpload')}
+                  </button>
+                  {stream?.thumbnailUrl && (
+                    <button type="button" className="live-small-btn" onClick={removeThumbnail} disabled={thumbBusy}>
+                      {t('liveThumbRemove')}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
 
             <div className="panel">
               <PanelHeading icon="sliders" title={t('liveObsHeading')} />
@@ -564,7 +654,14 @@ export default function LiveStudioPage() {
             </div>
           </div>
 
-          <LiveChat room={channelRoom(userId)} canModerate className="live-side" popoutHref={`/live/${userId}/chat`} />
+          <LiveChat
+            room={channelRoom(userId)}
+            canModerate
+            className="live-side"
+            popoutHref={`/live/${userId}/chat`}
+            since={stream?.chatSince ?? null}
+            note={stream && !stream.live && stream.endedAt ? t('liveChatFreshOffline') : null}
+          />
         </div>
       )}
     </div>

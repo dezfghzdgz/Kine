@@ -93,6 +93,11 @@ export default function RootLayout({
       <head>
         {/* Uložený vzhled (motiv, sklo, světlo kolem videa) hned při načtení - bez přebliknutí. */}
         <script dangerouslySetInnerHTML={{ __html: APPEARANCE_BOOT_SCRIPT }} />
+        {/* Spojení s Cloudflare (přehrávač, video, náhledy) se naváže hned - video se pak
+            po kliknutí rozjede o kus dřív. */}
+        <link rel="preconnect" href="https://iframe.videodelivery.net" />
+        <link rel="preconnect" href="https://videodelivery.net" />
+        <link rel="preconnect" href="https://embed.cloudflarestream.com" />
       </head>
       <body>
         <LanguageProvider>

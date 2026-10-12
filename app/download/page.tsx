@@ -139,7 +139,7 @@ export default function DownloadPage() {
             </svg>
             <span>
               {t('downloadUnsigned')}
-              {/* Windows 11 Smart App Control: "Část této aplikace byla zablokována" - instalátor tam neprojde. */}
+              {/* Windows 11 Inteligentní řízení aplikací (Smart App Control): nepodepsaný instalátor zablokuje celý nebo jeho část. */}
               <span className="dl-note-sac">{t('downloadSmartAppControl')}</span>
             </span>
           </div>

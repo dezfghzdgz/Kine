@@ -26,6 +26,8 @@ type Status = {
   moderation?: { hidden: boolean };
   /** Podpory ve vysílání (tlačítko 💛): kanál je umí přijmout. */
   tips?: { enabled: boolean; feePercent: number };
+  /** Po vysílání: poslední zveřejněný záznam (kdo přišel pozdě, pustí si ho). */
+  lastRecording?: { id: string; title: string; thumbnailUrl: string | null } | null;
   profile: { id: string; username: string; display_name: string | null; avatar_url: string | null; verification_tier: string | null } | null;
   stream: {
     title: string;
@@ -35,6 +37,10 @@ type Status = {
     endedAt: string | null;
     playerUrl: string;
     videoUid: string | null;
+    /** Od kdy ukazovat chat - každé vysílání má svůj (lib/liveChat.ts). Starší server ho neposílá. */
+    chatSince?: string | null;
+    /** Vlastní náhled přenosu (studio / appka). */
+    thumbnailUrl?: string | null;
   } | null;
 };
 
@@ -158,6 +164,15 @@ export default function LivePage() {
 
   const stream = status.stream;
   const isOwner = viewerId === profile.id;
+  // Každé vysílání má svůj chat: během vysílání zprávy od jeho začátku, po konci nový chat.
+  const chatProps = {
+    room: channelRoom(profile.id),
+    canModerate: isOwner,
+    className: 'live-side',
+    popoutHref: `/live/${profile.id}/chat`,
+    since: stream?.chatSince ?? null,
+    note: !status.live && stream?.endedAt ? t('liveChatFreshOffline') : null,
+  };
 
   const channelRow = (
     <div className="video-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
@@ -208,7 +223,7 @@ export default function LivePage() {
           </div>
           {channelRow}
         </div>
-        <LiveChat room={channelRoom(profile.id)} canModerate={isOwner} className="live-side" popoutHref={`/live/${profile.id}/chat`} />
+        <LiveChat {...chatProps} />
       </div>
     );
   }
@@ -224,11 +239,20 @@ export default function LivePage() {
                 {t('liveOfflineEnded').replace('{time}', new Date(stream.endedAt).toLocaleString(DATE_LOCALES[lang]))}
               </p>
             )}
+            {status.lastRecording && (
+              <Link href={`/watch/${status.lastRecording.id}`} className="live-offline-recording">
+                {status.lastRecording.thumbnailUrl ? <img src={status.lastRecording.thumbnailUrl} alt="" loading="lazy" decoding="async" /> : null}
+                <span>
+                  <span className="live-offline-recording-label">{t('liveOfflineRecording')}</span>
+                  <span className="live-offline-recording-title">{status.lastRecording.title}</span>
+                </span>
+              </Link>
+            )}
             <Link href={`/channel/${profile.id}`}>{t('liveGoToChannel')} →</Link>
           </div>
           {channelRow}
         </div>
-        <LiveChat room={channelRoom(profile.id)} canModerate={isOwner} className="live-side" popoutHref={`/live/${profile.id}/chat`} />
+        <LiveChat {...chatProps} />
       </div>
     );
   }
@@ -278,7 +302,7 @@ export default function LivePage() {
           </div>
         )}
       </div>
-      <LiveChat room={channelRoom(profile.id)} canModerate={isOwner} className="live-side" popoutHref={`/live/${profile.id}/chat`} />
+      <LiveChat {...chatProps} />
     </div>
   );
 }
