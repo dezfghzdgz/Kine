@@ -419,7 +419,7 @@ export default function LiveStudioPage() {
               </div>
               {stream?.live && setup.moderation?.hidden && (
                 <div className="moderation-hold-note" role="status" style={{ marginTop: 12, marginBottom: 0 }}>
-                  <span aria-hidden="true">⚠️</span>
+                  <UiIcon name="warning" size={18} />
                   <span>{t('liveHeldOwner')}</span>
                 </div>
               )}

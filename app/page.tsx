@@ -62,31 +62,140 @@ function explainMissingSparks(pool: any[], rawSparkCount: number, disableShorts:
   return portraitTooLong > 0 || missingDimensions > 0 ? 'rule' : null;
 }
 
+/**
+ * Feed z minula - návrat na hlavní stránku (zpět z videa, klik na Domů) se
+ * ukáže hned, i s místem, kde divák byl, místo nového kola dotazů a kostry.
+ * Žije jen v paměti otevřené stránky (zavřením karty zmizí) a 10 minut.
+ */
+type FeedSnapshot = {
+  savedAt: number;
+  userId: string | null;
+  blocks: Block[];
+  progressMap: Record<string, number>;
+  hasMore: boolean;
+  sparkNotice: 'off' | 'rule' | null;
+  hiddenCount: number;
+  ctx: FeedContext;
+  offset: number;
+  seenIds: string[];
+  scrollY: number;
+};
+
+const SNAPSHOT_TTL_MS = 10 * 60 * 1000;
+/** Feed načtený před víc než půl hodinou se už neukazuje ani při častém vracení (nová videa). */
+const SNAPSHOT_MAX_AGE_MS = 30 * 60 * 1000;
+let feedSnapshot: FeedSnapshot | null = null;
+/** Kdy naposledy přišel krok zpět/vpřed v prohlížeči - jen tehdy se vrací i pozice na stránce. */
+let lastPopAt = 0;
+if (typeof window !== 'undefined') {
+  window.addEventListener('popstate', () => {
+    lastPopAt = Date.now();
+  });
+}
+
+function freshSnapshot(): FeedSnapshot | null {
+  if (!feedSnapshot) return null;
+  const now = Date.now();
+  const loadedAt = Date.parse(feedSnapshot.ctx.cutoff);
+  if (now - feedSnapshot.savedAt >= SNAPSHOT_TTL_MS || !Number.isFinite(loadedAt) || now - loadedAt >= SNAPSHOT_MAX_AGE_MS) return null;
+  return feedSnapshot;
+}
+
+/** Jedna dávka videí z databáze (od `from`, videa do `cutoff`). */
+function queryBatch(from: number, cutoff: string) {
+  return supabase
+    .from('videos')
+    .select(VIDEO_COLUMNS)
+    .eq('status', 'ready')
+    .eq('visibility', 'public')
+    .lte('created_at', cutoff)
+    .or(`scheduled_at.is.null,scheduled_at.lte.${cutoff},is_premiere.eq.true`)
+    .order('created_at', { ascending: false })
+    .range(from, from + FEED_BATCH - 1);
+}
+
+/** Kolik karet nahoře stáhne náhled hned a přednostně (to, co je vidět bez scrollování). */
+const PRIORITY_CARDS = 4;
+
 export default function HomePage() {
   const { t } = useLanguage();
-  const [blocks, setBlocks] = useState<Block[] | null>(null);
+  // Feed z minula (návrat na stránku) - jen při prvním vykreslení.
+  const restoredRef = useRef<FeedSnapshot | null | undefined>(undefined);
+  if (restoredRef.current === undefined) restoredRef.current = freshSnapshot();
+  const restored = restoredRef.current;
+  const [blocks, setBlocks] = useState<Block[] | null>(restored?.blocks ?? null);
   const [empty, setEmpty] = useState(false);
-  const [progressMap, setProgressMap] = useState<Record<string, number>>({});
-  const [hasMore, setHasMore] = useState(true);
+  const [progressMap, setProgressMap] = useState<Record<string, number>>(restored?.progressMap ?? {});
+  const [hasMore, setHasMore] = useState(restored?.hasMore ?? true);
   const [loadingMore, setLoadingMore] = useState(false);
   // Proč na stránce nejsou Sparks. Feed je do teď zahazoval potichu, takže
   // se nedalo poznat, jestli je chyba v appce, v nastavení nebo v datech.
-  const [sparkNotice, setSparkNotice] = useState<'off' | 'rule' | null>(null);
-  const [hiddenCount, setHiddenCount] = useState(0);
+  const [sparkNotice, setSparkNotice] = useState<'off' | 'rule' | null>(restored?.sparkNotice ?? null);
+  const [hiddenCount, setHiddenCount] = useState(restored?.hiddenCount ?? 0);
   // Dokud tohle tu nebylo, spadlý dotaz nikdo nezachytil: stav zůstal na
   // "ještě nemám data" a stránka ukazovala kostru donekonečna.
   const [loadFailed, setLoadFailed] = useState(false);
 
   // Tyhle věci se mezi dávkami nemění a nesmí spustit překreslení stránky,
   // proto sedí v ref a ne ve state.
-  const ctxRef = useRef<FeedContext | null>(null);
-  const offsetRef = useRef(0);
-  const seenIdsRef = useRef<Set<string>>(new Set());
+  const ctxRef = useRef<FeedContext | null>(restored?.ctx ?? null);
+  const offsetRef = useRef(restored?.offset ?? 0);
+  const seenIdsRef = useRef<Set<string>>(new Set(restored?.seenIds ?? []));
   const loadingRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  // Pro uložení feedu při odchodu ze stránky (úklid efektu vidí jen první vykreslení).
+  const latestRef = useRef({ blocks, progressMap, hasMore, sparkNotice, hiddenCount });
+  latestRef.current = { blocks, progressMap, hasMore, sparkNotice, hiddenCount };
+  const scrollYRef = useRef(0);
 
   useEffect(() => {
-    startLoad();
+    const onScroll = () => {
+      scrollYRef.current = window.scrollY;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+
+    if (restored) {
+      // Zpět z videa: i na stejné místo, kde divák byl.
+      if (Date.now() - lastPopAt < 1500 && restored.scrollY > 0) {
+        requestAnimationFrame(() => window.scrollTo(0, restored.scrollY));
+      }
+      // Mezitím se mohl změnit účet (odhlášení, jiný účet) - pak feed načíst znovu.
+      supabase.auth.getSession().then(({ data }) => {
+        if ((data.session?.user?.id ?? null) === restored.userId) return;
+        feedSnapshot = null;
+        ctxRef.current = null;
+        offsetRef.current = 0;
+        seenIdsRef.current = new Set();
+        setBlocks(null);
+        setProgressMap({});
+        setHasMore(true);
+        setSparkNotice(null);
+        setHiddenCount(0);
+        startLoad();
+      });
+    } else {
+      startLoad();
+    }
+
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      const st = latestRef.current;
+      if (!st.blocks || st.blocks.length === 0 || !ctxRef.current) return;
+      feedSnapshot = {
+        savedAt: Date.now(),
+        userId: ctxRef.current.userId,
+        blocks: st.blocks,
+        progressMap: st.progressMap,
+        hasMore: st.hasMore,
+        sparkNotice: st.sparkNotice,
+        hiddenCount: st.hiddenCount,
+        ctx: ctxRef.current,
+        offset: offsetRef.current,
+        seenIds: [...seenIdsRef.current],
+        scrollY: scrollYRef.current,
+      };
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** Spustí načtení feedu a pohlídá, že se případný pád projeví na obrazovce. */
@@ -118,6 +227,12 @@ export default function HomePage() {
   }, [hasMore, blocks]);
 
   async function loadInitial() {
+    // První dávka videí jde do databáze hned, souběžně s tím, co o divákovi
+    // víme (odběry, historie...) - dřív čekala, až dorazí všechno ostatní.
+    const cutoff = new Date().toISOString();
+    // Pozor: dotaz Supabase se odešle až při "await"/then() - bez then() tady by
+    // první dávka čekala na profil a historii a souběh by byl jen naoko.
+    const firstBatch = queryBatch(0, cutoff).then((res) => res);
     const { data: authData } = await supabase.auth.getUser();
     const user = authData.user ?? null;
 
@@ -181,10 +296,10 @@ export default function HomePage() {
       watchedIds,
       topCategories,
       topHashtags,
-      cutoff: new Date().toISOString(),
+      cutoff,
     };
 
-    await fetchBatch(true);
+    await fetchBatch(true, firstBatch);
   }
 
   /**
@@ -194,7 +309,7 @@ export default function HomePage() {
    * vyprázdnit celou - v tom případě appka rovnou sáhne pro další, ať
    * scrollování nekončí uprostřed.
    */
-  async function fetchBatch(isFirst: boolean) {
+  async function fetchBatch(isFirst: boolean, prefetched?: PromiseLike<Awaited<ReturnType<typeof queryBatch>>>) {
     const ctx = ctxRef.current;
     if (!ctx || loadingRef.current) return;
     loadingRef.current = true;
@@ -202,18 +317,13 @@ export default function HomePage() {
     try {
       let emptyBatches = 0;
       let hiddenSoFar = 0;
+      let early = prefetched && offsetRef.current === 0 ? prefetched : null;
 
       while (emptyBatches < MAX_EMPTY_BATCHES) {
         const from = offsetRef.current;
-        const { data, error } = await supabase
-          .from('videos')
-          .select(VIDEO_COLUMNS)
-          .eq('status', 'ready')
-          .eq('visibility', 'public')
-          .lte('created_at', ctx.cutoff)
-          .or(`scheduled_at.is.null,scheduled_at.lte.${ctx.cutoff},is_premiere.eq.true`)
-          .order('created_at', { ascending: false })
-          .range(from, from + FEED_BATCH - 1);
+        // První dávka už mohla odejít dřív (loadInitial) - jinak teď.
+        const { data, error } = await (early ?? queryBatch(from, ctx.cutoff));
+        early = null;
 
         // Chyba se tu dřív zahazovala a pokračovalo se s prázdným polem.
         // Supabase u spadlého spojení nevyhodí výjimku, jen vrátí data:
@@ -371,6 +481,7 @@ export default function HomePage() {
 
     await clearHiddenContent(ctx.userId);
 
+    feedSnapshot = null;
     offsetRef.current = 0;
     seenIdsRef.current = new Set();
     setHiddenCount(0);
@@ -465,9 +576,10 @@ export default function HomePage() {
 
       {blocks.map((block, i) => (
         <VideoBlockRow key={i} type={block.type} style={{ marginBottom: 24 }}>
-          {block.items.map((video: any) => (
+          {block.items.map((video: any, j: number) => (
             <VideoCard
               key={video.id}
+              priority={i === 0 && j < PRIORITY_CARDS}
               video={video}
               href={block.type === 'sparks' ? `/sparks?start=${video.id}` : `/watch/${video.id}`}
               isSparks={block.type === 'sparks'}

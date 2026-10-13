@@ -16,13 +16,30 @@ export const BADGE_ICONS: Record<BadgeId, UiIconName> = {
   subscribers: 'users',
   sparks: 'bolt',
   streamer: 'broadcast',
+  likes: 'thumbUp',
+  hit: 'trophy',
+  streamHours: 'record',
+  posts: 'pencil',
+  comments: 'chat',
+  collabs: 'link',
 };
 
-/** Barva stupně: bronz, stříbro, zlato, platina, diamant; Průkopník a Streamer mají vlastní. */
+/**
+ * Barva stupně: bronz, stříbro, zlato, platina, diamant, mistr, legenda,
+ * mýtus (od diamantu se lesknou, legenda a mýtus mají živý přechod);
+ * Průkopník a Streamer mají vlastní.
+ */
 export function badgeTierClass(b: Pick<Badge, 'id' | 'level'>): string {
   if (b.id === 'early') return 'tier-pioneer';
   if (b.id === 'streamer') return 'tier-live';
-  return `tier-${Math.max(0, Math.min(b.level, 4))}`;
+  return `tier-${Math.max(0, Math.min(Number.isFinite(b.level) ? b.level : 0, 7))}`;
+}
+
+const TIER_NAME_KEYS: DictKey[] = ['badgeTier0', 'badgeTier1', 'badgeTier2', 'badgeTier3', 'badgeTier4', 'badgeTier5', 'badgeTier6', 'badgeTier7'];
+
+/** Název stupně ("Zlato") - pro sbírku. */
+export function badgeTierName(level: number, t: (key: DictKey) => string): string {
+  return t(TIER_NAME_KEYS[Math.max(0, Math.min(level, TIER_NAME_KEYS.length - 1))]);
 }
 
 type T = (key: DictKey) => string;
@@ -61,7 +78,19 @@ export function badgeTexts(t: T, lang: Lang) {
       case 'subscribers':
         return fill('badgeSubscribers', value);
       case 'sparks':
-        return fill('badgeSparks', value);
+        return value === 1 ? t('badgeFirstSpark') : fill('badgeSparks', value);
+      case 'likes':
+        return fill('badgeLikes', value);
+      case 'hit':
+        return fill('badgeHit', value);
+      case 'streamHours':
+        return fill('badgeStreamHours', value);
+      case 'posts':
+        return value === 1 ? t('badgeFirstPost') : fill('badgePosts', value);
+      case 'comments':
+        return fill('badgeComments', value);
+      case 'collabs':
+        return value === 1 ? t('badgeFirstCollab') : fill('badgeCollabs', value);
     }
   };
 
@@ -81,6 +110,18 @@ export function badgeTexts(t: T, lang: Lang) {
         return fill('badgeSubscribersTip', value);
       case 'sparks':
         return fill('badgeSparksTip', value);
+      case 'likes':
+        return fill('badgeLikesTip', value);
+      case 'hit':
+        return fill('badgeHitTip', value);
+      case 'streamHours':
+        return fill('badgeStreamHoursTip', value);
+      case 'posts':
+        return fill('badgePostsTip', value);
+      case 'comments':
+        return fill('badgeCommentsTip', value);
+      case 'collabs':
+        return fill('badgeCollabsTip', value);
     }
   };
 
@@ -101,6 +142,18 @@ export function badgeTexts(t: T, lang: Lang) {
         return t('badgeSeriesSubscribers');
       case 'sparks':
         return 'Sparks';
+      case 'likes':
+        return t('badgeSeriesLikes');
+      case 'hit':
+        return t('badgeSeriesHit');
+      case 'streamHours':
+        return t('badgeSeriesStreamHours');
+      case 'posts':
+        return t('badgeSeriesPosts');
+      case 'comments':
+        return t('badgeSeriesComments');
+      case 'collabs':
+        return t('badgeSeriesCollabs');
     }
   };
 
@@ -112,7 +165,7 @@ export function badgeTexts(t: T, lang: Lang) {
  * kontrola (máš 5 odznaků). Jiný text = null (vypíše se tak, jak je).
  */
 export function badgeNotificationText(message: string, t: T, lang: Lang): string | null {
-  const one = /^badge:([a-z]+):(\d+)$/.exec(message);
+  const one = /^badge:([a-zA-Z]+):(\d+)$/.exec(message);
   if (one) {
     const id = one[1] as BadgeId;
     if (!(id in BADGE_ICONS)) return null;
@@ -120,5 +173,8 @@ export function badgeNotificationText(message: string, t: T, lang: Lang): string
   }
   const all = /^badges:(\d+)$/.exec(message);
   if (all) return t('badgesNotifFirst').replace('{n}', all[1]);
+  // Víc nových odznaků naráz (třeba po přidání nových řad) - jedno oznámení, ne pět.
+  const many = /^badges-new:(\d+)$/.exec(message);
+  if (many) return t('badgeNotifMany').replace('{n}', many[1]);
   return null;
 }

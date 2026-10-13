@@ -17,6 +17,7 @@ import { customerCodeFromUrl } from '@/lib/streamSource';
 import { useMusicCommands } from '@/lib/musicPlayer';
 import { isTvMode } from '@/lib/tvMode';
 import { SPARK_WARM_FALLBACK_MS, sparkSlot, type SparkEngine } from '@/lib/sparksPlayback';
+import { playbackMode } from '@/lib/netQuality';
 import ProfileImage from '@/components/ProfileImage';
 
 const SPARK_FIELDS =
@@ -78,7 +79,8 @@ function SparksPageInner() {
     } catch {
       // bez úložiště se spojí, až přijde seznam
     }
-    setSaveData(!!(navigator as any).connection?.saveData);
+    // Lehký režim (šetření dat, pomalé připojení - lib/netQuality.ts): méně přednačítání, menší náhledy.
+    setSaveData(playbackMode() === 'light');
     (async () => {
       const { data } = await supabase.auth.getSession();
       const uid = data.session?.user?.id ?? null;
@@ -245,8 +247,20 @@ function SparksPageInner() {
     return () => window.removeEventListener('keydown', onKey);
   }, [videos.length, activeIndex]);
 
+  // Režim se mění podle toho, jak rychle se videa rozjíždějí (a přepínačem v Nastavení).
+  useEffect(() => {
+    const update = () => setSaveData(playbackMode() === 'light');
+    window.addEventListener('kine-net-mode', update);
+    return () => window.removeEventListener('kine-net-mode', update);
+  }, []);
+
   function markWarm() {
-    setWarm(true);
+    // Na rozjetém videu se změřilo připojení - podle toho přednačítat víc, nebo míň.
+    const light = playbackMode() === 'light';
+    setSaveData(light);
+    // Na pomalém připojení až chvíli po rozjezdu: video, které hraje, si napřed nabere zásobu.
+    if (light) setTimeout(() => setWarm(true), 2000);
+    else setWarm(true);
   }
 
   if (loading) {
@@ -310,6 +324,7 @@ function SparksPageInner() {
               video={video}
               active={i === activeIndex}
               {...sparkSlot(i, activeIndex, { engine, warm, saveData })}
+              light={saveData}
               engine={engine}
               viewer={viewer}
               commentsOpen={commentsOpen}

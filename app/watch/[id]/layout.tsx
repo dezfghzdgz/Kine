@@ -119,10 +119,14 @@ export default async function WatchLayout({
   // Spojení se serverem Cloudflare, odkud přehrávač stahuje video (customer-<kód>…),
   // se naváže hned při načtení stránky - ne až když si o seznam kvalit řekne přehrávač.
   const streamCode = video ? customerCodeFromUrl(video.thumbnail_url) : null;
+  // Seznam kvalit (HLS manifest) veřejného videa si prohlížeč stáhne už s HTML stránky -
+  // přehrávač (hls.js) ho pak má hned, ne až po načtení JavaScriptu a údajů o videu.
+  const manifest = video && streamCode && video.cloudflare_video_id ? manifestUrl(video.cloudflare_video_id, streamCode) : null;
 
   return (
     <>
       {streamCode && <link rel="preconnect" href={`https://customer-${streamCode}.cloudflarestream.com`} crossOrigin="anonymous" />}
+      {manifest && <link rel="preload" href={manifest} as="fetch" crossOrigin="anonymous" />}
       {jsonLd && (
         <script
           type="application/ld+json"

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isMissingTable, isStaffUser, userFromRequest } from '@/lib/apiUser';
-import { liveViewerCount, publicLive, syncLiveStreams, type LiveStreamRow } from '@/lib/liveStream';
+import { liveViewerCount, publicLive, syncLiveStreamsForViewers, type LiveStreamRow } from '@/lib/liveStream';
 import { arrangeLiveNow, type LiveNowProfile, type LiveRestriction } from '@/lib/liveNow';
 import { liveHiddenNow } from '@/lib/nudityRules';
 import { runInBackground } from '@/lib/background';
@@ -22,7 +22,7 @@ const PROFILE_FIELDS = 'id, username, display_name, avatar_url, verification_tie
  * "Živě", i když stránka přenosu fungovala. Teď zvlášť a se zálohou bez
  * sloupců o blokaci (pak se bere, že kanál zablokovaný není).
  */
-async function loadProfiles(ids: string[]): Promise<Map<string, LiveNowProfile>> {
+async function loadProfiles(ids: string[]): Promise<Map<string, LiveNowProfile> | null> {
   const map = new Map<string, LiveNowProfile>();
   if (ids.length === 0) return map;
   const full = await supabaseServer.from('profiles').select(`${PROFILE_FIELDS}, is_banned, is_shadow_banned`).in('id', ids);
@@ -30,7 +30,11 @@ async function loadProfiles(ids: string[]): Promise<Map<string, LiveNowProfile>>
   if (full.error) {
     console.error('Kine: /api/live/now profily (se sloupci o blokaci)', full.error.message);
     const basic = await supabaseServer.from('profiles').select(PROFILE_FIELDS).in('id', ids);
-    if (basic.error) console.error('Kine: /api/live/now profily', basic.error.message);
+    if (basic.error) {
+      // Bez profilů nejde poznat, kdo je zablokovaný - radši žádná odpověď než prázdná řada.
+      console.error('Kine: /api/live/now profily', basic.error.message);
+      return null;
+    }
     rows = (basic.data as LiveNowProfile[] | null) ?? null;
   }
   for (const p of rows ?? []) map.set(p.id, p);
@@ -70,7 +74,7 @@ export async function GET(req: NextRequest) {
   const withViewers = params.get('viewers') === '1';
   const limitRaw = Number(params.get('limit'));
   const limit = Number.isFinite(limitRaw) && limitRaw >= 1 ? Math.min(60, Math.floor(limitRaw)) : 24;
-  await syncLiveStreams();
+  await syncLiveStreamsForViewers();
   const { data, error } = await supabaseServer
     .from('live_streams')
     .select('*')
@@ -80,8 +84,10 @@ export async function GET(req: NextRequest) {
   const noStore = { headers: { 'Cache-Control': 'no-store' } };
   if (isMissingTable(error)) return NextResponse.json(countOnly ? { enabled: false, count: 0 } : { enabled: false, streams: [] }, noStore);
   if (error) {
+    // Výpadek databáze: chyba, ne prázdný seznam - stránka si nechá ten poslední
+    // (dřív odpověď "nikdo nevysílá" a přenos na chvíli zmizel z řady Živě).
     console.error('Kine: /api/live/now', error.message);
-    return NextResponse.json(countOnly ? { enabled: true, count: 0 } : { enabled: true, streams: [] }, noStore);
+    return NextResponse.json({ error: 'Seznam přenosů se teď nepodařilo načíst.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
   }
 
   // Snímky z přenosů pro automatickou kontrolu obsahu (lib/nudityScan.ts) - na pozadí, nejvýš jednou za chvíli.
@@ -90,7 +96,7 @@ export async function GET(req: NextRequest) {
   const viewer = req.headers.get('authorization') ? await userFromRequest(req) : null;
   const live = (data ?? []) as LiveStreamRow[];
   const ids = live.map((r) => r.owner_id);
-  const [profiles, followed] = await Promise.all([
+  const [loadedProfiles, followed] = await Promise.all([
     loadProfiles(ids),
     (async () => {
       const set = new Set<string>();
@@ -100,6 +106,10 @@ export async function GET(req: NextRequest) {
       return set;
     })(),
   ]);
+  if (!loadedProfiles) {
+    return NextResponse.json({ error: 'Seznam přenosů se teď nepodařilo načíst.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+  }
+  const profiles = loadedProfiles;
   // Moderátoři a správci vidí v řadě i přenosy, které ostatní nevidí - s popiskem proč. Role se
   // zjišťuje jen když je co skrývat (seznam se obnovuje každých 20 s - zbytečný dotaz navíc).
   const somethingHidden =
@@ -120,7 +130,7 @@ export async function GET(req: NextRequest) {
   if (countOnly) {
     return NextResponse.json(
       { enabled: true, count: publicCount },
-      { headers: { 'Cache-Control': viewer ? 'private, no-store' : 'public, s-maxage=15, stale-while-revalidate=30' } }
+      { headers: { 'Cache-Control': viewer ? 'private, no-store' : 'public, s-maxage=10, stale-while-revalidate=15' } }
     );
   }
   const arranged = all.slice(0, limit);

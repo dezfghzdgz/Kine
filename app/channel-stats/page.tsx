@@ -6,8 +6,22 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { fetchAllRows } from '@/lib/loadAll';
-import StatChartModal from '@/components/StatChartModal';
-import RatingChartModal from '@/components/RatingChartModal';
+import dynamic from 'next/dynamic';
+import UiIcon, { type UiIconName } from '@/components/UiIcon';
+import { ThumbsDownIcon, ThumbsUpIcon } from '@/components/ReactionIcons';
+
+// Grafy (knihovna recharts, ~100 kB) se stáhnou až po kliknutí na dlaždici - stránka
+// statistik se tak otevře o dost rychleji (dřív se stahovaly hned s ní).
+const StatChartModal = dynamic(() => import('@/components/StatChartModal'), { ssr: false });
+const RatingChartModal = dynamic(() => import('@/components/RatingChartModal'), { ssr: false });
+
+/** Kolik událostí (odběrů, zhlédnutí...) přibylo za posledních `days` dní. */
+function recentCount(dates: readonly Date[], days = 28, now = Date.now()): number {
+  const since = now - days * 24 * 3600 * 1000;
+  let n = 0;
+  for (const d of dates) if (d.getTime() >= since) n += 1;
+  return n;
+}
 import StarDistribution from '@/components/StarDistribution';
 import StatsBarList, { type BarItem } from '@/components/StatsBarList';
 import StatsHeatmap from '@/components/StatsHeatmap';
@@ -16,7 +30,7 @@ import { viewSourceLabelKey } from '@/lib/viewSource';
 import {
   effectiveCreatorPercent, nextTierFor, PARTNER_STATUS_LABELS, type PartnerStatus,
 } from '@/lib/revenueShare';
-import { computeTrustRatingClient, recordTrustRatingSnapshot, getTotalReactionCount, RATING_UNLOCK_THRESHOLD } from '@/lib/trustRatingClient';
+import { channelTrust, recordTrustRatingSnapshot, trustScoreFrom, RATING_UNLOCK_THRESHOLD } from '@/lib/trustRatingClient';
 import FieldHint from '@/components/FieldHint';
 import StatsRetention from '@/components/StatsRetention';
 
@@ -148,6 +162,34 @@ export default function ChannelStatsPage() {
       return;
     }
     setUserId(authData.user.id);
+    const me = authData.user.id;
+
+    // RYCHLOST: dřív šlo ~12 dotazů za sebou (videa -> reakce -> zhlédnutí -> komentáře ->
+    // souhrny -> odběratelé -> profil -> rating -> ...) - na mobilních datech vteřiny čekání.
+    // Teď se hned rozjede všechno, co na sobě nezávisí, a na videích závisí jen jedno kolo.
+    // Po dávkách - jeden dotaz vrátí nejvíc 1000 řádků a graf růstu by
+    // kanálu nad tisíc odběratelů lhal.
+    const subsPromise = fetchAllRows((from, to) =>
+      supabase.from('subscriptions').select('created_at').eq('channel_id', me).order('created_at', { ascending: true }).range(from, to)
+    );
+    // Úroveň ověření a datum založení jsou veřejné, podíl z výdělků a
+    // pozastavení výplat ne - ty vrací funkce my_account, a to jen
+    // majiteli účtu.
+    const profilePromise = Promise.all([
+      supabase.from('profiles').select('verification_tier, created_at').eq('id', me).single(),
+      supabase.rpc('my_account'),
+    ]);
+    // then() hned: dotaz Supabase se jinak odešle až při await (o několik kol později).
+    const requestPromise = supabase
+      .from('verification_requests')
+      .select('status')
+      .eq('user_id', me)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then((res) => res);
+    // Neošetřené odmítnutí by jinak spadlo do konzole, než na něj dojde řada.
+    subsPromise.catch(() => {});
 
     const [{ data: ownVideos }, { data: collabRows }] = await Promise.all([
       supabase
@@ -179,14 +221,37 @@ export default function ChannelStatsPage() {
     let dislikeTimestamps: Date[] = [];
     let viewTimestamps: Date[] = [];
     let avgRating: number | null = null;
+    // Reakce na vlastních videích (bez spolupráce) - rating se ukáže hned, přesný přepočet doběhne potom.
+    let ownReactionTotal = 0;
+    let ownReactionAvg: number | null = null;
 
     if (videoIds.length > 0) {
       // Jeden dotaz na reakce pro celou stránku - dřív se ta samá tabulka
-      // tahala dvakrát za sebou.
-      const { data: reactions } = await supabase
-        .from('video_reactions')
-        .select('video_id, reaction, score, created_at')
-        .in('video_id', videoIds);
+      // tahala dvakrát za sebou. Zhlédnutí, komentáře i souhrny za video jdou
+      // souběžně s ním (dřív jedno po druhém).
+      const [{ data: reactions }, viewsLog, { count: commentCount }, [{ data: perVideo, error: perVideoError }, { data: viewerCount }]] = await Promise.all([
+        supabase.from('video_reactions').select('video_id, reaction, score, created_at').in('video_id', videoIds),
+        // Zdroj zhlédnutí přidává samostatná migrace. Když ještě neproběhla,
+        // dotaz se sloupcem "source" skončí chybou - v tom případě si appka
+        // vezme aspoň časy zhlédnutí, ať se kvůli tomu nerozbije celá stránka.
+        loadAllViews(videoIds),
+        supabase.from('comments').select('*', { count: 'exact', head: true }).in('video_id', videoIds),
+        // Doba sledování, dokoukanost a počty komentářů u jednotlivých videí.
+        //
+        // Nejde je spočítat přímo z prohlížeče: rozkoukanost videí je schválně
+        // soukromá (každý vidí jen svoje řádky), takže by tvůrci vycházely
+        // samé nuly. Sečte je proto funkce v databázi, která vrací jen souhrny
+        // za video - nikdy ne to, kdo co sledoval a kam se dostal.
+        Promise.all([
+          supabase.rpc('creator_video_stats', { video_ids: videoIds }),
+          supabase.rpc('creator_unique_viewers', { video_ids: videoIds }),
+        ]),
+      ]);
+
+      const ownIds = new Set((ownVideos ?? []).map((v: any) => v.id));
+      const ownReactions = (reactions ?? []).filter((r: any) => ownIds.has(r.video_id));
+      ownReactionTotal = ownReactions.length;
+      ownReactionAvg = ownReactions.length > 0 ? ownReactions.reduce((sum: number, r: any) => sum + (r.score ?? 3), 0) / ownReactions.length : null;
 
       totalLikes = (reactions ?? []).filter((r) => r.reaction === 'like').length;
       totalDislikes = (reactions ?? []).filter((r) => r.reaction === 'dislike').length;
@@ -196,11 +261,6 @@ export default function ChannelStatsPage() {
       if (reactions && reactions.length > 0) {
         avgRating = reactions.reduce((sum, r) => sum + (r.score ?? 3), 0) / reactions.length;
       }
-
-      // Zdroj zhlédnutí přidává samostatná migrace. Když ještě neproběhla,
-      // dotaz se sloupcem "source" skončí chybou - v tom případě si appka
-      // vezme aspoň časy zhlédnutí, ať se kvůli tomu nerozbije celá stránka.
-      const viewsLog = await loadAllViews(videoIds);
 
       viewTimestamps = viewsLog.map((v) => new Date(v.viewed_at));
 
@@ -227,22 +287,7 @@ export default function ChannelStatsPage() {
       });
       setWatchHeatmap(heatmap);
 
-      const { count: commentCount } = await supabase
-        .from('comments')
-        .select('*', { count: 'exact', head: true })
-        .in('video_id', videoIds);
       setTotalComments(commentCount ?? 0);
-
-      // Doba sledování, dokoukanost a počty komentářů u jednotlivých videí.
-      //
-      // Nejde je spočítat přímo z prohlížeče: rozkoukanost videí je schválně
-      // soukromá (každý vidí jen svoje řádky), takže by tvůrci vycházely
-      // samé nuly. Sečte je proto funkce v databázi, která vrací jen souhrny
-      // za video - nikdy ne to, kdo co sledoval a kam se dostal.
-      const [{ data: perVideo, error: perVideoError }, { data: viewerCount }] = await Promise.all([
-        supabase.rpc('creator_video_stats', { video_ids: videoIds }),
-        supabase.rpc('creator_unique_viewers', { video_ids: videoIds }),
-      ]);
 
       // Funkce přidává samostatná migrace. Dokud neproběhne, zbytek stránky
       // musí fungovat dál - jen se místo čísel ukáže pomlčka.
@@ -323,19 +368,8 @@ export default function ChannelStatsPage() {
       setRatingTotals(totals);
     }
 
-    // Po dávkách - jeden dotaz vrátí nejvíc 1000 řádků a graf růstu by
-    // kanálu nad tisíc odběratelů lhal.
-    const subs = await fetchAllRows((from, to) =>
-      supabase.from('subscriptions').select('created_at').eq('channel_id', authData.user!.id).order('created_at', { ascending: true }).range(from, to)
-    );
-
-    // Úroveň ověření a datum založení jsou veřejné, podíl z výdělků a
-    // pozastavení výplat ne - ty vrací funkce my_account, a to jen
-    // majiteli účtu.
-    const [{ data: publicPart }, { data: accountRows }] = await Promise.all([
-      supabase.from('profiles').select('verification_tier, created_at').eq('id', authData.user.id).single(),
-      supabase.rpc('my_account'),
-    ]);
+    const subs = await subsPromise.catch(() => [] as { created_at: string }[]);
+    const [{ data: publicPart }, { data: accountRows }] = await profilePromise;
 
     const account: any = Array.isArray(accountRows) ? accountRows[0] : accountRows;
     const profile: any = { ...(publicPart ?? {}), ...(account ?? {}) };
@@ -349,28 +383,7 @@ export default function ChannelStatsPage() {
       manual: !!profile?.revenue_share_manual,
     });
 
-    if (profile?.created_at) {
-      const score = await computeTrustRatingClient(authData.user.id, profile.created_at);
-      setTrustRating(score);
-      await recordTrustRatingSnapshot(authData.user.id, score);
-      setReactionCount(await getTotalReactionCount(authData.user.id));
-
-      const { data: history } = await supabase
-        .from('trust_rating_snapshots')
-        .select('recorded_date, score')
-        .eq('profile_id', authData.user.id)
-        .order('recorded_date', { ascending: true })
-        .limit(90);
-      setTrustHistory((history ?? []).map((h) => ({ date: h.recorded_date, score: h.score })));
-    }
-
-    const { data: lastRequest } = await supabase
-      .from('verification_requests')
-      .select('status')
-      .eq('user_id', authData.user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data: lastRequest } = await requestPromise;
     setRequestStatus(lastRequest?.status ?? null);
 
     setTimestamps({
@@ -391,7 +404,28 @@ export default function ChannelStatsPage() {
     });
     setTopVideo(sortedByViews[0] ?? null);
     setAllVideos(videos ?? []);
+    setReactionCount(ownReactionTotal);
+    if (profile?.created_at) setTrustRating(trustScoreFrom(profile.created_at, ownReactionAvg));
     setChecking(false);
+
+    // Rating důvěryhodnosti až po zobrazení stránky - čísla nahoře na něj nečekají.
+    if (profile?.created_at) {
+      try {
+        const { score, total } = await channelTrust(me, profile.created_at);
+        setTrustRating(score);
+        setReactionCount(total);
+        await recordTrustRatingSnapshot(me, score);
+        const { data: history } = await supabase
+          .from('trust_rating_snapshots')
+          .select('recorded_date, score')
+          .eq('profile_id', me)
+          .order('recorded_date', { ascending: true })
+          .limit(90);
+        setTrustHistory((history ?? []).map((h) => ({ date: h.recorded_date, score: h.score })));
+      } catch {
+        // Rating se nespočítal (výpadek sítě) - zbytek statistik zůstává.
+      }
+    }
   }
 
   async function requestVerification() {
@@ -415,12 +449,19 @@ export default function ChannelStatsPage() {
     );
   }
 
-  const cards: { key: ChartKey; label: string; value: string | number; icon: string }[] = [
-    { key: 'subscribers', label: t('subscribersLabel'), value: stats.subscriberCount, icon: '👥' },
-    { key: 'views', label: t('totalViewsLabel'), value: stats.totalViews, icon: '👁' },
-    { key: 'videos', label: t('videoCountLabel'), value: stats.videoCount, icon: '🎬' },
-    { key: 'likes', label: t('likesLabel'), value: stats.totalLikes, icon: '👍' },
-    { key: 'dislikes', label: t('dislikesLabel'), value: stats.totalDislikes, icon: '👎' },
+  const fmt = (n: number) => {
+    try {
+      return new Intl.NumberFormat(DATE_LOCALES[lang], n >= 100_000 ? { notation: 'compact', maximumFractionDigits: 1 } : {}).format(n);
+    } catch {
+      return String(n);
+    }
+  };
+  const cards: { key: ChartKey; label: string; value: number; icon: UiIconName | 'thumbUp' | 'thumbDown'; tone: string }[] = [
+    { key: 'subscribers', label: t('subscribersLabel'), value: stats.subscriberCount, icon: 'users', tone: '#b07cf5' },
+    { key: 'views', label: t('totalViewsLabel'), value: stats.totalViews, icon: 'eye', tone: '#4d9fff' },
+    { key: 'videos', label: t('videoCountLabel'), value: stats.videoCount, icon: 'film', tone: '#f5a623' },
+    { key: 'likes', label: t('likesLabel'), value: stats.totalLikes, icon: 'thumbUp', tone: '#4fbf87' },
+    { key: 'dislikes', label: t('dislikesLabel'), value: stats.totalDislikes, icon: 'thumbDown', tone: '#e0453f' },
   ];
 
   const chartTitles: Record<ChartKey, string> = {
@@ -437,33 +478,24 @@ export default function ChannelStatsPage() {
     <div style={{ maxWidth: 980 }}>
       <p className="section-title">{t('channelStatsTitle')}</p>
 
-      <div
-        style={{
-          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-          gap: 12, marginBottom: 20,
-        }}
-      >
+      {/* Hlavní čísla: ikona, číslo, za posledních 28 dní a klik = graf v čase. */}
+      <div className="stats-kpis">
         {cards.map((card) => {
-          const valueStr = String(card.value);
-          const valueFontSize = valueStr.length > 9 ? 14 : valueStr.length > 6 ? 17 : 22;
-
+          const recent = recentCount(timestamps[card.key]);
           return (
-            <div
-              key={card.key}
-              onClick={() => setOpenChart(card.key)}
-              className="panel"
-              style={{
-                cursor: 'pointer', textAlign: 'center', padding: '18px 12px',
-                display: 'flex', flexDirection: 'column', justifyContent: 'center',
-                minHeight: 108, marginTop: 0,
-              }}
-            >
-              <div style={{ fontSize: 22, marginBottom: 6 }}>{card.icon}</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {card.value}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 4 }}>{card.label} 📈</div>
-            </div>
+            <button key={card.key} type="button" className="panel stats-kpi" onClick={() => setOpenChart(card.key)} title={chartTitles[card.key]}>
+              <span className="stats-kpi-icon" style={{ color: card.tone, background: `color-mix(in srgb, ${card.tone} 16%, transparent)` }} aria-hidden="true">
+                {card.icon === 'thumbUp' ? <ThumbsUpIcon size={18} /> : card.icon === 'thumbDown' ? <ThumbsDownIcon size={18} /> : <UiIcon name={card.icon} size={18} />}
+              </span>
+              <span className="stats-kpi-value">{fmt(card.value)}</span>
+              <span className="stats-kpi-label">{card.label}</span>
+              <span className={`stats-kpi-trend${recent > 0 ? ' up' : ''}`}>
+                {recent > 0 ? `+${fmt(recent)}` : '0'} · {t('statsLast28Days')}
+              </span>
+              <span className="stats-kpi-chart" aria-hidden="true">
+                <UiIcon name="chart" size={14} />
+              </span>
+            </button>
           );
         })}
       </div>
@@ -742,8 +774,9 @@ export default function ChannelStatsPage() {
 
       <div className="panel">
         {payoutsSuspended && (
-          <p style={{ color: '#ff6b6b', fontSize: 12.5, marginBottom: 10 }}>
-            ⚠️ {t('payoutsSuspendedNote')}
+          <p style={{ color: '#ff6b6b', fontSize: 12.5, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 7 }}>
+            <UiIcon name="warning" size={15} />
+            {t('payoutsSuspendedNote')}
           </p>
         )}
         <div className="tab-row" style={{ marginBottom: 12 }}>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isMissingTable, isStaffUser, userFromRequest } from '@/lib/apiUser';
-import { publicLive, syncLiveStreams, type LiveStreamRow } from '@/lib/liveStream';
+import { publicLive, syncLiveStreamsForViewers, type LiveStreamRow } from '@/lib/liveStream';
 import type { LiveRestriction } from '@/lib/liveNow';
 import { liveHiddenNow } from '@/lib/nudityRules';
 import { runInBackground } from '@/lib/background';
@@ -60,13 +60,15 @@ export async function GET(req: NextRequest) {
   const channel = req.nextUrl.searchParams.get('channel') ?? '';
   if (!UUID.test(channel)) return NextResponse.json({ error: 'Neplatný kanál.' }, { status: 400 });
 
-  await syncLiveStreams();
+  await syncLiveStreamsForViewers();
   const [{ data: row, error }, { data: profile }] = await Promise.all([
     supabaseServer.from('live_streams').select('*').eq('owner_id', channel).maybeSingle(),
     supabaseServer.from('profiles').select('id, username, display_name, avatar_url, verification_tier, is_banned, is_shadow_banned').eq('id', channel).maybeSingle(),
   ]);
   const { is_banned: banned, is_shadow_banned: shadowBanned, ...publicProfile } = (profile ?? {}) as Record<string, any>;
   if (isMissingTable(error)) return NextResponse.json({ enabled: false, live: false, profile: profile ? publicProfile : null });
+  // Výpadek databáze: chyba, ne "nevysílá" - stránka přenosu si nechá poslední stav.
+  if (error) return NextResponse.json({ error: 'Stav přenosu se teď nepodařilo načíst.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
   if (!profile) return NextResponse.json({ error: 'Kanál nenalezen.' }, { status: 404 });
   // Kdo se ptá a jestli je z týmu Kine - zjišťuje se jen když je to potřeba
   // (stránka se ptá často, ověření přihlášení stojí dotaz na Supabase).

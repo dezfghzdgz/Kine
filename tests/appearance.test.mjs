@@ -76,11 +76,24 @@ test('atributy pro <html>: sklo jen když je zapnuté, síla jako --glass-k', ()
     'data-contrast': null,
     'data-previews': null,
     'data-anim': null,
+    'data-pattern': null,
   });
   assert.equal(glass.glassK, '0.8');
   const classic = appearanceAttributes('dark', DEFAULT_APPEARANCE);
   assert.equal(classic.attrs['data-look'], null);
   assert.equal(classic.attrs['data-ambient'], '1');
+});
+
+test('vzor přes pozadí: známé vzory, síla 0-100 a velikost 50-200 %, atribut a proměnné', () => {
+  const a = sanitizeAppearance({ pattern: 'dots', patternStrength: 140, patternScale: 20 });
+  assert.deepEqual([a.pattern, a.patternStrength, a.patternScale], ['dots', 100, 50]);
+  const b = sanitizeAppearance({ pattern: 'leopard', patternStrength: 'x', patternScale: null });
+  assert.deepEqual([b.pattern, b.patternStrength, b.patternScale], ['none', DEFAULT_APPEARANCE.patternStrength, DEFAULT_APPEARANCE.patternScale]);
+  const attrs = appearanceAttributes('dark', { ...DEFAULT_APPEARANCE, pattern: 'waves', patternStrength: 60, patternScale: 150 });
+  assert.equal(attrs.attrs['data-pattern'], 'waves');
+  assert.equal(attrs.patternK, '0.6');
+  assert.equal(attrs.patternScale, '1.5');
+  assert.equal(appearanceAttributes('dark', DEFAULT_APPEARANCE).attrs['data-pattern'], null);
 });
 
 test('nové volby: písmo, rohy, karty, klidný režim, můj obrázek a jeho rozmazání', () => {

@@ -1,14 +1,30 @@
 /**
- * Odznaky na kanálu (první verze): spočítají se z toho, co o kanálu víme
- * (kdy se registroval, kolik má videí, zhlédnutí, odběratelů, Sparks, jestli
- * vysílal živě) - nic se kvůli nim neukládá. U každé řady se ukáže jen
- * nejvyšší dosažený stupeň; majitel kanálu navíc vidí, který odznak má
- * nejblíž (components/ChannelBadges.tsx).
+ * Odznaky na kanálu: spočítají se z toho, co o kanálu víme (kdy se
+ * registroval, videa, zhlédnutí, odběratelé, lajky, nejsledovanější video,
+ * Sparks, vysílání, příspěvky, komentáře, spolupráce) - nic se kvůli nim
+ * neukládá. Každá řada má víc stupňů (bronz, stříbro, zlato, platina,
+ * diamant, mistr, legenda, mýtus); u řady se ukáže jen nejvyšší dosažený
+ * stupeň. Majitel kanálu navíc vidí, který odznak má nejblíž
+ * (components/ChannelBadges.tsx). Čísla počítá server
+ * (lib/badgeCheck.ts - badgeStatsFor, /api/badges/stats).
  *
  * Čistá logika - má test (tests/badges.test.mjs).
  */
 
-export type BadgeId = 'early' | 'years' | 'videos' | 'views' | 'subscribers' | 'sparks' | 'streamer';
+export type BadgeId =
+  | 'early'
+  | 'years'
+  | 'videos'
+  | 'views'
+  | 'subscribers'
+  | 'sparks'
+  | 'streamer'
+  | 'likes'
+  | 'hit'
+  | 'streamHours'
+  | 'posts'
+  | 'comments'
+  | 'collabs';
 
 export type BadgeStats = {
   /** Kdy vznikl účet (ISO). */
@@ -22,29 +38,60 @@ export type BadgeStats = {
   sparks: number;
   /** Kanál vysílal živě (má záznam vysílání). */
   streamed: boolean;
+  /** Lajky u vlastních zveřejněných videí. */
+  likes?: number;
+  /** Zhlédnutí nejsledovanějšího videa (řada Hit). */
+  topVideoViews?: number;
+  /** Hodiny živého vysílání. */
+  streamHours?: number;
+  /** Příspěvky (text, fotky, ankety). */
+  posts?: number;
+  /** Napsané komentáře (u videí a příspěvků). */
+  comments?: number;
+  /** Přijaté spolupráce na cizích videích. */
+  collabs?: number;
 };
 
 export type Badge = { id: BadgeId; /** Stupeň v řadě (0 = první). */ level: number; /** Číslo do textu: hranice stupně (10 videí, 1000 zhlédnutí, 2 roky). */ value: number };
 
-export type NextBadge = { id: Exclude<BadgeId, 'early' | 'streamer'>; target: number; current: number; missing: number };
+export type NextBadge = { id: Exclude<BadgeId, 'early' | 'streamer' | 'years'>; target: number; current: number; missing: number };
 
 /** Registrace do konce roku 2026 = průkopník (Kine na začátku). */
 export const EARLY_MEMBER_BEFORE = Date.parse('2027-01-01T00:00:00Z');
 
 export const BADGE_TIERS = {
   years: [1, 2, 3, 5, 10],
-  videos: [1, 10, 50, 100, 500],
-  views: [1_000, 10_000, 100_000, 1_000_000, 10_000_000],
-  subscribers: [100, 1_000, 10_000, 100_000, 1_000_000],
-  sparks: [10, 50, 100, 500],
+  videos: [1, 10, 25, 50, 100, 250, 500, 1_000],
+  views: [100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000, 100_000_000],
+  subscribers: [10, 100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000],
+  likes: [10, 100, 1_000, 10_000, 100_000, 1_000_000],
+  hit: [1_000, 10_000, 100_000, 1_000_000, 10_000_000],
+  sparks: [1, 10, 50, 100, 250, 500],
+  streamHours: [1, 10, 50, 100, 500, 1_000],
+  posts: [1, 10, 50, 100, 500],
+  comments: [10, 100, 500, 1_000, 5_000],
+  collabs: [1, 5, 10, 25, 50],
 } as const;
+
+/** Názvy stupňů (barvy): bronz, stříbro, zlato, platina, diamant, mistr, legenda, mýtus. */
+export const TIER_COUNT = 8;
 
 type Tiered = keyof typeof BADGE_TIERS;
 
 const YEAR_MS = 365.25 * 24 * 3600 * 1000;
 
 /** Pořadí na kanálu: nejdřív to, co o tvůrci říká nejvíc. */
-const ORDER: BadgeId[] = ['subscribers', 'views', 'videos', 'sparks', 'streamer', 'years', 'early'];
+const ORDER: BadgeId[] = ['subscribers', 'views', 'hit', 'likes', 'videos', 'sparks', 'streamHours', 'streamer', 'posts', 'comments', 'collabs', 'years', 'early'];
+
+/**
+ * Pořadí pro odznaky na kanálu, dokud tvůrce sám nic nevybral: původní řady
+ * v původním pořadí, nové až za nimi. Kanálům se tak nové řady nepřehodily
+ * (a "Hit" se neukazuje hned vedle skoro stejného "N+ zhlédnutí").
+ */
+const DEFAULT_SHOWCASE_ORDER: BadgeId[] = ['subscribers', 'views', 'videos', 'sparks', 'streamer', 'years', 'early', 'likes', 'streamHours', 'posts', 'comments', 'collabs', 'hit'];
+
+/** Řady, které se u "dalšího odznaku" nabízejí až když v nich tvůrce něco má (jinak by "0 z 1" strašilo každého). */
+const OPTIONAL_SERIES: readonly Tiered[] = ['sparks', 'streamHours', 'posts', 'comments', 'collabs', 'hit'];
 
 function safe(n: number): number {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
@@ -58,8 +105,14 @@ export function yearsOnKine(joinedAt: string | null, now = Date.now()): number {
 }
 
 function current(stats: BadgeStats, kind: Tiered, now: number): number {
-  if (kind === 'years') return yearsOnKine(stats.joinedAt, now);
-  return safe(stats[kind]);
+  switch (kind) {
+    case 'years':
+      return yearsOnKine(stats.joinedAt, now);
+    case 'hit':
+      return safe(stats.topVideoViews ?? 0);
+    default:
+      return safe(stats[kind] ?? 0);
+  }
 }
 
 /** Získané odznaky (od každé řady jen nejvyšší stupeň), seřazené pro kanál. */
@@ -85,17 +138,18 @@ export function computeBadges(stats: BadgeStats, now = Date.now()): Badge[] {
 export function nextBadge(stats: BadgeStats, now = Date.now()): NextBadge | null {
   let best: NextBadge | null = null;
   let bestRatio = -1;
-  for (const kind of ['videos', 'views', 'subscribers', 'sparks'] as const) {
+  for (const kind of Object.keys(BADGE_TIERS) as Tiered[]) {
+    if (kind === 'years') continue;
     const tiers = BADGE_TIERS[kind];
     const value = current(stats, kind, now);
     const target = tiers.find((t) => value < t);
     if (target === undefined) continue;
-    // Sparks až když nějaké má (jinak by "0 z 10 Sparks" strašilo i tvůrce dlouhých videí).
-    if (kind === 'sparks' && value === 0) continue;
+    // Volitelné řady až když v nich něco má (jinak by "0 z 10 Sparks" strašilo i tvůrce dlouhých videí).
+    if (OPTIONAL_SERIES.includes(kind) && value === 0) continue;
     const ratio = value / target;
     if (ratio > bestRatio) {
       bestRatio = ratio;
-      best = { id: kind, target, current: value, missing: target - value };
+      best = { id: kind as NextBadge['id'], target, current: value, missing: target - value };
     }
   }
   return best;
@@ -144,11 +198,11 @@ export function sanitizeShowcase(value: unknown): BadgeId[] | null {
 
 /**
  * Odznaky na kanálu: vybrané (v pořadí výběru; jen ty, které pořád má),
- * a dokud nic nevybral, první tři podle pořadí. Prázdný výběr = schválně žádný.
+ * a dokud nic nevybral, první tři podle DEFAULT_SHOWCASE_ORDER. Prázdný výběr = schválně žádný.
  */
 export function showcaseBadges(earned: readonly Badge[], showcase: unknown, max = SHOWCASE_MAX): Badge[] {
   const picked = sanitizeShowcase(showcase);
-  if (picked === null) return earned.slice(0, max);
+  if (picked === null) return [...earned].sort((a, b) => DEFAULT_SHOWCASE_ORDER.indexOf(a.id) - DEFAULT_SHOWCASE_ORDER.indexOf(b.id)).slice(0, max);
   const out: Badge[] = [];
   for (const id of picked) {
     const badge = earned.find((b) => b.id === id);

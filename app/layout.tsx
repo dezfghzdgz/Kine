@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import Script from 'next/script';
 import { Inter } from 'next/font/google';
 import AppShellChrome from '@/components/AppShellChrome';
 import ErrorReporter from '@/components/ErrorReporter';
@@ -12,8 +11,22 @@ import { UploadProvider } from '@/lib/uploadManager';
 import './globals.css';
 import { SITE_URL } from '@/lib/linkPreview';
 import { APPEARANCE_BOOT_SCRIPT } from '@/lib/appearance';
+import { NETWORK_HINTS_BOOT_SCRIPT } from '@/lib/networkHints';
 
 const siteUrl = SITE_URL;
+
+/** Adresa databáze (Supabase) - spojení se naváže hned v hlavičce stránky. */
+const SUPABASE_ORIGIN = (() => {
+  try {
+    return process.env.NEXT_PUBLIC_SUPABASE_URL ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin : null;
+  } catch {
+    return null;
+  }
+})();
+
+/** Server videí Cloudflare (customer-<kód>.cloudflarestream.com), když je kód v nastavení serveru. */
+const STREAM_CODE = (process.env.NEXT_PUBLIC_STREAM_CUSTOMER_CODE ?? '').trim();
+const STREAM_ORIGIN = /^[a-z0-9]{6,40}$/i.test(STREAM_CODE) ? `https://customer-${STREAM_CODE}.cloudflarestream.com` : null;
 
 /**
  * Písmo appky.
@@ -96,11 +109,15 @@ export default function RootLayout({
       <head>
         {/* Uložený vzhled (motiv, sklo, světlo kolem videa) hned při načtení - bez přebliknutí. */}
         <script dangerouslySetInnerHTML={{ __html: APPEARANCE_BOOT_SCRIPT }} />
-        {/* Spojení s Cloudflare (přehrávač, video, náhledy) se naváže hned - video se pak
-            po kliknutí rozjede o kus dřív. */}
-        <link rel="preconnect" href="https://iframe.videodelivery.net" />
+        {/* Spojení se servery se naváže hned (lib/networkHints.ts): databáze (každá stránka
+            si o data říká hned po načtení) a Cloudflare (náhledy, video). Na mobilních
+            datech to je klidně půl vteřiny na každý server. */}
+        {SUPABASE_ORIGIN && <link rel="preconnect" href={SUPABASE_ORIGIN} crossOrigin="anonymous" />}
+        {STREAM_ORIGIN && <link rel="preconnect" href={STREAM_ORIGIN} crossOrigin="anonymous" />}
+        {STREAM_ORIGIN && <link rel="preconnect" href={STREAM_ORIGIN} />}
         <link rel="preconnect" href="https://videodelivery.net" />
-        <link rel="preconnect" href="https://embed.cloudflarestream.com" />
+        {/* Kód Cloudflare z minula (když není v nastavení serveru) - spojení hned, ne až s prvním náhledem. */}
+        {!STREAM_ORIGIN && <script dangerouslySetInnerHTML={{ __html: NETWORK_HINTS_BOOT_SCRIPT }} />}
       </head>
       <body>
         <LanguageProvider>
@@ -125,11 +142,6 @@ export default function RootLayout({
             </MusicPlayerProvider>
           </MobileNavProvider>
         </LanguageProvider>
-        {/* Přehrávač Cloudflare (kvůli náhledům při najetí myší) se načte
-            jednou pro celou appku. Dřív si ho o načtení říkala každá karta
-            zvlášť, takže na plném feedu vzniklo pár desítek zbytečných
-            komponent. */}
-        <Script src="https://embed.cloudflarestream.com/embed/sdk.latest.js" strategy="lazyOnload" />
       </body>
     </html>
   );

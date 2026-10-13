@@ -156,6 +156,17 @@ test('Cloudflare: přenos jednou chybí v seznamu - nezmizí (dřív "Živě" bl
   }
 });
 
+test('Cloudflare: appka hlásí vysílání a přenos je v seznamu běžících - potvrdí se, i když lifecycle zaostává', () => {
+  // lifecycle "nevysílá", seznam ano, appka se ozvala před 10 s: potvrdit (jinak by appce
+  // po 3 minutách bez potvrzení přestalo platit "pořád vysílám" a přenos zmizel)
+  const appRow = { ...liveRow, app_ping_at: iso(T0 + 20 * MIN - 10000), started_at: iso(T0 + 15 * MIN), cf_confirmed_at: iso(T0 + 16 * MIN) };
+  assert.equal(live.decideLive(appRow, { listed: true, connected: false }, T0 + 20 * MIN), 'confirm');
+  // appka zmlkla (spadla bez rozloučení): seznam sám nestačí, lifecycle rozhoduje
+  assert.equal(live.decideLive({ ...appRow, app_ping_at: iso(T0 + 18 * MIN) }, { listed: true, connected: false }, T0 + 20 * MIN), 'end');
+  // skončený přenos to neoživí (po Ukončit appka nehlásí)
+  assert.equal(live.decideLive({ ...endedRow, app_ping_at: null }, { listed: true, connected: false, videoCreatedAt: iso(T0) }, T0 + 21 * MIN), 'none');
+});
+
 test('Cloudflare: přenos ukončený bez potvrzení se vrátí, jakmile vstup jistě vysílá', () => {
   // srovnání ho ukončilo (minutu bez potvrzení); Cloudflare pořád jede ve stejném záznamu
   const endedBySync = { ...endedRow, ended_at: iso(T0 + 20 * MIN), cf_confirmed_at: iso(T0 + 19 * MIN) };
@@ -197,7 +208,8 @@ test('Cloudflare: stav vstupu z API (záloha za lifecycle)', () => {
 test('Cloudflare: appka hlásí vysílání - drží se, dokud se jí věří', () => {
   const app = { ...liveRow, app_ping_at: iso(T0 + 11 * MIN) };
   assert.equal(live.decideLive(app, { listed: false, connected: null }, T0 + 11 * MIN + 10000), 'keep');
-  assert.equal(live.decideLive(app, { listed: true, connected: false }, T0 + 11 * MIN + 10000), 'keep');
+  // v seznamu běžících + appka hlásí = potvrzení (lifecycle občas zaostává)
+  assert.equal(live.decideLive(app, { listed: true, connected: false }, T0 + 11 * MIN + 10000), 'confirm');
   // appka zmlkla
   assert.equal(live.decideLive(app, { listed: false, connected: null }, T0 + 12 * MIN), 'end');
   // neživý řádek nic nedrží

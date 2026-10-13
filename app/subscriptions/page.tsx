@@ -153,19 +153,8 @@ function SubscriptionsPageInner() {
               const post = group.post;
               const author = post.profiles;
               return (
-                <div key={`post-${post.id}`} style={{ marginBottom: 20, maxWidth: 460 }}>
-                  {author && (
-                    <Link href={`/channel/${author.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                      <span className="profile-avatar-small" style={{ width: 24, height: 24, overflow: 'hidden' }}>
-                        {author.avatar_url ? <ProfileImage src={author.avatar_url} alt={author.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
-                      </span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
-                        {author.display_name ?? author.username}
-                        <VerifiedBadge tier={author.verification_tier} />
-                      </span>
-                    </Link>
-                  )}
-                  <PostCard post={post} userId={userId} />
+                <div key={`post-${post.id}`} className="post-list">
+                  <PostCard post={post} userId={userId} author={author} onDeleted={(id) => setPosts((prev) => prev.filter((p) => p.id !== id))} />
                 </div>
               );
             }

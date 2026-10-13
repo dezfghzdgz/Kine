@@ -12,7 +12,7 @@ import { runInBackground } from './background';
  * (seskupené podle kanálu a události). Nic nového v Supabase.
  */
 
-export type LiveEventKind = 'start' | 'confirm' | 'end' | 'stop' | 'unconfirmed' | 'silent-end' | 'hidden';
+export type LiveEventKind = 'start' | 'confirm' | 'end' | 'stop' | 'unconfirmed' | 'silent-end' | 'hidden' | 'unseen';
 
 /** Stejná událost téhož kanálu nejvýš jednou za tolik (jedna instance serveru) - deník nezaplaví ani blikání. */
 const SAME_EVENT_GAP_MS = 15 * 1000;

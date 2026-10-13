@@ -21,6 +21,7 @@ import {
   EntertainmentIcon, NewsIcon, PetIcon,
 } from './ReactionIcons';
 import ProfileImage from './ProfileImage';
+import UiIcon from './UiIcon';
 
 function baseLinks(t: (key: any) => string) {
   return [
@@ -241,17 +242,20 @@ export default function Sidebar() {
         )}
         {isModerator && (
           <Link href="/reports" className={`sidebar-link ${pathname === '/reports' ? 'active' : ''}`}>
-            🚩 {t('reportsPageTitle')}
+            <UiIcon name="flag" size={20} />
+            {t('reportsPageTitle')}
           </Link>
         )}
         {isAdmin && (
           <Link href="/admin/revenue-share" className={`sidebar-link ${pathname === '/admin/revenue-share' ? 'active' : ''}`}>
-            💰 {t('revenueShareLabel')}
+            <UiIcon name="coins" size={20} />
+            {t('revenueShareLabel')}
           </Link>
         )}
         {isAdmin && (
           <Link href="/admin/errors" className={`sidebar-link ${pathname === '/admin/errors' ? 'active' : ''}`}>
-            🐞 {t('clientErrorsLabel')}
+            <UiIcon name="bug" size={20} />
+            {t('clientErrorsLabel')}
           </Link>
         )}
         {(isModerator || isAdmin) && (
@@ -454,17 +458,20 @@ export default function Sidebar() {
           )}
           {isModerator && (
             <Link href="/reports" className="sidebar-link" onClick={closeMobileNav}>
-              🚩 {t('reportsPageTitle')}
+              <UiIcon name="flag" size={20} />
+              {t('reportsPageTitle')}
             </Link>
           )}
           {isAdmin && (
             <Link href="/admin/revenue-share" className="sidebar-link" onClick={closeMobileNav}>
-              💰 {t('revenueShareLabel')}
+              <UiIcon name="coins" size={20} />
+              {t('revenueShareLabel')}
             </Link>
           )}
           {isAdmin && (
             <Link href="/admin/errors" className="sidebar-link" onClick={closeMobileNav}>
-              🐞 {t('clientErrorsLabel')}
+              <UiIcon name="bug" size={20} />
+              {t('clientErrorsLabel')}
             </Link>
           )}
           {(isModerator || isAdmin) && (

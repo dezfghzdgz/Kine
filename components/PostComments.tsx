@@ -6,7 +6,11 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import AttachmentPicker from './AttachmentPicker';
 import EmojiPicker from './EmojiPicker';
-import { useLanguage } from '@/lib/i18n';
+import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
+import { timeAgo } from '@/lib/timeAgo';
+import UiIcon from './UiIcon';
+import ProfileImage from './ProfileImage';
+import ConfirmDialog from './ConfirmDialog';
 
 function renderWithMentions(content: string) {
   return content.split(/(@[a-zA-Z0-9_]+)/g).map((part, i) =>
@@ -20,8 +24,9 @@ function renderWithMentions(content: string) {
   );
 }
 
-export default function PostComments({ postId, onCommentAdded }: { postId: string; onCommentAdded: () => void }) {
-  const { t } = useLanguage();
+export default function PostComments({ postId, ownerId, onCommentAdded }: { postId: string; ownerId?: string; onCommentAdded: () => void }) {
+  const { t, lang } = useLanguage();
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const router = useRouter();
   const [comments, setComments] = useState<any[]>([]);
   const [text, setText] = useState('');
@@ -38,7 +43,7 @@ export default function PostComments({ postId, onCommentAdded }: { postId: strin
   async function load() {
     const { data } = await supabase
       .from('comments')
-      .select('id, content, image_url, created_at, user_id, profiles!comments_user_id_fkey(username)')
+      .select('id, content, image_url, created_at, user_id, profiles!comments_user_id_fkey(username, display_name, avatar_url)')
       .eq('post_id', postId)
       .order('created_at', { ascending: false });
     setComments(data ?? []);
@@ -113,18 +118,51 @@ export default function PostComments({ postId, onCommentAdded }: { postId: strin
         <button type="submit" disabled={posting} style={{ alignSelf: 'flex-start' }}>{t('postComment')}</button>
       </form>
 
-      {comments.map((c) => (
-        <div key={c.id} className="comment-row" style={{ marginBottom: 12 }}>
-          <div className="comment-avatar" />
-          <div style={{ flex: 1 }}>
-            <p className="comment-author">{c.profiles?.username ?? t('unknownUserFallback')}</p>
-            {c.content && <p className="comment-text">{renderWithMentions(c.content)}</p>}
-            {c.image_url && (
-              <img loading="lazy" decoding="async" src={c.image_url} alt="" style={{ maxWidth: 200, borderRadius: 8, marginTop: 4 }} />
-            )}
+      {comments.map((c) => {
+        const name = c.profiles?.display_name || c.profiles?.username || t('unknownUserFallback');
+        return (
+          <div key={c.id} className="comment-row" data-anim-scope>
+            <Link href={`/channel/${c.user_id}`} className="comment-avatar" tabIndex={-1} aria-hidden="true">
+              {c.profiles?.avatar_url ? <ProfileImage src={c.profiles.avatar_url} /> : <span>{name.slice(0, 1).toUpperCase()}</span>}
+            </Link>
+            <div className="comment-body">
+              <p className="comment-author">
+                <Link href={`/channel/${c.user_id}`} className={`comment-author-name${ownerId && c.user_id === ownerId ? ' creator' : ''}`}>
+                  {name}
+                </Link>
+                <span className="comment-time" title={new Date(c.created_at).toLocaleString(DATE_LOCALES[lang])}>
+                  {timeAgo(c.created_at, DATE_LOCALES[lang])}
+                </span>
+              </p>
+              {c.content && <p className="comment-text">{renderWithMentions(c.content)}</p>}
+              {c.image_url && <img loading="lazy" decoding="async" src={c.image_url} alt="" className="comment-image" />}
+              {userId && (userId === c.user_id || userId === ownerId) && (
+                <div className="comment-actions">
+                  <button type="button" className="comment-action" onClick={() => setConfirmDeleteId(c.id)} title={t('delete')} aria-label={t('delete')}>
+                    <UiIcon name="trash" size={15} />
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
+      {confirmDeleteId && (
+        <ConfirmDialog
+          message={t('confirmDeleteComment')}
+          onConfirm={async () => {
+            const id = confirmDeleteId;
+            setConfirmDeleteId(null);
+            // Smaže jen to, co RLS dovolí (vlastní komentář; majitel příspěvku po migraci posty-ankety).
+            const { data: gone, error } = await supabase.from('comments').delete().eq('id', id).select('id');
+            if (!error && gone && gone.length > 0) {
+              setComments((prev) => prev.filter((x) => x.id !== id));
+              onCommentAdded();
+            }
+          }}
+          onCancel={() => setConfirmDeleteId(null)}
+        />
+      )}
     </div>
   );
 }

@@ -16,7 +16,7 @@ type Notification = {
   link: string | null;
   read: boolean;
   created_at: string;
-  type: 'default' | 'collab_invite' | 'like_milestone' | 'view_milestone' | 'donation' | 'subscription' | 'new_video' | 'comment_reply' | 'moderation_warning' | 'live' | 'badge';
+  type: 'default' | 'collab_invite' | 'like_milestone' | 'view_milestone' | 'donation' | 'subscription' | 'new_video' | 'new_post' | 'comment_reply' | 'moderation_warning' | 'live' | 'badge';
   /** Kdo oznámení poslal z prohlížeče (odběr, komentář, pozvánka). Oznámení od Kine (serveru) ho nemají. */
   sender_id?: string | null;
   senderName?: string | null;
@@ -38,6 +38,7 @@ const NOTIFICATION_TYPE_STYLES: Record<string, { color: string; icon: UiIconName
   comment_reply: { color: '#45c9c9', icon: 'chat', labelKey: 'notifTypeComment' },
   donation: { color: '#f07eb0', icon: 'coins', labelKey: 'notifTypeDonation' },
   new_video: { color: '#8a8a8f', icon: 'film', labelKey: 'notifTypeNewVideo' },
+  new_post: { color: '#5eb8ff', icon: 'pencil', labelKey: 'notifTypeNewPost' },
   moderation_warning: { color: '#e0453f', icon: 'warning', labelKey: 'notifTypeWarning' },
   live: { color: '#ff3b3b', icon: 'broadcast', labelKey: 'notifTypeLive' },
   badge: { color: '#e3b341', icon: 'trophy', labelKey: 'notifTypeBadge' },

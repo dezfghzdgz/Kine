@@ -11,6 +11,7 @@ import { validateUsername } from '@/lib/username';
 import AppearanceSettings from '@/components/AppearanceSettings';
 import UiIcon, { type UiIconName } from '@/components/UiIcon';
 import { PanelHeading, WithHelp } from '@/components/HelpTip';
+import PlaybackSettings from '@/components/PlaybackSettings';
 import { ThumbsDownIcon, ThumbsUpIcon } from '@/components/ReactionIcons';
 import { SETTINGS_SECTION_EVENT } from '@/lib/settingsNav';
 import ProfileImage from '@/components/ProfileImage';
@@ -407,6 +408,7 @@ export default function SettingsPage() {
       <div className="settings-page" style={{ maxWidth: 680 }}>
         <h1 className="settings-title">{t('settings')}</h1>
         <AppearanceSettings />
+        <PlaybackSettings />
         <div className="auth-gate">
           <p>{t('loginToEditSettingsNote')}</p>
           <Link href="/login">{t('loginLink')}</Link>
@@ -439,7 +441,13 @@ export default function SettingsPage() {
       </nav>
 
       {/* Vzhled: motiv, sklo, pozadí, průhlednost, světlo kolem videa, barva. */}
-      {section === 'appearance' && <AppearanceSettings />}
+      {section === 'appearance' && (
+        <>
+          <AppearanceSettings />
+          {/* Kvalita videa na datech (lib/netQuality.ts) - patří k zařízení jako vzhled. */}
+          <PlaybackSettings />
+        </>
+      )}
 
       {section === 'profile' && (
         <form onSubmit={handleSaveProfile} className="settings-stack">

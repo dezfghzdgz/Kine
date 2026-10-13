@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import UiIcon from './UiIcon';
 
 // Sdílený veřejný testovací klíč Giphy appka používala jako výchozí, ale
 // Giphy ho časem zablokovala (běžně se to takovým klíčům stává, jsou
@@ -87,7 +88,9 @@ export default function GifPickerModal({
       <div className="panel modal-glass" style={{ width: '100%', maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <p className="panel-heading" style={{ margin: 0 }}>GIFs</p>
-          <button onClick={onClose} style={{ background: 'none', color: 'var(--text-faint)', padding: 4 }}>✕</button>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close" style={{ color: 'var(--text-faint)' }}>
+            <UiIcon name="close" size={16} />
+          </button>
         </div>
 
         <div style={{ marginBottom: 12 }}>

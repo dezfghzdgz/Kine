@@ -8,6 +8,7 @@ import KeyboardShortcuts from './KeyboardShortcuts';
 import MusicMiniPlayer from './MusicMiniPlayer';
 import UploadProgressBar from './UploadProgressBar';
 import AppearanceBackdrop from './AppearanceBackdrop';
+import AppearancePattern from './AppearancePattern';
 
 export default function AppShellChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -33,6 +34,8 @@ export default function AppShellChrome({ children }: { children: React.ReactNode
     <div className="app-shell">
       {/* Skleněný vzhled: barevné rozmazané pozadí za celou appkou (Nastavení -> Vzhled). */}
       <AppearanceBackdrop />
+      {/* Vzor přes pozadí (tečky, mřížka... nebo vlastní obrázek) - Nastavení -> Vzhled -> Vzor. */}
+      <AppearancePattern />
       {/* Zkratky visí nad celou appkou, ne na jedné stránce. Na Sparks se
           vypínají úplně (mají vlastní ovládání šipkami) a u přehrávače se
           vypíná jen posun mezi kartami - tam "K" znamená přehrát/pauza,

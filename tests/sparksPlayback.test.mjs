@@ -27,10 +27,19 @@ test('než se rozjede první video, napojí se jen ono (přednačítání by mu 
   assert.deepEqual(attached(5, { engine: 'native', warm: false }), [5]);
 });
 
-test('pak jedno za sebou a dvě dopředu; při šetření dat jen jedno dopředu', () => {
+test('pak jedno za sebou a dvě dopředu; při šetření dat (lehký režim) jen jedno dopředu a nic za sebou', () => {
   assert.deepEqual(attached(0, { engine: 'native', warm: true }), [0, 1, 2]);
   assert.deepEqual(attached(5, { engine: 'native', warm: true }), [4, 5, 6, 7]);
-  assert.deepEqual(attached(5, { engine: 'native', warm: true, saveData: true }), [4, 5, 6]);
+  assert.deepEqual(attached(5, { engine: 'native', warm: true, saveData: true }), [5, 6]);
+  assert.deepEqual(attached(0, { engine: 'native', warm: true, saveData: true }), [0, 1]);
+});
+
+test('náhled karty v lehkém režimu menší (méně dat)', () => {
+  assert.equal(
+    s.sparkPoster({ thumbnail_url: 'https://customer-abc.cloudflarestream.com/uid1/thumbnails/thumbnail.jpg' }, true),
+    'https://customer-abc.cloudflarestream.com/uid1/thumbnails/thumbnail.jpg?height=480'
+  );
+  assert.equal(s.sparkPoster({ thumbnail_url: null, cloudflare_video_id: 'uid2' }, true), 'https://videodelivery.net/uid2/thumbnails/thumbnail.jpg?height=480');
 });
 
 test('iframe Cloudflare (záloha) je těžký - jen další jedno, jako dřív', () => {
@@ -84,6 +93,15 @@ test('přednačítá se jen kousek, video na řadě jako ostatní; za sebou cel�
   assert.ok(s.SPARK_ACTIVE_BUFFER_S >= 20);
   assert.ok(s.SPARK_BACK_BUFFER_S >= 120, 'Sparks mají až 2 minuty');
   assert.ok(s.SPARK_PLAY_RETRY_MS.every((ms, i, a) => i === 0 || ms > a[i - 1]), 'pokusy řídnou');
+});
+
+test('dvojité klepnutí = líbí se; nikdy nic nebere ani nepřepisuje hvězdičky', () => {
+  assert.equal(s.doubleTapScore('like_dislike', null), 5);
+  assert.equal(s.doubleTapScore('like_dislike', 1), 5, 'z nelíbí se na líbí se');
+  assert.equal(s.doubleTapScore('like_dislike', 5), null, 'už se líbí - jen animace, lajk zůstane');
+  assert.equal(s.doubleTapScore('stars', null), 5);
+  assert.equal(s.doubleTapScore('stars', 2), null, 'vlastní hodnocení se nepřepisuje');
+  assert.ok(s.SPARK_DOUBLE_TAP_MS >= 200 && s.SPARK_DOUBLE_TAP_MS <= 350);
 });
 
 console.log(`\n${prosly} prošlo, ${padly} spadlo`);

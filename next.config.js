@@ -90,10 +90,11 @@ const nextConfig = {
         ],
       },
       {
-        // API endpointy nesmí být cachovány proxy servery. Výjimka: /api/live/now
-        // si hlavičku nastavuje sám - počet přenosů pro menu (?countOnly=1) jde
-        // 30 s z mezipaměti CDN, jinak by každá otevřená stránka volala server.
-        source: '/api/:path((?!live/now).*)',
+        // API endpointy nesmí být cachovány proxy servery. Výjimky si hlavičku
+        // nastavují samy: /api/live/now (počet přenosů pro menu jde chvíli
+        // z mezipaměti CDN, jinak by každá otevřená stránka volala server)
+        // a /api/badges/stats (součty pro odznaky kanálu, 5 minut).
+        source: '/api/:path((?!live/now|badges/stats).*)',
         headers: [
           { key: 'Cache-Control', value: 'no-store, no-cache, must-revalidate' },
         ],

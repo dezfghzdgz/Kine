@@ -7,6 +7,7 @@ import { PlayIcon, PauseIcon } from './MusicIcons';
 import { AUTO_HIDE_MS, clampSeek, decideTap, formatTime, tapSide, type Tap, type TapSide } from '@/lib/playerControls';
 import { OPEN_SHORTCUTS_EVENT } from './KeyboardShortcuts';
 import { qualityLabel, type QualityLevel } from '@/lib/vodPlayerCore';
+import { pipActive, pipSupported, togglePictureInPicture, watchPictureInPicture } from '@/lib/pictureInPicture';
 
 type Chapter = { time: number; title: string };
 
@@ -53,6 +54,7 @@ export default function ChapterTimeline({
   quality = -1,
   playingHeight = null,
   onQuality,
+  dataSaver,
   onToggleStats,
 }: {
   chapters: Chapter[];
@@ -84,6 +86,11 @@ export default function ChapterTimeline({
   /** Co právě hraje (u Automaticky v závorce). */
   playingHeight?: number | null;
   onQuality?: (index: number) => void;
+  /**
+   * Šetření dat (lib/netQuality.ts) tam, kde se kvalita vybrat nedá (Safari volí
+   * kvalitu sám): přepínač lehký / plný režim. Bez toho se položka neukáže.
+   */
+  dataSaver?: { light: boolean; onToggle: () => void };
   /** Statistiky přehrávání (components/PlaybackStats.tsx). */
   onToggleStats?: () => void;
 }) {
@@ -121,6 +128,16 @@ export default function ChapterTimeline({
   const [volumeHover, setVolumeHover] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
+
+  // Obraz v obraze: video v plovoucím okénku i mimo prohlížeč (jiná karta, jiná appka).
+  // Jen vlastní <video> - iframe Cloudflare se zvenku do okénka dát nedá (lib/pictureInPicture.ts).
+  const [pipOk, setPipOk] = useState(false);
+  const [pipOn, setPipOn] = useState(false);
+  useEffect(() => {
+    setPipOk(pipSupported(player));
+    setPipOn(pipActive(player));
+    return watchPictureInPicture(player, setPipOn);
+  }, [player]);
 
   useEffect(() => {
     if (!settingsOpen) return;
@@ -631,6 +648,23 @@ export default function ChapterTimeline({
                       <span>{t('sleepTimerMenuLabel')}</span>
                       <span style={{ color: 'rgba(255,255,255,0.6)' }}>{sleepMinutes ? `${sleepMinutes} ${t('minutesShortLabel')}` : t('offLabel')}</span>
                     </button>
+                    {qualities.length <= 1 && dataSaver && (
+                      <button
+                        className="player-quality-btn"
+                        onClick={() => {
+                          dataSaver.onToggle();
+                          setSettingsOpen(false);
+                          setSettingsView('main');
+                        }}
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
+                          color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
+                        }}
+                      >
+                        <span>{t('playerQualityMenu')}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>{dataSaver.light ? t('playbackLightOn') : t('playbackLightOff')}</span>
+                      </button>
+                    )}
                     {qualities.length > 1 && onQuality && (
                       <button
                         className="player-quality-btn"
@@ -806,6 +840,22 @@ export default function ChapterTimeline({
               </div>
             )}
 
+            {pipOk && !compact && (
+              <button
+                onClick={(e) => { e.stopPropagation(); togglePictureInPicture(player); }}
+                type="button"
+                className="player-pip-btn"
+                title={pipOn ? t('playerPipOff') : t('playerPipOn')}
+                aria-label={pipOn ? t('playerPipOff') : t('playerPipOn')}
+                aria-pressed={pipOn}
+                style={iconBtn}
+              >
+                <svg width="20" height="16" viewBox="0 0 24 18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <rect x="1.5" y="2" width="21" height="14" rx="2" />
+                  <rect x="12" y="9" width="8" height="5" rx="1" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+            )}
             {onToggleTheater && !compact && !isMaximized && !touchUi && (
               <button
                 onClick={(e) => { e.stopPropagation(); onToggleTheater(); }}

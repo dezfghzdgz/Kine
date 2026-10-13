@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import UiIcon from './UiIcon';
 
 const EMOJIS = [
   '😀', '😂', '🥲', '😍', '😎', '🤔', '😢', '😭', '😡', '🥳',
@@ -26,10 +27,11 @@ export default function EmojiPicker({ onSelect }: { onSelect: (emoji: string) =>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', padding: '0 4px' }}
+        style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: '0 4px', display: 'inline-flex', alignItems: 'center' }}
         aria-label="Emoji"
+        title="Emoji"
       >
-        🙂
+        <UiIcon name="smile" size={19} />
       </button>
       {open && (
         <div

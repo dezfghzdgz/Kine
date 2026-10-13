@@ -45,7 +45,9 @@ export type SparkSlot = {
  *
  * Než se rozjede první video (warm = false), nenapojuje se nic jiného -
  * přednačítání by mu bralo data. Pak jedno za sebou (návrat zpět bez
- * čekání) a dvě dopředu; při šetření dat jen jedno dopředu. Iframe
+ * čekání) a dvě dopředu; při šetření dat / pomalém připojení
+ * (lib/netQuality.ts - lehký režim) jen jedno dopředu a nic za sebou -
+ * na mobilních datech si videa jinak berou připojení navzájem. Iframe
  * Cloudflare je těžký - jen další jedno, jako dřív.
  */
 export function sparkSlot(index: number, active: number, opts: { engine: SparkEngine | null; warm: boolean; saveData?: boolean }): SparkSlot {
@@ -55,22 +57,29 @@ export function sparkSlot(index: number, active: number, opts: { engine: SparkEn
   if (d === 0) return { attach: true, near: true };
   if (!opts.warm) return { attach: false, near };
   if (opts.engine === 'iframe') return { attach: d === 1, near };
-  return { attach: d >= -1 && d <= (opts.saveData ? 1 : 2), near };
+  if (opts.saveData) return { attach: d === 1, near };
+  return { attach: d >= -1 && d <= 2, near };
 }
+
+/** Výška náhledu karty (Sparks jsou na výšku přes celý telefon): plná / lehký režim (méně dat). */
+export const SPARK_POSTER_HEIGHT = 720;
+export const SPARK_POSTER_HEIGHT_LIGHT = 480;
 
 /**
  * Náhled karty (než se video rozjede, a u karet poblíž). Náhled od
- * Cloudflare bez velikosti je v plném rozlišení videa - stačí menší.
+ * Cloudflare bez velikosti je v plném rozlišení videa - stačí menší;
+ * v lehkém režimu (šetření dat) ještě menší.
  */
-export function sparkPoster(video: { thumbnail_url?: string | null; cloudflare_video_id?: string | null }): string | null {
+export function sparkPoster(video: { thumbnail_url?: string | null; cloudflare_video_id?: string | null }, light = false): string | null {
+  const height = light ? SPARK_POSTER_HEIGHT_LIGHT : SPARK_POSTER_HEIGHT;
   const url = typeof video.thumbnail_url === 'string' ? video.thumbnail_url.trim() : '';
   if (/^https:\/\//i.test(url)) {
     if (/cloudflarestream\.com\/|videodelivery\.net\//i.test(url) && /\/thumbnails\/thumbnail\.jpg/i.test(url) && !/[?&]height=/i.test(url)) {
-      return `${url}${url.includes('?') ? '&' : '?'}height=720`;
+      return `${url}${url.includes('?') ? '&' : '?'}height=${height}`;
     }
     return url;
   }
-  if (video.cloudflare_video_id) return `https://videodelivery.net/${encodeURIComponent(video.cloudflare_video_id)}/thumbnails/thumbnail.jpg?height=720`;
+  if (video.cloudflare_video_id) return `https://videodelivery.net/${encodeURIComponent(video.cloudflare_video_id)}/thumbnails/thumbnail.jpg?height=${height}`;
   return null;
 }
 
@@ -87,3 +96,19 @@ export function afterPlayRejected(errorName: string | null | undefined, muted: b
 
 /** Kdy znovu zkusit play(), než se video rozjede (ms od zapnutí karty) - záloha k událostem přehrávače. */
 export const SPARK_PLAY_RETRY_MS = [150, 400, 900, 1600, 2600, 4000, 6500];
+
+/**
+ * Dvojité klepnutí na Spark = "líbí se" (jako TikTok). Jedno klepnutí čeká
+ * SPARK_DOUBLE_TAP_MS, jestli nepřijde druhé, a teprve pak pauzne.
+ */
+export const SPARK_DOUBLE_TAP_MS = 280;
+
+/**
+ * Jaké hodnocení dát po dvojitém klepnutí. Nikdy nic nebere: co už se líbí,
+ * zůstane, a ve hvězdičkách se nepřepisuje hodnocení, které člověk dal sám.
+ * null = jen ukázat animaci, nic neukládat.
+ */
+export function doubleTapScore(ratingMode: 'stars' | 'like_dislike', myScore: number | null): number | null {
+  if (ratingMode === 'like_dislike') return myScore === 5 ? null : 5;
+  return myScore === null ? 5 : null;
+}

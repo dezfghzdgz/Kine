@@ -159,6 +159,7 @@ export default function KeyboardShortcuts({
           ['M', t('shortcutsMute')],
           ['F', t('shortcutsFullscreen')],
           ['C', t('shortcutsCaptions')],
+          ['I', t('shortcutsPip')],
           ['0 – 9', t('shortcutsDigits')],
         ] as [string, string][])
       : []),

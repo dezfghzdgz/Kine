@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLanguage } from '@/lib/i18n';
 import { supabase } from '@/lib/supabaseClient';
 import {
@@ -14,7 +15,7 @@ import {
   type BadgeId,
   type BadgeStats,
 } from '@/lib/badges';
-import { BADGE_ICONS, badgeTexts, badgeTierClass } from '@/lib/badgeText';
+import { BADGE_ICONS, badgeTexts, badgeTierClass, badgeTierName } from '@/lib/badgeText';
 import UiIcon from './UiIcon';
 
 /**
@@ -172,7 +173,10 @@ function BadgeCollection({
 
   const unchanged = savedPick !== null && JSON.stringify(picked) === JSON.stringify(savedPick);
 
-  return (
+  // Do <body>: uvnitř hlavičky kanálu (vlastní vrstva) by okno i se z-indexem zůstalo
+  // pod horní lištou - ta zakrývala jeho nadpis a s víc odznaky i první řadu.
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div className="badge-modal-backdrop" onClick={onClose}>
       <div className="panel modal-glass badge-modal" role="dialog" aria-modal="true" aria-label={t('badgesLabel')} onClick={(e) => e.stopPropagation()}>
         <div className="badge-modal-head">
@@ -204,9 +208,9 @@ function BadgeCollection({
                 <span className="badge-tile-name">{badge ? text.label(p.id, badge.value) : text.series(p.id)}</span>
                 <span className="badge-tile-meta">
                   {badge && p.tiers > 1
-                    ? p.next === null
-                      ? t('badgesTopTier')
-                      : t('badgesTier').replace('{n}', String(badge.level + 1)).replace('{total}', String(p.tiers))
+                    ? `${badgeTierName(badge.level, t)} · ${
+                        p.next === null ? t('badgesTopTier') : t('badgesTier').replace('{n}', String(badge.level + 1)).replace('{total}', String(p.tiers))
+                      }`
                     : badge
                       ? t('badgesUnlocked')
                       : t('badgesLocked')}
@@ -246,6 +250,7 @@ function BadgeCollection({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

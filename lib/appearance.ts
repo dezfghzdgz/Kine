@@ -45,6 +45,8 @@ export type FontChoice = 'inter' | 'system' | 'rounded' | 'serif' | 'mono';
 export type Density = 'compact' | 'normal' | 'comfy';
 /** Kdy hrají animované profilovky a bannery (lib/animatedImage.ts). */
 export type AvatarMotion = 'always' | 'hover' | 'never';
+/** Vzor přes pozadí celé appky (v barvě appky) - nebo vlastní obrázek jako dlaždice. */
+export type Pattern = 'none' | 'dots' | 'grid' | 'diagonal' | 'waves' | 'plus' | 'circles' | 'zigzag' | 'custom';
 
 export type Appearance = {
   look: Look;
@@ -77,6 +79,12 @@ export type Appearance = {
   previews: boolean;
   /** Animované profilovky a bannery: vždy / po najetí myší / nikdy. */
   avatars: AvatarMotion;
+  /** Vzor přes pozadí (klasický i skleněný vzhled). */
+  pattern: Pattern;
+  /** Jak výrazný je vzor 0-100. */
+  patternStrength: number;
+  /** Velikost vzoru 50-200 (%). */
+  patternScale: number;
 };
 
 export const THEMES: readonly Theme[] = ['dark', 'gray', 'light'];
@@ -88,11 +96,14 @@ export const CARD_SIZES: readonly CardSize[] = ['s', 'm', 'l'];
 export const FONTS: readonly FontChoice[] = ['inter', 'system', 'rounded', 'serif', 'mono'];
 export const DENSITIES: readonly Density[] = ['compact', 'normal', 'comfy'];
 export const AVATAR_MOTIONS: readonly AvatarMotion[] = ['always', 'hover', 'never'];
+export const PATTERNS: readonly Pattern[] = ['none', 'dots', 'grid', 'diagonal', 'waves', 'plus', 'circles', 'zigzag', 'custom'];
 
 export const THEME_KEY = 'kine-theme';
 export const APPEARANCE_KEY = 'kine-appearance';
 /** Vlastní obrázek za sklem (data URL, zmenšený) - zvlášť, je větší než zbytek vzhledu. */
 export const BACKDROP_IMAGE_KEY = 'kine-backdrop-image';
+/** Vlastní vzor (dlaždice, data URL) - zvlášť jako obrázek za sklem. */
+export const PATTERN_IMAGE_KEY = 'kine-pattern-image';
 /** Událost na window, když se vzhled změní (nabídka profilu, pozadí, nastavení). */
 export const APPEARANCE_EVENT = 'kine-appearance';
 
@@ -113,6 +124,9 @@ export const DEFAULT_APPEARANCE: Appearance = {
   contrast: false,
   previews: true,
   avatars: 'hover',
+  pattern: 'none',
+  patternStrength: 40,
+  patternScale: 100,
 };
 
 export function parseTheme(value: unknown): Theme {
@@ -141,11 +155,23 @@ export function sanitizeAppearance(raw: unknown): Appearance {
     contrast: typeof r.contrast === 'boolean' ? r.contrast : DEFAULT_APPEARANCE.contrast,
     previews: typeof r.previews === 'boolean' ? r.previews : DEFAULT_APPEARANCE.previews,
     avatars: AVATAR_MOTIONS.includes(r.avatars as AvatarMotion) ? (r.avatars as AvatarMotion) : DEFAULT_APPEARANCE.avatars,
+    pattern: PATTERNS.includes(r.pattern as Pattern) ? (r.pattern as Pattern) : DEFAULT_APPEARANCE.pattern,
+    patternStrength: clampNumber(r.patternStrength, 0, 100, DEFAULT_APPEARANCE.patternStrength),
+    patternScale: clampNumber(r.patternScale, 50, 200, DEFAULT_APPEARANCE.patternScale),
   };
 }
 
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  if (value === null || value === undefined || value === '') return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(Math.max(min, Math.min(max, n))) : fallback;
+}
+
 /** Atributy a proměnné pro <html> - jediné místo, které říká, jak se vzhled projeví. */
-export function appearanceAttributes(theme: Theme, a: Appearance): { attrs: Record<string, string | null>; glassK: string; blurK: string } {
+export function appearanceAttributes(
+  theme: Theme,
+  a: Appearance
+): { attrs: Record<string, string | null>; glassK: string; blurK: string; patternK: string; patternScale: string } {
   return {
     attrs: {
       // Tmavý je výchozí (bez atributu); CSS zná html[data-theme="gray|light"].
@@ -164,9 +190,12 @@ export function appearanceAttributes(theme: Theme, a: Appearance): { attrs: Reco
       'data-contrast': a.contrast ? '1' : null,
       'data-previews': a.previews ? null : '0',
       'data-anim': a.avatars === 'hover' ? null : a.avatars,
+      'data-pattern': a.pattern === 'none' ? null : a.pattern,
     },
     glassK: String(a.strength / 100),
     blurK: String(a.blur / 100),
+    patternK: String(a.patternStrength / 100),
+    patternScale: String(a.patternScale / 100),
   };
 }
 
@@ -199,13 +228,66 @@ export function readAppearance(): Appearance {
 export function applyAppearance(theme: Theme, a: Appearance): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
-  const { attrs, glassK, blurK } = appearanceAttributes(theme, a);
+  const { attrs, glassK, blurK, patternK, patternScale } = appearanceAttributes(theme, a);
   for (const [name, value] of Object.entries(attrs)) {
     if (value === null) root.removeAttribute(name);
     else root.setAttribute(name, value);
   }
   root.style.setProperty('--glass-k', glassK);
   root.style.setProperty('--blur-k', blurK);
+  root.style.setProperty('--pattern-k', patternK);
+  root.style.setProperty('--pattern-scale', patternScale);
+}
+
+// ---- vlastní vzor (dlaždice) -------------------------------------------------------
+
+/** Uložený vlastní vzor (data URL), nebo null. */
+export function readPatternImage(): string | null {
+  try {
+    const value = storage()?.getItem(PATTERN_IMAGE_KEY) ?? null;
+    return value && /^data:image\/(jpeg|png|webp);base64,/.test(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Uloží (nebo smaže, null) vlastní vzor. false = nevešel se do paměti prohlížeče. */
+export function savePatternImage(dataUrl: string | null): boolean {
+  try {
+    const s = storage();
+    if (!s) return false;
+    if (dataUrl) s.setItem(PATTERN_IMAGE_KEY, dataUrl);
+    else s.removeItem(PATTERN_IMAGE_KEY);
+  } catch {
+    return false;
+  }
+  announce();
+  return true;
+}
+
+/**
+ * Obrázek z disku -> dlaždice vzoru (nejvýš 480 px, s průhledností jako PNG/WebP),
+ * ať se vejde do paměti prohlížeče. null = nejde přečíst.
+ */
+export async function patternImageFromFile(file: Blob): Promise<string | null> {
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    return null;
+  }
+  const scale = Math.min(1, 480 / Math.max(1, bitmap.width), 480 / Math.max(1, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  // WebP (menší, s průhledností); prohlížeč, který ho neumí, vrátí PNG.
+  const url = canvas.toDataURL('image/webp', 0.9);
+  return /^data:image\/(webp|png);base64,/.test(url) ? url : null;
 }
 
 // ---- vlastní obrázek za sklem ------------------------------------------------------
@@ -316,7 +398,7 @@ export function onAmbientSource(fn: (url: string | null) => void): () => void {
  * ještě před prvním vykreslením. Schválně samostatný a malý - nesmí nic
  * importovat a při jakékoli chybě nechá výchozí vzhled.
  */
-export const APPEARANCE_BOOT_SCRIPT = `(function(){try{var d=document.documentElement,s=window.localStorage;var t=s.getItem('${THEME_KEY}');if(t==='gray'||t==='light'||t==='dark')d.setAttribute('data-theme',t);var a=null;try{a=JSON.parse(s.getItem('${APPEARANCE_KEY}')||'null')}catch(e){}a=a&&typeof a==='object'?a:{};if(a.look==='glass')d.setAttribute('data-look','glass');var b=${JSON.stringify(BACKDROPS)};d.setAttribute('data-backdrop',b.indexOf(a.backdrop)>=0?a.backdrop:'auto');d.setAttribute('data-ambient',a.ambient===false?'0':'1');if(a.motion===true)d.setAttribute('data-motion','1');if(a.text==='s'||a.text==='l')d.setAttribute('data-text',a.text);if(a.corners==='sharp'||a.corners==='round')d.setAttribute('data-corners',a.corners);if(a.cards==='s'||a.cards==='l')d.setAttribute('data-cards',a.cards);if(a.calm===true)d.setAttribute('data-calm','1');var f=${JSON.stringify(FONTS)};if(a.font!=='inter'&&f.indexOf(a.font)>=0)d.setAttribute('data-font',a.font);if(a.density==='compact'||a.density==='comfy')d.setAttribute('data-density',a.density);if(a.contrast===true)d.setAttribute('data-contrast','1');if(a.previews===false)d.setAttribute('data-previews','0');if(a.avatars==='always'||a.avatars==='never')d.setAttribute('data-anim',a.avatars);var k=Number(a.strength);d.style.setProperty('--glass-k',String((isFinite(k)?Math.max(0,Math.min(100,k)):${DEFAULT_APPEARANCE.strength})/100));var u=Number(a.blur);d.style.setProperty('--blur-k',String((isFinite(u)?Math.max(0,Math.min(100,u)):${DEFAULT_APPEARANCE.blur})/100))}catch(e){}})();`;
+export const APPEARANCE_BOOT_SCRIPT = `(function(){try{var d=document.documentElement,s=window.localStorage;var t=s.getItem('${THEME_KEY}');if(t==='gray'||t==='light'||t==='dark')d.setAttribute('data-theme',t);var a=null;try{a=JSON.parse(s.getItem('${APPEARANCE_KEY}')||'null')}catch(e){}a=a&&typeof a==='object'?a:{};if(a.look==='glass')d.setAttribute('data-look','glass');var b=${JSON.stringify(BACKDROPS)};d.setAttribute('data-backdrop',b.indexOf(a.backdrop)>=0?a.backdrop:'auto');d.setAttribute('data-ambient',a.ambient===false?'0':'1');if(a.motion===true)d.setAttribute('data-motion','1');if(a.text==='s'||a.text==='l')d.setAttribute('data-text',a.text);if(a.corners==='sharp'||a.corners==='round')d.setAttribute('data-corners',a.corners);if(a.cards==='s'||a.cards==='l')d.setAttribute('data-cards',a.cards);if(a.calm===true)d.setAttribute('data-calm','1');var f=${JSON.stringify(FONTS)};if(a.font!=='inter'&&f.indexOf(a.font)>=0)d.setAttribute('data-font',a.font);if(a.density==='compact'||a.density==='comfy')d.setAttribute('data-density',a.density);if(a.contrast===true)d.setAttribute('data-contrast','1');if(a.previews===false)d.setAttribute('data-previews','0');if(a.avatars==='always'||a.avatars==='never')d.setAttribute('data-anim',a.avatars);var pt=${JSON.stringify(PATTERNS)};if(a.pattern&&a.pattern!=='none'&&pt.indexOf(a.pattern)>=0)d.setAttribute('data-pattern',a.pattern);var pk=Number(a.patternStrength);d.style.setProperty('--pattern-k',String((isFinite(pk)?Math.max(0,Math.min(100,pk)):${DEFAULT_APPEARANCE.patternStrength})/100));var ps=Number(a.patternScale);d.style.setProperty('--pattern-scale',String((isFinite(ps)?Math.max(50,Math.min(200,ps)):${DEFAULT_APPEARANCE.patternScale})/100));var k=Number(a.strength);d.style.setProperty('--glass-k',String((isFinite(k)?Math.max(0,Math.min(100,k)):${DEFAULT_APPEARANCE.strength})/100));var u=Number(a.blur);d.style.setProperty('--blur-k',String((isFinite(u)?Math.max(0,Math.min(100,u)):${DEFAULT_APPEARANCE.blur})/100))}catch(e){}})();`;
 
 /**
  * Snímek z videa v daném čase (Cloudflare umí náhled odkudkoli z videa) -

@@ -9,6 +9,8 @@ import { FOLLOW_MINUTES_OPTIONS, SLOW_MODE_OPTIONS } from '@/lib/liveChatRules';
 import { formatTipAmount } from '@/lib/liveTips';
 import { ChatSpeaker, TTS_MODES, readTtsMode, saveTtsMode, speechText, type TtsMode } from '@/lib/chatSpeech';
 import ProfileImage from './ProfileImage';
+import UiIcon, { type UiIconName } from './UiIcon';
+import { SpeakerIcon } from './ReactionIcons';
 
 type Message = {
   id: number;
@@ -328,11 +330,11 @@ export default function LiveChat({
   }
 
   const s = rules?.settings;
-  const modes: string[] = [];
-  if (s?.shield) modes.push('🛡 ' + t('liveChatModeShield'));
-  if (s && s.slowSeconds > 0) modes.push('🐢 ' + t('liveChatModeSlow').replace('{d}', t('liveChatSeconds').replace('{n}', String(s.slowSeconds))));
-  if (s?.followersOnly) modes.push('👥 ' + t('liveChatModeFollowers'));
-  if (s?.blockLinks) modes.push('🔗 ' + t('liveChatModeLinks'));
+  const modes: { icon: UiIconName; label: string }[] = [];
+  if (s?.shield) modes.push({ icon: 'shield', label: t('liveChatModeShield') });
+  if (s && s.slowSeconds > 0) modes.push({ icon: 'timer', label: t('liveChatModeSlow').replace('{d}', t('liveChatSeconds').replace('{n}', String(s.slowSeconds))) });
+  if (s?.followersOnly) modes.push({ icon: 'users', label: t('liveChatModeFollowers') });
+  if (s?.blockLinks) modes.push({ icon: 'link', label: t('liveChatModeLinks') });
 
   if (overlay) {
     return (
@@ -365,7 +367,7 @@ export default function LiveChat({
               aria-label={t('ttsButton')}
               aria-expanded={ttsMenu}
             >
-              {ttsMode === 'off' ? '🔈' : '🔊'}
+              <SpeakerIcon muted={ttsMode === 'off'} size={16} />
             </button>
             {ttsMenu && (
               <span className="live-chat-tts-menu" role="menu">
@@ -420,12 +422,21 @@ export default function LiveChat({
               aria-label={t('liveChatSettings')}
               aria-expanded={panelOpen}
             >
-              ⚙
+              <UiIcon name="sliders" size={16} />
             </button>
           )}
         </span>
       </div>
-      {modes.length > 0 && <div className="live-chat-modes">{modes.join(' · ')}</div>}
+      {modes.length > 0 && (
+        <div className="live-chat-modes">
+          {modes.map((m) => (
+            <span key={m.icon} className="live-chat-mode">
+              <UiIcon name={m.icon} size={13} />
+              {m.label}
+            </span>
+          ))}
+        </div>
+      )}
 
       {mod && panelOpen && rules && (
         <div className="live-chat-panel">
@@ -436,7 +447,8 @@ export default function LiveChat({
             onClick={() => saveRules({ shield: !s?.shield })}
             disabled={!rules.available}
           >
-            🛡 {s?.shield ? t('liveChatShieldOff') : t('liveChatShield')}
+            <UiIcon name="shield" size={15} />
+            {s?.shield ? t('liveChatShieldOff') : t('liveChatShield')}
           </button>
           <p className="live-chat-panel-note">{t('liveChatShieldHint')}</p>
           <label className="live-chat-panel-row">

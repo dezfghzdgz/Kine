@@ -114,7 +114,7 @@ test('technický souhrn: všechno podstatné na pár řádcích', () => {
     },
     { videoId: 'v1', durationS: 720.4, startAt: 300, bufferedAheadS: 12.5, waitedMs: 12_000 }
   );
-  assert.match(text, /verdict=slow-server engine=hls\.js host=customer-abc\.cloudflarestream\.com/);
+  assert.match(text, /verdict=slow-server engine=hls\.js mode=full host=customer-abc\.cloudflarestream\.com/);
   assert.match(text, /video=v1 duration=720s startAt=300s/);
   assert.match(text, /firstFrame=9800ms manifest=210ms/);
   assert.match(text, /firstChunk=360p 4s ttfb=7400ms load=7900ms 600KB/);

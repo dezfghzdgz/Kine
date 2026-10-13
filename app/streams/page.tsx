@@ -7,7 +7,7 @@ import { useLanguage } from '@/lib/i18n';
 import { authHeaders } from '@/lib/authHeaders';
 import { announceLiveCount } from '@/lib/useLiveCount';
 import { categoryLabel, isCategoryKey } from '@/lib/categories';
-import { LiveCard, type LiveItem } from '@/components/LiveNowRow';
+import { LiveCard, recentLiveList, rememberLiveList, type LiveItem } from '@/components/LiveNowRow';
 
 type Sort = 'foryou' | 'viewers' | 'newest';
 const SORTS: Sort[] = ['foryou', 'viewers', 'newest'];
@@ -25,7 +25,8 @@ function StreamsInner() {
   const { t } = useLanguage();
   const params = useSearchParams();
   const router = useRouter();
-  const [streams, setStreams] = useState<LiveItem[] | null>(null);
+  // Seznam z minula (hlavní stránka, předchozí návštěva) hned - obnoví se potichu.
+  const [streams, setStreams] = useState<LiveItem[] | null>(() => recentLiveList()?.streams ?? null);
   const [enabled, setEnabled] = useState(true);
   const [failed, setFailed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -41,7 +42,7 @@ function StreamsInner() {
   useEffect(() => {
     let cancelled = false;
     // Kdy přišel poslední platný seznam - starý (přenosy v něm už nemusí běžet) se neukazuje.
-    let loadedAt = 0;
+    let loadedAt = recentLiveList()?.at ?? 0;
     async function load() {
       if (document.hidden) return;
       try {
@@ -56,7 +57,9 @@ function StreamsInner() {
           setFailed(false);
           // Číslo u Živě v menu podle téhož seznamu - ať se nerozchází s tím, co je vidět
           // (bez přenosů, které vidí jen majitel a tým Kine - číslo je stejné pro všechny).
-          announceLiveCount(typeof body.publicTotal === 'number' ? body.publicTotal : typeof body.total === 'number' ? body.total : body.streams.length);
+          const publicTotal = typeof body.publicTotal === 'number' ? body.publicTotal : typeof body.total === 'number' ? body.total : body.streams.length;
+          announceLiveCount(publicTotal);
+          rememberLiveList(body.streams, publicTotal);
         } else setFailed(true);
       } catch {
         if (!cancelled) setFailed(true);
@@ -77,7 +80,8 @@ function StreamsInner() {
     }, 1000);
     const onVisible = () => {
       if (document.hidden) return;
-      if (loadedAt && Date.now() - loadedAt > 20 * 1000) {
+      // Hodně starý seznam pryč; mladší zůstane vidět, než přijde nový.
+      if (loadedAt && Date.now() - loadedAt > 60 * 1000) {
         loadedAt = 0;
         setStreams(null);
         setFailed(false);

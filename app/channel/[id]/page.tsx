@@ -10,10 +10,11 @@ import VerifiedBadge from '@/components/VerifiedBadge';
 import PlusBadge from '@/components/PlusBadge';
 import PostComposer from '@/components/PostComposer';
 import PostCard from '@/components/PostCard';
+import { sortPosts } from '@/lib/posts';
 import { buildVideoBlocks, isSpark } from '@/lib/videoBlocks';
 import { safeExternalUrl } from '@/lib/safeUrl';
 import { useLanguage } from '@/lib/i18n';
-import { computeTrustRatingClient, getTotalReactionCount, RATING_UNLOCK_THRESHOLD } from '@/lib/trustRatingClient';
+import { channelTrust, RATING_UNLOCK_THRESHOLD } from '@/lib/trustRatingClient';
 import { useUserRole } from '@/lib/useUserRole';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import LiveBadge from '@/components/LiveBadge';
@@ -109,10 +110,11 @@ function ChannelPageInner() {
     setProfile(profileData ? { ...(profileData as any), ...(flags ?? {}), badge_showcase: badgeShowcase } : null);
     setSubscriberCount(count ?? 0);
     if (profileData) {
-      computeTrustRatingClient(profileData.id, profileData.created_at).then(async (score) => {
-        const reactionCount = await getTotalReactionCount(profileData.id);
-        if (reactionCount >= RATING_UNLOCK_THRESHOLD) setTrustRating(score);
-      });
+      channelTrust(profileData.id, profileData.created_at)
+        .then(({ score, total }) => {
+          if (total >= RATING_UNLOCK_THRESHOLD) setTrustRating(score);
+        })
+        .catch(() => {});
     }
 
     if (profileData) {
@@ -174,6 +176,7 @@ function ChannelPageInner() {
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setVideos(mergedVideos);
       // Odznaky jen z vlastních videí, která už jsou venku (naplánovaná vidí jen majitel - ta se nepočítají).
+      // Hned z toho, co stránka má; všechny řady (lajky, hit, hodiny živě, příspěvky...) pak ze serveru.
       const published = (videoData ?? []).filter((v: any) => !v.scheduled_at || Date.parse(v.scheduled_at) <= Date.now());
       setBadgeStats({
         joinedAt: profileData.created_at ?? null,
@@ -182,7 +185,21 @@ function ChannelPageInner() {
         subscribers: count ?? 0,
         sparks: published.filter((v: any) => isSpark(v)).length,
         streamed: !streamedRes.error && (streamedRes.count ?? 0) > 0,
+        topVideoViews: published.reduce((max: number, v: any) => Math.max(max, Number(v.views) || 0), 0),
+        posts: (postData ?? []).length,
       });
+      // Nejvýš 8 s - odznaky z toho, co stránka už má, jsou vidět hned a čekání na server nic neblokuje.
+      const statsAbort = new AbortController();
+      const statsTimer = setTimeout(() => statsAbort.abort(), 8000);
+      fetch(`/api/badges/stats?channel=${encodeURIComponent(channelId)}`, { signal: statsAbort.signal })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((body) => {
+          if (body?.stats && typeof body.stats === 'object') setBadgeStats(body.stats as BadgeStats);
+        })
+        .catch(() => {
+          // Bez serveru zůstanou odznaky z toho, co stránka má.
+        })
+        .finally(() => clearTimeout(statsTimer));
       setPosts(postData ?? []);
       setChannelPlaylists(playlistData ?? []);
       setSavedPlaylistIds(new Set((myPlaylists ?? []).map((p: any) => p.saved_from)));
@@ -462,12 +479,22 @@ function ChannelPageInner() {
       )}
 
       {tab === 'posts' && (
-        <div style={{ maxWidth: 560 }}>
+        <div className="post-list">
           {isOwner && <PostComposer userId={userId!} onPosted={load} initialType={searchParams.get('compose') as 'text' | 'photo' | 'poll' | null} />}
           {posts.length === 0 ? (
             <p style={{ color: 'var(--text-faint)' }}>{t('noPostsYet')}</p>
           ) : (
-            posts.map((post) => <PostCard key={post.id} post={post} userId={userId} />)
+            // Připnuté nahoře (lib/posts.ts - sortPosts).
+            sortPosts(posts).map((post) => (
+              <PostCard
+                key={post.id}
+                post={post}
+                userId={userId}
+                author={profile}
+                onDeleted={(id) => setPosts((prev) => prev.filter((p) => p.id !== id))}
+                onChanged={load}
+              />
+            ))
           )}
         </div>
       )}

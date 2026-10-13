@@ -11,13 +11,17 @@ import {
   DEFAULT_APPEARANCE,
   DENSITIES,
   FONTS,
+  PATTERNS,
   TEXT_SIZES,
   backdropImageFromFile,
+  patternImageFromFile,
   readAppearance,
   readBackdropImage,
+  readPatternImage,
   readTheme,
   saveAppearance,
   saveBackdropImage,
+  savePatternImage,
   saveTheme,
   type Appearance,
   type AvatarMotion,
@@ -26,6 +30,7 @@ import {
   type Corners,
   type Density,
   type FontChoice,
+  type Pattern,
   type TextSize,
   type Theme,
 } from '@/lib/appearance';
@@ -47,6 +52,39 @@ const BACKDROP_LABELS: Record<Backdrop, DictKey> = {
   mono: 'appearanceBackdropMono',
   image: 'appearanceBackdropImage',
 };
+
+const PATTERN_LABELS: Record<Pattern, DictKey> = {
+  none: 'appearancePatternNone',
+  dots: 'appearancePatternDots',
+  grid: 'appearancePatternGrid',
+  diagonal: 'appearancePatternDiagonal',
+  waves: 'appearancePatternWaves',
+  plus: 'appearancePatternPlus',
+  circles: 'appearancePatternCircles',
+  zigzag: 'appearancePatternZigzag',
+  custom: 'appearancePatternCustom',
+};
+
+/**
+ * Hotové motivy: jedním klikem motiv, styl, pozadí, vzor, písmo a barva appky
+ * (pak jde cokoli doladit ručně). Náhled = barvy motivu.
+ */
+type Preset = {
+  id: 'kine' | 'midnight' | 'neon' | 'forest' | 'paper' | 'sunset';
+  label: DictKey;
+  theme: Theme;
+  brand: string;
+  patch: Partial<Appearance>;
+  preview: string;
+};
+const PRESETS: Preset[] = [
+  { id: 'kine', label: 'appearancePresetKine', theme: 'dark', brand: '#00c9a7', patch: { look: 'classic', backdrop: 'auto', pattern: 'none', font: 'inter', corners: 'normal' }, preview: 'linear-gradient(135deg, #0b0b0e, #16161b)' },
+  { id: 'midnight', label: 'appearancePresetMidnight', theme: 'dark', brand: '#8b5cf6', patch: { look: 'glass', backdrop: 'night', pattern: 'dots', patternStrength: 35, font: 'inter', corners: 'round' }, preview: 'linear-gradient(135deg, #0f0c29, #302b63)' },
+  { id: 'neon', label: 'appearancePresetNeon', theme: 'dark', brand: '#ff2bd6', patch: { look: 'glass', backdrop: 'neon', pattern: 'grid', patternStrength: 30, font: 'mono', corners: 'sharp' }, preview: 'linear-gradient(135deg, #12002b, #ff2bd6 140%)' },
+  { id: 'forest', label: 'appearancePresetForest', theme: 'gray', brand: '#22c55e', patch: { look: 'glass', backdrop: 'forest', pattern: 'waves', patternStrength: 30, font: 'rounded', corners: 'round' }, preview: 'linear-gradient(135deg, #0b2b1a, #2f6d3a)' },
+  { id: 'paper', label: 'appearancePresetPaper', theme: 'light', brand: '#e11d48', patch: { look: 'classic', backdrop: 'auto', pattern: 'diagonal', patternStrength: 25, font: 'serif', corners: 'normal' }, preview: 'linear-gradient(135deg, #faf7f2, #ece5d8)' },
+  { id: 'sunset', label: 'appearancePresetSunset', theme: 'dark', brand: '#f97316', patch: { look: 'glass', backdrop: 'sunset', pattern: 'none', font: 'inter', corners: 'round' }, preview: 'linear-gradient(135deg, #3a0d2e, #f97316)' },
+];
 
 const TEXT_LABELS: Record<TextSize, DictKey> = { s: 'appearanceTextS', m: 'appearanceTextM', l: 'appearanceTextL' };
 const CORNER_LABELS: Record<Corners, DictKey> = { sharp: 'appearanceCornersSharp', normal: 'appearanceCornersNormal', round: 'appearanceCornersRound' };
@@ -84,12 +122,17 @@ export default function AppearanceSettings() {
   const [wallpaper, setWallpaper] = useState<string | null>(null);
   const [wallpaperError, setWallpaperError] = useState<string | null>(null);
   const wallpaperInput = useRef<HTMLInputElement>(null);
+  // Vlastní vzor (dlaždice, data URL v paměti prohlížeče).
+  const [patternImage, setPatternImage] = useState<string | null>(null);
+  const [patternError, setPatternError] = useState<string | null>(null);
+  const patternInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const sync = () => {
       setTheme(readTheme());
       setAppearance(readAppearance());
       setWallpaper(readBackdropImage());
+      setPatternImage(readPatternImage());
     };
     sync();
     setBrand(currentBrandColor());
@@ -129,6 +172,28 @@ export default function AppearanceSettings() {
     change({ backdrop: 'image' });
   }
 
+  /** Vlastní vzor: zmenší se na dlaždici a uloží do zařízení; vzor se na něj přepne. */
+  async function pickPattern(file: File) {
+    setPatternError(null);
+    const url = await patternImageFromFile(file);
+    if (!url) {
+      setPatternError(t('appearanceImageUnreadable'));
+      return;
+    }
+    if (!savePatternImage(url)) {
+      setPatternError(t('appearanceImageTooBig'));
+      return;
+    }
+    setPatternImage(url);
+    change({ pattern: 'custom' });
+  }
+
+  function applyPreset(preset: Preset) {
+    changeTheme(preset.theme);
+    change({ patternStrength: DEFAULT_APPEARANCE.patternStrength, ...preset.patch });
+    changeBrand(preset.brand);
+  }
+
   function removeWallpaper() {
     saveBackdropImage(null);
     setWallpaper(null);
@@ -157,6 +222,21 @@ export default function AppearanceSettings() {
     <div className="panel appearance-panel" id="appearance" style={{ marginBottom: 32, display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div>
         <PanelHeading icon="palette" title={t('appearanceHeading')} help={t('appearanceDeviceNote')} />
+      </div>
+
+      {/* Hotové motivy - jedním klikem; pak jde cokoli doladit níž. */}
+      <div>
+        <p className="appearance-label">{t('appearancePresetsLabel')}</p>
+        <div className="appearance-presets">
+          {PRESETS.map((preset) => (
+            <button key={preset.id} type="button" className="appearance-preset" data-preset={preset.id} onClick={() => applyPreset(preset)}>
+              <span className="appearance-preset-preview" style={{ background: preset.preview }} aria-hidden="true">
+                <i style={{ background: preset.brand }} />
+              </span>
+              <span>{t(preset.label)}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div>
@@ -302,6 +382,104 @@ export default function AppearanceSettings() {
           </WithHelp>
         </>
       )}
+
+      {/* Vzor přes pozadí celé appky (oba vzhledy) - vestavěný v barvě appky, nebo vlastní obrázek. */}
+      <div>
+        <WithHelp help={t('appearancePatternHint')} className="appearance-label-help">
+          <p className="appearance-label">{t('appearancePatternLabel')}</p>
+        </WithHelp>
+        <div className="appearance-patterns" role="radiogroup" aria-label={t('appearancePatternLabel')}>
+          {PATTERNS.map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={appearance.pattern === value}
+              className={`appearance-pattern-chip ${appearance.pattern === value ? 'active' : ''}`}
+              data-pattern={value}
+              onClick={() => {
+                // Vlastní vzor bez obrázku: rovnou výběr souboru.
+                if (value === 'custom' && !patternImage) patternInput.current?.click();
+                else change({ pattern: value });
+              }}
+            >
+              <span
+                className={`appearance-pattern-swatch appearance-pattern-swatch-${value}`}
+                aria-hidden="true"
+                style={value === 'custom' && patternImage ? { backgroundImage: `url(${patternImage})` } : undefined}
+              >
+                {value === 'custom' && !patternImage ? <UiIcon name="plus" size={16} /> : value === 'none' ? <UiIcon name="close" size={14} /> : null}
+              </span>
+              {t(PATTERN_LABELS[value])}
+            </button>
+          ))}
+        </div>
+        <input
+          ref={patternInput}
+          type="file"
+          accept="image/*"
+          hidden
+          className="appearance-pattern-input"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (file) void pickPattern(file);
+          }}
+        />
+        {patternError && <p className="appearance-error">{patternError}</p>}
+        {appearance.pattern !== 'none' && (
+          <div className="appearance-wallpaper">
+            {appearance.pattern === 'custom' && patternImage && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                <button type="button" className="appearance-reset" onClick={() => patternInput.current?.click()}>
+                  <UiIcon name="image" size={15} />
+                  <span>{t('appearanceImageChange')}</span>
+                </button>
+                <button
+                  type="button"
+                  className="appearance-reset"
+                  onClick={() => {
+                    savePatternImage(null);
+                    setPatternImage(null);
+                    change({ pattern: 'none' });
+                  }}
+                >
+                  <UiIcon name="close" size={15} />
+                  <span>{t('appearanceImageRemove')}</span>
+                </button>
+              </div>
+            )}
+            <p className="appearance-label">{t('appearancePatternStrength')}</p>
+            <label className="appearance-range">
+              <span>{t('appearancePatternSubtle')}</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={appearance.patternStrength}
+                onChange={(e) => change({ patternStrength: Number(e.target.value) })}
+                aria-label={t('appearancePatternStrength')}
+              />
+              <span>{t('appearancePatternBold')}</span>
+            </label>
+            <p className="appearance-label" style={{ marginTop: 12 }}>{t('appearancePatternSize')}</p>
+            <label className="appearance-range">
+              <span>{t('appearancePatternSmaller')}</span>
+              <input
+                type="range"
+                min={50}
+                max={200}
+                step={10}
+                value={appearance.patternScale}
+                onChange={(e) => change({ patternScale: Number(e.target.value) })}
+                aria-label={t('appearancePatternSize')}
+              />
+              <span>{t('appearancePatternBigger')}</span>
+            </label>
+          </div>
+        )}
+      </div>
 
       <WithHelp help={t('appearanceAmbientHint')} className="settings-option">
         <label className="settings-check">

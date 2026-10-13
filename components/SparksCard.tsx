@@ -16,9 +16,11 @@ import { useMusicCommands } from '@/lib/musicPlayer';
 import {
   SPARK_ACTIVE_BUFFER_S,
   SPARK_BACK_BUFFER_S,
+  SPARK_DOUBLE_TAP_MS,
   SPARK_PLAY_RETRY_MS,
   SPARK_PRELOAD_BUFFER_S,
   afterPlayRejected,
+  doubleTapScore,
   sparkPoster,
   type SparkEngine,
 } from '@/lib/sparksPlayback';
@@ -44,6 +46,7 @@ export default function SparksCard({
   onToggleComments,
   soundEnabledRef,
   onStarted,
+  light = false,
 }: {
   video: any;
   active: boolean;
@@ -59,6 +62,8 @@ export default function SparksCard({
   soundEnabledRef: { current: boolean };
   /** Video se rozjelo - stránka pak smí přednačítat další. */
   onStarted?: () => void;
+  /** Lehký režim (šetření dat, pomalé připojení - lib/netQuality.ts): menší náhled. */
+  light?: boolean;
 }) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -67,7 +72,8 @@ export default function SparksCard({
   const ratingMode = viewer.ratingMode;
   const [myScore, setMyScore] = useState<number | null>(null);
   const [avgScore, setAvgScore] = useState<number | null>(null);
-  const [totalRatings, setTotalRatings] = useState(0);
+  // Číslo u palce nahoru = kolik lidí dalo "líbí se" (dřív všechna hodnocení včetně palců dolů).
+  const [likeCount, setLikeCount] = useState(0);
   const [subscribed, setSubscribed] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -422,12 +428,12 @@ export default function SparksCard({
     const { data: reactions } = await supabase.from('video_reactions').select('score, user_id').eq('video_id', video.id);
     if (reactions && reactions.length > 0) {
       setAvgScore(reactions.reduce((s, r) => s + (r.score ?? 3), 0) / reactions.length);
-      setTotalRatings(reactions.length);
+      setLikeCount(reactions.filter((r) => (r.score ?? 0) >= 4).length);
       const mine = reactions.find((r) => r.user_id === userId);
       setMyScore(mine?.score ?? null);
     } else {
       setAvgScore(null);
-      setTotalRatings(0);
+      setLikeCount(0);
       setMyScore(null);
     }
   }
@@ -573,6 +579,62 @@ export default function SparksCard({
     soundEnabledRef.current = !next;
   }
 
+  // ---- dvojité klepnutí = líbí se (jako TikTok) --------------------------------------------
+  // Pauza počká SPARK_DOUBLE_TAP_MS, jestli nepřijde druhé klepnutí; rozjetí videa a zapnutí
+  // zvuku jdou hned (prohlížeč chce klepnutí "teď" a dvojité klepnutí jim nevadí).
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTapAtRef = useRef(0);
+  const likeBusyRef = useRef(false);
+  const [likeBurst, setLikeBurst] = useState<{ x: number; y: number; nonce: number } | null>(null);
+  useEffect(() => () => { if (tapTimerRef.current) clearTimeout(tapTimerRef.current); }, []);
+  useEffect(() => {
+    // Odscrollováno na jiné video: rozpracované klepnutí už nic nepauzne.
+    if (!active && tapTimerRef.current) {
+      clearTimeout(tapTimerRef.current);
+      tapTimerRef.current = null;
+    }
+  }, [active]);
+
+  function onSurfaceTap(e: React.MouseEvent<HTMLDivElement>) {
+    if (!active) return;
+    const now = Date.now();
+    if (now - lastTapAtRef.current <= SPARK_DOUBLE_TAP_MS) {
+      // Další rychlá klepnutí dál přidávají jen animaci (žádná pauza mezi nimi).
+      lastTapAtRef.current = now;
+      if (tapTimerRef.current) {
+        clearTimeout(tapTimerRef.current);
+        tapTimerRef.current = null;
+      }
+      const rect = e.currentTarget.getBoundingClientRect();
+      setLikeBurst({ x: e.clientX - rect.left, y: e.clientY - rect.top, nonce: now });
+      if (!userId) {
+        flash(t('sparksLoginToLike'));
+        return;
+      }
+      const score = doubleTapScore(ratingMode, myScore);
+      if (score !== null && !likeBusyRef.current) {
+        likeBusyRef.current = true;
+        setMyScore(score);
+        void submitScore(score).finally(() => {
+          likeBusyRef.current = false;
+        });
+      }
+      return;
+    }
+    lastTapAtRef.current = now;
+    const el = videoRef.current;
+    const pausing = native && el ? !el.paused && !soundBlocked : !paused;
+    if (!pausing) {
+      togglePlayPause();
+      return;
+    }
+    if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+    tapTimerRef.current = setTimeout(() => {
+      tapTimerRef.current = null;
+      togglePlayRef.current();
+    }, SPARK_DOUBLE_TAP_MS);
+  }
+
   // Mezerník / K = přehrát/pauza, M = zvuk - jen u videa, které je na řadě.
   const togglePlayRef = useRef(togglePlayPause);
   togglePlayRef.current = togglePlayPause;
@@ -598,14 +660,14 @@ export default function SparksCard({
   }, [active]);
 
   const creatorName = video.profiles?.display_name ?? video.profiles?.username ?? t('unknownCreator');
-  const poster = near ? sparkPoster(video) : null;
+  const poster = near ? sparkPoster(video, light) : null;
   const showPlayIcon = active && (native ? userPaused || needsTap : paused);
 
   return (
     <div className="spark-slide">
       {/* SDK přehrávače Cloudflare jen pro záložní iframe (vlastní přehrávač ho nepotřebuje). */}
       {engine !== null && !native && <Script src="https://embed.cloudflarestream.com/embed/sdk.latest.js" strategy="afterInteractive" />}
-      <div className="spark-player-wrap" onClick={togglePlayPause} style={{ cursor: 'pointer', position: 'relative' }}>
+      <div className="spark-player-wrap" onClick={onSurfaceTap} style={{ cursor: 'pointer', position: 'relative' }}>
         {native && near ? (
           <video
             ref={videoRef}
@@ -660,6 +722,17 @@ export default function SparksCard({
             <SpeakerIcon muted={muted} size={16} />
           </button>
         )}
+        {likeBurst && (
+          <span
+            key={likeBurst.nonce}
+            className="spark-like-burst"
+            style={{ left: likeBurst.x, top: likeBurst.y }}
+            aria-hidden="true"
+            onAnimationEnd={() => setLikeBurst(null)}
+          >
+            <ThumbsUpIcon filled size={92} />
+          </span>
+        )}
         {native && (
           <div className="spark-progress" aria-hidden="true">
             <div ref={progressRef} className="spark-progress-fill" />
@@ -699,7 +772,7 @@ export default function SparksCard({
           <>
             <div className="spark-action-item" onClick={() => submitScore(5)}>
               <ThumbsUpIcon filled={myScore === 5} size={28} />
-              <span className="spark-action-label">{totalRatings > 0 ? totalRatings : ''}</span>
+              <span className="spark-action-label">{likeCount > 0 ? likeCount : ''}</span>
             </div>
             <div className="spark-action-item" onClick={() => submitScore(1)}>
               <ThumbsDownIcon filled={myScore === 1} size={28} />

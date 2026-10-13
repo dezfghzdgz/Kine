@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 import { formatTipAmount } from '@/lib/liveTips';
 import ProfileImage from './ProfileImage';
+import UiIcon from './UiIcon';
 
 type ReplayMessage = {
   id: number;
@@ -110,7 +111,10 @@ export default function ChatReplay({
   return (
     <div className="live-chat chat-replay" style={{ height: hidden ? 'auto' : undefined }}>
       <div className="live-chat-head">
-        <span>💬 {t('chatReplayHeading')}</span>
+        <span className="live-chat-head-title">
+          <UiIcon name="chat" size={15} />
+          {t('chatReplayHeading')}
+        </span>
         <button type="button" className="live-chat-icon-btn" onClick={() => setHidden((v) => !v)} aria-expanded={!hidden} title={hidden ? t('chatReplayShow') : t('chatReplayHide')}>
           {hidden ? '▾' : '▴'}
         </button>

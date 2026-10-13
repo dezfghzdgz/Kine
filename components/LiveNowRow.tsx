@@ -33,6 +33,23 @@ const HOME_LIMIT = 8;
 
 /** Seznam starší než tohle (nejde obnovit) se schová - přenosy v něm už nemusí běžet. */
 const STALE_AFTER_MS = 90 * 1000;
+/** Po návratu do karty / na stránku se seznam mladší než tohle ukáže hned (obnoví se potichu). */
+const REUSE_MS = 60 * 1000;
+
+/**
+ * Poslední seznam přenosů (sdílí ho hlavní stránka i stránka Živě) - po
+ * přechodu mezi stránkami je řada vidět hned, ne až po novém dotazu
+ * (dřív při každém návratu na chvíli zmizela - "jednou tam je, jednou ne").
+ */
+let lastLiveList: { at: number; streams: LiveItem[]; publicTotal: number } | null = null;
+
+export function rememberLiveList(streams: LiveItem[], publicTotal: number): void {
+  lastLiveList = { at: Date.now(), streams, publicTotal };
+}
+
+export function recentLiveList(maxAgeMs: number = REUSE_MS): { at: number; streams: LiveItem[]; publicTotal: number } | null {
+  return lastLiveList && Date.now() - lastLiveList.at < maxAgeMs ? lastLiveList : null;
+}
 
 /**
  * Řada "Živě" na hlavní stránce - kdo teď vysílá. Když nikdo, nevykreslí
@@ -40,14 +57,16 @@ const STALE_AFTER_MS = 90 * 1000;
  */
 export default function LiveNowRow() {
   const { t } = useLanguage();
-  const [streams, setStreams] = useState<LiveItem[]>([]);
+  const [streams, setStreams] = useState<LiveItem[]>(() => recentLiveList()?.streams ?? []);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     let cancelled = false;
     // Kdy přišel poslední platný seznam. Starý seznam se neukazuje - jinak tu po návratu
     // do karty (třeba z appky, kde vysílání skončilo) visel přenos, který už neběží.
-    let loadedAt = 0;
+    const reused = recentLiveList();
+    let loadedAt = reused ? reused.at : 0;
+    if (reused) announceLiveCount(reused.publicTotal);
     async function load() {
       if (document.hidden) return;
       try {
@@ -59,7 +78,9 @@ export default function LiveNowRow() {
           setStreams(body.streams);
           // Číslo u Živě v menu podle téhož seznamu - ať se nerozchází s tím, co je vidět
           // (bez přenosů, které vidí jen majitel a tým Kine - číslo je stejné pro všechny).
-          announceLiveCount(typeof body.publicTotal === 'number' ? body.publicTotal : typeof body.total === 'number' ? body.total : body.streams.length);
+          const publicTotal = typeof body.publicTotal === 'number' ? body.publicTotal : typeof body.total === 'number' ? body.total : body.streams.length;
+          announceLiveCount(publicTotal);
+          rememberLiveList(body.streams, publicTotal);
         }
       } catch {
         // Bez sítě se řada prostě neukáže.
@@ -76,7 +97,8 @@ export default function LiveNowRow() {
     }, 1000);
     const onVisible = () => {
       if (document.hidden) return;
-      if (loadedAt && Date.now() - loadedAt > 20 * 1000) {
+      // Hodně starý seznam (karta dlouho na pozadí) pryč; mladší zůstane, než přijde nový.
+      if (loadedAt && Date.now() - loadedAt > REUSE_MS) {
         loadedAt = 0;
         setStreams([]);
       }

@@ -141,6 +141,8 @@ export function mbps(kbps: number | null | undefined): string {
 /** Údaje přehrávače, ze kterých se skládá technický souhrn (VodStats z lib/vodPlayer.ts). */
 export type StatsSnapshot = {
   engine: string;
+  /** Lehký režim (šetří data) / plný - lib/netQuality.ts. */
+  mode?: string;
   host: string;
   manifestMs: number | null;
   firstFrameMs: number | null;
@@ -167,7 +169,7 @@ export function statsReport(
   extra: { videoId?: string | null; durationS?: number | null; startAt?: number | null; bufferedAheadS?: number | null; waitedMs?: number | null } = {}
 ): string {
   const lines = [
-    `verdict=${vodVerdict(s)} engine=${s.engine} host=${s.host || '?'}`,
+    `verdict=${vodVerdict(s)} engine=${s.engine} mode=${s.mode ?? 'full'} host=${s.host || '?'}`,
     `video=${extra.videoId ?? '?'} duration=${extra.durationS ? Math.round(extra.durationS) + 's' : '?'} startAt=${extra.startAt ? Math.round(extra.startAt) + 's' : '0'}`,
     `firstFrame=${s.firstFrameMs !== null ? s.firstFrameMs + 'ms' : `none(waited ${extra.waitedMs !== null && extra.waitedMs !== undefined ? Math.round(extra.waitedMs) + 'ms' : '?'})`} manifest=${s.manifestMs !== null ? s.manifestMs + 'ms' : '?'}`,
     `firstChunk=${s.firstFragment ? sampleText(s.firstFragment) : '?'}`,

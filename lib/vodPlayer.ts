@@ -2,6 +2,17 @@
 
 import { preloadHls, supportsNativeHls } from './hlsAttach';
 import { fragmentSample, qualityOptions, startEstimate, type FragmentSample, type QualityLevel } from './vodPlayerCore';
+import {
+  LIGHT_START_ESTIMATE,
+  LIGHT_UPGRADE_BANDWIDTH,
+  dataSaverPref,
+  lightLevelCap,
+  lightManifestUrl,
+  playbackMode,
+  recordStall,
+  recordStart,
+  type PlaybackMode,
+} from './netQuality';
 import { fingerprintOf } from './errorReporter';
 import { detectDeviceClass } from './deviceClass';
 
@@ -39,6 +50,8 @@ export function canPlayVodNatively(): boolean {
 
 export type VodStats = {
   engine: 'hls.js' | 'native';
+  /** Lehký režim (šetří data, nižší kvalita) / plný - lib/netQuality.ts. */
+  mode: PlaybackMode;
   host: string;
   /** performance.now() při napojení. */
   attachedAt: number;
@@ -89,6 +102,10 @@ export type VodOptions = {
   bufferCap?: number;
   /** Kolik vteřin za sebou držet (výchozí 30). Krátká videa ve smyčce (Sparks) celé - smyčka pak nic nestahuje znovu. */
   backBuffer?: number;
+  /** Režim kvality (výchozí podle připojení - lib/netQuality.ts). */
+  mode?: PlaybackMode;
+  /** Zapisovat rozjezd a zaseknutí do měření připojení (výchozí ano; náhled po najetí ne). */
+  measure?: boolean;
 };
 
 /** Safari (HLS sám) se nedá říct "jen 4 s dopředu" - u přednačítaného videa aspoň preload=metadata. */
@@ -125,8 +142,11 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
   } catch {
     host = '';
   }
+  const mode: PlaybackMode = options.mode ?? playbackMode();
+  const measure = options.measure !== false;
   const stats: VodStats = {
     engine: supportsNativeHls() ? 'native' : 'hls.js',
+    mode,
     host,
     attachedAt: typeof performance !== 'undefined' ? performance.now() : Date.now(),
     playRequestedAt: null,
@@ -153,6 +173,8 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
   let levels: QualityLevel[] = [];
   let mediaRecoveries = 0;
   let networkRecoveries = 0;
+  /** Lehký režim: kolik kusů po sobě přišlo rychle (zvednutí stropu kvality). */
+  let fastFragments = 0;
 
   // Po přetočení a ruční změně kvality se chvíli načítá schválně - to není zaseknutí.
   let quietUntil = 0;
@@ -160,10 +182,18 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
     if (stats.playRequestedAt === null) stats.playRequestedAt = now();
   };
   const onPlaying = () => {
-    if (stats.firstFrameMs === null) stats.firstFrameMs = Math.round(now() - (stats.playRequestedAt ?? stats.attachedAt));
+    if (stats.firstFrameMs === null) {
+      stats.firstFrameMs = Math.round(now() - (stats.playRequestedAt ?? stats.attachedAt));
+      // Jak rychle se video rozjelo - podle toho se příště volí kvalita (lib/netQuality.ts).
+      // Ne když karta byla na pozadí nebo se čekalo na klepnutí (to není síť).
+      if (measure && stats.playRequestedAt !== null && !stats.hiddenBeforeStart) recordStart(stats.firstFrameMs, 0, mode);
+    }
   };
   const onWaiting = () => {
-    if (stats.firstFrameMs !== null && !video.seeking && now() > quietUntil) stats.stalls += 1;
+    if (stats.firstFrameMs !== null && !video.seeking && now() > quietUntil) {
+      stats.stalls += 1;
+      if (measure) recordStall();
+    }
   };
   const onSeeking = () => {
     quietUntil = now() + 3000;
@@ -208,7 +238,9 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
     // Safari si o tom, kolik stáhnout dopředu, rozhoduje sám - u přednačítaného videa
     // (malý strop) aspoň jen začátek a údaje, ať nebere data tomu, co právě hraje.
     video.preload = nativePreload(bufferCap);
-    video.src = url;
+    // Lehký režim: Cloudflare pošle jen jednu nižší kvalitu (Safari si ji jinak volí sám a na
+    // datech začínal klidně ve vysoké - video se pak dlouho rozjíždělo).
+    video.src = mode === 'light' ? lightManifestUrl(url) : url;
     nativeCleanup = () => {
       video.removeEventListener('loadedmetadata', onMeta);
       video.removeEventListener('error', onError);
@@ -230,9 +262,12 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
         // První kus podle odhadu připojení (malý), pak hls.js kvalitu sám zvedne.
         startLevel: -1,
         testBandwidth: false,
-        abrEwmaDefaultEstimate: startEstimate(rememberedBandwidth()),
+        // Lehký režim začíná ještě níž (lib/netQuality.ts).
+        abrEwmaDefaultEstimate: mode === 'light' ? LIGHT_START_ESTIMATE : startEstimate(rememberedBandwidth()),
         // Do malého okna se nestahuje 1080p; na celé obrazovce kvalita vyskočí.
         capLevelToPlayerSize: true,
+        // Telefon s hustým displejem (3x) nepotřebuje video na trojnásobek okna - stačí 2x (o dost míň dat).
+        maxDevicePixelRatio: 2,
         maxBufferLength: bufferAhead,
         maxMaxBufferLength: bufferCap,
         backBufferLength: options.backBuffer ?? 30,
@@ -247,6 +282,11 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
       });
       hls.on(E.MANIFEST_PARSED, () => {
         levels = qualityOptions(hls?.levels ?? []);
+        // Lehký režim: automatika nejvýš do ~480p (strop se zvedne, když se připojení ukáže dobré).
+        if (mode === 'light') {
+          const cap = lightLevelCap(hls?.levels ?? []);
+          if (cap >= 0) hls.autoLevelCapping = cap;
+        }
         options.onLevels?.();
       });
       hls.on(E.LEVEL_SWITCHED, (_e: unknown, data: any) => {
@@ -267,6 +307,13 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
           stats.bandwidthKbps = Math.round(bw / 1000);
           // Příště se začne podle tohohle (lib/vodPlayerCore.ts - startEstimate).
           if (stats.recent.length >= 2) rememberBandwidth(bw);
+          // Lehký režim a připojení se ukázalo dobré (3 kusy po sobě): strop pryč - kvalita
+          // vyskočí sama ("když bude internet OK, tak bez komprese"). Ne, když si člověk
+          // šetření dat zapnul sám.
+          if (mode === 'light' && hls && hls.autoLevelCapping !== -1 && dataSaverPref() !== 'save') {
+            fastFragments = bw >= LIGHT_UPGRADE_BANDWIDTH ? fastFragments + 1 : 0;
+            if (fastFragments >= 3) hls.autoLevelCapping = -1;
+          }
         }
       });
       hls.on(E.ERROR, (_e: unknown, data: any) => {

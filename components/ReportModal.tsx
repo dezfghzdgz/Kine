@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import UiIcon from './UiIcon';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
@@ -69,7 +70,9 @@ export default function ReportModal({
           <p className="panel-heading" style={{ margin: 0 }}>
             {commentId ? t('reportComment') : t('reportVideo')}
           </p>
-          <button onClick={onClose} style={{ background: 'none', color: 'var(--text-faint)', padding: 4 }}>✕</button>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close" style={{ color: 'var(--text-faint)' }}>
+            <UiIcon name="close" size={16} />
+          </button>
         </div>
 
         {failed && (

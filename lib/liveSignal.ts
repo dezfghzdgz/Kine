@@ -142,7 +142,11 @@ export function decideLive(
   now: number = Date.now()
 ): LiveDecision {
   const sure = cf.connected !== null;
-  const streaming = sure ? cf.connected === true : cf.listed;
+  let streaming = sure ? cf.connected === true : cf.listed;
+  // Appka právě hlásí, že vysílá, a Cloudflare má přenos v seznamu běžících: lifecycle
+  // (jinak "jistý") občas chvíli zaostává - tady se věří seznamu, ať se přenos potvrdí
+  // (bez potvrzení by appce po 3 minutách přestalo platit "pořád vysílám").
+  if (!streaming && cf.listed && row.is_live && appPingFresh(row, now)) streaming = true;
 
   if (row.is_live) {
     if (streaming) return 'confirm';

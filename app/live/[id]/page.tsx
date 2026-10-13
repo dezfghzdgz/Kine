@@ -17,6 +17,7 @@ import { FOLLOW_LIVE_MS, liveFrameUrl, preloadImage, setAmbientSource } from '@/
 import AmbientCanvas from '@/components/AmbientCanvas';
 import { useAppearance } from '@/lib/useAppearance';
 import ProfileImage from '@/components/ProfileImage';
+import UiIcon from '@/components/UiIcon';
 
 type Status = {
   enabled: boolean;
@@ -263,14 +264,14 @@ export default function LivePage() {
       <div className="live-main">
         {status.moderation?.hidden && (
           <div className="moderation-hold-note" role="status">
-            <span aria-hidden="true">⚠️</span>
+            <UiIcon name="warning" size={18} />
             {/* Majiteli "tvůj přenos", týmu Kine co se děje a kde ho pustit. */}
             <span>{status.moderation.own === false ? t('liveHeldStaff') : t('liveHeldOwner')}</span>
           </div>
         )}
         {status.moderation?.restricted && (
           <div className="moderation-hold-note" role="status">
-            <span aria-hidden="true">⚠️</span>
+            <UiIcon name="warning" size={18} />
             <span>{status.moderation.restricted === 'banned' ? t('liveRestrictedBannedNote') : t('liveRestrictedShadowNote')}</span>
           </div>
         )}

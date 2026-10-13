@@ -14,7 +14,12 @@ import ReportModal from './ReportModal';
 import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { categoryLabel } from '@/lib/categories';
 import LoadFailed from './LoadFailed';
-import { parseTimestamp } from '@/lib/captions';
+import { parseTimestamp, type Caption } from '@/lib/captions';
+import TranscriptPanel from './TranscriptPanel';
+import { timeAgo } from '@/lib/timeAgo';
+import UiIcon from './UiIcon';
+import ProfileImage from './ProfileImage';
+import { ThumbsDownIcon, ThumbsUpIcon } from './ReactionIcons';
 
 /** Kolik komentářů se ukáže naráz (další po kliknutí). */
 const COMMENTS_PAGE = 20;
@@ -30,7 +35,7 @@ type Comment = {
   /** Srdíčko od tvůrce videa - "tohle se mi líbí", viditelné všem. */
   hearted_by_creator?: boolean | null;
   image_url: string | null;
-  profiles: { username: string; is_supporter?: boolean } | null;
+  profiles: { username: string; display_name?: string | null; avatar_url?: string | null; is_supporter?: boolean } | null;
   likeCount: number;
   dislikeCount: number;
   myReaction: 'like' | 'dislike' | null;
@@ -47,7 +52,7 @@ type VideoInfo = {
   comments_disabled?: boolean;
 };
 
-const TABS = ['Popis', 'Flow', 'Technical'] as const;
+const TABS = ['Popis', 'Flow', 'Prepis', 'Technical'] as const;
 
 function formatDuration(seconds: number | null) {
   if (!seconds) return '—';
@@ -86,14 +91,28 @@ function renderCommentContent(content: string, onSeek?: (seconds: number) => voi
   });
 }
 
+/** Komentář po změně vlastní reakce (počty i "moje"). */
+function applyReaction(c: Comment, next: 'like' | 'dislike' | null): Comment {
+  let { likeCount, dislikeCount } = c;
+  if (c.myReaction === 'like') likeCount -= 1;
+  if (c.myReaction === 'dislike') dislikeCount -= 1;
+  if (next === 'like') likeCount += 1;
+  if (next === 'dislike') dislikeCount += 1;
+  return { ...c, likeCount: Math.max(0, likeCount), dislikeCount: Math.max(0, dislikeCount), myReaction: next };
+}
+
 export default function CommentSection({
-  videoId, description, video, ownerId, onSeek,
+  videoId, description, video, ownerId, onSeek, captions, getCurrentTime,
 }: {
   videoId: string;
   description?: string | null;
   video?: VideoInfo;
   ownerId?: string;
   onSeek?: (seconds: number) => void;
+  /** Titulky videa - z nich přepis (záložka jen když nějaké jsou). */
+  captions?: Caption[] | null;
+  /** Kde video právě je (zvýraznění řádku v přepisu). */
+  getCurrentTime?: () => number;
 }) {
   const router = useRouter();
   const { t, lang } = useLanguage();
@@ -123,6 +142,8 @@ export default function CommentSection({
   // Řazení (jako na YouTube) a kolik komentářů je vidět.
   const [sortMode, setSortMode] = useState<'top' | 'newest'>('top');
   const [visibleCount, setVisibleCount] = useState(COMMENTS_PAGE);
+  // Rozbalené odpovědi (jako na YouTube jsou schované pod "Zobrazit odpovědi").
+  const [openReplies, setOpenReplies] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadComments();
@@ -140,13 +161,13 @@ export default function CommentSection({
       if (seSrdickem) {
         return supabase
           .from('comments')
-          .select('id, content, created_at, parent_id, timestamp_seconds, user_id, pinned, hearted_by_creator, image_url, profiles!comments_user_id_fkey(username, is_supporter)')
+          .select('id, content, created_at, parent_id, timestamp_seconds, user_id, pinned, hearted_by_creator, image_url, profiles!comments_user_id_fkey(username, display_name, avatar_url, is_supporter)')
           .eq('video_id', videoId)
           .order('created_at', { ascending: false });
       }
       return supabase
         .from('comments')
-        .select('id, content, created_at, parent_id, timestamp_seconds, user_id, pinned, image_url, profiles!comments_user_id_fkey(username, is_supporter)')
+        .select('id, content, created_at, parent_id, timestamp_seconds, user_id, pinned, image_url, profiles!comments_user_id_fkey(username, display_name, avatar_url, is_supporter)')
         .eq('video_id', videoId)
         .order('created_at', { ascending: false });
     };
@@ -327,12 +348,15 @@ export default function CommentSection({
       router.push('/login');
       return;
     }
-    if (currentReaction === type) {
-      await supabase.from('comment_reactions').delete().eq('comment_id', commentId).eq('user_id', userId);
-    } else {
-      await supabase.from('comment_reactions').upsert({ comment_id: commentId, user_id: userId, type });
-    }
-    loadComments();
+    // Hned na obrazovce (dřív se po každém kliknutí znovu stáhly všechny komentáře
+    // i reakce - palec naskočil až za vteřinu i víc); databáze potom, při chybě znovu načíst.
+    const next = currentReaction === type ? null : type;
+    setComments((prev) => prev.map((c) => (c.id === commentId ? applyReaction(c, next) : c)));
+    const { error } =
+      next === null
+        ? await supabase.from('comment_reactions').delete().eq('comment_id', commentId).eq('user_id', userId)
+        : await supabase.from('comment_reactions').upsert({ comment_id: commentId, user_id: userId, type: next });
+    if (error) loadComments();
   }
 
   // Připnutý první; pak podle řazení: "Nejlepší" = lajky mínus nelajky (srdíčko
@@ -349,20 +373,134 @@ export default function CommentSection({
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
   const flowComments = allTopLevel.slice(0, visibleCount);
-  const repliesFor = (id: string) => comments.filter((c) => c.parent_id === id);
+  // Odpovědi pod komentářem od nejstarší (rozhovor se čte shora dolů).
+  const repliesFor = (id: string) =>
+    comments.filter((c) => c.parent_id === id).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+  function toggleReplies(id: string) {
+    setOpenReplies((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  /** Jeden komentář (i odpověď): profilovka a jméno s odkazem na kanál, kdy, text, akce ikonami. */
+  function renderComment(c: Comment, isReply: boolean) {
+    const name = c.profiles?.display_name || c.profiles?.username || t('unknownUserFallback');
+    const isCreator = !!ownerId && c.user_id === ownerId;
+    const canModerate = !!ownerId && ownerId === userId;
+    return (
+      <div key={c.id} className={`comment-row${isReply ? ' comment-reply' : ''}`} data-anim-scope>
+        <Link href={`/channel/${c.user_id}`} className="comment-avatar" tabIndex={-1} aria-hidden="true">
+          {c.profiles?.avatar_url ? <ProfileImage src={c.profiles.avatar_url} /> : <span>{name.slice(0, 1).toUpperCase()}</span>}
+        </Link>
+        <div className="comment-body">
+          <p className="comment-author">
+            <Link href={`/channel/${c.user_id}`} className={isCreator ? 'comment-author-name creator' : 'comment-author-name'}>
+              {name}
+            </Link>
+            <SupporterBadge isSupporter={c.profiles?.is_supporter} />
+            <span className="comment-time" title={new Date(c.created_at).toLocaleString(DATE_LOCALES[lang])}>
+              {timeAgo(c.created_at, DATE_LOCALES[lang])}
+            </span>
+            {c.pinned && (
+              <span className="comment-pinned">
+                <UiIcon name="pin" size={12} />
+                {t('pinnedLabel')}
+              </span>
+            )}
+          </p>
+          <p className="comment-text">{renderCommentContent(c.content, onSeek)}</p>
+          {c.image_url && <img loading="lazy" decoding="async" src={c.image_url} alt="" className="comment-image" />}
+          <div className="comment-actions">
+            <button
+              type="button"
+              className={`comment-action${c.myReaction === 'like' ? ' active' : ''}`}
+              aria-pressed={c.myReaction === 'like'}
+              aria-label={t('commentLike')}
+              title={t('commentLike')}
+              onClick={() => toggleReaction(c.id, 'like', c.myReaction)}
+            >
+              <ThumbsUpIcon size={15} filled={c.myReaction === 'like'} />
+              {c.likeCount > 0 && <span>{c.likeCount}</span>}
+            </button>
+            <button
+              type="button"
+              className={`comment-action${c.myReaction === 'dislike' ? ' active' : ''}`}
+              aria-pressed={c.myReaction === 'dislike'}
+              aria-label={t('commentDislike')}
+              title={t('commentDislike')}
+              onClick={() => toggleReaction(c.id, 'dislike', c.myReaction)}
+            >
+              <ThumbsDownIcon size={15} filled={c.myReaction === 'dislike'} />
+              {c.dislikeCount > 0 && <span>{c.dislikeCount}</span>}
+            </button>
+            {!isReply && (
+              <button type="button" className="comment-action" onClick={() => setReplyingTo(replyingTo === c.id ? null : c.id)}>
+                <UiIcon name="reply" size={15} />
+                <span>{t('reply')}</span>
+              </button>
+            )}
+            {/* Majitel videa má místo štítku přepínač srdíčka (níž) - dvě srdíčka vedle sebe mátla. */}
+            {c.hearted_by_creator && !canModerate && (
+              <span className="creator-heart" title={t('creatorHeartLabel')} aria-label={t('creatorHeartLabel')}>
+                <UiIcon name="heart" size={14} />
+              </span>
+            )}
+            {canModerate && (
+              <button
+                type="button"
+                className={`comment-action comment-action-heart${c.hearted_by_creator ? ' active' : ''}`}
+                aria-pressed={!!c.hearted_by_creator}
+                onClick={() => heartComment(c.id, !!c.hearted_by_creator)}
+                title={c.hearted_by_creator ? t('creatorUnheartButton') : t('creatorHeartButton')}
+                aria-label={c.hearted_by_creator ? t('creatorUnheartButton') : t('creatorHeartButton')}
+              >
+                <UiIcon name="heart" size={15} />
+              </button>
+            )}
+            {canModerate && !isReply && (
+              <button
+                type="button"
+                className={`comment-action${c.pinned ? ' active' : ''}`}
+                onClick={() => pinComment(c.id, c.pinned)}
+                title={c.pinned ? t('unpinButton') : t('pinButton')}
+                aria-label={c.pinned ? t('unpinButton') : t('pinButton')}
+              >
+                <UiIcon name="pin" size={15} />
+              </button>
+            )}
+            {(userId === c.user_id || userId === ownerId || isModerator) && (
+              <button type="button" className="comment-action" onClick={() => setConfirmDeleteId(c.id)} title={t('delete')} aria-label={t('delete')}>
+                <UiIcon name="trash" size={15} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="panel">
       <p className="panel-heading">{t('comments')}</p>
 
       <div className="tab-row">
-        {TABS.map((tab) => (
+        {TABS.filter((tab) => tab !== 'Prepis' || (captions?.length ?? 0) > 0).map((tab) => (
           <button
             key={tab}
             className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
             onClick={() => setActiveTab(tab)}
           >
-            {tab === 'Popis' ? t('description2') : tab === 'Flow' ? `${t('comments')}${comments.length > 0 ? ` (${comments.length})` : ''}` : t('technicalTab')}
+            {tab === 'Popis'
+              ? t('description2')
+              : tab === 'Flow'
+                ? `${t('comments')}${comments.length > 0 ? ` (${comments.length})` : ''}`
+                : tab === 'Prepis'
+                  ? t('transcriptTab')
+                  : t('technicalTab')}
           </button>
         ))}
       </div>
@@ -438,120 +576,43 @@ export default function CommentSection({
             </div>
           )}
 
-          {flowComments.map((c) => (
-            <div key={c.id} style={{ marginBottom: 18 }}>
-              <div className="comment-row" style={{ marginBottom: 6 }}>
-                <div className="comment-avatar" />
-                <div style={{ flex: 1 }}>
-                  <p className="comment-author">
-                    {c.profiles?.username ?? t('unknownUserFallback')}
-                    <SupporterBadge isSupporter={c.profiles?.is_supporter} />
-                    {c.pinned && <span style={{ color: 'var(--text-faint)', fontWeight: 400 }}> · 📌 {t('pinnedLabel')}</span>}
-                    {c.hearted_by_creator && (
-                      <span className="creator-heart" title={t('creatorHeartLabel')} aria-label={t('creatorHeartLabel')}>♥</span>
-                    )}
-                  </p>
-                  <p className="comment-text">{renderCommentContent(c.content, onSeek)}</p>
-                  {c.image_url && (
-                    <img loading="lazy" decoding="async" src={c.image_url} alt="" style={{ maxWidth: 200, borderRadius: 8, marginTop: 6, display: 'block' }} />
-                  )}
-                  <div className="comment-actions">
-                    <span
-                      onClick={() => toggleReaction(c.id, 'like', c.myReaction)}
-                      style={{ cursor: 'pointer', color: c.myReaction === 'like' ? 'var(--text)' : undefined }}
-                    >
-                      👍 {c.likeCount > 0 ? c.likeCount : ''}
-                    </span>
-                    <span
-                      onClick={() => toggleReaction(c.id, 'dislike', c.myReaction)}
-                      style={{ cursor: 'pointer', color: c.myReaction === 'dislike' ? 'var(--text)' : undefined }}
-                    >
-                      👎 {c.dislikeCount > 0 ? c.dislikeCount : ''}
-                    </span>
-                    <span style={{ cursor: 'pointer' }} onClick={() => setReplyingTo(replyingTo === c.id ? null : c.id)}>
-                      {t('reply')}
-                    </span>
-                    {ownerId && ownerId === userId && (
-                      <span style={{ cursor: 'pointer' }} onClick={() => pinComment(c.id, c.pinned)}>
-                        {c.pinned ? t('unpinButton') : t('pinButton')}
-                      </span>
-                    )}
-                    {ownerId && ownerId === userId && (
-                      <span
-                        style={{ cursor: 'pointer', color: c.hearted_by_creator ? 'var(--brand)' : undefined }}
-                        onClick={() => heartComment(c.id, !!c.hearted_by_creator)}
-                        title={c.hearted_by_creator ? t('creatorUnheartButton') : t('creatorHeartButton')}
-                      >
-                        {c.hearted_by_creator ? '♥' : '♡'}
-                      </span>
-                    )}
-                    {(userId === c.user_id || userId === ownerId || isModerator) && (
-                      <span style={{ cursor: 'pointer' }} onClick={() => setConfirmDeleteId(c.id)}>
-                        {t('delete')}
-                      </span>
-                    )}
-                  </div>
-                </div>
+          {flowComments.map((c) => {
+            const replies = repliesFor(c.id);
+            const repliesOpen = openReplies.has(c.id) || replyingTo === c.id;
+            return (
+              <div key={c.id} className="comment-thread">
+                {renderComment(c, false)}
+                {replies.length > 0 && (
+                  <button
+                    type="button"
+                    className={`comment-replies-toggle${repliesOpen ? ' open' : ''}`}
+                    aria-expanded={repliesOpen}
+                    onClick={() => toggleReplies(c.id)}
+                  >
+                    <UiIcon name="chevronDown" size={14} />
+                    {repliesOpen ? t('commentHideReplies') : t('commentShowReplies').replace('{n}', String(replies.length))}
+                  </button>
+                )}
+                {repliesOpen && replies.map((r) => renderComment(r, true))}
+
+                {replyingTo === c.id && (
+                  <form onSubmit={(e) => postComment(e, c.id)} className="comment-reply-form">
+                    <input
+                      type="text"
+                      placeholder={t('replyPlaceholder')}
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      style={{ flex: 1, minWidth: 0 }}
+                      autoFocus
+                    />
+                    <EmojiPicker onSelect={(emoji) => setReplyText((v) => v + emoji)} />
+                    <button type="submit" disabled={posting}>{t('postComment')}</button>
+                    {postError && <p className="error-text" style={{ fontSize: 12.5 }}>{postError}</p>}
+                  </form>
+                )}
               </div>
-
-              {repliesFor(c.id).map((r) => (
-                <div key={r.id} className="comment-row" style={{ marginLeft: 40, marginBottom: 6 }}>
-                  <div className="comment-avatar" style={{ width: 24, height: 24 }} />
-                  <div style={{ flex: 1 }}>
-                    <p className="comment-author">
-                      {r.profiles?.username ?? t('unknownUserFallback')}
-                      {r.hearted_by_creator && (
-                        <span className="creator-heart" title={t('creatorHeartLabel')} aria-label={t('creatorHeartLabel')}>♥</span>
-                      )}
-                    </p>
-                    <p className="comment-text">{renderCommentContent(r.content, onSeek)}</p>
-                    <div className="comment-actions">
-                      <span
-                        onClick={() => toggleReaction(r.id, 'like', r.myReaction)}
-                        style={{ cursor: 'pointer', color: r.myReaction === 'like' ? 'var(--text)' : undefined }}
-                      >
-                        👍 {r.likeCount > 0 ? r.likeCount : ''}
-                      </span>
-                      <span
-                        onClick={() => toggleReaction(r.id, 'dislike', r.myReaction)}
-                        style={{ cursor: 'pointer', color: r.myReaction === 'dislike' ? 'var(--text)' : undefined }}
-                      >
-                        👎 {r.dislikeCount > 0 ? r.dislikeCount : ''}
-                      </span>
-                      {ownerId && ownerId === userId && (
-                        <span
-                          style={{ cursor: 'pointer', color: r.hearted_by_creator ? 'var(--brand)' : undefined }}
-                          onClick={() => heartComment(r.id, !!r.hearted_by_creator)}
-                          title={r.hearted_by_creator ? t('creatorUnheartButton') : t('creatorHeartButton')}
-                        >
-                          {r.hearted_by_creator ? '♥' : '♡'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {replyingTo === c.id && (
-                <form
-                  onSubmit={(e) => postComment(e, c.id)}
-                  style={{ display: 'flex', gap: 8, marginLeft: 40, marginTop: 6 }}
-                >
-                  <input
-                    type="text"
-                    placeholder={t('replyPlaceholder')}
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    style={{ flex: 1, minWidth: 0 }}
-                    autoFocus
-                  />
-                  <EmojiPicker onSelect={(emoji) => setReplyText((v) => v + emoji)} />
-                  <button type="submit" disabled={posting}>{t('postComment')}</button>
-                  {postError && <p className="error-text" style={{ fontSize: 12.5 }}>{postError}</p>}
-                </form>
-              )}
-            </div>
-          ))}
+            );
+          })}
 
           {allTopLevel.length > flowComments.length && (
             <button
@@ -573,6 +634,8 @@ export default function CommentSection({
           )}
         </>
       )}
+
+      {activeTab === 'Prepis' && captions && captions.length > 0 && <TranscriptPanel captions={captions} onSeek={onSeek} getCurrentTime={getCurrentTime} />}
 
       {activeTab === 'Technical' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

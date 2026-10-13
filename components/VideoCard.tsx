@@ -3,6 +3,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import Script from 'next/script';
 import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { SpeakerIcon } from './ReactionIcons';
 import VideoCardMenu from './VideoCardMenu';
@@ -12,6 +13,8 @@ import { isUpcomingPremiere } from '@/lib/scheduling';
 import { attachVod, canPlayVodNatively } from '@/lib/vodPlayer';
 import { customerCodeFromUrl, manifestUrl } from '@/lib/streamSource';
 import { preloadHls } from '@/lib/hlsAttach';
+import { rememberStreamCode } from '@/lib/networkHints';
+import { previewsAllowed } from '@/lib/netQuality';
 
 const HOVER_DELAY_MS = 150;
 const SOUND_PREF_KEY = 'kine-preview-sound-enabled';
@@ -29,6 +32,7 @@ function VideoCard({
   formatDuration,
   reason,
   hideCreator,
+  priority,
 }: {
   video: any;
   href: string;
@@ -38,6 +42,8 @@ function VideoCard({
   /** Proč se video nabízí - krátký popisek pod názvem (lib/homeRecommendation.ts). */
   reason?: string | null;
   hideCreator?: boolean;
+  /** Karta nahoře na obrazovce: náhled se stáhne hned a přednostně (ne líně až po ostatních). */
+  priority?: boolean;
 }) {
   const { t, lang } = useLanguage();
   const [previewing, setPreviewing] = useState(false);
@@ -84,6 +90,8 @@ function VideoCard({
       bufferAhead: 10,
       bufferCap: 15,
       backBuffer: 15,
+      // Náhled po najetí se do měření připojení nepočítá (lib/netQuality.ts).
+      measure: false,
       onFatal: () => setNativeFailed(true),
     });
     let done = false;
@@ -140,10 +148,18 @@ function VideoCard({
     };
   }, [previewing, nativePreview, video.cloudflare_video_id]);
 
+  // Kód zákazníka Cloudflare (z adresy náhledu) si prohlížeč zapamatuje - příště se
+  // spojení se serverem videí naváže hned při načtení stránky (lib/networkHints.ts).
+  useEffect(() => {
+    rememberStreamCode(customerCodeFromUrl(video.thumbnail_url));
+  }, [video.thumbnail_url]);
+
   function startHover() {
     if (!video.cloudflare_video_id || upcomingPremiere) return;
     // Náhledy po najetí vypnuté v Nastavení -> Vzhled.
     if (document.documentElement.getAttribute('data-previews') === '0') return;
+    // Šetření dat / pomalé připojení: náhledy po najetí nestahují video (lib/netQuality.ts).
+    if (!previewsAllowed()) return;
     // Neveřejné video (soukromé, pro odběratele) hraje jen s podepsaným
     // tokenem (lib/streamProtection.ts) - náhled po najetí by skončil
     // chybou Cloudflare. Bez viditelnosti v datech se bere jako veřejné.
@@ -211,16 +227,21 @@ function VideoCard({
     // a prohlížeče se u něj chovají různě.
     <div
       className="video-card video-card-interactive"
-      onMouseEnter={startHover}
-      onMouseLeave={stopHover}
-      onTouchStart={startHover}
-      onTouchEnd={stopHover}
+      // Náhled jen po najetí MYŠÍ. Na telefonu se dřív spouštěl i dotykem - a protože
+      // scrollování začíná dotykem na kartu, stahovalo se při projíždění feedu video
+      // u každé karty, které se prst dotkl. Na mobilních datech to brzdilo všechno.
+      onPointerEnter={(e) => {
+        if (e.pointerType === 'mouse') startHover();
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType === 'mouse') stopHover();
+      }}
     >
       <Link href={href} className="video-card-link">
         <div className={isSparks ? 'video-thumb video-thumb-vertical' : 'video-thumb'}>
           {/* U vlastního přehrávače obrázek zůstává pod videem (žádné černé bliknutí, než se video rozjede). */}
           {video.thumbnail_url && (!previewing || nativePreview) && (
-            <Image src={video.thumbnail_url} alt={video.title} width={320} height={180} />
+            <Image src={video.thumbnail_url} alt={video.title} width={320} height={180} priority={priority} />
           )}
           {nativePreview && (
             <video
@@ -233,6 +254,8 @@ function VideoCard({
               aria-hidden="true"
             />
           )}
+          {/* Přehrávač Cloudflare (SDK) jen když je potřeba - dřív se stahoval na každé stránce. */}
+          {previewing && !nativePreview && <Script src="https://embed.cloudflarestream.com/embed/sdk.latest.js" strategy="afterInteractive" />}
           {previewing && !nativePreview && (
             <iframe
               ref={iframeRef}

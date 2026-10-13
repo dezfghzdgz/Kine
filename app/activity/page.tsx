@@ -9,6 +9,7 @@ import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { buildVideoBlocks } from '@/lib/videoBlocks';
 import WatchCalendar, { dayKey } from '@/components/WatchCalendar';
+import UiIcon from '@/components/UiIcon';
 import { videoCountLabel } from '@/lib/plural';
 import { VideoBlockRow } from '@/components/SparksShelf';
 
@@ -238,7 +239,8 @@ function ActivityPageInner() {
               className={`tab-btn ${calendarOpen || selectedDay ? 'active' : ''}`}
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}
             >
-              📅 {calendarOpen ? t('activityHideCalendar') : t('activityCalendar')}
+              <UiIcon name="calendar" size={15} />
+              {calendarOpen ? t('activityHideCalendar') : t('activityCalendar')}
             </button>
             {selectedDay && (
               <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>

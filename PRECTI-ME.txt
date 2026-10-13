@@ -1,3 +1,116 @@
+KINE - rychlost, mobilní data, příspěvky a ankety, odznaky (8 stupňů), vzhled (vzor
+a předvolby), komentáře, přepis, obraz v obraze; appka: klipy samy z Rocket League
+(dodávka kine-rychlost-posty-odznaky-2026-10-13)
+==========================================================================================
+
+Web + appka (Kine do PC / Kine Clipper 0.10.4).
+- Web: rozbal kine-web-rychlost-posty.zip do kořene repa Kine a přepiš, nahraj na GitHub
+  (přetažením) a pusť node zkontroluj-soubory.mjs.
+- Supabase -> SQL Editor: supabase-migration-posty-ankety.sql (příspěvky s víc fotkami
+  a videem, konec ankety, připnutí, úpravy, oznámení odběratelům; hodiny živě pro odznak).
+  Bez ní web běží dál - příspěvek má jednu fotku, anketa nemá konec a oznámení nechodí.
+- Vercel -> Environment Variables (doporučení): NEXT_PUBLIC_STREAM_CUSTOMER_CODE =
+  808j341v3bq647x6 a Redeploy. Prohlížeč se pak se serverem videí spojí hned při načtení
+  stránky (bez toho až při druhé návštěvě).
+- Appka: rozbal kine-desktop-0.10.4.zip do kořene repa kine-desktop, nahraj a pusť Vydání.
+  Pořadí web / appka je jedno (appka nic nového od webu nepotřebuje).
+- Na GitHubu pořád smaž (drag & drop nemaže): tests/username.test.mjs,
+  supabase-migration-zarizeni-chyby-jmena.sql, app/tests/playerStart.test.mjs,
+  kine-web-live.patch, CTI-ME.txt.
+
+RYCHLOST (hlavní priorita)
+- Přihlášení se neověřuje u serveru při každém dotazu: getUser bere relaci z prohlížeče
+  hned a u serveru ji ověří jednou za 5 minut na pozadí (lib/supabaseClient.ts) - dřív
+  každá stránka čekala na kolo k Supabase, než začala vůbec něco načítat.
+- Hlavní stránka: první dávka videí jde do databáze hned, souběžně s profilem, odběry
+  a historií (dřív až po nich). Zpět z videa = feed z paměti, bez načítání a na stejném
+  místě (10 minut). První 4 náhledy se stahují přednostně, ostatní líně.
+- Video: pozice "pokračovat od" se hledá souběžně s videem, playlist videa (manifest) se
+  přednačte už v hlavičce stránky, spojení se Supabase a serverem videí se naváže hned.
+- Rating kanálu (u videa, na kanálu, v Prozkoumat) jen z počtů po hvězdičkách - dřív se
+  při KAŽDÉM otevření videa stáhla všechna hodnocení všech videí kanálu (tisíce řádků po
+  mobilních datech souběžně s videem) a pak ještě jednou totéž.
+- Statistiky: ~12 dotazů za sebou -> 2 kola souběžně (odběratelé, účet a žádost o ověření
+  hned na začátku; reakce, zhlédnutí, komentáře a souhrny naráz); rating až po zobrazení.
+  Knihovna grafů se stáhne až po kliknutí na kartu.
+- Odznaky na kanálu: čísla ze serveru (/api/badges/stats) z mezipaměti CDN 5 minut.
+- Přehrávač Cloudflare (SDK) se stahuje jen tam, kde je potřeba (dřív na každé stránce).
+
+MOBILNÍ DATA
+- Hlavní příčina "na datech to nejde scrollovat": náhled videa se spouštěl i DOTYKEM - každá
+  karta, které se prst při scrollování dotkl, začala stahovat video. Teď náhled jen myší.
+- Lehký / plný režim (lib/netQuality.ts): na pomalém připojení (nebo když se videa
+  rozjíždějí pomalu - appka si to měří) začne video v menší kvalitě a samo se zvedne, když
+  data stačí. Sparks přednačítají jen jedno další video a menší náhledy, náhledy po najetí
+  nejdou. Nastavení -> Vzhled -> "Přehrávání": Automaticky / Šetřit data / Vždy nejlepší.
+  Na iPhonu (Safari) je přepínač i v nabídce ⋮ přehrávače.
+
+ŽIVĚ (občas vidím, občas ne)
+- Seznam Živě: chyba databáze/serveru už nevrací prázdný seznam (503 - stránka si nechá
+  poslední), odpověď divákovi nečeká na Cloudflare déle než 1,2 s, vysílání s appkou
+  (ping) a v seznamu Cloudflare se bere jako živé, i když druhé rozhraní Cloudflare
+  zrovna mlčí. Seznam se mezi stránkami pamatuje minutu (žádné bliknutí).
+- Diagnostika /admin/live -> "Sledovat průběh": každých 5 s se zeptá jako anonymní divák,
+  zapíše, jestli tě vidí, a "Kopírovat průběh" - když to bude zase blikat, pošli mi ten text.
+
+KOMENTÁŘE
+- Palce jako ikony (rozhodl jsem ikony, ne emoji - stejné jako u videa), profilovka, jméno,
+  "před 5 minutami", odpovědi sbalené pod "Zobrazit odpovědi (N)", lajk naskočí hned.
+
+PŘEPIS, OBRAZ V OBRAZE
+- U videa s titulky záložka "Přepis": řádky s časem, klik skočí ve videu, hledání bez
+  diakritiky, mluvený řádek se zvýrazní.
+- Obraz v obraze (video v okénku i mimo prohlížeč): tlačítko v přehrávači a klávesa I.
+
+SPARKS
+- Dvojité klepnutí = palec nahoru (s animací), jedno klepnutí pauza. Číslo u palce = lajky.
+
+ODZNAKY
+- 13 řad: navíc lajky, Hit (nejsledovanější video), hodiny živě, příspěvky, komentáře,
+  spolupráce. Až 8 stupňů: bronz, stříbro, zlato, platina, diamant, mistr, legenda, mýtus
+  (mistr až mýtus mají vlastní vzhled). Kanálům se výchozí trojice nepřeházela.
+- Okno odznaků je nad horní lištou (dřív ji měl nadpis pod ní).
+
+VZHLED
+- Vzor přes celou appku (tečky, mřížka, šikmé čáry, vlnky, křížky, kruhy, cik-cak) v barvě
+  appky, nebo VLASTNÍ obrázek jako vzor; výraznost a velikost. Předvolby celého vzhledu
+  jedním klikem (Kine, Půlnoc, Neon, Les, Papír, Západ slunce).
+
+PŘÍSPĚVKY A ANKETY
+- Až 4 fotky (mřížka, prohlížeč), video z Kine v příspěvku, anketa až 6 možností s koncem
+  (den / 3 dny / týden / bez konce), hlas jde změnit, výsledky v procentech, vítěz po
+  konci. Připnutí, úprava ("upraveno"), smazání, odkaz na příspěvek (/post/...).
+  Odběratelé se zvonečkem dostanou oznámení o novém příspěvku.
+
+STATISTIKY
+- Karty nahoře s ikonou a trendem "+N za 28 dní"; klik otevře graf.
+
+IKONY MÍSTO EMOJI
+- Premiéra, aktivita, chat vysílání (režimy, předčítání, nastavení), záznam chatu,
+  příloha komentáře, výběr emoji, odkazy pro tým v menu, varování moderace.
+
+APPKA 0.10.4 (Kine Clipper / Kine do PC)
+- Klipy samy z Rocket League (Nastavení -> Klipy samy ze hry, stejná volba jako u CS2):
+  tvoje góly, hattrick a skvělé zákroky; s volbou "Každé zabití" i obyčejné zákroky
+  a demolice. Název klipu nese skóre z tvého pohledu ("Gól · 2:1"). Oficiální Stats API
+  hry (Steam i Epic), do hry se nic nevkládá - appka ho v konfiguraci hry zapne sama
+  (vypnutím klipů ze hry se vrátí, jak bylo). Rocket League konfiguraci čte při startu:
+  po aktualizaci appky ho jednou restartuj.
+
+OPRAVA PŘI KONTROLE
+- Video: když vlastní přehrávač nejde (výpadek sítě, starší prohlížeč) a video převezme
+  přehrávač Cloudflare, mohl náhled s kolečkem zakrývat už běžící video až 30 s.
+
+CO JEŠTĚ CHYBÍ (návrhy na příště)
+- Kine: automatické titulky hned po nahrání (teď jen na požádání v úpravách videa) - pak
+  by měl přepis každé video, remix / reakce na Spark, playlisty pro víc lidí, graf diváků
+  během vysílání ve studiu.
+- Clipper: Valorant / Fortnite / Apex klipy samy nejdou (bez Overwolf to hry oficiálně
+  nedovolují); "chytré" klipy i u ostatních her podle hlasitosti (výbuch, křik - bez
+  zásahu do hry), sestřih nejlepších momentů po zápase jedním klikem z automatických klipů.
+
+==========================================================================================
+
 KINE - odznaky na výběr, záznamy vysílání jen na přání, playlisty, kanál, hledání s méně
 textem, playkine.com, náhled odkazu a ikony (dodávka kine-odznaky-playlisty-2026-10-13)
 ==========================================================================================

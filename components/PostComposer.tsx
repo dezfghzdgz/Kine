@@ -1,28 +1,98 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
+import { authHeaders } from '@/lib/authHeaders';
+import UiIcon from './UiIcon';
+import {
+  MAX_POLL_OPTIONS,
+  MAX_POST_IMAGES,
+  MAX_POST_TEXT,
+  POLL_DURATIONS_H,
+  cleanPollOptions,
+  pollEndsAt,
+  videoIdFromLink,
+  type PollDuration,
+} from '@/lib/posts';
 
+type PostType = 'text' | 'photo' | 'poll';
+
+/**
+ * Nový příspěvek na kanálu: text, až 4 fotky, video z Kine (vlastní video
+ * nebo odkaz), anketa až o 6 možnostech s koncem (den, 3 dny, týden, bez
+ * konce). Odběratelé se zvonečkem dostanou oznámení (/api/posts/notify).
+ */
 export default function PostComposer({
-  userId, onPosted, initialType,
+  userId,
+  onPosted,
+  initialType,
 }: {
   userId: string;
   onPosted: () => void;
   initialType?: 'text' | 'photo' | 'poll' | null;
 }) {
   const { t } = useLanguage();
-  const [type, setType] = useState<'text' | 'photo' | 'poll'>(initialType ?? 'text');
+  const [type, setType] = useState<PostType>(initialType ?? 'text');
   const [content, setContent] = useState('');
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [pollOptions, setPollOptions] = useState(['', '']);
+  const [pollHours, setPollHours] = useState<PollDuration>(72);
+  const [videoPicker, setVideoPicker] = useState(false);
+  const [myVideos, setMyVideos] = useState<{ id: string; title: string; thumbnail_url: string | null }[] | null>(null);
+  const [videoId, setVideoId] = useState<string | null>(null);
+  const [videoLink, setVideoLink] = useState('');
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
+  useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
+
+  async function openVideoPicker() {
+    setVideoPicker((v) => !v);
+    if (myVideos) return;
+    const { data } = await supabase
+      .from('videos')
+      .select('id, title, thumbnail_url')
+      .eq('owner_id', userId)
+      .eq('status', 'ready')
+      .eq('visibility', 'public')
+      .order('created_at', { ascending: false })
+      .limit(24);
+    setMyVideos(data ?? []);
+  }
+
+  function addFiles(list: FileList | null) {
+    if (!list) return;
+    const next = [...files];
+    for (const f of Array.from(list)) {
+      if (!f.type.startsWith('image/')) continue;
+      if (f.size > 10 * 1024 * 1024) {
+        setError(t('postImageTooBig'));
+        continue;
+      }
+      if (next.length >= MAX_POST_IMAGES) break;
+      next.push(f);
+    }
+    setFiles(next);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setPosting(true);
     setError(null);
+    const text = content.trim();
+    const options = type === 'poll' ? cleanPollOptions(pollOptions) : null;
+    if (type === 'poll' && !options) {
+      setError(t('pollNeedsTwo'));
+      return;
+    }
+    const linkedVideo = videoId ?? (videoLink.trim() ? videoIdFromLink(videoLink) : null);
+    if (videoLink.trim() && !linkedVideo) {
+      setError(t('postVideoLinkInvalid'));
+      return;
+    }
+    if (!text && files.length === 0 && !options && !linkedVideo) return;
+    setPosting(true);
 
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { count: recentPostCount } = await supabase
@@ -30,112 +100,226 @@ export default function PostComposer({
       .select('*', { count: 'exact', head: true })
       .eq('owner_id', userId)
       .gte('created_at', since24h);
-
     if ((recentPostCount ?? 0) >= 5) {
       setError(t('dailyPostLimitReached'));
       setPosting(false);
       return;
     }
 
-    let imageUrl: string | null = null;
-    if (type === 'photo' && imageFile) {
-      const ext = imageFile.name.split('.').pop();
-      const path = `${userId}/${Date.now()}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from('post-images').upload(path, imageFile);
-      if (uploadError) {
-        setError(`${t('imageUploadFailed')} ${uploadError.message}`);
-        setPosting(false);
-        return;
+    // Fotky do úložiště (každá zvlášť; jedna nepovedená = nic se neodešle, ať se dá zkusit znovu).
+    const imageUrls: string[] = [];
+    if (type === 'photo') {
+      for (const [i, file] of files.entries()) {
+        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+        const path = `${userId}/${Date.now()}-${i}.${ext}`;
+        const { error: uploadError } = await supabase.storage.from('post-images').upload(path, file);
+        if (uploadError) {
+          setError(`${t('imageUploadFailed')} ${uploadError.message}`);
+          setPosting(false);
+          return;
+        }
+        imageUrls.push(supabase.storage.from('post-images').getPublicUrl(path).data.publicUrl);
       }
-      const { data } = supabase.storage.from('post-images').getPublicUrl(path);
-      imageUrl = data.publicUrl;
     }
 
-    const { error: insertError } = await supabase.from('posts').insert({
+    const full = {
       owner_id: userId,
       type,
-      content: content.trim() || null,
-      image_url: imageUrl,
-      poll_options: type === 'poll'
-        ? pollOptions.filter((o) => o.trim()).map((o) => ({ text: o.trim(), votes: 0 }))
-        : null,
-    });
-
-    if (insertError) {
-      setError(`${t('publishFailed')} ${insertError.message}`);
+      content: text || null,
+      image_url: imageUrls[0] ?? null,
+      image_urls: imageUrls.length > 0 ? imageUrls : null,
+      video_id: linkedVideo,
+      poll_options: options,
+      poll_ends_at: options ? pollEndsAt(pollHours) : null,
+    };
+    let { data: inserted, error: insertError } = await supabase.from('posts').insert(full).select('id').single();
+    if (insertError && /image_urls|video_id|poll_ends_at|schema cache|column/i.test(insertError.message ?? '')) {
+      // Bez migrace posty-ankety: jedna fotka, odkaz na video do textu, anketa bez konce.
+      const withLink = linkedVideo ? `${text}${text ? '\n' : ''}${window.location.origin}/watch/${linkedVideo}` : text;
+      ({ data: inserted, error: insertError } = await supabase
+        .from('posts')
+        .insert({ owner_id: userId, type, content: withLink || null, image_url: imageUrls[0] ?? null, poll_options: options })
+        .select('id')
+        .single());
+    }
+    if (insertError || !inserted) {
+      setError(`${t('publishFailed')} ${insertError?.message ?? ''}`.trim());
       setPosting(false);
       return;
     }
 
+    // Odběratelé se zvonečkem: oznámení o novém příspěvku (server ohlídá, že jednou).
+    const postId = inserted.id;
+    void authHeaders().then((headers) =>
+      fetch('/api/posts/notify', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ postId }) }).catch(() => {})
+    );
+
     setContent('');
-    setImageFile(null);
+    setFiles([]);
     setPollOptions(['', '']);
+    setVideoId(null);
+    setVideoLink('');
+    setVideoPicker(false);
     setPosting(false);
     onPosted();
   }
 
+  const chosenVideo = videoId ? myVideos?.find((v) => v.id === videoId) ?? null : null;
+
   return (
-    <form onSubmit={handleSubmit} className="panel" style={{ marginBottom: 20 }}>
-      <div className="tab-row" style={{ marginBottom: 12 }}>
-        <button type="button" className={`tab-btn ${type === 'text' ? 'active' : ''}`} onClick={() => setType('text')}>{t('postTextTab')}</button>
-        <button type="button" className={`tab-btn ${type === 'photo' ? 'active' : ''}`} onClick={() => setType('photo')}>{t('postPhotoTab')}</button>
-        <button type="button" className={`tab-btn ${type === 'poll' ? 'active' : ''}`} onClick={() => setType('poll')}>{t('postPollTab')}</button>
+    <form onSubmit={handleSubmit} className="panel post-composer">
+      <div className="post-composer-types" role="tablist">
+        {(
+          [
+            ['text', 'pencil', 'postTextTab'],
+            ['photo', 'image', 'postPhotoTab'],
+            ['poll', 'poll', 'postPollTab'],
+          ] as const
+        ).map(([value, icon, label]) => (
+          <button key={value} type="button" role="tab" aria-selected={type === value} className={`post-composer-type${type === value ? ' active' : ''}`} onClick={() => setType(value)}>
+            <UiIcon name={icon} size={16} />
+            {t(label)}
+          </button>
+        ))}
       </div>
 
-      <textarea
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        placeholder={type === 'poll' ? t('postPlaceholderPoll') : t('postPlaceholderText')}
-        rows={2}
-        style={{ marginBottom: 10 }}
-      />
+      <div className="post-composer-text">
+        <textarea
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder={type === 'poll' ? t('postPlaceholderPoll') : t('postPlaceholderText')}
+          rows={3}
+          maxLength={MAX_POST_TEXT}
+        />
+        {content.length > MAX_POST_TEXT * 0.8 && (
+          <span className="post-composer-count">
+            {content.length}/{MAX_POST_TEXT}
+          </span>
+        )}
+      </div>
 
       {type === 'photo' && (
-        <input
-          type="file"
-          accept="image/*,.gif"
-          onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
-          style={{ marginBottom: 10 }}
-        />
+        <div className="post-composer-photos">
+          {previews.map((src, i) => (
+            <span key={src} className="post-composer-photo">
+              <img src={src} alt="" />
+              <button type="button" className="icon-btn" aria-label={t('removeLabel')} onClick={() => setFiles((f) => f.filter((_, j) => j !== i))}>
+                <UiIcon name="close" size={14} />
+              </button>
+            </span>
+          ))}
+          {files.length < MAX_POST_IMAGES && (
+            <label className="post-composer-add-photo">
+              <UiIcon name="plus" size={20} />
+              <span>{t('postAddPhotos').replace('{n}', String(MAX_POST_IMAGES - files.length))}</span>
+              <input
+                type="file"
+                accept="image/*,.gif"
+                multiple
+                hidden
+                onChange={(e) => {
+                  addFiles(e.target.files);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          )}
+        </div>
       )}
 
       {type === 'poll' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+        <div className="post-composer-poll">
           {pollOptions.map((opt, i) => (
-            <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <div key={i} className="post-composer-option">
               <input
                 type="text"
                 placeholder={`${t('pollOptionPlaceholder')} ${i + 1}`}
                 value={opt}
+                maxLength={120}
                 onChange={(e) => {
                   const next = [...pollOptions];
                   next[i] = e.target.value;
                   setPollOptions(next);
                 }}
-                style={{ flex: 1 }}
               />
               {pollOptions.length > 2 && (
-                <button
-                  type="button"
-                  onClick={() => setPollOptions(pollOptions.filter((_, idx) => idx !== i))}
-                  style={{ background: 'var(--panel-raised)', color: 'var(--text)', fontSize: 12, padding: '6px 10px' }}
-                  aria-label={t('removePollOption')}
-                >
-                  ✕
+                <button type="button" className="icon-btn" onClick={() => setPollOptions(pollOptions.filter((_, idx) => idx !== i))} aria-label={t('removePollOption')}>
+                  <UiIcon name="close" size={14} />
                 </button>
               )}
             </div>
           ))}
-          {pollOptions.length < 5 && (
-            <button type="button" onClick={() => setPollOptions([...pollOptions, ''])} style={{ background: 'var(--panel-raised)', color: 'var(--text)', fontSize: 12 }}>
-              {t('addPollOption')}
+          <div className="post-composer-poll-row">
+            {pollOptions.length < MAX_POLL_OPTIONS && (
+              <button type="button" className="secondary" onClick={() => setPollOptions([...pollOptions, ''])}>
+                <UiIcon name="plus" size={14} />
+                {t('addPollOption')}
+              </button>
+            )}
+            <label className="post-composer-duration">
+              <UiIcon name="timer" size={15} />
+              <select value={pollHours} onChange={(e) => setPollHours(Number(e.target.value) as PollDuration)} aria-label={t('pollDuration')}>
+                {POLL_DURATIONS_H.map((h) => (
+                  <option key={h} value={h}>
+                    {h === 0 ? t('pollNoEnd') : h === 24 ? t('pollDuration1d') : h === 72 ? t('pollDuration3d') : t('pollDuration7d')}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+      )}
+
+      {type !== 'poll' && (
+        <div className="post-composer-video">
+          <button type="button" className={`secondary${videoId || videoLink ? ' active' : ''}`} onClick={openVideoPicker} aria-expanded={videoPicker}>
+            <UiIcon name="film" size={15} />
+            {chosenVideo ? chosenVideo.title : t('postAttachVideo')}
+          </button>
+          {videoId && (
+            <button type="button" className="icon-btn" aria-label={t('removeLabel')} onClick={() => setVideoId(null)}>
+              <UiIcon name="close" size={14} />
             </button>
+          )}
+          {videoPicker && (
+            <div className="post-composer-videos">
+              {(myVideos ?? []).map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  className={`post-composer-video-item${videoId === v.id ? ' active' : ''}`}
+                  onClick={() => {
+                    setVideoId(v.id);
+                    setVideoLink('');
+                    setVideoPicker(false);
+                  }}
+                >
+                  {v.thumbnail_url ? <img src={v.thumbnail_url} alt="" loading="lazy" /> : <span />}
+                  <span>{v.title}</span>
+                </button>
+              ))}
+              {myVideos && myVideos.length === 0 && <p className="post-composer-hint">{t('postNoOwnVideos')}</p>}
+              <input
+                type="url"
+                placeholder={t('postVideoLinkPlaceholder')}
+                value={videoLink}
+                onChange={(e) => {
+                  setVideoLink(e.target.value);
+                  setVideoId(null);
+                }}
+              />
+            </div>
           )}
         </div>
       )}
 
-      <button type="submit" disabled={posting}>{posting ? t('publishing') : t('publish')}</button>
-      {error && <p className="error-text" style={{ marginTop: 8 }}>{error}</p>}
+      <div className="post-composer-foot">
+        <button type="submit" className="post-composer-submit" disabled={posting}>
+          <UiIcon name="send" size={15} />
+          {posting ? t('publishing') : t('publish')}
+        </button>
+        {error && <p className="error-text" style={{ margin: 0 }}>{error}</p>}
+      </div>
     </form>
   );
 }

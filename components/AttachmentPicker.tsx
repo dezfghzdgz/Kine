@@ -2,8 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import GifPickerModal from './GifPickerModal';
+import UiIcon from './UiIcon';
+import { useLanguage } from '@/lib/i18n';
 
 export default function AttachmentPicker({ onSelect }: { onSelect: (fileOrUrl: File | string) => void }) {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const [gifPickerOpen, setGifPickerOpen] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -38,14 +41,20 @@ export default function AttachmentPicker({ onSelect }: { onSelect: (fileOrUrl: F
             className="profile-dropdown-item"
             onClick={() => { photoInputRef.current?.click(); setOpen(false); }}
           >
-            🖼️ Photo
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <UiIcon name="image" size={16} />
+              {t('postPhotoTab')}
+            </span>
           </button>
           <button
             type="button"
             className="profile-dropdown-item"
             onClick={() => { setGifPickerOpen(true); setOpen(false); }}
           >
-            GIF
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <UiIcon name="sparkle" size={16} />
+              GIF
+            </span>
           </button>
         </div>
       )}

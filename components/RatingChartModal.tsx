@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import UiIcon from './UiIcon';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useLanguage, type Lang } from '@/lib/i18n';
 
@@ -64,7 +65,9 @@ export default function RatingChartModal({
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <p className="panel-heading" style={{ margin: 0 }}>Rating</p>
-          <button onClick={onClose} style={{ background: 'none', color: 'var(--text-faint)', padding: 4 }}>✕</button>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close" style={{ color: 'var(--text-faint)' }}>
+            <UiIcon name="close" size={16} />
+          </button>
         </div>
 
         <div className="tab-row">

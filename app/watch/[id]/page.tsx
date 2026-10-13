@@ -1,14 +1,14 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Script from 'next/script';
 import { buildVideoBlocks, isSpark } from '@/lib/videoBlocks';
-import { getTotalReactionCount, RATING_UNLOCK_THRESHOLD } from '@/lib/trustRatingClient';
+import { channelTrust, RATING_UNLOCK_THRESHOLD } from '@/lib/trustRatingClient';
 import { supabase } from '@/lib/supabaseClient';
-import { computeTrustRating } from '@/lib/trustRating';
 import VideoReactions from '@/components/VideoReactions';
 import CommentSection from '@/components/CommentSection';
+import UiIcon from '@/components/UiIcon';
 import AddToPlaylist from '@/components/AddToPlaylist';
 import SubscribeButton from '@/components/SubscribeButton';
 import DownloadButton from '@/components/DownloadButton';
@@ -35,6 +35,7 @@ import MusicStage from '@/components/MusicStage';
 import MusicVideoSurface from '@/components/MusicVideoSurface';
 import { startPlayback as beginPlayback } from '@/lib/playerStart';
 import { decideOrientationFullscreen } from '@/lib/playerControls';
+import { pipSupported, togglePictureInPicture } from '@/lib/pictureInPicture';
 import { shareLink, browserShareDeps } from '@/lib/share';
 import { isTvMode } from '@/lib/tvMode';
 import { detectDeviceClass } from '@/lib/deviceClass';
@@ -54,6 +55,7 @@ import { FOLLOW_VIDEO_MS, preloadImage, setAmbientSource, videoFrameUrl } from '
 import AmbientCanvas from '@/components/AmbientCanvas';
 import { useAppearance } from '@/lib/useAppearance';
 import { attachVod, canPlayVodNatively, mediaPlayer, reportSlowVideo, type VodHandle } from '@/lib/vodPlayer';
+import type { PlaybackMode } from '@/lib/netQuality';
 import { chooseEngine, shouldReportSlowStart, statsReport, vodVerdict, type QualityLevel } from '@/lib/vodPlayerCore';
 import { customerCodeFromUrl, manifestUrl } from '@/lib/streamSource';
 import { preloadHls, supportsNativeHls } from '@/lib/hlsAttach';
@@ -103,6 +105,11 @@ function WatchPageInner() {
   const [inWatchLater, setInWatchLater] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
+  // Pořadové číslo napojeného přehrávače. Při přechodu z vlastního přehrávače na Cloudflare
+  // se může stát, že React spojí "není připraven" a "připraven" do jednoho vykreslení -
+  // playerReady by zůstalo true a efekty s posluchači by visely na starém přehrávači
+  // (náhled a kolečko by zakrývaly běžící video až 30 s). Číslo se změní pokaždé.
+  const [playerGen, setPlayerGen] = useState(0);
   // Obraz se opravdu rozjel (událost playing). Do té doby náhled videa a kolečko místo černé plochy.
   const [playbackStarted, setPlaybackStarted] = useState(false);
   // Kde přehrávání začne: odkaz s ?t=, nebo kde divák minule skončil. Rozhodne se dřív, než se
@@ -165,6 +172,9 @@ function WatchPageInner() {
   // Volba kvality (jen vlastní přehrávač mimo Safari): úrovně, zvolená (-1 = automaticky), právě hraná výška.
   const [qualities, setQualities] = useState<QualityLevel[]>([]);
   const [quality, setQuality] = useState(-1);
+  // Šetření dat zapnuté/vypnuté přímo v přehrávači (Safari - kvalitu jinak volí sám); null = podle připojení.
+  const [forcedMode, setForcedMode] = useState<PlaybackMode | null>(null);
+  const [playingMode, setPlayingMode] = useState<PlaybackMode>('full');
   const [playingHeight, setPlayingHeight] = useState<number | null>(null);
   // Statistiky přehrávání (⋮ -> Statistiky, nebo ?stats=1).
   const [statsOpen, setStatsOpen] = useState(() => searchParams.get('stats') === '1');
@@ -331,7 +341,7 @@ function WatchPageInner() {
   // Opakování: přehrávač Cloudflare to umí sám (a pak nehlásí konec, takže nenaskočí další video).
   useEffect(() => {
     if (playerReady && playerRef.current) playerRef.current.loop = loop;
-  }, [loop, playerReady]);
+  }, [loop, playerReady, playerGen]);
 
   useEffect(() => {
     setLoop(false);
@@ -510,6 +520,11 @@ function WatchPageInner() {
         // T = kino režim (jako na YouTube).
         e.preventDefault();
         toggleTheater();
+      } else if (e.code === 'KeyI') {
+        // I = obraz v obraze (video v okénku i mimo prohlížeč) - jen vlastní přehrávač.
+        if (!pipSupported(player)) return;
+        e.preventDefault();
+        togglePictureInPicture(player);
       } else if (e.code === 'KeyC') {
         if (!hasCaptionsRef.current) return;
         e.preventDefault();
@@ -823,6 +838,7 @@ function WatchPageInner() {
     player.muted = false;
     player.volume = 1;
     setPlayerReady(true);
+    setPlayerGen((g) => g + 1);
     // Na televizi je po otevření vybraný přehrávač: OK hraje, šipky
     // posouvají, dolů vede k názvu a komentářům.
     if (isTvMode()) wrapRef.current?.focus({ preventScroll: true });
@@ -849,13 +865,9 @@ function WatchPageInner() {
    * Kde přehrávání začne: ?t= z odkazu, jinak kde divák minule skončil
    * (nedokoukané video, víc než 10 s, ne úplně na konci).
    */
-  async function startPoint(data: any): Promise<{ seconds: number; resumed: boolean } | null> {
-    const fromLink = searchParams.get('t');
-    if (fromLink) {
-      const seconds = Number(fromLink);
-      return Number.isFinite(seconds) && seconds > 0 ? { seconds: Math.floor(seconds), resumed: false } : null;
-    }
-    if (data?.status !== 'ready') return null;
+  /** Řádek historie (kde divák skončil) - jde do databáze hned se začátkem načítání stránky. */
+  async function resumeRow(): Promise<{ progress_seconds: number | null; completed: boolean | null } | null> {
+    if (searchParams.get('t')) return null;
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const uid = sessionData.session?.user?.id;
@@ -864,8 +876,23 @@ function WatchPageInner() {
         .from('watch_history')
         .select('progress_seconds, completed')
         .eq('user_id', uid)
-        .eq('video_id', data.id)
+        .eq('video_id', videoId)
         .maybeSingle();
+      return history ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function startPoint(data: any, prefetched?: ReturnType<typeof resumeRow>): Promise<{ seconds: number; resumed: boolean } | null> {
+    const fromLink = searchParams.get('t');
+    if (fromLink) {
+      const seconds = Number(fromLink);
+      return Number.isFinite(seconds) && seconds > 0 ? { seconds: Math.floor(seconds), resumed: false } : null;
+    }
+    if (data?.status !== 'ready') return null;
+    try {
+      const history = await (prefetched ?? resumeRow());
       const progress = Math.floor(Number(history?.progress_seconds) || 0);
       const duration = Number(data.duration_seconds) || 0;
       if (!history || history.completed || progress <= 10 || (duration > 0 && progress >= duration - 5)) return null;
@@ -947,6 +974,7 @@ function WatchPageInner() {
         const attached: VodHandle = attachVod(el, manifestUrl(current.playback_id ?? current.cloudflare_video_id, customerCodeFromUrl(current.thumbnail_url)), {
           // Začátek (pokračování, ?t=) načte přehrávač rovnou - žádné přetáčení potom.
           startAt: start?.seconds ?? null,
+          ...(forcedMode ? { mode: forcedMode } : {}),
           onFatal: (why, at) => {
             console.warn('Kine: vlastní přehrávač nejde, hraje přehrávač Cloudflare', why);
             // Cloudflare naváže tam, kde vlastní přehrávač skončil.
@@ -961,6 +989,7 @@ function WatchPageInner() {
         });
         handle = attached;
         vodRef.current = attached;
+        setPlayingMode(attached.stats.mode);
         attachPlayer(mediaPlayer(el, () => setNeedsPlayTap(true)), null);
         return true;
       };
@@ -993,7 +1022,7 @@ function WatchPageInner() {
       playbackCleanupRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [video?.id, mode, engine]);
+  }, [video?.id, mode, engine, forcedMode]);
 
   // Tlačítka na klávesnici a sluchátkách, zamčená obrazovka a oznámení ovládají
   // video (vlastní přehrávač je ve stejném dokumentu jako hudba - lib/musicPlayer.tsx).
@@ -1100,7 +1129,7 @@ function WatchPageInner() {
       player.removeEventListener?.('timeupdate', onTime);
       clearTimeout(fallback);
     };
-  }, [playerReady, playbackStarted]);
+  }, [playerReady, playbackStarted, playerGen]);
 
   useEffect(() => {
     if (!playerReady || !playerRef.current) return;
@@ -1114,7 +1143,7 @@ function WatchPageInner() {
     }
     player.addEventListener?.('ended', handleEnded);
     return () => player.removeEventListener?.('ended', handleEnded);
-  }, [playerReady, upNextQueue]);
+  }, [playerReady, upNextQueue, playerGen]);
 
   useEffect(() => {
     // Automatické pokračování vypnuté: nabídka dalších videí zůstane, ale nikam se nejde samo.
@@ -1155,6 +1184,9 @@ function WatchPageInner() {
       clearInterval(timer);
     };
   }, [video?.id, video?.status]);
+
+  /** Kde video právě je (přepis zvýrazní řádek, který se mluví). */
+  const currentPlayerTime = useCallback(() => Number(playerRef.current?.currentTime) || 0, []);
 
   function seekTo(seconds: number) {
     if (playerRef.current) {
@@ -1199,6 +1231,8 @@ function WatchPageInner() {
     setNotFoundReason(null);
     // hls.js (vlastní přehrávač) se stahuje souběžně s údaji o videu - ať je po ruce hned.
     void preloadHls();
+    // Kde divák minule skončil - souběžně s údaji o videu (dřív až po nich: o kolo dotazů déle).
+    const resume = resumeRow();
 
     let { data, error } = await supabase
       .from('videos')
@@ -1229,7 +1263,7 @@ function WatchPageInner() {
     // (lib/playbackToken.ts). Zjistí se DŘÍV, než se přehrávač vykreslí -
     // změna adresy iframu by ho načetla znovu a napojení by shořelo.
     // U veřejného videa je to id samo, bez dotazu.
-    const [playbackId, startAt] = await Promise.all([resolvePlaybackId(data), startPoint(data)]);
+    const [playbackId, startAt] = await Promise.all([resolvePlaybackId(data), startPoint(data, resume)]);
     data.playback_id = playbackId;
     startAtRef.current = startAt;
     // Vlastní přehrávač, kde to jde; ?player=cloudflare vynutí přehrávač Cloudflare (záchrana, srovnání).
@@ -1342,32 +1376,15 @@ function WatchPageInner() {
     }
 
     if (data.profiles) {
-      computeTrustRatingClient(data.profiles.id, data.profiles.created_at).then(async (score) => {
-        const reactionCount = await getTotalReactionCount(data.profiles.id);
-        if (reactionCount >= RATING_UNLOCK_THRESHOLD) setTrustRating(score);
-      });
+      // Jen počty reakcí (lib/trustRatingClient.ts) - ne tisíce řádků souběžně s videem.
+      channelTrust(data.profiles.id, data.profiles.created_at)
+        .then(({ score, total }) => {
+          if (total >= RATING_UNLOCK_THRESHOLD) setTrustRating(score);
+        })
+        .catch(() => {});
     }
 
     setLoading(false);
-  }
-
-  async function computeTrustRatingClient(profileId: string, createdAt: string): Promise<number> {
-    const ageDays = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24);
-    const ageScore = Math.min(ageDays / 180, 1);
-
-    const { data: videos } = await supabase.from('videos').select('id').eq('owner_id', profileId);
-    const videoIds = (videos ?? []).map((v) => v.id);
-
-    let likeRatio = 0.9;
-    if (videoIds.length > 0) {
-      const { data: reactions } = await supabase.from('video_reactions').select('score').in('video_id', videoIds);
-      if (reactions && reactions.length > 0) {
-        const avg = reactions.reduce((sum, r) => sum + (r.score ?? 3), 0) / reactions.length;
-        likeRatio = (avg - 1) / 4;
-      }
-    }
-
-    return Math.round(Math.min(Math.max(60 + ageScore * 20 + likeRatio * 20, 50), 99));
   }
 
   async function handleModDelete() {
@@ -1717,6 +1734,19 @@ function WatchPageInner() {
                         qualities={engine === 'native' ? qualities : []}
                         quality={quality}
                         playingHeight={playingHeight}
+                        dataSaver={
+                          engine === 'native' && supportsNativeHls()
+                            ? {
+                                light: playingMode === 'light',
+                                onToggle: () => {
+                                  // Přepnutí zdroje: přehrávač naváže tam, kde video právě je.
+                                  const at = videoElRef.current?.currentTime ?? 0;
+                                  if (at > 1) startAtRef.current = { seconds: Math.floor(at), resumed: false };
+                                  setForcedMode(playingMode === 'light' ? 'full' : 'light');
+                                },
+                              }
+                            : undefined
+                        }
                         onQuality={(index) => {
                           vodRef.current?.setQuality(index);
                           setQuality(index);
@@ -1909,7 +1939,7 @@ function WatchPageInner() {
         {/* Automatická kontrola obsahu video skryla (lib/nudityScan.ts) - vidí ho jen autor. */}
         {ownerView && video.moderation_hold && (
           <div className={`moderation-hold-note ${video.moderation_hold === 'removed' ? 'removed' : ''}`} role="status">
-            <span aria-hidden="true">{video.moderation_hold === 'removed' ? '⛔' : '⚠️'}</span>
+            <UiIcon name={video.moderation_hold === 'removed' ? 'lock' : 'warning'} size={18} />
             <span>{video.moderation_hold === 'removed' ? t('moderationHoldRemoved') : t('moderationHoldNote')}</span>
           </div>
         )}
@@ -2083,8 +2113,10 @@ function WatchPageInner() {
           <p style={{
             fontSize: 13, background: 'var(--panel-raised)', border: '1px solid var(--border)',
             padding: '10px 12px', borderRadius: 8, color: 'var(--text)', marginTop: 10, fontWeight: 600,
+            display: 'flex', alignItems: 'center', gap: 8,
           }}>
-            🎬 {(video.is_premiere ? t('premiereOwnerNote') : t('scheduledOwnerNote')).replace('{date}', new Date(premiereAt).toLocaleString(DATE_LOCALES[lang]))}
+            <UiIcon name="calendar" size={16} />
+            {(video.is_premiere ? t('premiereOwnerNote') : t('scheduledOwnerNote')).replace('{date}', new Date(premiereAt).toLocaleString(DATE_LOCALES[lang]))}
           </p>
         )}
       </div>
@@ -2130,7 +2162,10 @@ function WatchPageInner() {
         )}
         {premiereChat && (
           <div style={{ marginBottom: 20 }}>
-            <p className="section-title">🎬 {t('premiereChatHeading')}</p>
+            <p className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <UiIcon name="film" size={17} />
+              {t('premiereChatHeading')}
+            </p>
             <LiveChat room={videoRoom(video.id)} canModerate={ownerView} />
           </div>
         )}
@@ -2162,6 +2197,8 @@ function WatchPageInner() {
           description={video.description}
           ownerId={video.profiles?.id}
           onSeek={seekTo}
+          captions={Array.isArray(video.captions) ? video.captions : null}
+          getCurrentTime={currentPlayerTime}
           video={{
             duration_seconds: video.duration_seconds,
             category: video.category,

@@ -4,6 +4,7 @@ import { autoPublishAfterStream } from './liveRecording';
 import { chatSessionSince } from './liveChat';
 import { logLiveEvent, secondsSince } from './liveEvents';
 import { liveHiddenNow } from './nudityRules';
+import { runInBackground } from './background';
 
 export { appPingFresh, appSignalTrusted, APP_PING_FRESH_MS, APP_UNCONFIRMED_MAX_MS } from './liveSignal';
 
@@ -303,8 +304,28 @@ export async function cloudflareLiveListing(): Promise<{ ok: boolean; error: str
   }
 }
 
+/**
+ * Odvysílaný čas do profilu (odznak Hodiny živě - lib/badges.ts). Jen přenos,
+ * který Cloudflare v tomhle vysílání opravdu viděl (žádné "vysílání" bez
+ * jediného snímku). Bez migrace posty-ankety funkce chybí - nic se nestane.
+ */
+async function addLiveSeconds(row: LiveStreamRow, endIso: string): Promise<void> {
+  const started = row.started_at ? Date.parse(row.started_at) : NaN;
+  const confirmed = Date.parse((row.cf_confirmed_at ?? row.checked_at ?? '') as string);
+  const end = Date.parse(endIso);
+  if (!Number.isFinite(started) || !Number.isFinite(end) || !Number.isFinite(confirmed) || confirmed < started) return;
+  const seconds = Math.round((Math.min(end, confirmed + 90 * 1000) - started) / 1000);
+  if (seconds <= 0) return;
+  try {
+    await supabaseServer.rpc('add_live_seconds', { p_user: row.owner_id, p_seconds: Math.min(seconds, 24 * 3600) });
+  } catch {
+    // počítadlo není nutné pro vysílání
+  }
+}
+
 /** Ukončí přenos v databázi (a zveřejní záznam, když si to tvůrce zapnul). */
 async function endStream(row: LiveStreamRow, nowIso: string): Promise<void> {
+  if (row.is_live) await addLiveSeconds(row, nowIso);
   // Čerstvé hlášení, kterému se už nevěří (Cloudflare přenos dlouho nevidí):
   // smazat ho, ať ho další "pořád vysílám" neoživí - znovu jen "začal jsem".
   await supabaseServer
@@ -438,6 +459,14 @@ export async function syncLiveStreams(options: { force?: boolean } = {}): Promis
           // Appka hlásí, že vysílá (Cloudflare to jen ještě nepotvrdil), nebo se vstup právě
           // připojuje znovu. checked_at se tu nemění: drží čas posledního potvrzení od Cloudflare.
           if (!video && row.current_video_uid) {
+            // Přenos, který Cloudflare před chvílí potvrdil, teď nevidí - do deníku (proč pak zmizel / nezmizel).
+            logLiveEvent(row.owner_id, 'unseen', 'Cloudflare přenos teď nevidí - zatím se drží (appka hlásí / krátký výpadek)', {
+              'lifecycle (přijímá vysílání)': life ? life.live : 'nejde zjistit',
+              'v seznamu běžících': false,
+              'appka hlásila (s)': secondsSince(row.app_ping_at),
+              'appce se věří': appSignalTrusted(row),
+              'Cloudflare naposledy potvrdil (s)': secondsSince(lastConfirmedIso(row)),
+            });
             await supabaseServer.from('live_streams').update({ current_video_uid: null }).eq('owner_id', row.owner_id);
           }
         } else if (decision === 'end') {
@@ -462,6 +491,26 @@ export async function syncLiveStreams(options: { force?: boolean } = {}): Promis
   } finally {
     syncing = null;
   }
+}
+
+/** Nejdéle tolik čeká odpověď divákovi na srovnání s Cloudflare; zbytek doběhne na pozadí. */
+export const VIEWER_SYNC_BUDGET_MS = 1200;
+
+/**
+ * Srovnání s Cloudflare pro odpovědi divákům (řada Živě, stránka přenosu):
+ * nejvýš VIEWER_SYNC_BUDGET_MS čekání. Dotazy na Cloudflare (seznam běžících,
+ * lifecycle vstupů) trvaly někdy i několik vteřin - a celou tu dobu se
+ * divákovi nic neukázalo (na hlavní stránce řada Živě chyběla, než
+ * odpověď přišla). Stav v databázi drží čerstvý hlavně appka (hlásí se
+ * každých 15 s a srovnání spouští sama); srovnání, které se do limitu
+ * nevejde, doběhne na pozadí a projeví se při dalším obnovení (do 20 s).
+ */
+export async function syncLiveStreamsForViewers(budgetMs: number = VIEWER_SYNC_BUDGET_MS): Promise<void> {
+  const run = syncLiveStreams();
+  runInBackground(run, 'srovnání živých vysílání');
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  await Promise.race([run, new Promise<void>((resolve) => (timer = setTimeout(resolve, budgetMs)))]);
+  if (timer) clearTimeout(timer);
 }
 
 /**
@@ -558,6 +607,7 @@ export async function appLiveSignal(
       }
     }
     await write({ ...stopPatch, ended_at: row.is_live ? nowIso : row.ended_at });
+    if (row.is_live) await addLiveSeconds(row, nowIso);
     // Záznam rovnou na Kine, když si to tvůrce zapnul (studio / appka).
     const published = row.is_live ? await autoPublishAfterStream(ownerId) : null;
     return { confirmed: false, migrated, viewers: null, recording: published?.ok ? { videoId: published.videoId, status: published.status } : null, recordingUid };
