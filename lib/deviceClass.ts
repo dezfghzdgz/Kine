@@ -25,7 +25,7 @@ export type DeviceClass = (typeof DEVICE_CLASSES)[number];
 export const PHONE_MAX_SHORT_SIDE = 600;
 
 const TV_UA =
-  /smart-?tv|tizen|web0s|webos|netcast|bravia|hbbtv|viera|roku|apple ?tv|google ?tv|android tv|crkey|aft[a-z]{1,3}\b|philipstv|sonydtv|nettv|opera tv|vidaa|whaletv|kddi/i;
+  /smart-?tv|tizen|web0s|webos|netcast|bravia|hbbtv|viera|roku|apple ?tv|google ?tv|android tv|crkey|aft[a-z]{1,3}\b|philipstv|sonydtv|nettv|opera tv|vidaa|whaletv|kddi|titan ?os|zeasn|foxxum|xbox|playstation/i;
 
 export interface DeviceSignals {
   /** (pointer: coarse) - prst nebo ovladač, ne myš. */

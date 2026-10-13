@@ -1,12 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n';
-import { CATEGORY_KEYS } from '@/lib/categories';
+import { isCategoryKey } from '@/lib/categories';
 import VideoCard from './VideoCard';
 import { formatDuration } from '@/lib/homeRecommendation';
-import { DEFAULT_FILTERS, searchHref, type SearchFilters } from '@/lib/searchFilters';
+import { DEFAULT_FILTERS, OPEN_SEARCH_FILTERS_EVENT, searchHref, type SearchFilters } from '@/lib/searchFilters';
+import UiIcon from './UiIcon';
 import ProfileImage from './ProfileImage';
 
 /**
@@ -39,110 +39,63 @@ export default function SearchResults({
   minRating?: string | null;
 }) {
   const { t } = useLanguage();
-  const router = useRouter();
 
   if (!query) {
     return <p style={{ color: 'var(--text-faint)' }}>{t('searchEmptyPrompt')}</p>;
   }
 
-  // Přepínače filtrů (jako na YouTube): odkaz s upraveným parametrem, hledá server.
-  const groups: { key: keyof SearchFilters; label: string; options: { value: string; label: string }[] }[] = [
-    {
-      key: 'type',
-      label: t('searchFilterType'),
-      options: [
-        { value: 'all', label: t('contentTypeAll') },
-        { value: 'long', label: t('contentTypeVideos') },
-        { value: 'sparks', label: t('contentTypeSparks') },
-      ],
+  // Názvy hodnot filtrů - na stránce jsou jen ty zapnuté (jako čipy s křížkem),
+  // celé nastavení je v panelu u pole hledání (components/TopBar.tsx). Dřív tu byl
+  // celý blok přepínačů na šest řádků a stránka byla hlavně text.
+  const labels: Record<keyof SearchFilters, Record<string, string>> = {
+    type: { long: t('contentTypeVideos'), sparks: t('contentTypeSparks') },
+    date: {
+      hour: t('searchDateHour'),
+      today: t('searchDateToday'),
+      week: t('searchDateWeek'),
+      month: t('searchDateMonth'),
+      year: t('searchDateYear'),
     },
-    {
-      key: 'date',
-      label: t('searchFilterDate'),
-      options: [
-        { value: 'any', label: t('searchFilterAny') },
-        { value: 'hour', label: t('searchDateHour') },
-        { value: 'today', label: t('searchDateToday') },
-        { value: 'week', label: t('searchDateWeek') },
-        { value: 'month', label: t('searchDateMonth') },
-        { value: 'year', label: t('searchDateYear') },
-      ],
-    },
-    {
-      key: 'duration',
-      label: t('searchFilterDuration'),
-      options: [
-        { value: 'any', label: t('searchDurationAny') },
-        { value: 'short', label: t('searchDurationShort') },
-        { value: 'medium', label: t('searchDurationMedium') },
-        { value: 'long', label: t('searchDurationLong') },
-      ],
-    },
-    {
-      key: 'sort',
-      label: t('searchFilterSort'),
-      options: [
-        { value: 'relevance', label: t('searchSortRelevance') },
-        { value: 'date', label: t('searchSortDate') },
-        { value: 'views', label: t('searchSortViews') },
-      ],
-    },
-  ];
+    duration: { short: t('searchDurationShort'), medium: t('searchDurationMedium'), long: t('searchDurationLong') },
+    sort: { date: t('searchSortDate'), views: t('searchSortViews') },
+    category: {},
+  };
+  const chips: { key: string; label: string; href: string; sort?: boolean }[] = [];
+  for (const key of ['type', 'date', 'duration', 'sort', 'category'] as (keyof SearchFilters)[]) {
+    const value = filters[key];
+    if (value === DEFAULT_FILTERS[key]) continue;
+    const label = key === 'category' ? (isCategoryKey(value) ? t(value) : value) : labels[key][value] ?? value;
+    chips.push({ key, label, href: searchHref(query, filters, { [key]: DEFAULT_FILTERS[key] } as Partial<SearchFilters>, minRating), sort: key === 'sort' });
+  }
+  if (minRating) chips.unshift({ key: 'rating', label: t('searchRating80'), href: searchHref(query, filters, {}, null) });
 
   return (
     <div>
-      <p className="section-title">{t('searchResultsFor').replace('{query}', query)}</p>
-
-      <div className="search-filters" role="group" aria-label={t('advancedSearch')}>
-        {groups.map((g) => (
-          <div key={g.key} className="search-filter-group">
-            <span className="search-filter-label">{g.label}</span>
-            {g.options.map((o) => (
-              <Link
-                key={o.value}
-                href={searchHref(query, filters, { [g.key]: o.value } as Partial<SearchFilters>, minRating)}
-                className={`search-chip ${filters[g.key] === o.value ? 'active' : ''}`}
-                aria-current={filters[g.key] === o.value ? 'true' : undefined}
-                scroll={false}
-              >
-                {o.label}
-              </Link>
-            ))}
-          </div>
-        ))}
-        <div className="search-filter-group">
-          <span className="search-filter-label">{t('searchFilterCreators')}</span>
-          <Link href={searchHref(query, filters, {}, null)} className={`search-chip ${!minRating ? 'active' : ''}`} aria-current={!minRating ? 'true' : undefined} scroll={false}>
-            {t('searchRatingAny')}
-          </Link>
-          <Link
-            href={searchHref(query, filters, {}, '80')}
-            className={`search-chip ${minRating ? 'active' : ''}`}
-            aria-current={minRating ? 'true' : undefined}
-            title={t('highRatingOnly')}
-            scroll={false}
+      <div className="search-results-head">
+        <p className="section-title">{t('searchResultsFor').replace('{query}', query)}</p>
+        <div className="search-active-filters" role="group" aria-label={t('advancedSearch')}>
+          {chips.map((c) => (
+            <Link key={c.key} href={c.href} className="search-chip active search-chip-removable" scroll={false} title={t('searchRemoveFilter')}>
+              {c.sort && <UiIcon name="sort" size={13} />}
+              {c.label}
+              <UiIcon name="close" size={12} />
+            </Link>
+          ))}
+          {chips.length > 1 && (
+            <Link href={searchHref(query, DEFAULT_FILTERS, {}, null)} className="search-clear-filters" scroll={false}>
+              {t('searchResetFilters')}
+            </Link>
+          )}
+          <button
+            type="button"
+            className="search-filters-open"
+            onClick={() => window.dispatchEvent(new CustomEvent(OPEN_SEARCH_FILTERS_EVENT))}
+            aria-label={t('advancedSearch')}
+            title={t('advancedSearch')}
           >
-            {t('searchRating80')}
-          </Link>
-        </div>
-        <div className="search-filter-group">
-          <span className="search-filter-label">{t('searchFilterCategory')}</span>
-          {/* 15 kategorií by jako přepínače zabraly tři řádky - proto výběr. */}
-          <select
-            className="search-category-select"
-            value={filters.category}
-            onChange={(e) => router.push(searchHref(query, filters, { category: e.target.value }, minRating), { scroll: false })}
-            aria-label={t('searchFilterCategory')}
-          >
-            <option value="any">{t('searchCategoryAny')}</option>
-            {[...CATEGORY_KEYS]
-              .sort((a, b) => t(a).localeCompare(t(b)))
-              .map((key) => (
-                <option key={key} value={key}>
-                  {t(key)}
-                </option>
-              ))}
-          </select>
+            <UiIcon name="sliders" size={15} />
+            {chips.length === 0 && <span>{t('searchFiltersButton')}</span>}
+          </button>
         </div>
       </div>
 

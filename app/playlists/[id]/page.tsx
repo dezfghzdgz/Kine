@@ -6,6 +6,10 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
+import UiIcon from '@/components/UiIcon';
+import { PlaylistIcon } from '@/components/ReactionIcons';
+import { formatDuration } from '@/lib/homeRecommendation';
+import { hasChosenColor } from '@/lib/playlistCover';
 
 export default function PlaylistDetailPage() {
   const { t } = useLanguage();
@@ -35,10 +39,16 @@ export default function PlaylistDetailPage() {
   async function load() {
     const { data: playlistData } = await supabase
       .from('playlists')
-      .select('id, title, owner_id, color, thumbnail_url, is_system')
+      .select('id, title, owner_id, color, thumbnail_url, is_system, visibility')
       .eq('id', playlistId)
       .single();
-    setPlaylist(playlistData);
+    // Kdo playlist sestavil - zvlášť, ať případná chyba nerozbije celou stránku.
+    let ownerProfile: { username: string | null; display_name: string | null } | null = null;
+    if (playlistData?.owner_id) {
+      const { data: ownerRow } = await supabase.from('profiles').select('username, display_name').eq('id', playlistData.owner_id).maybeSingle();
+      ownerProfile = (ownerRow as any) ?? null;
+    }
+    setPlaylist(playlistData ? { ...playlistData, profiles: ownerProfile } : null);
 
     const { data: items } = await supabase
       .from('playlist_videos')
@@ -90,14 +100,14 @@ export default function PlaylistDetailPage() {
     const match = linkInput.trim().match(/\/watch\/([a-f0-9-]{36})/i) || linkInput.trim().match(/^[a-f0-9-]{36}$/i);
     const videoIdToAdd = match ? (match[1] ?? match[0]) : null;
     if (!videoIdToAdd) {
-      setAddError('Nepodařilo se z odkazu poznat video. Vlož odkaz na video z Kine.');
+      setAddError(t('playlistLinkInvalid'));
       return;
     }
     const { error } = await supabase.from('playlist_videos').upsert({
       playlist_id: playlistId, video_id: videoIdToAdd, position: videos.length,
     });
     if (error) {
-      setAddError('Přidání se nepovedlo: ' + error.message);
+      setAddError(t('playlistAddFailed').replace('{error}', error.message));
       return;
     }
     setLinkInput('');
@@ -149,138 +159,158 @@ export default function PlaylistDetailPage() {
   }
 
   if (loading) return <p style={{ color: 'var(--text-faint)' }}>{t('loading')}</p>;
-  if (!playlist) return <p>Playlist nenalezen.</p>;
+  if (!playlist) return <p>{t('playlistNotFound')}</p>;
 
   const isOwner = userId === playlist.owner_id;
   const firstVideo = videos[0];
+  // Vlastní obrázek > vybraná barva > náhled prvního videa (lib/playlistCover.ts).
+  const cover = playlist.thumbnail_url || (hasChosenColor(playlist.color) ? null : firstVideo?.thumbnail_url) || null;
+  const coverStyle = cover ? undefined : { background: `linear-gradient(135deg, ${playlist.color ?? '#3a3a40'}, #111114)` };
+  const totalSeconds = videos.reduce((sum, v) => sum + (Number(v.duration_seconds) || 0), 0);
+  const owner = Array.isArray(playlist.profiles) ? playlist.profiles[0] : playlist.profiles;
+  const isPublic = playlist.visibility === 'public';
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24 }}>
-      <div>
-        <p className="section-title">{playlist.title}</p>
-
-        {firstVideo ? (
-          <Link href={`/watch/${firstVideo.id}?playlist=${playlistId}`} className="player-wrap" style={{ aspectRatio: '16/9', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
-            {firstVideo.thumbnail_url && (
-              <Image src={firstVideo.thumbnail_url} alt={firstVideo.title} fill style={{ objectFit: 'cover' }} />
+    <div className="playlist-page">
+      {/* Vlevo (na mobilu nahoře): obal, název, kolik videí a jak dlouho, Přehrát vše. */}
+      <section className="playlist-hero" style={{ ['--playlist-tint' as string]: playlist.color ?? '#3a3a40' }}>
+        {cover && <div className="playlist-hero-backdrop" style={{ backgroundImage: `url("${cover}")` }} aria-hidden="true" />}
+        <div className="playlist-hero-body">
+          {firstVideo ? (
+            <Link href={`/watch/${firstVideo.id}?playlist=${playlistId}`} className="playlist-hero-cover" style={coverStyle}>
+              {cover ? <Image src={cover} alt="" fill sizes="(max-width: 900px) 100vw, 380px" style={{ objectFit: 'cover' }} /> : <PlaylistIcon size={40} />}
+              <span className="playlist-hero-play" aria-hidden="true">
+                <UiIcon name="play" size={26} />
+              </span>
+            </Link>
+          ) : (
+            <div className="playlist-hero-cover empty" style={coverStyle}>
+              {cover ? <Image src={cover} alt="" fill sizes="(max-width: 900px) 100vw, 380px" style={{ objectFit: 'cover' }} /> : <PlaylistIcon size={40} />}
+            </div>
+          )}
+          <h1 className="playlist-hero-title">{playlist.title}</h1>
+          <p className="playlist-hero-meta">
+            {owner?.username && (
+              <Link href={`/channel/${playlist.owner_id}`} className="playlist-hero-owner">
+                {owner.display_name ?? owner.username}
+              </Link>
             )}
-            <div className="play-badge" style={{ position: 'relative', fontSize: 32 }}>▶</div>
-          </Link>
-        ) : (
-          <div className="player-wrap" style={{ aspectRatio: '16/9', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <p style={{ color: 'var(--text-faint)' }}>Tenhle playlist zatím neobsahuje žádná videa.</p>
-          </div>
-        )}
+            <span>
+              {videos.length} {t('playlistVideoCountSuffix')}
+            </span>
+            {totalSeconds > 0 && <span>{formatDuration(totalSeconds)}</span>}
+            <span className="playlist-hero-visibility">
+              <UiIcon name={isPublic ? 'globe' : 'lock'} size={12} />
+              {isPublic ? t('playlistVisibilityPublic') : t('playlistVisibilityPrivate')}
+            </span>
+          </p>
+          {firstVideo ? (
+            <button type="button" className="playlist-play-all" onClick={() => playVideoAt(0)}>
+              <UiIcon name="play" size={16} />
+              {t('playlistPlayAll')}
+            </button>
+          ) : (
+            <p className="playlist-hero-empty">{t('playlistEmptyNote')}</p>
+          )}
+          {isOwner && (
+            <form onSubmit={handleAddByLink} className="playlist-add-link">
+              <UiIcon name="link" size={15} />
+              <input type="text" placeholder={t('pasteVideoLink')} value={linkInput} onChange={(e) => setLinkInput(e.target.value)} aria-label={t('pasteVideoLink')} />
+              <button type="submit" disabled={!linkInput.trim()}>
+                {t('addToPlaylist')}
+              </button>
+            </form>
+          )}
+          {addError && <p className="error-text">{addError}</p>}
+        </div>
+      </section>
 
-        {firstVideo && (
-          <>
-            <h1 className="video-title">{firstVideo.title}</h1>
-            <p className="video-meta">{firstVideo.profiles?.username ?? t('unknownCreator')} · {firstVideo.views} {t('views')}</p>
-          </>
-        )}
-
-        {isOwner && (
-          <form onSubmit={handleAddByLink} style={{ display: 'flex', gap: 8, margin: '20px 0', maxWidth: 480 }}>
-            <input
-              type="text"
-              placeholder={t('pasteVideoLink')}
-              value={linkInput}
-              onChange={(e) => setLinkInput(e.target.value)}
-              style={{ flex: 1 }}
-            />
-            <button type="submit">{t('addToPlaylist')}</button>
-          </form>
-        )}
-        {addError && <p className="error-text">{addError}</p>}
-      </div>
-
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <p className="panel-heading" style={{ margin: 0 }}>Playlist ({videos.length})</p>
-          {savingOrder && <span style={{ fontSize: 11.5, color: 'var(--text-faint)' }}>{t('playlistSavingOrder')}</span>}
+      <section className="playlist-list">
+        <div className="playlist-list-head">
+          <p className="panel-heading" style={{ margin: 0 }}>
+            {t('playlistListHeading')} <span className="playlist-list-count">{videos.length}</span>
+          </p>
+          {savingOrder && <span className="playlist-saving">{t('playlistSavingOrder')}</span>}
         </div>
 
-        {isOwner && videos.length > 1 && (
-          <p style={{ fontSize: 11.5, color: 'var(--text-faint)', margin: '6px 0 10px' }}>
-            {t('playlistReorderHint')}
-          </p>
-        )}
+        {isOwner && videos.length > 1 && <p className="playlist-reorder-hint">{t('playlistReorderHint')}</p>}
 
         {/* Přehazování videí: šipky fungují všude včetně mobilu, tažení za
-            úchyt je rychlejší na počítači. Tahat jde jen za ⠿, ať se
+            úchyt je rychlejší na počítači. Tahat jde jen za úchyt, ať se
             omylem nespustí video při snaze video přesunout. */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 24 }}>
+        <div className="playlist-rows">
           {videos.map((v, i) => (
             <div
               key={v.id}
               draggable={isOwner}
-              onDragStart={(e) => { setDragIndex(i); e.dataTransfer.effectAllowed = 'move'; }}
+              onDragStart={(e) => {
+                setDragIndex(i);
+                e.dataTransfer.effectAllowed = 'move';
+              }}
               onDragEnd={() => {
                 setDragIndex(null);
                 setDropIndex(null);
                 // Značka platí jen na okamžik po puštění. Bez toho by
                 // zůstala viset napořád a spolkla by i další obyčejný klik.
                 justDraggedRef.current = true;
-                setTimeout(() => { justDraggedRef.current = false; }, 150);
+                setTimeout(() => {
+                  justDraggedRef.current = false;
+                }, 150);
               }}
-              onDragOver={(e) => { e.preventDefault(); if (dropIndex !== i) setDropIndex(i); }}
-              onDragLeave={() => { if (dropIndex === i) setDropIndex(null); }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (dropIndex !== i) setDropIndex(i);
+              }}
+              onDragLeave={() => {
+                if (dropIndex === i) setDropIndex(null);
+              }}
               onDrop={() => handleDrop(i)}
               // Po přetažení se video nesmí zároveň spustit - dřív tažení
               // často skončilo tím, že appka odešla na přehrávání.
               onClick={() => {
-                if (justDraggedRef.current) { justDraggedRef.current = false; return; }
+                if (justDraggedRef.current) {
+                  justDraggedRef.current = false;
+                  return;
+                }
                 playVideoAt(i);
               }}
-              className={`panel playlist-row ${dragIndex === i ? 'dragging' : ''} ${dropIndex === i && dragIndex !== i ? 'drop-target' : ''}`}
+              className={`playlist-row ${dragIndex === i ? 'dragging' : ''} ${dropIndex === i && dragIndex !== i ? 'drop-target' : ''}`}
             >
               {isOwner && (
-                <>
-                  <span
-                    className="playlist-row-handle"
-                    title={t('playlistDragHandle')}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    ⠿
-                  </span>
-                  <span className="playlist-move-btns" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      className="playlist-move-btn"
-                      disabled={i === 0}
-                      onClick={() => moveVideo(i, i - 1)}
-                      title={t('playlistMoveUp')}
-                      aria-label={t('playlistMoveUp')}
-                    >
-                      ▲
-                    </button>
-                    <button
-                      type="button"
-                      className="playlist-move-btn"
-                      disabled={i === videos.length - 1}
-                      onClick={() => moveVideo(i, i + 1)}
-                      title={t('playlistMoveDown')}
-                      aria-label={t('playlistMoveDown')}
-                    >
-                      ▼
-                    </button>
-                  </span>
-                </>
+                <span className="playlist-row-handle" title={t('playlistDragHandle')} onClick={(e) => e.stopPropagation()} aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="9" cy="6" r="1.6" />
+                    <circle cx="15" cy="6" r="1.6" />
+                    <circle cx="9" cy="12" r="1.6" />
+                    <circle cx="15" cy="12" r="1.6" />
+                    <circle cx="9" cy="18" r="1.6" />
+                    <circle cx="15" cy="18" r="1.6" />
+                  </svg>
+                </span>
               )}
-              <span style={{ fontSize: 12, color: 'var(--text-faint)', width: 16, flexShrink: 0 }}>{i + 1}</span>
-              <div style={{ width: 64, height: 36, borderRadius: 6, overflow: 'hidden', flexShrink: 0, background: 'var(--panel-raised)' }}>
-                {v.thumbnail_url && <Image src={v.thumbnail_url} alt={v.title} width={64} height={36} style={{ objectFit: 'cover' }} />}
+              <span className="playlist-row-index">{i + 1}</span>
+              <div className="playlist-row-thumb">
+                {v.thumbnail_url && <Image src={v.thumbnail_url} alt="" width={128} height={72} style={{ objectFit: 'cover', width: '100%', height: '100%' }} />}
+                {v.duration_seconds ? <span className="playlist-row-duration">{formatDuration(v.duration_seconds)}</span> : null}
               </div>
-              <p style={{ fontSize: 12.5, margin: 0, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {v.title}
-              </p>
+              <div className="playlist-row-text">
+                <p className="playlist-row-title">{v.title}</p>
+                <p className="playlist-row-meta">
+                  {v.profiles?.username ?? t('unknownCreator')} · {v.views ?? 0} {t('views')}
+                </p>
+              </div>
               {isOwner && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); removeVideo(v.id); }}
-                  style={{ background: 'none', color: 'var(--text-faint)', padding: 4, fontSize: 12 }}
-                >
-                  ✕
-                </button>
+                <span className="playlist-row-actions" onClick={(e) => e.stopPropagation()}>
+                  <button type="button" className="icon-btn" disabled={i === 0} onClick={() => moveVideo(i, i - 1)} title={t('playlistMoveUp')} aria-label={t('playlistMoveUp')}>
+                    <UiIcon name="chevronDown" size={15} className="flip-y" />
+                  </button>
+                  <button type="button" className="icon-btn" disabled={i === videos.length - 1} onClick={() => moveVideo(i, i + 1)} title={t('playlistMoveDown')} aria-label={t('playlistMoveDown')}>
+                    <UiIcon name="chevronDown" size={15} />
+                  </button>
+                  <button type="button" className="icon-btn" onClick={() => removeVideo(v.id)} title={t('playlistRemoveVideo')} aria-label={t('playlistRemoveVideo')}>
+                    <UiIcon name="close" size={15} />
+                  </button>
+                </span>
               )}
             </div>
           ))}
@@ -288,27 +318,26 @@ export default function PlaylistDetailPage() {
 
         {recommended.length > 0 && (
           <>
-            <p className="panel-heading">{t('recommendedNext')}</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <p className="panel-heading" style={{ marginTop: 26 }}>{t('recommendedNext')}</p>
+            <div className="playlist-rows">
               {recommended.map((v) => (
-                <Link
-                  href={`/watch/${v.id}`}
-                  key={v.id}
-                  className="panel"
-                  style={{ display: 'flex', gap: 10, alignItems: 'center', padding: 8, cursor: 'pointer' }}
-                >
-                  <div style={{ width: 64, height: 36, borderRadius: 6, overflow: 'hidden', flexShrink: 0, background: 'var(--panel-raised)' }}>
-                    {v.thumbnail_url && <Image src={v.thumbnail_url} alt={v.title} width={64} height={36} style={{ objectFit: 'cover' }} />}
+                <Link href={`/watch/${v.id}`} key={v.id} className="playlist-row">
+                  <div className="playlist-row-thumb">
+                    {v.thumbnail_url && <Image src={v.thumbnail_url} alt="" width={128} height={72} style={{ objectFit: 'cover', width: '100%', height: '100%' }} />}
+                    {v.duration_seconds ? <span className="playlist-row-duration">{formatDuration(v.duration_seconds)}</span> : null}
                   </div>
-                  <p style={{ fontSize: 12.5, margin: 0, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {v.title}
-                  </p>
+                  <div className="playlist-row-text">
+                    <p className="playlist-row-title">{v.title}</p>
+                    <p className="playlist-row-meta">
+                      {v.profiles?.username ?? t('unknownCreator')} · {v.views ?? 0} {t('views')}
+                    </p>
+                  </div>
                 </Link>
               ))}
             </div>
           </>
         )}
-      </div>
+      </section>
     </div>
   );
 }

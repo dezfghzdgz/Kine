@@ -9,11 +9,11 @@
  *      (lib/spatialNav.ts),
  *   3) OK otevře nebo přehraje, Zpět vrátí.
  *
- * Zapíná se:
- *   - sám, když prohlížeč vypadá jako televize (lib/deviceClass.ts),
- *   - ručně v nabídce profilu (uloží se),
- *   - adresou ?tv=1 (na vyzkoušení na počítači; ?tv=0 vypne).
- * Ruční volba má přednost před automatikou.
+ * Zapíná se sám, když prohlížeč vypadá jako televize (lib/deviceClass.ts).
+ * Přepínač v nabídce profilu byl zbytečný (televize se pozná sama), proto
+ * zmizel - a s ním i uložená ruční volba, ať nikomu nezůstane zapnutý na
+ * počítači. Na vyzkoušení jde pořád adresa ?tv=1 (?tv=0 vypne); platí jen
+ * do zavření karty.
  */
 
 import { detectDeviceClass } from './deviceClass';
@@ -32,9 +32,10 @@ export function resolveTvMode(input: { preference: TvPreference; looksLikeTv: bo
   return input.looksLikeTv;
 }
 
+/** Vyzkoušení přes ?tv=1 / ?tv=0 - jen pro tuhle kartu (sessionStorage). */
 export function readTvPreference(): TvPreference {
   try {
-    const v = localStorage.getItem(TV_STORAGE_KEY);
+    const v = sessionStorage.getItem(TV_STORAGE_KEY);
     return v === 'on' || v === 'off' ? v : 'auto';
   } catch {
     return 'auto';
@@ -43,8 +44,8 @@ export function readTvPreference(): TvPreference {
 
 export function setTvPreference(pref: TvPreference) {
   try {
-    if (pref === 'auto') localStorage.removeItem(TV_STORAGE_KEY);
-    else localStorage.setItem(TV_STORAGE_KEY, pref);
+    if (pref === 'auto') sessionStorage.removeItem(TV_STORAGE_KEY);
+    else sessionStorage.setItem(TV_STORAGE_KEY, pref);
   } catch {
     // bez úložiště platí volba jen do obnovení stránky
   }
@@ -72,9 +73,15 @@ export function applyTvMode(): boolean {
 
   let urlParam: string | null = null;
   try {
+    // Ruční volba z dřívějšího přepínače v nabídce (trvalá) - už neplatí.
+    localStorage.removeItem(TV_STORAGE_KEY);
+  } catch {
+    // bez úložiště
+  }
+  try {
     urlParam = new URLSearchParams(window.location.search).get('tv');
-    if (urlParam === '1' || urlParam === 'on') localStorage.setItem(TV_STORAGE_KEY, 'on');
-    if (urlParam === '0' || urlParam === 'off') localStorage.setItem(TV_STORAGE_KEY, 'off');
+    if (urlParam === '1' || urlParam === 'on') sessionStorage.setItem(TV_STORAGE_KEY, 'on');
+    if (urlParam === '0' || urlParam === 'off') sessionStorage.setItem(TV_STORAGE_KEY, 'off');
   } catch {
     // bez úložiště
   }

@@ -4,6 +4,7 @@ import { Inter } from 'next/font/google';
 import AppShellChrome from '@/components/AppShellChrome';
 import ErrorReporter from '@/components/ErrorReporter';
 import TvMode from '@/components/TvMode';
+import BadgeWatcher from '@/components/BadgeWatcher';
 import { LanguageProvider } from '@/lib/i18n';
 import { MobileNavProvider } from '@/lib/mobileNavContext';
 import { MusicPlayerProvider } from '@/lib/musicPlayer';
@@ -69,7 +70,8 @@ export const metadata: Metadata = {
   description: 'Kine is a video platform built on free expression - watch, create and share videos, Sparks, posts and live streams.',
   openGraph: {
     title: 'Kine',
-    description: 'The video platform built on free expression. Videos, Sparks, live streams and clips.',
+    // Věta z obrázku náhledu se tu neopakuje - popis říká, co se na Kine dá dělat.
+    description: 'Watch and create videos and Sparks, go live, and clip your games with Kine Clipper.',
     url: siteUrl,
     siteName: 'Kine',
     type: 'website',
@@ -77,7 +79,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Kine',
-    description: 'The video platform built on free expression. Videos, Sparks, live streams and clips.',
+    description: 'Watch and create videos and Sparks, go live, and clip your games with Kine Clipper.',
   },
 };
 
@@ -116,6 +118,8 @@ export default function RootLayout({
                 <ErrorReporter />
                 {/* Režim televize: zvětšení a ovládání šipkami (lib/tvMode.ts). */}
                 <TvMode />
+                {/* Nový odznak = oslavné okénko a oznámení (components/BadgeWatcher.tsx). */}
+                <BadgeWatcher />
                 <AppShellChrome>{children}</AppShellChrome>
               </UploadProvider>
             </MusicPlayerProvider>

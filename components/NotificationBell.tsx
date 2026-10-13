@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
-import { DownloadIcon, PeopleIcon, PlaylistIcon, WatchLaterIcon, BellIcon } from './ReactionIcons';
+import { DownloadIcon, PeopleIcon, PlaylistIcon, WatchLaterIcon, BellIcon, ThumbsUpIcon } from './ReactionIcons';
+import UiIcon, { type UiIconName } from './UiIcon';
+import { NOTIFICATIONS_REFRESH_EVENT } from './BadgeWatcher';
+import { badgeNotificationText } from '@/lib/badgeText';
 import { safeInternalLink } from '@/lib/safeLink';
 
 type Notification = {
@@ -13,7 +16,7 @@ type Notification = {
   link: string | null;
   read: boolean;
   created_at: string;
-  type: 'default' | 'collab_invite' | 'like_milestone' | 'view_milestone' | 'donation' | 'subscription' | 'new_video' | 'comment_reply' | 'moderation_warning' | 'live';
+  type: 'default' | 'collab_invite' | 'like_milestone' | 'view_milestone' | 'donation' | 'subscription' | 'new_video' | 'comment_reply' | 'moderation_warning' | 'live' | 'badge';
   /** Kdo oznámení poslal z prohlížeče (odběr, komentář, pozvánka). Oznámení od Kine (serveru) ho nemají. */
   sender_id?: string | null;
   senderName?: string | null;
@@ -27,18 +30,24 @@ type Notification = {
  * šly rozeznat i s barvoslepostí - nespoléhá se jen na barvu, u každého
  * řádku je i ikonka a popisek druhu.
  */
-const NOTIFICATION_TYPE_STYLES: Record<string, { color: string; icon: string; labelKey: string }> = {
-  like_milestone: { color: '#4fbf87', icon: '👍', labelKey: 'notifTypeLike' },
-  view_milestone: { color: '#4d9fff', icon: '👁', labelKey: 'notifTypeViews' },
-  subscription: { color: '#b07cf5', icon: '👥', labelKey: 'notifTypeSubscriber' },
-  collab_invite: { color: '#f5a623', icon: '🤝', labelKey: 'notifTypeCollab' },
-  comment_reply: { color: '#45c9c9', icon: '💬', labelKey: 'notifTypeComment' },
-  donation: { color: '#f07eb0', icon: '💛', labelKey: 'notifTypeDonation' },
-  new_video: { color: '#8a8a8f', icon: '🎬', labelKey: 'notifTypeNewVideo' },
-  moderation_warning: { color: '#e0453f', icon: '⚠', labelKey: 'notifTypeWarning' },
-  live: { color: '#ff3b3b', icon: '🔴', labelKey: 'notifTypeLive' },
-  default: { color: '#8a8a8f', icon: '•', labelKey: 'notifTypeOther' },
+const NOTIFICATION_TYPE_STYLES: Record<string, { color: string; icon: UiIconName | 'thumbUp'; labelKey: string }> = {
+  like_milestone: { color: '#4fbf87', icon: 'thumbUp', labelKey: 'notifTypeLike' },
+  view_milestone: { color: '#4d9fff', icon: 'eye', labelKey: 'notifTypeViews' },
+  subscription: { color: '#b07cf5', icon: 'users', labelKey: 'notifTypeSubscriber' },
+  collab_invite: { color: '#f5a623', icon: 'link', labelKey: 'notifTypeCollab' },
+  comment_reply: { color: '#45c9c9', icon: 'chat', labelKey: 'notifTypeComment' },
+  donation: { color: '#f07eb0', icon: 'coins', labelKey: 'notifTypeDonation' },
+  new_video: { color: '#8a8a8f', icon: 'film', labelKey: 'notifTypeNewVideo' },
+  moderation_warning: { color: '#e0453f', icon: 'warning', labelKey: 'notifTypeWarning' },
+  live: { color: '#ff3b3b', icon: 'broadcast', labelKey: 'notifTypeLive' },
+  badge: { color: '#e3b341', icon: 'trophy', labelKey: 'notifTypeBadge' },
+  default: { color: '#8a8a8f', icon: 'bell', labelKey: 'notifTypeOther' },
 };
+
+/** Ikona druhu oznámení - čisté ikony jako všude jinde, ne emoji. */
+function TypeIcon({ icon }: { icon: UiIconName | 'thumbUp' }) {
+  return icon === 'thumbUp' ? <ThumbsUpIcon size={15} /> : <UiIcon name={icon} size={15} />;
+}
 
 function styleForType(type: string) {
   return NOTIFICATION_TYPE_STYLES[type] ?? NOTIFICATION_TYPE_STYLES.default;
@@ -70,7 +79,13 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
   useEffect(() => {
     load();
     const interval = setInterval(load, 30000); // obnovit každých 30s
-    return () => clearInterval(interval);
+    // Nový odznak (components/BadgeWatcher.tsx) - oznámení hned, ne až za 30 s.
+    const refresh = () => load();
+    window.addEventListener(NOTIFICATIONS_REFRESH_EVENT, refresh);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener(NOTIFICATIONS_REFRESH_EVENT, refresh);
+    };
   }, []);
 
   useEffect(() => {
@@ -341,7 +356,7 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
                       style={{ background: `${styleForType(n.type).color}22`, color: styleForType(n.type).color }}
                       aria-hidden="true"
                     >
-                      {styleForType(n.type).icon}
+                      <TypeIcon icon={styleForType(n.type).icon} />
                     </span>
 
                     <button
@@ -358,7 +373,7 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
                       >
                         {t(styleForType(n.type).labelKey as any)}
                       </span>
-                      {n.message}
+                      {(n.type === 'badge' && badgeNotificationText(n.message, t, lang)) || n.message}
                       <span style={{ display: 'block', fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
                         {new Date(n.created_at).toLocaleString(DATE_LOCALES[lang])}
                         {n.senderName && n.type !== 'like_milestone' ? ` · @${n.senderName}` : ''}
@@ -366,9 +381,11 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
                     </button>
                     <button
                       onClick={(e) => deleteNotification(e, n.id)}
-                      style={{ background: 'none', color: 'var(--text-faint)', padding: 6, fontSize: 12 }}
+                      style={{ background: 'none', color: 'var(--text-faint)', padding: 6, fontSize: 12, display: 'inline-flex' }}
+                      aria-label={t('delete')}
+                      title={t('delete')}
                     >
-                      ✕
+                      <UiIcon name="close" size={14} />
                     </button>
                   </div>
                 )

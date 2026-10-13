@@ -1,3 +1,85 @@
+KINE - odznaky na výběr, záznamy vysílání jen na přání, playlisty, kanál, hledání s méně
+textem, playkine.com, náhled odkazu a ikony (dodávka kine-odznaky-playlisty-2026-10-13)
+==========================================================================================
+
+Web + appka (Kine do PC / Kine Clipper 0.10.3).
+- Web: rozbal kine-web-odznaky-playlisty.zip do kořene repa Kine a přepiš, nahraj na GitHub
+  (přetažením) a pusť node zkontroluj-soubory.mjs.
+- Supabase -> SQL Editor: supabase-migration-odznaky.sql (výběr odznaků na kanál + oznámení
+  o novém odznaku). Bez ní web běží dál, jen výběr nejde uložit a oznámení nechodí.
+- Appka: rozbal kine-desktop-0.10.3.zip do kořene repa kine-desktop, nahraj a pusť Vydání.
+- Pořadí: nejdřív web (a migrace), pak appka - Stáhnout/Zahodit v appce mluví s novým webem.
+
+ODZNAKY
+- Na kanálu nejvýš 3 odznaky - které, si vybere majitel (tužka vedle odznaků, nebo "+N"):
+  sbírka ukáže všechny řady, získané i zamčené, s postupem k dalšímu stupni. Barvy stupňů:
+  bronz, stříbro, zlato, platina, diamant (diamant a Průkopník se lesknou). Dokud nevybere,
+  ukážou se první tři. Ukazuje se jen to, co opravdu má (počítá se z kanálu).
+- Nový odznak = oslavné okénko (jako ve hrách) + oznámení ve zvonečku (vede na kanál
+  s otevřenou sbírkou). Server si pamatuje, o čem už víš (profiles.badges_seen) - první
+  kontrola pošle jedno "Získané odznaky: N", ne pět oznámení naráz. lib/badgeCheck.ts,
+  app/api/badges/check, components/BadgeWatcher.tsx, components/ChannelBadges.tsx.
+- Oznámení mají ikony místo emoji.
+
+ZÁZNAMY VYSÍLÁNÍ
+- Ta videa s 0 zhlédnutími na kanálu ("Counter-Strike 2 · clip 22. 9. ...") podle názvu
+  nebyly záznamy vysílání, ale nejspíš klipy, které appka 22. 9. nahrála jako soukromé (to je
+  výchozí volba při nahrání z appky). Kanál teď soukromá videa neukazuje nikomu, ani
+  majiteli (jako YouTube) - jsou v "Tvoje videa".
+- Po konci vysílání: Nahrát na Kine / Stáhnout do PC / Zahodit - v appce na kartě v záložce
+  Živě i ve studiu na webu. Stáhnout = Kine nechá u Cloudflare vyrobit MP4 (u dlouhého
+  vysílání pár minut), appka ho uloží do knihovny Klipy. Zahodit = záznam se hned smaže.
+  Když neuděláš nic, záznam se nikde neukáže a po 30 dnech se smaže sám.
+
+KANÁL
+- Jméno, @jméno a počet odběratelů jsou pod bannerem (na světlém banneru se ztrácely);
+  přes banner zasahuje jen profilovka. Videa na kanálu jsou stejné karty jako jinde
+  (délka, náhled po najetí, nabídka). Záložky (Domů, Videa...) mají zaoblené rohy.
+
+HLEDÁNÍ
+- Na výsledcích už není blok šesti řádků přepínačů - jen zapnuté filtry jako čipy s křížkem,
+  "Vymazat filtry" a tlačítko, které otevře panel u pole hledání.
+
+PLAYLISTY
+- Přehled: obal = vlastní obrázek, jinak vybraná barva, jinak náhled prvního videa (jako
+  YouTube). V nabídce barev je šedá volba "Bez barvy - náhled prvního videa" (třeba pro
+  "Sledovat později", které má od založení modrou). Počet videí na obalu, veřejný/soukromý
+  ikonou, nabídka s ikonami. Stránka playlistu: obal, název, kdo, počet a celková délka,
+  Přehrát vše; videa s náhledem a délkou; na mobilu pod sebou.
+
+PRŮVODCE A ÚKOLY TVŮRCE
+- V průvodci po registraci je u like/dislike palec nahoru a dolů, u hvězdiček 5 hvězd.
+- "Vítej na Kine" (úkoly pro nového tvůrce) je přeložené do všech jazyků, s ikonami.
+
+TELEVIZE
+- Přepínač "Režim TV" z nabídky zmizel - prohlížeč televize (Tizen, webOS, Android TV,
+  Fire TV, Xbox...) se pozná sám. Dřívější ruční zapnutí se smaže. Na vyzkoušení ?tv=1.
+
+PLAYKINE.COM
+- Stránky otevřené na *.vercel.app (kine-lac.vercel.app...) přesměrují na vlastní doménu,
+  sdílené odkazy tak nenesou "vercel" (jen produkce; API se nepřesměrovává - appka do PC
+  si novou adresu vezme sama a od 0.10.3 jde rovnou na www).
+- Doporučení: ve Vercelu Environment Variables nastav NEXT_PUBLIC_SITE_URL =
+  https://www.playkine.com (a Redeploy) - pak všechny odkazy míří přesně tam.
+- Supabase -> Authentication -> URL Configuration: Site URL https://www.playkine.com
+  a do Redirect URLs přidej https://www.playkine.com/** (odkazy v e-mailech, obnova hesla).
+
+NÁHLED ODKAZU A IKONY
+- Nový obrázek náhledu (Discord, X...): značka Kine, věta, druhy obsahu a "kousek appky";
+  popis pod ním neopakuje text z obrázku. Písmo Inter je přibalené (lib/og-fonts, OFL).
+- Ikona 180 px (apple-touch-icon) a 512 px: Opera si bere ikonu větší než 114 px - Rychlá
+  volba ukáže logo Kine místo zeleného pole s adresou (Opera si dlaždici obnoví sama, nebo
+  dlaždici smaž a přidej znovu). Stejná ikona je i pro iPhone (Přidat na plochu).
+
+VERCEL: VAROVÁNÍ PŘI SESTAVENÍ
+- "npm warn install-scripts ... core-js": jen varování, ne chyba. core-js (přibalený
+  k TensorFlow pro kontrolu nahoty) má po instalaci jen reklamní hlášku - v package.json je
+  teď "allowScripts": { "core-js": false } a varování zmizí.
+- Next.js 14.2.5 -> 14.2.35: v 14.2.5 jsou známé bezpečnostní chyby (npm ho označuje jako
+  zranitelný) - stejná řada 14.2, jen opravy.
+
+------------------------------------------------------------------------------------------
+
 KINE - hledání s filtry u pole, Sparks až ke kraji, odznaky, animované profilovky, víc vzhledu,
 nové vítání, pravidla, diagnostika živého vysílání (dodávka kine-filtry-odznaky-2026-10-12)
 ==========================================================================================

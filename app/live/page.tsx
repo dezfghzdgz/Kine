@@ -79,6 +79,17 @@ export default function LiveStudioPage() {
   const [savingDetails, setSavingDetails] = useState(false);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [publishing, setPublishing] = useState<{ uid: string; title: string; visibility: 'public' | 'subscribers' | 'private' } | null>(null);
+  /** Záznam, který se chystá ke stažení (Cloudflare vyrábí MP4) / je připravený, nebo se ptá na zahození. */
+  const [recDownload, setRecDownload] = useState<{ uid: string; percent: number | null; url: string | null } | null>(null);
+  const [recDiscard, setRecDiscard] = useState<string | null>(null);
+  /** Po odchodu ze studia se na MP4 už neptá. */
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const [streamLive, setStreamLive] = useState(false);
   const [moderators, setModerators] = useState<Moderator[]>([]);
   const [newModerator, setNewModerator] = useState('');
@@ -280,6 +291,46 @@ export default function LiveStudioPage() {
       setToast({ message: (e as Error).message, type: 'error' });
     } finally {
       setBusy(false);
+    }
+  }
+
+  /**
+   * Stáhnout záznam do PC: Cloudflare MP4 nejdřív vyrobí (u dlouhého vysílání pár
+   * minut) - ptá se znovu, dokud není hotové; pak se ukáže odkaz na uložení (okno
+   * otevřené až po čekání by prohlížeč zablokoval).
+   */
+  async function downloadRecording(uid: string) {
+    setRecDownload({ uid, percent: null, url: null });
+    try {
+      for (let attempt = 0; attempt < 240; attempt++) {
+        if (!mountedRef.current) return;
+        const body = await api('/api/live/recordings/download', { method: 'POST', body: JSON.stringify({ videoUid: uid }) });
+        if (body.status === 'ready' && body.url) {
+          setRecDownload({ uid, percent: 100, url: body.url });
+          return;
+        }
+        setRecDownload({ uid, percent: typeof body.percent === 'number' ? Math.round(body.percent) : null, url: null });
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      setRecDownload(null);
+      setToast({ message: t('liveRecNotReady'), type: 'error' });
+    } catch (e) {
+      setRecDownload(null);
+      setToast({ message: (e as Error).message, type: 'error' });
+    }
+  }
+
+  async function discardRecording(uid: string) {
+    setBusy(true);
+    try {
+      await api('/api/live/recordings/discard', { method: 'POST', body: JSON.stringify({ videoUid: uid }) });
+      setRecordings((list) => list.filter((r) => r.uid !== uid));
+      setToast({ message: t('liveRecDiscarded'), type: 'success' });
+    } catch (e) {
+      setToast({ message: (e as Error).message, type: 'error' });
+    } finally {
+      setBusy(false);
+      setRecDiscard(null);
     }
   }
 
@@ -599,6 +650,39 @@ export default function LiveStudioPage() {
                           >
                             {t('livePublishRecording')}
                           </button>
+                          {r.state !== 'live-inprogress' &&
+                            (recDownload?.uid === r.uid ? (
+                              recDownload.url ? (
+                                <a href={recDownload.url} target="_blank" rel="noopener noreferrer" className="live-small-btn live-rec-save" onClick={() => setTimeout(() => setRecDownload(null), 500)}>
+                                  <UiIcon name="download" size={13} /> {t('liveRecSaveFile')}
+                                </a>
+                              ) : (
+                                <span className="live-hint">
+                                  <span className="spin" aria-hidden="true" /> {t('liveRecPreparing').replace('{percent}', recDownload.percent === null ? '…' : `${recDownload.percent} %`)}
+                                </span>
+                              )
+                            ) : (
+                              <button type="button" className="live-small-btn" onClick={() => void downloadRecording(r.uid)} disabled={!!recDownload}>
+                                <UiIcon name="download" size={13} /> {t('liveRecDownload')}
+                              </button>
+                            ))}
+                          {recDiscard === r.uid ? (
+                            <span className="live-rec-confirm">
+                              {t('liveRecDiscardConfirm')}
+                              <button type="button" className="live-small-btn live-rec-danger" onClick={() => void discardRecording(r.uid)} disabled={busy}>
+                                {t('liveRecDiscard')}
+                              </button>
+                              <button type="button" className="live-small-btn" onClick={() => setRecDiscard(null)}>
+                                {t('cancel')}
+                              </button>
+                            </span>
+                          ) : (
+                            !(r.state === 'live-inprogress' && streamLive) && (
+                              <button type="button" className="live-small-btn live-rec-danger" onClick={() => setRecDiscard(r.uid)}>
+                                <UiIcon name="trash" size={13} /> {t('liveRecDiscard')}
+                              </button>
+                            )
+                          )}
                         </span>
                       )}
                     </div>

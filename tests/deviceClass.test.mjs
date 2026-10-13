@@ -42,6 +42,9 @@ test('televize podle prohlížeče, ať hlásí cokoliv o dotyku', () => {
   assert.equal(deviceClass({ coarse: false, width: 1920, height: 1080, userAgent: TIZEN }), 'tv');
   assert.equal(deviceClass({ coarse: true, width: 1920, height: 1080, userAgent: WEBOS }), 'tv');
   assert.equal(deviceClass({ coarse: false, width: 3840, height: 2160, userAgent: ANDROID_TV }), 'tv');
+  // Konzole u televize (prohlížeč Edge na Xboxu, PlayStation) a novější systémy televizí.
+  assert.equal(deviceClass({ coarse: false, width: 1920, height: 1080, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox Series X) AppleWebKit/537.36 Chrome/120.0 Safari/537.36 Edge/120.0' }), 'tv');
+  assert.equal(deviceClass({ coarse: false, width: 1920, height: 1080, userAgent: 'Mozilla/5.0 (Linux; TitanOS 1.0; Philips) AppleWebKit/537.36 Chrome/108.0 Safari/537.36' }), 'tv');
 });
 
 test('4K monitor s myší není televize', () => {

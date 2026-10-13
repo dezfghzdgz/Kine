@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage, type DictKey } from '@/lib/i18n';
 import UiIcon, { type UiIconName } from '@/components/UiIcon';
+import { ThumbsDownIcon, ThumbsUpIcon } from '@/components/ReactionIcons';
 import { firstWelcomeStep, WELCOME_STEPS, type WelcomeProfile, type WelcomeStep } from '@/lib/welcome';
 
 /**
@@ -20,7 +21,10 @@ import { firstWelcomeStep, WELCOME_STEPS, type WelcomeProfile, type WelcomeStep 
  * (/agree-to-rules, /choose-purpose...) sem přesměrují.
  */
 
-type Choice = { value: string; icon: UiIconName; title: string; desc: string };
+/** Volba v kroku průvodce: obrázek (ikona, palce, hvězdy), název a jedna věta. */
+type Choice = { value: string; visual: ReactNode; title: string; desc: string };
+
+const icon = (name: UiIconName) => <UiIcon name={name} size={24} />;
 
 export default function WelcomePage() {
   const router = useRouter();
@@ -83,7 +87,7 @@ export default function WelcomePage() {
       {items.map((c) => (
         <button key={c.value} type="button" className={`welcome-choice ${current === c.value ? 'active' : ''}`} disabled={saving} onClick={() => onPick(c.value)}>
           <span className="welcome-choice-icon" aria-hidden="true">
-            <UiIcon name={c.icon} size={24} />
+            {c.visual}
           </span>
           <span className="welcome-choice-title">{c.title}</span>
           <span className="welcome-choice-desc">{c.desc}</span>
@@ -146,8 +150,8 @@ export default function WelcomePage() {
           <p className="welcome-lead">{t('purposeIntro')}</p>
           {choices(
             [
-              { value: 'viewer', icon: 'play', title: t('wantToWatch'), desc: t('wantToWatchDesc') },
-              { value: 'creator', icon: 'film', title: t('wantToCreate'), desc: t('wantToCreateDesc') },
+              { value: 'viewer', visual: icon('play'), title: t('wantToWatch'), desc: t('wantToWatchDesc') },
+              { value: 'creator', visual: icon('film'), title: t('wantToCreate'), desc: t('wantToCreateDesc') },
             ],
             profile.viewerType,
             (value) => void save({ viewer_type: value }, { viewerType: value })
@@ -161,8 +165,31 @@ export default function WelcomePage() {
           <p className="welcome-lead">{t('ratingModeIntro')}</p>
           {choices(
             [
-              { value: 'like_dislike', icon: 'heart', title: t('welcomeLikeDislike'), desc: t('likeDislikeDesc') },
-              { value: 'stars', icon: 'starFilled', title: t('starsLabel'), desc: t('starsDesc') },
+              {
+                value: 'like_dislike',
+                // Palec nahoru a dolů - stejné ikony jako pod videem (srdíčko mátlo, vypadalo jako "oblíbené").
+                visual: (
+                  <span className="welcome-choice-pair">
+                    <ThumbsUpIcon size={22} />
+                    <ThumbsDownIcon size={22} />
+                  </span>
+                ),
+                title: t('welcomeLikeDislike'),
+                desc: t('likeDislikeDesc'),
+              },
+              {
+                value: 'stars',
+                // Pět hvězd jako u hodnocení videa.
+                visual: (
+                  <span className="welcome-choice-stars">
+                    {[0, 1, 2, 3, 4].map((i) => (
+                      <UiIcon key={i} name="starFilled" size={15} />
+                    ))}
+                  </span>
+                ),
+                title: t('starsLabel'),
+                desc: t('starsDesc'),
+              },
             ],
             profile.ratingMode,
             (value) => void save({ rating_mode: value }, { ratingMode: value })
@@ -176,8 +203,8 @@ export default function WelcomePage() {
           <p className="welcome-lead">{t('contentPrefIntro')}</p>
           {choices(
             [
-              { value: 'long', icon: 'film', title: t('longerVideosLabel'), desc: t('longVideosDesc') },
-              { value: 'short', icon: 'bolt', title: 'Sparks', desc: t('sparksDesc') },
+              { value: 'long', visual: icon('film'), title: t('longerVideosLabel'), desc: t('longVideosDesc') },
+              { value: 'short', visual: icon('bolt'), title: 'Sparks', desc: t('sparksDesc') },
             ],
             profile.contentPreference,
             (value) => void save({ content_preference: value }, { contentPreference: value })

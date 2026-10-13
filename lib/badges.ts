@@ -100,3 +100,83 @@ export function nextBadge(stats: BadgeStats, now = Date.now()): NextBadge | null
   }
   return best;
 }
+
+// ---------------------------------------------------------------------------
+// Výběr na kanál (jako v Clash Royale), sbírka a oznámení o novém odznaku.
+// ---------------------------------------------------------------------------
+
+/** Na kanálu jsou vidět nejvýš tři odznaky - které, si vybere majitel. */
+export const SHOWCASE_MAX = 3;
+
+/** Všechny řady odznaků v pořadí sbírky. */
+export const BADGE_IDS: readonly BadgeId[] = ORDER;
+
+export function isBadgeId(value: unknown): value is BadgeId {
+  return typeof value === 'string' && (ORDER as string[]).includes(value);
+}
+
+/** Klíč pro "o tomhle už ví" (profiles.badges_seen): řada + stupeň - videos:10, views:1000. */
+export function badgeKey(b: Badge): string {
+  return `${b.id}:${b.value}`;
+}
+
+/** Získané odznaky, o kterých tvůrce ještě neví (nejsou mezi `seen`). */
+export function unseenBadges(earned: readonly Badge[], seen: readonly string[]): Badge[] {
+  const known = new Set(seen);
+  return earned.filter((b) => !known.has(badgeKey(b)));
+}
+
+/** Co si zapamatovat po kontrole: staré + všechno, co má teď (o ztraceném a znovu získaném stupni se znovu nehlásí). */
+export function mergeSeen(seen: readonly string[], earned: readonly Badge[]): string[] {
+  return Array.from(new Set([...seen.filter((k) => typeof k === 'string'), ...earned.map(badgeKey)])).slice(-200);
+}
+
+/** Výběr z databáze / od uživatele: jen platné řady, bez opakování, nejvýš tři. null = ještě nevybíral. */
+export function sanitizeShowcase(value: unknown): BadgeId[] | null {
+  if (!Array.isArray(value)) return null;
+  const out: BadgeId[] = [];
+  for (const id of value) {
+    if (isBadgeId(id) && !out.includes(id)) out.push(id);
+    if (out.length >= SHOWCASE_MAX) break;
+  }
+  return out;
+}
+
+/**
+ * Odznaky na kanálu: vybrané (v pořadí výběru; jen ty, které pořád má),
+ * a dokud nic nevybral, první tři podle pořadí. Prázdný výběr = schválně žádný.
+ */
+export function showcaseBadges(earned: readonly Badge[], showcase: unknown, max = SHOWCASE_MAX): Badge[] {
+  const picked = sanitizeShowcase(showcase);
+  if (picked === null) return earned.slice(0, max);
+  const out: Badge[] = [];
+  for (const id of picked) {
+    const badge = earned.find((b) => b.id === id);
+    if (badge) out.push(badge);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/** Řada ve sbírce: dosažený stupeň (nebo null), kolik stupňů řada má a jak daleko je další. */
+export type BadgeProgress = {
+  id: BadgeId;
+  badge: Badge | null;
+  /** Počet stupňů řady (Průkopník a Streamer mají jeden). */
+  tiers: number;
+  /** Hranice dalšího stupně - null = má nejvyšší (nebo řada stupně nemá). */
+  next: number | null;
+  current: number;
+};
+
+export function badgeProgress(stats: BadgeStats, now = Date.now()): BadgeProgress[] {
+  const earned = computeBadges(stats, now);
+  return ORDER.map((id) => {
+    const badge = earned.find((b) => b.id === id) ?? null;
+    if (id === 'early' || id === 'streamer') return { id, badge, tiers: 1, next: null, current: badge ? 1 : 0 };
+    const tiers = BADGE_TIERS[id];
+    const value = current(stats, id, now);
+    const next = tiers.find((t) => value < t) ?? null;
+    return { id, badge, tiers: tiers.length, next, current: value };
+  });
+}

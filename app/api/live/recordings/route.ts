@@ -8,8 +8,9 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Záznamy živých vysílání (Cloudflare je nahrává samo). Tvůrce vidí svoje
- * a jedním klikem z nich udělá normální video na Kine (lib/liveRecording.ts).
- * Nezveřejněné záznamy Cloudflare po 30 dnech smaže; zveřejněné zůstávají.
+ * a jedním klikem z nich udělá normální video na Kine, stáhne si je do PC
+ * (MP4), nebo je zahodí (lib/liveRecording.ts). Nezveřejněný záznam se nikde
+ * neukazuje a Cloudflare ho po 30 dnech smaže; zveřejněné zůstávají.
  */
 async function myInput(ownerId: string) {
   const { data, error } = await supabaseServer.from('live_inputs').select('cf_input_id').eq('owner_id', ownerId).maybeSingle();
@@ -49,6 +50,11 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   // "latest" = nejnovější záznam (appka Kine po skončení vysílání neví jeho id).
   const uid = String(body?.videoUid ?? '').trim() || 'latest';
+
+  // Stáhnout / Zahodit mají vlastní cesty (./download, ./discard). Tady jen zveřejnění -
+  // cokoliv s "action" se odmítne, ať se omylem nikdy nezveřejní záznam, který měl jít pryč.
+  if (body?.action !== undefined) return NextResponse.json({ error: 'Neznámá akce.' }, { status: 400 });
+
   const result = await publishRecording(user.id, {
     videoUid: uid,
     title: typeof body?.title === 'string' ? body.title : undefined,

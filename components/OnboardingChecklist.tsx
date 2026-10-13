@@ -3,24 +3,39 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
+import { useLanguage, type DictKey } from '@/lib/i18n';
+import UiIcon, { type UiIconName } from './UiIcon';
 
-type Step = { label: string; done: boolean; href: string };
+type Step = { key: DictKey; icon: UiIconName; done: boolean; href: string };
 
+const DISMISS_KEY = 'kine-onboarding-dismissed';
+
+/**
+ * Úkoly pro nového tvůrce na hlavní stránce (jen kdo si v průvodci vybral
+ * "chci tvořit"). Dřív byly natvrdo česky i v angličtině a s emoji - teď
+ * přes překlady a s ikonami. Zmizí, když je všechno hotové nebo když ho
+ * tvůrce skryje (pamatuje si to prohlížeč).
+ */
 export default function OnboardingChecklist() {
+  const { t } = useLanguage();
   const [steps, setSteps] = useState<Step[] | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    load();
+    void load();
   }, []);
 
   async function load() {
     const { data: authData } = await supabase.auth.getUser();
     if (!authData.user) return;
 
-    if (localStorage.getItem('kine-onboarding-dismissed') === authData.user.id) {
-      setDismissed(true);
-      return;
+    try {
+      if (localStorage.getItem(DISMISS_KEY) === authData.user.id) {
+        setDismissed(true);
+        return;
+      }
+    } catch {
+      // paměť prohlížeče nejde - seznam se ukáže
     }
 
     const [{ count: videoCount }, { count: sparkCount }, { count: playlistCount }, profileRes] = await Promise.all([
@@ -44,18 +59,22 @@ export default function OnboardingChecklist() {
     const hasSocialLink = Array.isArray(profileRes.data?.social_links) && profileRes.data.social_links.length > 0;
 
     setSteps([
-      { label: 'Nahraj první video', done: (videoCount ?? 0) > 0, href: '/upload' },
-      { label: 'Zkus nahrát Spark (krátké vertikální video)', done: (sparkCount ?? 0) > 0, href: '/upload' },
-      { label: 'Vytvoř playlist', done: (playlistCount ?? 0) > 0, href: '/playlists' },
-      { label: 'Uprav si profil (fotka nebo popis)', done: profileCustomized, href: '/settings' },
-      { label: 'Nastav banner kanálu', done: hasBanner, href: '/settings' },
-      { label: 'Přidej odkaz na sociální síť', done: hasSocialLink, href: '/settings' },
+      { key: 'onboardUpload', icon: 'upload', done: (videoCount ?? 0) > 0, href: '/upload' },
+      { key: 'onboardSpark', icon: 'bolt', done: (sparkCount ?? 0) > 0, href: '/upload' },
+      { key: 'onboardPlaylist', icon: 'film', done: (playlistCount ?? 0) > 0, href: '/playlists' },
+      { key: 'onboardProfile', icon: 'user', done: profileCustomized, href: '/settings#profile' },
+      { key: 'onboardBanner', icon: 'image', done: hasBanner, href: '/settings#profile' },
+      { key: 'onboardSocial', icon: 'link', done: hasSocialLink, href: '/settings#profile' },
     ]);
   }
 
   function handleDismiss() {
     supabase.auth.getUser().then(({ data }) => {
-      if (data.user) localStorage.setItem('kine-onboarding-dismissed', data.user.id);
+      try {
+        if (data.user) localStorage.setItem(DISMISS_KEY, data.user.id);
+      } catch {
+        // nevadí - skryje se aspoň teď
+      }
     });
     setDismissed(true);
   }
@@ -66,37 +85,33 @@ export default function OnboardingChecklist() {
   if (doneCount === steps.length) return null;
 
   return (
-    <div className="panel" style={{ marginBottom: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <p className="panel-heading" style={{ margin: 0 }}>Vítej na Kine 👋</p>
-        <button onClick={handleDismiss} style={{ background: 'none', color: 'var(--text-faint)', padding: 4 }}>✕</button>
+    <section className="panel onboarding-card" aria-label={t('onboardTitle')}>
+      <div className="onboarding-head">
+        <span className="onboarding-badge" aria-hidden="true">
+          <UiIcon name="sparkle" size={18} />
+        </span>
+        <p className="onboarding-title">{t('onboardTitle')}</p>
+        <span className="onboarding-count">{t('onboardProgress').replace('{done}', String(doneCount)).replace('{total}', String(steps.length))}</span>
+        <button type="button" className="icon-btn onboarding-close" onClick={handleDismiss} aria-label={t('onboardHide')} title={t('onboardHide')}>
+          <UiIcon name="close" size={16} />
+        </button>
       </div>
 
-      <div style={{ height: 6, background: 'var(--border)', borderRadius: 999, marginBottom: 14, overflow: 'hidden' }}>
-        <div
-          style={{
-            height: '100%', width: `${(doneCount / steps.length) * 100}%`,
-            background: 'var(--text)', transition: 'width 0.2s ease',
-          }}
-        />
+      <div className="onboarding-progress" aria-hidden="true">
+        <span style={{ width: `${(doneCount / steps.length) * 100}%` }} />
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="onboarding-steps">
         {steps.map((step) => (
-          <Link
-            key={step.label}
-            href={step.href}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
-              color: step.done ? 'var(--text-faint)' : 'var(--text)',
-              textDecoration: step.done ? 'line-through' : 'none',
-            }}
-          >
-            <span>{step.done ? '✅' : '⬜'}</span>
-            {step.label}
+          <Link key={step.key} href={step.href} className={`onboarding-step ${step.done ? 'done' : ''}`}>
+            <span className="onboarding-step-check" aria-hidden="true">
+              {step.done ? <UiIcon name="check" size={14} /> : <UiIcon name={step.icon} size={15} />}
+            </span>
+            <span className="onboarding-step-label">{t(step.key)}</span>
+            {!step.done && <UiIcon name="chevronRight" size={15} className="onboarding-step-arrow" />}
           </Link>
         ))}
       </div>
-    </div>
+    </section>
   );
 }

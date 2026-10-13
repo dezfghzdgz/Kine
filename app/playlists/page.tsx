@@ -6,6 +6,9 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import UiIcon from '@/components/UiIcon';
+import { PlaylistIcon } from '@/components/ReactionIcons';
+import { DEFAULT_PLAYLIST_COLOR, hasChosenColor, playlistCover } from '@/lib/playlistCover';
 
 const COLOR_PRESETS = ['#3a5a8a', '#8a3a3a', '#3a8a5a', '#8a7a3a', '#6a3a8a', '#3a3a40'];
 
@@ -47,7 +50,7 @@ function PlaylistsPageInner() {
 
     const { data } = await supabase
       .from('playlists')
-      .select('id, title, color, thumbnail_url, is_system, visibility, created_at, playlist_videos(video_id)')
+      .select('id, title, color, thumbnail_url, is_system, visibility, created_at, playlist_videos(video_id, position, videos(thumbnail_url))')
       .eq('owner_id', authData.user.id)
       .order('is_system', { ascending: false })
       .order('created_at', { ascending: false });
@@ -87,7 +90,7 @@ function PlaylistsPageInner() {
 
   async function uploadThumbnail(id: string, file: File) {
     if (!userId) {
-      setThumbError('Appka ještě nezjistila tvého uživatele - zkus to prosím o chvíli znovu.');
+      setThumbError(t('playlistThumbNoUser'));
       return;
     }
     setThumbError(null);
@@ -95,7 +98,7 @@ function PlaylistsPageInner() {
     const path = `${userId}/${id}.${ext}`;
     const { error } = await supabase.storage.from('playlist-covers').upload(path, file, { upsert: true });
     if (error) {
-      setThumbError(`Nahrání se nepovedlo (cesta: ${path}): ${error.message}`);
+      setThumbError(t('playlistThumbUploadFailed').replace('{error}', error.message));
       return;
     }
     const { data: publicUrlData } = supabase.storage.from('playlist-covers').getPublicUrl(path);
@@ -104,7 +107,7 @@ function PlaylistsPageInner() {
       .update({ thumbnail_url: `${publicUrlData.publicUrl}?t=${Date.now()}` })
       .eq('id', id);
     if (updateError) {
-      setThumbError(`Uložení náhledu se nepovedlo: ${updateError.message}`);
+      setThumbError(t('playlistThumbSaveFailed').replace('{error}', updateError.message));
       return;
     }
     setMenuOpenId(null);
@@ -133,127 +136,161 @@ function PlaylistsPageInner() {
 
   return (
     <div>
-      <p className="section-title">{t('playlistsTitle')}</p>
+      <div className="playlists-head">
+        <p className="section-title" style={{ margin: 0 }}>{t('playlistsTitle')}</p>
+        <form onSubmit={createPlaylist} className="playlist-create">
+          <UiIcon name="plus" size={16} />
+          <input type="text" placeholder={t('newPlaylistNamePlaceholder')} value={newTitle} onChange={(e) => setNewTitle(e.target.value)} aria-label={t('newPlaylistNamePlaceholder')} />
+          <button type="submit" disabled={creating || !newTitle.trim()}>
+            {t('create')}
+          </button>
+        </form>
+      </div>
       {thumbError && <p className="error-text" style={{ marginBottom: 16 }}>{thumbError}</p>}
 
-      <form onSubmit={createPlaylist} style={{ display: 'flex', gap: 8, marginBottom: 28, maxWidth: 420 }}>
-        <input
-          type="text"
-          placeholder={t('newPlaylistNamePlaceholder')}
-          value={newTitle}
-          onChange={(e) => setNewTitle(e.target.value)}
-          style={{ flex: 1 }}
-        />
-        <button type="submit" disabled={creating}>{t('create')}</button>
-      </form>
-
       {filtered.length === 0 ? (
-        <p style={{ color: 'var(--text-faint)' }}>{t('noPlaylistsToShow')}</p>
+        <div className="playlists-empty">
+          <span className="playlists-empty-icon" aria-hidden="true">
+            <PlaylistIcon size={26} />
+          </span>
+          <p>{t('noPlaylistsToShow')}</p>
+        </div>
       ) : (
         <div className="video-grid">
-          {filtered.map((p) => (
-            <div key={p.id} style={{ position: 'relative' }}>
-              <Link href={`/playlists/${p.id}`} className="video-card">
-                <div
-                  className="video-thumb"
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: p.thumbnail_url ? undefined : (p.color ?? '#3a3a40'),
-                    position: 'relative', overflow: 'hidden',
-                  }}
-                >
-                  {p.thumbnail_url ? (
-                    <img loading="lazy" decoding="async" src={p.thumbnail_url} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : null}
-                  <span style={{
-                    color: '#fff', fontSize: 13, fontWeight: 600, textShadow: '0 1px 3px rgba(0,0,0,0.6)',
-                    position: p.thumbnail_url ? 'absolute' : 'static', bottom: p.thumbnail_url ? 8 : undefined, left: p.thumbnail_url ? 8 : undefined,
-                  }}>
-                    {p.is_system ? '🕒 ' : ''}{p.playlist_videos?.length ?? 0} {t('playlistVideoCountSuffix')}
-                  </span>
-                </div>
-                {renamingId === p.id ? null : (
-                  <p className="video-card-title">
-                    {p.title} {!p.is_system && (p.visibility === 'public' ? '🌐' : '🔒')}
-                  </p>
-                )}
-              </Link>
-
-              {renamingId === p.id && (
-                <div style={{ display: 'flex', gap: 6, marginTop: -6 }}>
-                  <input
-                    type="text"
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    style={{ flex: 1, fontSize: 13, padding: '6px 8px' }}
-                    autoFocus
-                  />
-                  <button onClick={() => renamePlaylist(p.id)} style={{ fontSize: 12, padding: '6px 10px' }}>{t('save')}</button>
-                </div>
-              )}
-
-              <button
-                onClick={() => setMenuOpenId(menuOpenId === p.id ? null : p.id)}
-                className="icon-btn"
-                style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.5)', borderRadius: 999, color: '#fff' }}
-              >
-                ⋮
-              </button>
-
-              {menuOpenId === p.id && (
-                <div className="profile-dropdown" ref={menuRef} style={{ top: 34, right: 6, bottom: 'auto', left: 'auto', width: 200 }}>
-                  <button
-                    className="profile-dropdown-item"
-                    onClick={() => { setRenamingId(p.id); setRenameValue(p.title); setMenuOpenId(null); }}
-                    disabled={p.is_system}
-                  >
-                    {t('renameButton')}
-                  </button>
-
-                  {!p.is_system && (
-                    <button className="profile-dropdown-item" onClick={() => toggleVisibility(p.id, p.visibility ?? 'private')}>
-                      <span>{t('visibilityLabel')}</span>
-                      <span className="profile-dropdown-value">{p.visibility === 'public' ? t('playlistVisibilityPublic') : t('playlistVisibilityPrivate')}</span>
-                    </button>
+          {filtered.map((p) => {
+            const cover = playlistCover(p);
+            const count = p.playlist_videos?.length ?? 0;
+            const isPublic = p.visibility === 'public';
+            return (
+              <div key={p.id} className="playlist-card">
+                <Link href={`/playlists/${p.id}`} className="playlist-card-link">
+                  <div className="playlist-cover" style={cover ? undefined : { background: `linear-gradient(135deg, ${p.color ?? '#3a3a40'}, #111114)` }}>
+                    {cover ? <img loading="lazy" decoding="async" src={cover} alt="" /> : <PlaylistIcon size={34} />}
+                    <span className="playlist-cover-count">
+                      <PlaylistIcon size={14} />
+                      {count} {t('playlistVideoCountSuffix')}
+                    </span>
+                  </div>
+                  {renamingId === p.id ? null : (
+                    <>
+                      <p className="video-card-title playlist-card-title">{p.title}</p>
+                      <p className="playlist-card-meta">
+                        <UiIcon name={isPublic ? 'globe' : 'lock'} size={12} />
+                        {isPublic ? t('playlistVisibilityPublic') : t('playlistVisibilityPrivate')}
+                      </p>
+                    </>
                   )}
+                </Link>
 
-                  <div style={{ padding: '8px 8px 4px' }}>
-                    <p style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 6 }}>{t('thumbnailColorLabel')}</p>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {COLOR_PRESETS.map((c) => (
-                        <button
-                          key={c}
-                          onClick={() => changeColor(p.id, c)}
-                          style={{
-                            width: 22, height: 22, borderRadius: '50%', background: c, padding: 0,
-                            border: p.color === c && !p.thumbnail_url ? '2px solid var(--text)' : '2px solid transparent',
+                {renamingId === p.id && (
+                  <form
+                    className="playlist-rename"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void renamePlaylist(p.id);
+                    }}
+                  >
+                    <input type="text" value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus aria-label={t('renameButton')} />
+                    <button type="submit">{t('save')}</button>
+                    <button type="button" className="playlist-rename-cancel" onClick={() => setRenamingId(null)} aria-label={t('cancel')}>
+                      <UiIcon name="close" size={14} />
+                    </button>
+                  </form>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setMenuOpenId(menuOpenId === p.id ? null : p.id)}
+                  className="icon-btn playlist-card-menu-btn"
+                  aria-label={t('playlistOptions')}
+                  title={t('playlistOptions')}
+                  aria-expanded={menuOpenId === p.id}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <circle cx="12" cy="5.5" r="1.8" />
+                    <circle cx="12" cy="12" r="1.8" />
+                    <circle cx="12" cy="18.5" r="1.8" />
+                  </svg>
+                </button>
+
+                {menuOpenId === p.id && (
+                  <div className="profile-dropdown playlist-card-menu" ref={menuRef}>
+                    <button
+                      className="profile-dropdown-item"
+                      onClick={() => {
+                        setRenamingId(p.id);
+                        setRenameValue(p.title);
+                        setMenuOpenId(null);
+                      }}
+                      disabled={p.is_system}
+                    >
+                      <span className="playlist-menu-label">
+                        <UiIcon name="pencil" size={15} />
+                        {t('renameButton')}
+                      </span>
+                    </button>
+
+                    {!p.is_system && (
+                      <button className="profile-dropdown-item" onClick={() => toggleVisibility(p.id, p.visibility ?? 'private')}>
+                        <span className="playlist-menu-label">
+                          <UiIcon name={isPublic ? 'globe' : 'lock'} size={15} />
+                          {t('visibilityLabel')}
+                        </span>
+                        <span className="profile-dropdown-value">{isPublic ? t('playlistVisibilityPublic') : t('playlistVisibilityPrivate')}</span>
+                      </button>
+                    )}
+
+                    <div className="playlist-menu-colors">
+                      <p>{t('thumbnailColorLabel')}</p>
+                      <div>
+                        {COLOR_PRESETS.map((c) => {
+                          // Výchozí šedá = bez vybrané barvy: obal je náhled prvního videa.
+                          const auto = c === DEFAULT_PLAYLIST_COLOR;
+                          const active = !p.thumbnail_url && (auto ? !hasChosenColor(p.color) : p.color === c);
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => changeColor(p.id, c)}
+                              className={`playlist-color${auto ? ' playlist-color-auto' : ''}${active ? ' active' : ''}`}
+                              style={{ background: c }}
+                              aria-label={auto ? t('playlistCoverAuto') : c}
+                              title={auto ? t('playlistCoverAuto') : undefined}
+                            >
+                              {auto && <UiIcon name="image" size={12} />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <label htmlFor={`playlist-thumb-${p.id}`} className="playlist-menu-upload">
+                        <UiIcon name="image" size={14} />
+                        {t('orUploadCustomImageLabel')}
+                        <input
+                          id={`playlist-thumb-${p.id}`}
+                          type="file"
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) uploadThumbnail(p.id, f);
                           }}
                         />
-                      ))}
+                      </label>
                     </div>
-                    <label htmlFor={`playlist-thumb-${p.id}`} style={{ cursor: 'pointer' }}>
-                      <span style={{ fontSize: 11, color: 'var(--text)', textDecoration: 'underline', marginTop: 8, display: 'inline-block' }}>
-                        {t('orUploadCustomImageLabel')}
-                      </span>
-                      <input
-                        id={`playlist-thumb-${p.id}`}
-                        type="file"
-                        accept="image/*"
-                        style={{ display: 'none' }}
-                        onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadThumbnail(p.id, f); }}
-                      />
-                    </label>
-                  </div>
 
-                  {!p.is_system && (
-                    <button className="profile-dropdown-item" onClick={() => setConfirmPlaylistId(p.id)} style={{ color: '#ff6b6b' }}>
-                      {t('deletePlaylist')}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+                    {!p.is_system && (
+                      <button className="profile-dropdown-item playlist-menu-danger" onClick={() => setConfirmPlaylistId(p.id)}>
+                        <span className="playlist-menu-label">
+                          <UiIcon name="trash" size={15} />
+                          {t('deletePlaylist')}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

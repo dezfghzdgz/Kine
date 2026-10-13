@@ -63,5 +63,47 @@ test('další odznak: ten nejblíž splněný; Sparks jen když nějaké jsou; n
   assert.equal(b.nextBadge(max, NOW), null);
 });
 
+test('výběr na kanál: max 3, v pořadí výběru, jen získané; dokud nevybíral, první tři', () => {
+  const stats = { joinedAt: '2026-10-01T00:00:00Z', videos: 57, views: 12_345, subscribers: 1_000, sparks: 12, streamed: true };
+  const earned = b.computeBadges(stats, NOW);
+  const show = (sel) => b.showcaseBadges(earned, sel).map((x) => x.id);
+  assert.deepEqual(show(null), ['subscribers', 'views', 'videos']);
+  assert.deepEqual(show(undefined), ['subscribers', 'views', 'videos']);
+  assert.deepEqual(show(['early', 'streamer']), ['early', 'streamer']);
+  assert.deepEqual(show([]), [], 'prázdný výběr = schválně žádný');
+  assert.deepEqual(show(['early', 'early', 'nesmysl', 'sparks', 'views', 'videos']), ['early', 'sparks', 'views']);
+  // řadu, kterou už nemá (třeba odběratelé spadli), přeskočí
+  const fewer = b.computeBadges({ ...stats, subscribers: 5 }, NOW);
+  assert.deepEqual(b.showcaseBadges(fewer, ['subscribers', 'early']).map((x) => x.id), ['early']);
+  assert.deepEqual(b.sanitizeShowcase('x'), null);
+  assert.deepEqual(b.sanitizeShowcase(['views', 'views', 'a', 'early', 'sparks', 'years']), ['views', 'early', 'sparks']);
+});
+
+test('oznámení: nové stupně proti zapamatovaným, zapamatované se slučují', () => {
+  const before = b.computeBadges({ ...base, videos: 3 }, NOW);
+  const seen = b.mergeSeen([], before);
+  assert.deepEqual(seen, ['videos:1']);
+  const after = b.computeBadges({ ...base, videos: 12, views: 1500 }, NOW);
+  assert.deepEqual(b.unseenBadges(after, seen).map(b.badgeKey), ['views:1000', 'videos:10']);
+  const merged = b.mergeSeen(seen, after);
+  assert.deepEqual(merged, ['videos:1', 'views:1000', 'videos:10']);
+  assert.deepEqual(b.unseenBadges(after, merged), []);
+});
+
+test('sbírka: každá řada se stupněm, dalším cílem a postupem', () => {
+  const p = b.badgeProgress({ ...base, videos: 12, views: 800 }, NOW);
+  const byId = Object.fromEntries(p.map((x) => [x.id, x]));
+  assert.deepEqual(p.map((x) => x.id), ['subscribers', 'views', 'videos', 'sparks', 'streamer', 'years', 'early']);
+  assert.equal(byId.videos.badge.value, 10);
+  assert.equal(byId.videos.next, 50);
+  assert.equal(byId.videos.tiers, 5);
+  assert.equal(byId.views.badge, null);
+  assert.equal(byId.views.next, 1000);
+  assert.equal(byId.views.current, 800);
+  assert.equal(byId.streamer.tiers, 1);
+  assert.equal(byId.streamer.badge, null);
+  assert.equal(b.badgeProgress({ ...base, views: 1e12 }, NOW).find((x) => x.id === 'views').next, null);
+});
+
 console.log(`\n${prosly} prošlo, ${padly} padlo`);
 if (padly > 0) process.exit(1);

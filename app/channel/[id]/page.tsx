@@ -3,7 +3,6 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import SubscribeButton from '@/components/SubscribeButton';
 import CreatorSubscribeButton from '@/components/CreatorSubscribeButton';
@@ -22,9 +21,14 @@ import { visibleNowFilter } from '@/lib/scheduling';
 import { setAmbientSource } from '@/lib/appearance';
 import { VideoBlockRow } from '@/components/SparksShelf';
 import ChannelBadges from '@/components/ChannelBadges';
+import { BADGE_CHECK_EVENT } from '@/components/BadgeWatcher';
 import UiIcon from '@/components/UiIcon';
 import type { BadgeStats } from '@/lib/badges';
 import ProfileImage from '@/components/ProfileImage';
+import VideoCard from '@/components/VideoCard';
+import { PlaylistIcon } from '@/components/ReactionIcons';
+import { playlistCover } from '@/lib/playlistCover';
+import { formatDuration } from '@/lib/homeRecommendation';
 
 type Tab = 'home' | 'videos' | 'sparks' | 'posts' | 'playlists';
 
@@ -67,6 +71,11 @@ function ChannelPageInner() {
   }, [ambientImage]);
   useEffect(() => () => setAmbientSource(null), []);
 
+  // Majitel na svém kanálu: čísla jsou čerstvá - zkontrolovat nové odznaky hned (components/BadgeWatcher.tsx).
+  useEffect(() => {
+    if (userId && userId === channelId && badgeStats) window.dispatchEvent(new Event(BADGE_CHECK_EVENT));
+  }, [userId, channelId, badgeStats]);
+
   async function load() {
     setLoading(true);
     const [{ data: authData }, { data: profileData }, { count }] = await Promise.all([
@@ -87,10 +96,17 @@ function ChannelPageInner() {
     // prohlížeče přečíst nedá - byl by vidět i tomu, koho se týká, a
     // shadow ban tím ztrácí smysl. Funkce ho vydá jen moderátorovi,
     // ostatním vrátí prázdno.
-    const { data: flagRows } = await supabase.rpc('moderation_flags', { channel_id: channelId });
+    // Vybrané odznaky (profiles.badge_showcase) zvlášť - bez migrace odznaků by výčet sloupců
+    // výš spadl celý; takhle jen chybí výběr a ukážou se první tři.
+    const [{ data: flagRows }, showcaseRes] = await Promise.all([
+      supabase.rpc('moderation_flags', { channel_id: channelId }),
+      supabase.from('profiles').select('badge_showcase').eq('id', channelId).maybeSingle(),
+    ]);
     const flags: any = Array.isArray(flagRows) ? flagRows[0] : flagRows;
+    const badgeShowcase = showcaseRes.error ? null : ((showcaseRes.data as any)?.badge_showcase ?? null);
 
-    setProfile({ ...(profileData as any), ...(flags ?? {}) });
+    // Kanál neexistuje -> null (stránka napíše "Kanál nenalezen"); dřív tu byl vždycky objekt.
+    setProfile(profileData ? { ...(profileData as any), ...(flags ?? {}), badge_showcase: badgeShowcase } : null);
     setSubscriberCount(count ?? 0);
     if (profileData) {
       computeTrustRatingClient(profileData.id, profileData.created_at).then(async (score) => {
@@ -102,12 +118,16 @@ function ChannelPageInner() {
     if (profileData) {
       // Naplánovaná videa (zveřejní se později) vidí jen majitel kanálu; premiéry
       // všichni jako "připravuje se" - stejně jako hlavní stránka (lib/scheduling.ts).
+      // Soukromá videa na kanál nepatří ani pro majitele (jako na YouTube) - ta jsou
+      // v "Tvoje videa". Dřív je majitel viděl mezi ostatními (třeba klipy, které
+      // appka nahrála jako soukromé) s 0 zhlédnutími a bez náhledu.
       const ownChannel = authData.user?.id === channelId;
       let videosQuery = supabase
         .from('videos')
-        .select('id, title, thumbnail_url, views, width, height, duration_seconds, created_at, cloudflare_video_id, scheduled_at, is_premiere')
+        .select('id, owner_id, title, thumbnail_url, views, width, height, duration_seconds, created_at, cloudflare_video_id, scheduled_at, is_premiere, visibility')
         .eq('owner_id', channelId)
-        .eq('status', 'ready');
+        .eq('status', 'ready')
+        .neq('visibility', 'private');
       if (!ownChannel) videosQuery = videosQuery.or(visibleNowFilter());
       const [{ data: videoData }, { data: collabRows }, { data: postData }, { data: playlistData }, { data: myPlaylists }, streamedRes] = await Promise.all([
         videosQuery.order('created_at', { ascending: false }),
@@ -119,7 +139,7 @@ function ChannelPageInner() {
         // sama, jednoznačně, hned pod tím v appce.
         supabase
           .from('video_collaborators')
-          .select('status, videos(id, title, thumbnail_url, views, width, height, duration_seconds, created_at, status, cloudflare_video_id)')
+          .select('status, videos(id, owner_id, title, thumbnail_url, views, width, height, duration_seconds, created_at, status, cloudflare_video_id, visibility)')
           .eq('profile_id', channelId),
         supabase
           .from('posts')
@@ -128,7 +148,7 @@ function ChannelPageInner() {
           .order('created_at', { ascending: false }),
         supabase
           .from('playlists')
-          .select('id, title, color, thumbnail_url, playlist_videos(video_id)')
+          .select('id, title, color, thumbnail_url, playlist_videos(video_id, position, videos(thumbnail_url))')
           .eq('owner_id', channelId)
           .eq('visibility', 'public')
           .eq('is_system', false)
@@ -147,7 +167,7 @@ function ChannelPageInner() {
       const collabVideos = (collabRows ?? [])
         .filter((r: any) => r.status === 'accepted')
         .map((r: any) => r.videos)
-        .filter((v: any) => v && v.status === 'ready');
+        .filter((v: any) => v && v.status === 'ready' && v.visibility !== 'private');
 
       const mergedVideos = [...(videoData ?? []), ...collabVideos]
         .filter((v, i, arr) => arr.findIndex((x) => x.id === v.id) === i)
@@ -199,7 +219,7 @@ function ChannelPageInner() {
   }
 
   if (loading) return <p style={{ color: 'var(--text-faint)' }}>{t('loading')}</p>;
-  if (!profile) return <p>Kanál nenalezen.</p>;
+  if (!profile) return <p>{t('channelNotFound')}</p>;
 
   const isOwner = userId === channelId;
 
@@ -261,16 +281,7 @@ function ChannelPageInner() {
     return (
       <div className="video-grid">
         {list.map((video: any) => (
-          <Link href={`/watch/${video.id}`} key={video.id} className="video-card">
-            <div className="video-thumb">
-              {video.thumbnail_url ? (
-                <Image src={video.thumbnail_url} alt={video.title} width={320} height={180} />
-              ) : null}
-              <div className="play-badge">▶</div>
-            </div>
-            <p className="video-card-title">{video.title}</p>
-            <p className="video-card-meta">{video.views} {t('views')}</p>
-          </Link>
+          <VideoCard key={video.id} video={video} href={`/watch/${video.id}`} formatDuration={formatDuration} hideCreator />
         ))}
       </div>
     );
@@ -278,30 +289,20 @@ function ChannelPageInner() {
 
   return (
     <div>
-      <div
-        style={{
-          width: '100%', height: 160, borderRadius: 12, overflow: 'hidden', marginBottom: -40,
-          background: profile.banner_url ? undefined : 'var(--panel-raised)',
-        }}
-      >
-        {profile.banner_url && (
-          <ProfileImage src={profile.banner_url} alt="banner" animate="always" eager style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        )}
+      {/* Hlavička kanálu: přes banner zasahuje jen profilovka, jméno a počty jsou pod ním.
+          Dřív byl celý blok textu vytažený do banneru a na světlém banneru se ztrácel. */}
+      <div className={`channel-banner ${profile.banner_url ? '' : 'empty'}`}>
+        {profile.banner_url && <ProfileImage src={profile.banner_url} alt="" animate="always" eager />}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20, padding: '0 8px', marginBottom: 20 }}>
-        <div
-          className="creator-avatar"
-          style={{ width: 96, height: 96, overflow: 'hidden', border: '4px solid var(--bg)', flexShrink: 0 }}
-        >
-          {profile.avatar_url ? (
-            <ProfileImage src={profile.avatar_url} alt={profile.username} animate="always" eager style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          ) : null}
+      <div className="channel-head-row">
+        <div className="creator-avatar channel-avatar">
+          {profile.avatar_url ? <ProfileImage src={profile.avatar_url} alt={profile.username} animate="always" eager /> : null}
         </div>
 
-        <div style={{ flex: 1, minWidth: 0, paddingBottom: 4 }}>
-          <p className="video-title" style={{ margin: 0, fontSize: 24 }}>
-            {profile.display_name ?? profile.username}
+        <div className="channel-info">
+          <h1 className="channel-name">
+            <span className="channel-name-text">{profile.display_name ?? profile.username}</span>
             <VerifiedBadge tier={profile.verification_tier} />
             <PlusBadge userId={profile.id} size="md" />
             {trustRating !== null && trustRating >= 90 && (
@@ -315,46 +316,50 @@ function ChannelPageInner() {
                 {t('newcomerBadgeLabel')}
               </span>
             )}
+          </h1>
+          <p className="channel-meta">
+            {profile.username ? <span>@{profile.username}</span> : null}
+            <span>
+              {subscriberCount} {t('subscribersSuffix')}
+            </span>
+            <span>
+              {videos.length} {t('videosSuffix')}
+            </span>
+            {trustRating !== null && <span>Rating {trustRating}%</span>}
           </p>
-          <p className="video-meta" style={{ margin: '4px 0' }}>
-            @{profile.username} · {subscriberCount} {t('subscribersSuffix')} · {videos.length} {t('videosSuffix')}
-            {trustRating !== null && ` · Rating ${trustRating}%`}
-          </p>
-          {badgeStats && <ChannelBadges stats={badgeStats} own={isOwner} />}
+          {badgeStats && (
+            <ChannelBadges
+              stats={badgeStats}
+              own={isOwner}
+              showcase={profile.badge_showcase ?? null}
+              onShowcaseSaved={(next) => setProfile((prev: any) => ({ ...prev, badge_showcase: next }))}
+              openOnLoad={isOwner && searchParams.get('badges') === '1'}
+            />
+          )}
           {/* Kanál právě vysílá živě - odkaz na přenos (jinak se nevykreslí nic). */}
           <div style={{ margin: '6px 0' }}>
             <LiveBadge channelId={profile.id} withTitle />
           </div>
-          {profile.bio && (
-            <p style={{ color: 'var(--text-dim)', fontSize: 13, maxWidth: 560, margin: '4px 0' }}>{profile.bio}</p>
-          )}
+          {profile.bio && <p className="channel-bio">{profile.bio}</p>}
           {profile.social_links && profile.social_links.length > 0 && (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+            <div className="channel-links">
               {profile.social_links.map((link: { label: string; url: string }, i: number) => {
                 // Odkaz si píše majitel kanálu, čte ho kdokoliv. Cokoliv
                 // jiného než http(s) - hlavně "javascript:" - se zahodí.
                 const href = safeExternalUrl(link.url);
                 if (!href) return null;
                 return (
-                <a
-                  key={i}
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    fontSize: 12, background: 'var(--panel-raised)', border: '1px solid var(--border)',
-                    padding: '5px 11px', borderRadius: 999,
-                  }}
-                >
-                  {link.label}
-                </a>
+                  <a key={i} href={href} target="_blank" rel="noopener noreferrer" className="channel-link-chip">
+                    <UiIcon name="link" size={12} />
+                    {link.label}
+                  </a>
                 );
               })}
             </div>
           )}
         </div>
 
-        <div style={{ paddingBottom: 4, display: 'flex', gap: 8 }}>
+        <div className="channel-actions">
           <SubscribeButton channelId={profile.id} />
           <CreatorSubscribeButton creatorId={profile.id} />
           {isModerator && !isOwner && (
@@ -406,7 +411,7 @@ function ChannelPageInner() {
 
       {!isOwner && profile.trailer && (
         <div style={{ marginBottom: 24 }}>
-          <p className="panel-heading">Upoutávka kanálu</p>
+          <p className="panel-heading">{t('channelTrailerHeading')}</p>
           <div className="player-wrap" style={{ aspectRatio: '16/9', maxWidth: 640 }}>
             <iframe
               src={`https://iframe.videodelivery.net/${profile.trailer.cloudflare_video_id}?autoplay=true&muted=true&loop=true&controls=true`}
@@ -431,20 +436,14 @@ function ChannelPageInner() {
           {buildVideoBlocks(videos).map((block, i) => (
             <VideoBlockRow key={i} type={block.type} style={{ marginBottom: 20 }}>
               {block.items.map((video: any) => (
-                <Link
-                  href={block.type === 'sparks' ? `/sparks?start=${video.id}` : `/watch/${video.id}`}
+                <VideoCard
                   key={video.id}
-                  className="video-card"
-                >
-                  <div className={block.type === 'sparks' ? 'video-thumb video-thumb-vertical' : 'video-thumb'}>
-                    {video.thumbnail_url ? (
-                      <Image src={video.thumbnail_url} alt={video.title} width={320} height={180} />
-                    ) : null}
-                    <div className="play-badge">▶</div>
-                  </div>
-                  <p className="video-card-title">{video.title}</p>
-                  <p className="video-card-meta">{video.views} {t('views')}</p>
-                </Link>
+                  video={video}
+                  href={block.type === 'sparks' ? `/sparks?start=${video.id}` : `/watch/${video.id}`}
+                  isSparks={block.type === 'sparks'}
+                  formatDuration={formatDuration}
+                  hideCreator
+                />
               ))}
             </VideoBlockRow>
           ))}
@@ -456,16 +455,7 @@ function ChannelPageInner() {
       {tab === 'sparks' && (
         <div className="shorts-grid">
           {sparkVideos.map((video: any) => (
-            <Link href={`/sparks?start=${video.id}`} key={video.id} className="video-card">
-              <div className="video-thumb video-thumb-vertical">
-                {video.thumbnail_url ? (
-                  <Image src={video.thumbnail_url} alt={video.title} width={320} height={180} />
-                ) : null}
-                <div className="play-badge">▶</div>
-              </div>
-              <p className="video-card-title">{video.title}</p>
-              <p className="video-card-meta">{video.views} {t('views')}</p>
-            </Link>
+            <VideoCard key={video.id} video={video} href={`/sparks?start=${video.id}`} isSparks formatDuration={formatDuration} hideCreator />
           ))}
           {sparkVideos.length === 0 && <p style={{ color: 'var(--text-faint)' }}>{t('noSparksYet')}</p>}
         </div>
@@ -487,34 +477,32 @@ function ChannelPageInner() {
           <p style={{ color: 'var(--text-faint)' }}>{t('creatorHasNoPublicPlaylists')}</p>
         ) : (
           <div className="video-grid">
-            {channelPlaylists.map((p: any) => (
-              <div key={p.id}>
-                <Link href={`/playlists/${p.id}`} className="video-card">
-                  <div
-                    className="video-thumb"
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.thumbnail_url ? undefined : (p.color ?? '#3a3a40'), overflow: 'hidden' }}
-                  >
-                    {p.thumbnail_url ? (
-                      <img loading="lazy" decoding="async" src={p.thumbnail_url} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: 600 }}>
-                        {p.playlist_videos?.length ?? 0} videí
+            {channelPlaylists.map((p: any) => {
+              const cover = playlistCover(p);
+              return (
+                <div key={p.id} className="playlist-card">
+                  <Link href={`/playlists/${p.id}`} className="playlist-card-link">
+                    <div className="playlist-cover" style={cover ? undefined : { background: `linear-gradient(135deg, ${p.color ?? '#3a3a40'}, #111114)` }}>
+                      {cover ? <img loading="lazy" decoding="async" src={cover} alt="" /> : <PlaylistIcon size={34} />}
+                      <span className="playlist-cover-count">
+                        <PlaylistIcon size={14} />
+                        {p.playlist_videos?.length ?? 0} {t('playlistVideoCountSuffix')}
                       </span>
-                    )}
-                  </div>
-                  <p className="video-card-title">{p.title}</p>
-                </Link>
-                {!isOwner && (
-                  <button
-                    onClick={() => savePlaylist(p)}
-                    disabled={savedPlaylistIds.has(p.id)}
-                    style={{ width: '100%', marginTop: 8, background: 'var(--panel-raised)', color: 'var(--text)', fontSize: 12 }}
-                  >
-                    {savedPlaylistIds.has(p.id) ? t('saved') : t('saveToMine')}
-                  </button>
-                )}
-              </div>
-            ))}
+                    </div>
+                    <p className="video-card-title playlist-card-title">{p.title}</p>
+                  </Link>
+                  {!isOwner && (
+                    <button
+                      onClick={() => savePlaylist(p)}
+                      disabled={savedPlaylistIds.has(p.id)}
+                      style={{ width: '100%', marginTop: 8, background: 'var(--panel-raised)', color: 'var(--text)', fontSize: 12 }}
+                    >
+                      {savedPlaylistIds.has(p.id) ? t('saved') : t('saveToMine')}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )
       )}

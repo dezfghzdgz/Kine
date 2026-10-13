@@ -1,7 +1,8 @@
 import { supabaseServer } from './supabaseServer';
-import { cloudflareVideo, keepRecording, listInputVideos, type LiveRecording } from './liveStream';
+import { cloudflareVideo, deleteCloudflareVideo, keepRecording, listInputVideos, requestCloudflareDownload, type LiveRecording } from './liveStream';
 import { refreshFromCloudflare } from './markVideoReady';
-import { shouldBeProtected, syncVideoProtection } from './streamProtection';
+import { protectionConfigured, shouldBeProtected, syncVideoProtection } from './streamProtection';
+import { createStreamToken, DOWNLOAD_TOKEN_TTL_S, signingKeyFromEnv, swapPlaybackId } from './streamToken';
 import { channelRoom } from './liveChat';
 import { defaultRecordingTitle, parseRecordingVisibility, pickRecording, type RecordingVisibility } from './liveRecordingRules';
 
@@ -135,4 +136,87 @@ export async function autoPublishAfterStream(ownerId: string): Promise<PublishRe
     console.error('Kine: automatické zveřejnění záznamu', (e as Error).message);
     return null;
   }
+}
+
+/**
+ * Záznam kanálu podle id ("latest" = nejnovější). Hledá se jen v záznamech
+ * vlastního vstupu - cizí záznam tudy smazat ani stáhnout nejde.
+ */
+async function ownRecording(
+  ownerId: string,
+  wanted: string
+): Promise<{ ok: true; rec: LiveRecording; videoId: string | null; streamLive: boolean } | { ok: false; status: number; error: string }> {
+  const { data: input } = await supabaseServer.from('live_inputs').select('cf_input_id').eq('owner_id', ownerId).maybeSingle();
+  if (!input?.cf_input_id) return { ok: false, status: 404, error: 'Nemáš založené živé vysílání.' };
+  let recordings: LiveRecording[];
+  try {
+    recordings = await listInputVideos(input.cf_input_id);
+  } catch (e) {
+    return { ok: false, status: 502, error: (e as Error).message };
+  }
+  const rec = wanted && wanted !== 'latest' ? recordings.find((r) => r.uid === wanted) ?? null : recordings[0] ?? null;
+  if (!rec) return { ok: false, status: 404, error: wanted === 'latest' ? 'Záznam vysílání zatím není - zkus to za minutu.' : 'Záznam nenalezen.' };
+  const [{ data: video }, { data: stream }] = await Promise.all([
+    supabaseServer.from('videos').select('id').eq('owner_id', ownerId).eq('cloudflare_video_id', rec.uid).maybeSingle(),
+    supabaseServer.from('live_streams').select('is_live').eq('owner_id', ownerId).maybeSingle(),
+  ]);
+  return { ok: true, rec, videoId: (video?.id as string | undefined) ?? null, streamLive: !!stream?.is_live };
+}
+
+export type RecordingActionResult = { ok: true; uid: string } | { ok: false; status: number; error: string };
+
+/**
+ * "Zahodit": záznam pryč hned (jinak ho Cloudflare smaže po 30 dnech sám).
+ * Záznam, ze kterého už je video na Kine, se tudy nemaže - to se maže jako
+ * každé jiné video (Tvoje videa).
+ */
+export async function discardRecording(ownerId: string, wanted: string): Promise<RecordingActionResult> {
+  if (!wanted || wanted === 'latest') return { ok: false, status: 400, error: 'Chybí, který záznam zahodit.' };
+  const found = await ownRecording(ownerId, wanted);
+  if (!found.ok) return found;
+  if (found.videoId) return { ok: false, status: 409, error: 'Záznam už je video na Kine - smaž ho v Tvoje videa.' };
+  if (found.rec.state === 'live-inprogress' && found.streamLive) return { ok: false, status: 409, error: 'Vysílání ještě běží.' };
+  try {
+    await deleteCloudflareVideo(found.rec.uid);
+  } catch (e) {
+    return { ok: false, status: 502, error: (e as Error).message };
+  }
+  return { ok: true, uid: found.rec.uid };
+}
+
+export type DownloadResult =
+  | { ok: true; uid: string; status: 'ready' | 'inprogress'; url: string | null; percent: number | null }
+  | { ok: false; status: number; error: string };
+
+/**
+ * "Stáhnout do PC": adresa MP4 záznamu. Cloudflare ho nejdřív vyrobí (u
+ * dlouhého vysílání pár minut) - volající se ptá znovu, dokud není "ready".
+ * Záznam, který se ještě uzavírá (minuta po konci vysílání) nebo zpracovává,
+ * je taky "chystá se"; běžící vysílání stáhnout nejde.
+ */
+export async function recordingDownload(ownerId: string, wanted: string): Promise<DownloadResult> {
+  const found = await ownRecording(ownerId, wanted);
+  if (!found.ok) return found;
+  if (found.rec.state === 'live-inprogress' && found.streamLive) return { ok: false, status: 409, error: 'Vysílání ještě běží.' };
+  if (found.rec.state === 'error') return { ok: false, status: 502, error: 'Cloudflare záznam nezpracoval - stáhnout nejde.' };
+  // Záznam se po konci vysílání ještě minutu uzavírá a pak zpracovává - "chystá se", zeptat se znovu.
+  if (found.rec.state === 'live-inprogress' || !found.rec.readyToStream) return { ok: true, uid: found.rec.uid, status: 'inprogress', url: null, percent: null };
+  try {
+    const download = await requestCloudflareDownload(found.rec.uid);
+    if (download.status === 'error') return { ok: false, status: 502, error: 'Cloudflare MP4 nevyrobil.' };
+    let url = download.url;
+    // Záznam zveřejněný jako soukromé video je chráněný - adresa potřebuje podpis (jako u stahování videa).
+    if (url && found.videoId) url = await signedDownloadUrl(found.videoId, found.rec.uid, url);
+    return { ok: true, uid: found.rec.uid, status: download.status, url: download.status === 'ready' ? url : null, percent: download.percent };
+  } catch (e) {
+    return { ok: false, status: 502, error: (e as Error).message };
+  }
+}
+
+async function signedDownloadUrl(videoId: string, uid: string, url: string): Promise<string> {
+  const { data } = await supabaseServer.from('videos').select('visibility').eq('id', videoId).maybeSingle();
+  const key = signingKeyFromEnv();
+  if (!key || !protectionConfigured() || !shouldBeProtected((data?.visibility as string | undefined) ?? 'public')) return url;
+  const token = createStreamToken(key, uid, { ttlSeconds: DOWNLOAD_TOKEN_TTL_S, downloadable: true });
+  return swapPlaybackId(url, token) ?? url;
 }

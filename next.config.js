@@ -2,8 +2,43 @@
 // Node načetl model jako ES modul (balíček je "type": "module") a model by byl prázdný.
 const NSFW_MODEL_FILES = ['./node_modules/nsfwjs/dist/models/mobilenet_v2/**/*', './node_modules/nsfwjs/dist/models/package.json'];
 
+/**
+ * Hlavní adresa webu: NEXT_PUBLIC_SITE_URL, jinak produkční adresa, kterou hlásí
+ * Vercel (VERCEL_PROJECT_PRODUCTION_URL - vlastní doména, když je nastavená).
+ * Stejné pravidlo jako lib/linkPreview.ts (SITE_URL).
+ */
+function canonicalSite() {
+  const env = (process.env.NEXT_PUBLIC_SITE_URL || '').trim().replace(/\/+$/, '');
+  if (env) return env;
+  const vercel = (process.env.VERCEL_PROJECT_PRODUCTION_URL || '').trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  return vercel ? `https://${vercel}` : '';
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  async redirects() {
+    const site = canonicalSite();
+    let host = '';
+    try {
+      host = new URL(site).host;
+    } catch {
+      host = '';
+    }
+    // Jen produkce s vlastní doménou - náhledová nasazení (preview) zůstávají na své adrese.
+    if (process.env.VERCEL_ENV !== 'production' || !host || /\.vercel\.app$/i.test(host)) return [];
+    return [
+      {
+        // Stránky otevřené na *.vercel.app (kine-lac.vercel.app...) -> vlastní doména, ať
+        // sdílené odkazy nenesou "vercel". API ne: appka do PC na staré adrese posílá
+        // přihlášení v hlavičce a přesměrování na jinou doménu by ho zahodilo - appka si
+        // novou adresu vezme sama (/api/desktop/config).
+        source: '/:path((?!api/|_next/).*)',
+        has: [{ type: 'host', value: '.+\\.vercel\\.app' }],
+        destination: `${site}/:path`,
+        permanent: false,
+      },
+    ];
+  },
   experimental: {
     // Kontrola nahoty (lib/nudityScan.ts): TensorFlow.js a model se na serveru
     // načtou z node_modules tak, jak jsou - nebalí se do kódu stránek.
@@ -15,6 +50,9 @@ const nextConfig = {
       '/api/live/**': NSFW_MODEL_FILES,
       '/api/desktop/**': NSFW_MODEL_FILES,
       '/api/moderation/**': NSFW_MODEL_FILES,
+      // Písmo obrázku náhledu odkazu a ikon (app/opengraph-image.tsx, app/apple-icon.tsx).
+      '/opengraph-image': ['./lib/og-fonts/**'],
+      '/apple-icon': ['./lib/og-fonts/**'],
     },
   },
   images: {

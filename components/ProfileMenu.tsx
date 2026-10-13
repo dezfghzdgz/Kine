@@ -7,7 +7,6 @@ import { supabase } from '@/lib/supabaseClient';
 import { useLanguage, Lang } from '@/lib/i18n';
 import ThemeSlider from './ThemeSlider';
 import ConfirmDialog from './ConfirmDialog';
-import { isTvMode, setTvPreference } from '@/lib/tvMode';
 import { APPEARANCE_EVENT, readTheme, saveTheme, type Theme } from '@/lib/appearance';
 import UiIcon, { type UiIconName } from './UiIcon';
 import { goToSettingsSection } from '@/lib/settingsNav';
@@ -73,12 +72,6 @@ export default function ProfileMenu({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  // Stav přepínače televize - čte se z <html> při otevření nabídky.
-  const [tvOn, setTvOn] = useState(false);
-  useEffect(() => {
-    if (open) setTvOn(isTvMode());
-  }, [open]);
 
   function applyTheme(next: Theme) {
     setTheme(next);
@@ -178,19 +171,7 @@ export default function ProfileMenu({
             )}
           </div>
 
-          {/* Režim televize: zvětšení a ovládání šipkami. Na Smart TV se
-              zapne sám, tady se dá přepnout ručně (lib/tvMode.ts). */}
-          <button
-            className="profile-dropdown-item"
-            onClick={() => {
-              const next = isTvMode() ? 'off' : 'on';
-              setTvPreference(next);
-              setTvOn(next === 'on');
-            }}
-          >
-            <ItemLabel icon="tv">{t('tvModeLabel')}</ItemLabel>
-            <span className="profile-dropdown-value">{tvOn ? t('onLabel') : t('offLabel')}</span>
-          </button>
+          {/* Režim televize tu už není: na televizi se zapne sám (lib/tvMode.ts). */}
 
           <div className="profile-dropdown-divider" />
 

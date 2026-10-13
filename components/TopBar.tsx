@@ -6,7 +6,7 @@ import { useMobileNav } from '@/lib/mobileNavContext';
 import { useLanguage } from '@/lib/i18n';
 import { OPEN_SEARCH_EVENT } from './KeyboardShortcuts';
 import { CATEGORY_KEYS } from '@/lib/categories';
-import { DEFAULT_FILTERS, parseSearchFilters, searchHref, type SearchFilters } from '@/lib/searchFilters';
+import { DEFAULT_FILTERS, OPEN_SEARCH_FILTERS_EVENT, parseSearchFilters, searchHref, type SearchFilters } from '@/lib/searchFilters';
 
 const SCOPED_PATHS = ['/activity', '/downloaded', '/your-videos', '/playlists', '/subscriptions', '/watch-later'];
 
@@ -86,12 +86,22 @@ export default function TopBar() {
   }
 
   // Klávesa "/" kdekoliv v appce otevře tohle pole a rovnou do něj skočí.
+  // Tlačítko filtrů na stránce výsledků otevře pole i s panelem filtrů.
   useEffect(() => {
     function handleOpenRequest() {
       openSearch();
     }
+    function handleOpenFilters() {
+      openSearch();
+      syncFromUrl(false);
+      setAdvancedOpen(true);
+    }
     window.addEventListener(OPEN_SEARCH_EVENT, handleOpenRequest);
-    return () => window.removeEventListener(OPEN_SEARCH_EVENT, handleOpenRequest);
+    window.addEventListener(OPEN_SEARCH_FILTERS_EVENT, handleOpenFilters);
+    return () => {
+      window.removeEventListener(OPEN_SEARCH_EVENT, handleOpenRequest);
+      window.removeEventListener(OPEN_SEARCH_FILTERS_EVENT, handleOpenFilters);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 

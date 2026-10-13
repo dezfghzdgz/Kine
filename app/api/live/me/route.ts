@@ -75,6 +75,8 @@ export async function POST(req: NextRequest) {
         migrated: result.migrated,
         viewers: result.viewers,
         recording: result.recording ?? null,
+        // Po "stopped": id záznamu právě skončeného vysílání (appka: Stáhnout / Zahodit).
+        recordingUid: result.recordingUid ?? null,
         // Přenos skrytý kontrolou obsahu (čeká na moderátora): appka nemá hlásit "vše v pořádku".
         hidden: result.hidden ? 'moderation' : null,
       },

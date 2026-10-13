@@ -176,6 +176,25 @@ export async function keepRecording(uid: string): Promise<void> {
   }
 }
 
+/** Smaže video (záznam vysílání) u Cloudflare - nejde vrátit. */
+export async function deleteCloudflareVideo(uid: string): Promise<void> {
+  await cfFetch(`/${uid}`, { method: 'DELETE' });
+}
+
+export type CloudflareDownload = { status: 'ready' | 'inprogress' | 'error'; url: string | null; percent: number | null };
+
+/**
+ * MP4 ke stažení: první požadavek ho u Cloudflare nechá vyrobit (u hodinového
+ * záznamu to trvá i pár minut), další jen zjistí, jak daleko je.
+ */
+export async function requestCloudflareDownload(uid: string): Promise<CloudflareDownload> {
+  const result = await cfFetch(`/${uid}/downloads`, { method: 'POST' });
+  const mp4 = result?.default ?? null;
+  const status = mp4?.status === 'ready' ? 'ready' : mp4?.status === 'error' ? 'error' : 'inprogress';
+  const percent = typeof mp4?.percentComplete === 'number' ? Math.max(0, Math.min(100, mp4.percentComplete)) : null;
+  return { status, url: typeof mp4?.url === 'string' ? mp4.url : null, percent };
+}
+
 /** Údaje o jednom videu u Cloudflare (délka, náhled, rozměry, připravenost). */
 export async function cloudflareVideo(uid: string): Promise<any | null> {
   try {
@@ -490,6 +509,12 @@ export async function appLiveSignal(
   viewers: number | null;
   /** Po "skončil jsem": záznam zveřejněný automaticky (nastavení tvůrce), jinak null. */
   recording?: { videoId: string; status: 'ready' | 'processing' } | null;
+  /**
+   * Po "skončil jsem": id záznamu PRÁVĚ skončeného vysílání u Cloudflare - appka ho
+   * drží na kartě, ať "Stáhnout" a "Zahodit" míří na něj, ne na "nejnovější" (mezitím
+   * mohlo začít jiné vysílání třeba z OBS).
+   */
+  recordingUid?: string | null;
   /** Přenos běží, ale kontrola obsahu ho skryla z "Živě" (čeká na moderátora) - appka to má říct, ne hlásit "vše v pořádku". */
   hidden?: boolean;
 } | null> {
@@ -520,10 +545,22 @@ export async function appLiveSignal(
 
   if (action === 'stopped') {
     if (row.is_live) logLiveEvent(ownerId, 'stop', 'ukončeno v appce (Ukončit)', { 'začátek (s)': secondsSince(row.started_at) });
+    // Který záznam patří k tomuhle vysílání: video, které Cloudflare právě nahrával; když ho
+    // Kine už nemá (přenos skončil dřív), nejnovější záznam od začátku vysílání.
+    let recordingUid: string | null = row.current_video_uid ?? null;
+    if (!recordingUid && row.cf_input_id && row.started_at) {
+      try {
+        const since = Date.parse(row.started_at) - 2 * 60 * 1000;
+        const recs = await listInputVideos(row.cf_input_id);
+        recordingUid = recs.find((r) => r.created && Date.parse(r.created) >= since)?.uid ?? null;
+      } catch {
+        recordingUid = null;
+      }
+    }
     await write({ ...stopPatch, ended_at: row.is_live ? nowIso : row.ended_at });
     // Záznam rovnou na Kine, když si to tvůrce zapnul (studio / appka).
     const published = row.is_live ? await autoPublishAfterStream(ownerId) : null;
-    return { confirmed: false, migrated, viewers: null, recording: published?.ok ? { videoId: published.videoId, status: published.status } : null };
+    return { confirmed: false, migrated, viewers: null, recording: published?.ok ? { videoId: published.videoId, status: published.status } : null, recordingUid };
   }
 
   const wasLive = row.is_live;

@@ -6,6 +6,9 @@
  */
 import { isCategoryKey } from './categories';
 
+/** Tlačítko filtrů na stránce výsledků otevře panel u pole hledání (components/TopBar.tsx). */
+export const OPEN_SEARCH_FILTERS_EVENT = 'kine-open-search-filters';
+
 export type SearchType = 'all' | 'long' | 'sparks';
 export type SearchDate = 'any' | 'hour' | 'today' | 'week' | 'month' | 'year';
 export type SearchDuration = 'any' | 'short' | 'medium' | 'long';
