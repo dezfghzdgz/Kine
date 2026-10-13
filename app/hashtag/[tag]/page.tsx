@@ -8,6 +8,7 @@ import { useLanguage } from '@/lib/i18n';
 import { visibleNowFilter } from '@/lib/scheduling';
 import { formatDuration } from '@/lib/homeRecommendation';
 import VideoCard from '@/components/VideoCard';
+import { VideoBlockRow } from '@/components/SparksShelf';
 
 /**
  * Videa s hashtagem. Stejné karty jako všude jinde (náhled po najetí,
@@ -52,7 +53,7 @@ export default function HashtagPage() {
         <p style={{ color: 'var(--text-faint)' }}>{t('hashtagEmptyNote')}</p>
       ) : (
         buildVideoBlocks(videos).map((block, bi) => (
-          <div key={bi} className={block.type === 'sparks' ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 20 }}>
+          <VideoBlockRow key={bi} type={block.type} style={{ marginBottom: 20 }}>
             {block.items.map((video: any) => (
               <VideoCard
                 key={video.id}
@@ -62,7 +63,7 @@ export default function HashtagPage() {
                 formatDuration={formatDuration}
               />
             ))}
-          </div>
+          </VideoBlockRow>
         ))
       )}
     </div>

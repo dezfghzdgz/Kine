@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 import Toast, { ToastType } from '@/components/Toast';
 import { useLanguage } from '@/lib/i18n';
 import { autoCaptionLanguage, chaptersFromDescription, parseSubtitles, sanitizeCaptions, sanitizeChapters, toSrt } from '@/lib/captions';
+import ProfileImage from '@/components/ProfileImage';
 
 // Na jednom videu se můžou podílet nejvýš 4 tvůrci - ten, kdo ho nahrál,
 // a k tomu tři spolutvůrci. Všichni čtyři se pak ukazují pod videem.
@@ -482,7 +483,7 @@ export default function EditVideoPage() {
             {collaborators.map((c) => (
               <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span className="profile-avatar-small" style={{ width: 26, height: 26, overflow: 'hidden' }}>
-                  {c.avatar_url ? <img loading="lazy" decoding="async" src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                  {c.avatar_url ? <ProfileImage src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
                 </span>
                 <span style={{ fontSize: 13, flex: 1 }}>
                   {c.username}
@@ -527,7 +528,7 @@ export default function EditVideoPage() {
                 }}
               >
                 <span className="profile-avatar-small" style={{ width: 22, height: 22, overflow: 'hidden', flexShrink: 0 }}>
-                  {r.avatar_url ? <img loading="lazy" decoding="async" src={r.avatar_url} alt={r.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                  {r.avatar_url ? <ProfileImage src={r.avatar_url} alt={r.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
                 </span>
                 <span style={{ fontSize: 13, color: 'var(--text)' }}>{r.username}</span>
               </button>

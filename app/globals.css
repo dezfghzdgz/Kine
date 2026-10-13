@@ -1621,6 +1621,159 @@ html[data-theme="gray"] {
   box-shadow: none;
 }
 
+/* Pole hledání a panel filtrů pod ním. Panel dřív visel u pravého kraje
+   celé lišty (lišta je přes celou šířku, pole jen 560 px) - daleko od
+   pole, ke kterému patří. Teď je ukotvený k poli. */
+.top-bar-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  max-width: 560px;
+  height: 100%;
+  display: flex;
+}
+
+.top-bar-search-wrap .top-bar-search-form {
+  flex: 1;
+  min-width: 0;
+}
+
+.top-bar-filter-btn {
+  position: relative;
+  flex-shrink: 0;
+  border-radius: var(--radius-xs);
+}
+
+.top-bar-filter-btn.open {
+  color: var(--text);
+}
+
+.top-bar-filter-count {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--brand);
+  color: #0a0a0b;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.profile-dropdown.search-panel {
+  top: calc(100% + 8px);
+  bottom: auto;
+  left: 0;
+  right: 0;
+  width: auto;
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: search-slide-in var(--dur-2) var(--ease);
+}
+
+.search-panel-title {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.search-panel-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-panel-row .search-filter-label {
+  min-width: 84px;
+}
+
+.search-panel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.search-panel .search-chip {
+  font-weight: 500;
+  padding: 5px 12px;
+}
+
+.search-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+}
+
+.search-panel-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.search-panel-field > span {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.search-panel-field select {
+  width: 100%;
+  min-width: 0;
+}
+
+.search-panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.search-panel-reset {
+  background: none;
+  box-shadow: none;
+  color: var(--text-dim);
+  padding: 8px 10px;
+  font-weight: 500;
+  font-size: var(--fs-sm);
+}
+
+.search-panel-reset:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.search-panel-apply {
+  background: var(--brand);
+  color: #0a0a0b;
+  padding: 8px 18px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-sm);
+}
+
+.search-panel-apply:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.search-panel-hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  text-align: right;
+}
+
+@media (max-width: 520px) {
+  .search-panel-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ---------- Notification bell ---------- */
 
 .notif-badge {
@@ -1635,9 +1788,11 @@ html[data-theme="gray"] {
 
 /* ---------- Shorts (Šoty): vertical grid + player ---------- */
 
+/* Mřížka svislých karet (celý výpis Sparks). Karty vyplní sloupec - dřív
+   měly strop 220 px a na širokém monitoru mezi nimi a za nimi zůstávalo prázdno. */
 .shorts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(clamp(150px, 13vw, 220px), 1fr));
   gap: 16px;
 }
 
@@ -1646,8 +1801,69 @@ html[data-theme="gray"] {
 }
 
 .shorts-grid > .video-card {
-  max-width: 220px;
-  justify-self: start;
+  min-width: 0;
+}
+
+/* Pruh Sparks mezi videi (components/SparksShelf.tsx): jeden řádek přes celou šířku. */
+.sparks-shelf {
+  margin-bottom: 24px;
+}
+
+.sparks-shelf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 2px 0 12px;
+}
+
+.sparks-shelf-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.sparks-shelf-title svg {
+  color: var(--brand);
+}
+
+.sparks-shelf-all {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+.sparks-shelf-all:hover {
+  color: var(--text);
+}
+
+.sparks-shelf-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.sparks-shelf-grid > .video-card {
+  min-width: 0;
+  width: 100%;
+}
+
+.sparks-shelf-more {
+  display: block;
+  margin: 14px auto 0;
+  padding: 8px 18px;
+  border-radius: var(--radius-pill);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sparks-shelf-more:hover {
+  border-color: var(--text-faint);
 }
 
 .player-wrap-vertical {
@@ -6075,6 +6291,15 @@ input:focus, textarea:focus, select:focus {
   border-color: var(--text);
 }
 
+.search-category-select {
+  width: auto;
+  min-width: 160px;
+  max-width: 100%;
+  padding: 5px 10px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-sm);
+}
+
 /* Premiéra, která ještě nezačala - štítek na kartě místo délky. */
 .video-premiere-badge {
   position: absolute;
@@ -6617,6 +6842,38 @@ html[data-backdrop="neon"] {
     radial-gradient(85% 70% at 50% 108%, rgba(168, 85, 247, 0.6), transparent 72%);
 }
 
+/* Polární záře: zelená a fialová jako na severní obloze. */
+html[data-backdrop="aurora"] {
+  --kine-backdrop:
+    radial-gradient(70% 60% at 14% 10%, rgba(52, 211, 153, 0.72), transparent 72%),
+    radial-gradient(60% 55% at 86% 16%, rgba(129, 140, 248, 0.62), transparent 70%),
+    radial-gradient(85% 70% at 50% 108%, rgba(192, 38, 211, 0.48), transparent 72%);
+}
+
+/* Cukrová vata: růžová, broskvová a levandulová. */
+html[data-backdrop="candy"] {
+  --kine-backdrop:
+    radial-gradient(70% 60% at 14% 10%, rgba(244, 114, 182, 0.72), transparent 72%),
+    radial-gradient(60% 55% at 86% 16%, rgba(251, 146, 60, 0.5), transparent 70%),
+    radial-gradient(85% 70% at 50% 108%, rgba(167, 139, 250, 0.6), transparent 72%);
+}
+
+/* Žhavé uhlíky: tmavě rudá a oranžová zdola. */
+html[data-backdrop="ember"] {
+  --kine-backdrop:
+    radial-gradient(70% 60% at 14% 10%, rgba(185, 28, 28, 0.7), transparent 72%),
+    radial-gradient(60% 55% at 86% 16%, rgba(234, 88, 12, 0.55), transparent 70%),
+    radial-gradient(85% 70% at 50% 108%, rgba(250, 204, 21, 0.4), transparent 72%);
+}
+
+/* Bez barev: jen šedé světlo (sklo bez barevných odlesků). */
+html[data-backdrop="mono"] {
+  --kine-backdrop:
+    radial-gradient(70% 60% at 14% 10%, rgba(255, 255, 255, 0.22), transparent 72%),
+    radial-gradient(60% 55% at 86% 16%, rgba(160, 160, 170, 0.2), transparent 70%),
+    radial-gradient(85% 70% at 50% 108%, rgba(90, 90, 100, 0.35), transparent 72%);
+}
+
 /* ---------- Vrstva pozadí ---------- */
 
 .kine-backdrop {
@@ -6962,6 +7219,10 @@ body.player-css-fullscreen .player-ambient {
 .appearance-swatch-forest { background: linear-gradient(135deg, #16a34a, #0d9488 55%, #84cc16); }
 .appearance-swatch-ocean { background: linear-gradient(135deg, #06b6d4, #2563eb 55%, #14b8a6); }
 .appearance-swatch-neon { background: linear-gradient(135deg, #ec4899, #22d3ee 55%, #a855f7); }
+.appearance-swatch-aurora { background: linear-gradient(135deg, #34d399, #818cf8 55%, #c026d3); }
+.appearance-swatch-candy { background: linear-gradient(135deg, #f472b6, #fb923c 55%, #a78bfa); }
+.appearance-swatch-ember { background: linear-gradient(135deg, #b91c1c, #ea580c 55%, #facc15); }
+.appearance-swatch-mono { background: linear-gradient(135deg, #f4f4f5, #71717a 55%, #27272a); }
 .appearance-error {
   margin: 8px 0 0;
   color: #ff8b8b;
@@ -7047,6 +7308,186 @@ html[data-cards="l"] .streams-grid {
   grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
 }
 
+/* Písmo (Nastavení -> Vzhled). Zaoblené (Nunito), patkové (Lora) a strojové (JetBrains Mono)
+   jsou v public/fonts (licence OFL, public/fonts/LICENSE-fonts.txt) - prohlížeč si soubor
+   stáhne, až když je písmo opravdu použité, a jen tu část abecedy, kterou stránka potřebuje
+   (latinka, čeština a spol., azbuka). Při sestavení se nic nestahuje. */
+@font-face {
+  font-family: 'Kine Rounded';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 1000;
+  src: url('/fonts/kine-rounded-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+@font-face {
+  font-family: 'Kine Rounded';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 1000;
+  src: url('/fonts/kine-rounded-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Kine Rounded';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 1000;
+  src: url('/fonts/kine-rounded-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+
+@font-face {
+  font-family: 'Kine Serif';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 700;
+  src: url('/fonts/kine-serif-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+@font-face {
+  font-family: 'Kine Serif';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 700;
+  src: url('/fonts/kine-serif-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Kine Serif';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 700;
+  src: url('/fonts/kine-serif-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+
+@font-face {
+  font-family: 'Kine Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src: url('/fonts/kine-mono-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+@font-face {
+  font-family: 'Kine Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src: url('/fonts/kine-mono-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Kine Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src: url('/fonts/kine-mono-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+
+html[data-font="system"] body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+html[data-font="rounded"] body {
+  font-family: 'Kine Rounded', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
+}
+
+html[data-font="serif"] body {
+  font-family: 'Kine Serif', Georgia, 'Times New Roman', serif;
+}
+
+html[data-font="mono"] body {
+  font-family: 'Kine Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  letter-spacing: -0.01em;
+}
+
+/* Rozestupy: úsporné = víc obsahu na obrazovce, vzdušné = víc místa kolem. */
+html[data-density="compact"] {
+  --sp-3: 9px;
+  --sp-4: 12px;
+  --sp-5: 18px;
+  --sp-6: 24px;
+  --sp-7: 36px;
+}
+
+html[data-density="compact"] .content-area {
+  padding: 20px 26px;
+}
+
+html[data-density="compact"] .video-grid {
+  gap: 14px;
+}
+
+html[data-density="compact"] .panel {
+  padding: 14px 16px;
+}
+
+html[data-density="compact"] .sidebar-link {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+html[data-density="comfy"] {
+  --sp-3: 14px;
+  --sp-4: 20px;
+  --sp-5: 30px;
+  --sp-6: 40px;
+  --sp-7: 60px;
+}
+
+html[data-density="comfy"] .content-area {
+  padding: 40px 56px;
+}
+
+html[data-density="comfy"] .video-grid {
+  gap: 30px;
+}
+
+html[data-density="comfy"] .sidebar-link {
+  padding-top: 13px;
+  padding-bottom: 13px;
+}
+
+html[data-density="comfy"] .panel {
+  padding: 28px 30px;
+}
+
+@media (max-width: 768px) {
+  html[data-density="compact"] .content-area,
+  html[data-density="comfy"] .content-area {
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+}
+
+/* Vysoký kontrast: vedlejší text skoro jako hlavní, výraznější okraje. */
+html[data-contrast="1"] {
+  --text-dim: #d4d4da;
+  --text-faint: #b4b4bc;
+  --border: #4a4a55;
+}
+
+html[data-contrast="1"][data-theme="gray"] {
+  --text-dim: #dcdce2;
+  --text-faint: #bdbdc5;
+  --border: #5a5a66;
+}
+
+html[data-contrast="1"][data-theme="light"] {
+  --text-dim: #2a2a30;
+  --text-faint: #48484f;
+  --border: #9a9aa2;
+}
+
 /* Klidný režim: žádné animace ani přechody (kolečka "načítám" se točí dál - jinak by vypadala zamrzle). */
 html[data-calm="1"] *:not([class*="spin"]),
 html[data-calm="1"] *:not([class*="spin"])::before,
@@ -7091,6 +7532,17 @@ html[data-calm="1"] *:not([class*="spin"])::after {
   background: var(--text);
   color: var(--bg);
   box-shadow: none;
+}
+
+/* Víc voleb (písmo, profilovky): zalomit do řádků místo mačkání. */
+.appearance-font,
+.appearance-avatars {
+  flex-wrap: wrap;
+}
+
+.appearance-font button,
+.appearance-avatars button {
+  flex: 1 1 110px;
 }
 
 .appearance-label {
@@ -8019,6 +8471,103 @@ html[data-calm="1"] *:not([class*="spin"])::after {
   display: block;
 }
 
+/* ---------- Odznaky kanálu (components/ChannelBadges.tsx) ---------- */
+.channel-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 2px;
+}
+
+.channel-badge,
+.channel-badge-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px 3px 8px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: var(--text-dim);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  cursor: default;
+}
+
+.channel-badge svg {
+  flex: none;
+}
+
+/* Vyšší stupeň = výraznější: šedá -> barva appky -> zlatá. */
+.channel-badge.level-1 {
+  color: var(--text);
+}
+
+.channel-badge.level-2,
+.channel-badge.level-3 {
+  color: var(--text);
+  border-color: rgba(var(--brand-rgb), 0.55);
+  background: rgba(var(--brand-rgb), 0.1);
+}
+
+.channel-badge.level-3 svg {
+  color: var(--brand);
+}
+
+.channel-badge.level-4 {
+  color: #fde68a;
+  border-color: rgba(250, 204, 21, 0.6);
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.16), rgba(234, 88, 12, 0.12));
+}
+
+.channel-badge-early {
+  color: var(--text);
+  border-color: rgba(167, 139, 250, 0.55);
+  background: rgba(167, 139, 250, 0.12);
+}
+
+.channel-badge-streamer svg {
+  color: #f87171;
+}
+
+/* Vedle jména: hvězda za Rating 90 %+ a "Nováček" (první měsíc na Kine) - ikony místo emoji. */
+.channel-star {
+  display: inline-flex;
+  margin-left: 6px;
+  vertical-align: middle;
+  color: #facc15;
+}
+
+.channel-badge-new {
+  margin-left: 8px;
+  vertical-align: middle;
+  font-size: 11px;
+}
+
+.channel-badge-new svg {
+  color: #4ade80;
+}
+
+.channel-badge-next {
+  font-weight: 500;
+  color: var(--text-faint);
+  background: transparent;
+  border-style: dashed;
+}
+
+html[data-theme="light"] .channel-badge.level-4 {
+  color: #92400e;
+}
+
+/* Drobná poznámka pod volbou (co jde nahrát, do kolika MB...). */
+.settings-hint {
+  margin: 10px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
 .settings-file-button {
   display: inline-flex;
   align-items: center;
@@ -8299,4 +8848,573 @@ html[data-calm="1"] *:not([class*="spin"])::after {
   font-size: 12px;
   padding: 5px 10px;
   cursor: pointer;
+}
+
+/* =====================================================================
+   VÍTÁNÍ PO REGISTRACI (app/welcome/page.tsx) - průvodce v jednom
+   rámečku: tečky s postupem nahoře, velké volby s ikonami, zpět /
+   přeskočit dole. Na telefonu přes celou šířku.
+   ===================================================================== */
+
+.welcome {
+  max-width: 600px;
+  margin: 48px auto 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.welcome-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
+
+.welcome-dot {
+  width: 28px;
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+  transition: background-color var(--dur-2) var(--ease), width var(--dur-2) var(--ease);
+}
+
+.welcome-dot.done {
+  background: rgba(var(--brand-rgb), 0.55);
+}
+
+.welcome-dot.current {
+  width: 44px;
+  background: var(--brand);
+}
+
+.welcome-progress-text {
+  margin-left: 8px;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.welcome-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px 32px 28px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  animation: content-fade-in 0.28s ease both;
+}
+
+.welcome-card h1 {
+  margin: 0;
+  font-size: var(--fs-2xl);
+  letter-spacing: -0.01em;
+}
+
+.welcome-lead {
+  margin: 0;
+  max-width: 460px;
+  color: var(--text-dim);
+  font-size: var(--fs-md);
+  line-height: 1.6;
+}
+
+.welcome-badge {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  color: var(--brand);
+  background: rgba(var(--brand-rgb), 0.12);
+  box-shadow: inset 0 0 0 1px rgba(var(--brand-rgb), 0.35);
+}
+
+.welcome-badge.done {
+  color: #0a0a0b;
+  background: var(--brand);
+  box-shadow: 0 8px 24px rgba(var(--brand-rgb), 0.35);
+}
+
+.welcome-rules {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  text-align: left;
+}
+
+.welcome-rules > div {
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+.welcome-rules p {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.welcome-rules .welcome-rules-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.welcome-rules-head.ok svg {
+  color: #34d399;
+}
+
+.welcome-rules-head.no svg {
+  color: #f87171;
+}
+
+.welcome-small {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  line-height: 1.6;
+}
+
+.welcome-small a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.welcome-primary {
+  min-width: 220px;
+  padding: 12px 28px;
+  border-radius: var(--radius-pill);
+  background: var(--brand);
+  color: #0a0a0b;
+  font-weight: 700;
+}
+
+.welcome-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.welcome-choices {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.welcome-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 22px 16px 20px;
+  border-radius: var(--radius-md);
+  background: var(--panel-raised);
+  background-image: none;
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border);
+  font-weight: 500;
+  text-align: center;
+  transition: box-shadow var(--dur-2) var(--ease), transform var(--dur-1) var(--ease), background-color var(--dur-2) var(--ease);
+}
+
+.welcome-choice:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 1px rgba(var(--brand-rgb), 0.7), 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.welcome-choice.active {
+  box-shadow: inset 0 0 0 2px var(--brand);
+  background: rgba(var(--brand-rgb), 0.08);
+}
+
+.welcome-choice-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  color: var(--brand);
+  background: rgba(var(--brand-rgb), 0.12);
+}
+
+.welcome-choice-title {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+}
+
+.welcome-choice-desc {
+  font-size: var(--fs-sm);
+  color: var(--text-faint);
+}
+
+.welcome-next {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 4px 0 6px;
+}
+
+.welcome-next-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-align: left;
+}
+
+.welcome-next-item svg {
+  color: var(--brand);
+  flex: none;
+}
+
+.welcome-next-item:hover {
+  border-color: rgba(var(--brand-rgb), 0.6);
+}
+
+.welcome-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.welcome-link {
+  background: none;
+  background-image: none;
+  box-shadow: none;
+  padding: 6px 4px;
+  color: var(--text-faint);
+  font-weight: 500;
+  font-size: var(--fs-sm);
+}
+
+.welcome-link:hover:not(:disabled) {
+  color: var(--text);
+}
+
+@media (max-width: 560px) {
+  .welcome {
+    margin-top: 16px;
+  }
+
+  .welcome-card {
+    padding: 24px 18px 22px;
+  }
+
+  .welcome-rules,
+  .welcome-choices,
+  .welcome-next {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .welcome-choice {
+    flex-direction: row;
+    text-align: left;
+    padding: 14px 16px;
+  }
+
+  .welcome-choice-title {
+    font-size: var(--fs-md);
+  }
+
+  .welcome-choice-desc {
+    margin-left: auto;
+  }
+}
+
+/* ---------- Registrace (app/signup/page.tsx): vlevo co Kine je, vpravo formulář ---------- */
+.signup {
+  max-width: 920px;
+  margin: 48px auto 64px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.signup-pitch {
+  padding: 30px 28px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(90% 70% at 0% 0%, rgba(var(--brand-rgb), 0.18), transparent 70%),
+    radial-gradient(80% 60% at 100% 100%, rgba(88, 52, 190, 0.18), transparent 70%),
+    var(--panel);
+}
+
+.signup-kicker {
+  margin: 0 0 6px;
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+
+.signup-pitch h2 {
+  margin: 0 0 22px;
+  font-size: var(--fs-2xl);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.signup-pitch ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.signup-pitch li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.signup-pitch li > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.signup-pitch li b {
+  color: var(--text);
+  font-size: var(--fs-md);
+}
+
+.signup-pitch-icon {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: var(--brand);
+  background: rgba(var(--brand-rgb), 0.12);
+}
+
+.signup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 26px 24px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.signup-form h1 {
+  margin: 0 0 4px;
+  font-size: var(--fs-2xl);
+}
+
+.signup-form input:not([type="checkbox"]) {
+  width: 100%;
+}
+
+.signup-hint {
+  margin: 4px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.signup-hint.good {
+  color: #34d399;
+}
+
+.signup-hint.bad {
+  color: #ff8b8b;
+}
+
+.signup-password {
+  position: relative;
+}
+
+.signup-password input {
+  padding-right: 42px;
+}
+
+.signup-eye {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: none;
+  background-image: none;
+  box-shadow: none;
+  color: var(--text-faint);
+}
+
+.signup-eye:hover {
+  color: var(--text);
+}
+
+.signup-eye:active:not(:disabled) {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.signup-agree {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.signup-agree input {
+  width: auto;
+  margin-top: 3px;
+}
+
+.signup-agree a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.signup-submit {
+  margin-top: 4px;
+  padding: 12px;
+  border-radius: var(--radius-pill);
+  background: var(--brand);
+  color: #0a0a0b;
+  font-weight: 700;
+}
+
+.signup-submit:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.signup-login {
+  margin: 2px 0 0;
+  text-align: center;
+  font-size: var(--fs-sm);
+  color: var(--text-faint);
+}
+
+.signup-login a {
+  color: var(--text);
+  font-weight: 600;
+}
+
+@media (max-width: 820px) {
+  .signup {
+    grid-template-columns: minmax(0, 1fr);
+    margin-top: 16px;
+  }
+
+  /* Na telefonu napřed formulář, výhody pod ním. */
+  .signup-form {
+    order: -1;
+  }
+
+  .signup-pitch {
+    padding: 22px 20px;
+  }
+}
+
+/* ---------- Pravidla, Podmínky, Ochrana údajů (components/LegalDoc.tsx) ---------- */
+.legal-doc {
+  max-width: 760px;
+  color: var(--text-dim);
+  font-size: var(--fs-md);
+  line-height: 1.7;
+}
+
+.legal-doc h1 {
+  color: var(--text);
+  margin: 8px 0 12px;
+  font-size: var(--fs-3xl);
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+
+.legal-doc h2 {
+  color: var(--text);
+  margin: 28px 0 8px;
+  font-size: var(--fs-lg);
+}
+
+.legal-doc p {
+  margin: 0 0 10px;
+}
+
+.legal-doc .legal-lead {
+  font-size: var(--fs-lg);
+  color: var(--text);
+}
+
+.legal-doc ul {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+
+.legal-doc li {
+  margin-bottom: 6px;
+}
+
+.legal-doc a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.legal-footer {
+  margin-top: 32px !important;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  color: var(--text-faint);
+}
+
+.legal-lang {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.legal-lang button {
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: none;
+  background-image: none;
+  box-shadow: none;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+.legal-lang button.active {
+  background: var(--text);
+  color: var(--bg);
 }

@@ -7,7 +7,9 @@ export type VideoBlock = { type: 'long' | 'sparks'; items: any[] };
 // zůstala velká díra. Dvanáctka se beze zbytku rozpadne na řádky po 1, 2,
 // 3, 4 i 6 kartách, takže řádky vycházejí zaplněné na všech šířkách.
 const CHUNK_LONG = 12;
-const CHUNK_SPARKS = 6;
+// Pruh Sparks ukáže, kolik se vejde do řádku (components/SparksShelf.tsx), zbytek za "Zobrazit víc" -
+// na širokém monitoru se vejde i 8 karet, šestka nechávala vpravo prázdno.
+const CHUNK_SPARKS = 12;
 
 // Do pruhu Sparks se počítá video na výšku do dvou minut. Číslo i pravidlo
 // jsou schválně na jednom místě - dřív se stejná podmínka opisovala zvlášť

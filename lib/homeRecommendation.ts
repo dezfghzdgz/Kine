@@ -26,7 +26,8 @@ export const WATCHED_HISTORY_LIMIT = 500;
 // rozpadne na řádky po 1, 2, 3, 4 i 6 kartách - dřívější čtyřka nechávala
 // na širokém monitoru vpravo prázdné sloupce.
 const CHUNK_LONG = 12;
-const CHUNK_SPARKS = 6;
+// Pruh Sparks vyplní celou šířku i na širokém monitoru (components/SparksShelf.tsx) - karet musí být dost.
+const CHUNK_SPARKS = 12;
 
 export function formatDuration(seconds: number | null) {
   if (!seconds) return '';

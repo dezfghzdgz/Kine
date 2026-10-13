@@ -4,10 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useLanguage, type DictKey } from '@/lib/i18n';
 import {
   APPEARANCE_EVENT,
+  AVATAR_MOTIONS,
   BACKDROPS,
   CARD_SIZES,
   CORNERS,
   DEFAULT_APPEARANCE,
+  DENSITIES,
+  FONTS,
   TEXT_SIZES,
   backdropImageFromFile,
   readAppearance,
@@ -17,9 +20,12 @@ import {
   saveBackdropImage,
   saveTheme,
   type Appearance,
+  type AvatarMotion,
   type Backdrop,
   type CardSize,
   type Corners,
+  type Density,
+  type FontChoice,
   type TextSize,
   type Theme,
 } from '@/lib/appearance';
@@ -35,12 +41,33 @@ const BACKDROP_LABELS: Record<Backdrop, DictKey> = {
   forest: 'appearanceBackdropForest',
   ocean: 'appearanceBackdropOcean',
   neon: 'appearanceBackdropNeon',
+  aurora: 'appearanceBackdropAurora',
+  candy: 'appearanceBackdropCandy',
+  ember: 'appearanceBackdropEmber',
+  mono: 'appearanceBackdropMono',
   image: 'appearanceBackdropImage',
 };
 
 const TEXT_LABELS: Record<TextSize, DictKey> = { s: 'appearanceTextS', m: 'appearanceTextM', l: 'appearanceTextL' };
 const CORNER_LABELS: Record<Corners, DictKey> = { sharp: 'appearanceCornersSharp', normal: 'appearanceCornersNormal', round: 'appearanceCornersRound' };
 const CARD_LABELS: Record<CardSize, DictKey> = { s: 'appearanceCardsS', m: 'appearanceCardsM', l: 'appearanceCardsL' };
+const DENSITY_LABELS: Record<Density, DictKey> = { compact: 'appearanceDensityCompact', normal: 'appearanceDensityNormal', comfy: 'appearanceDensityComfy' };
+const AVATAR_LABELS: Record<AvatarMotion, DictKey> = { always: 'appearanceAvatarsAlways', hover: 'appearanceAvatarsHover', never: 'appearanceAvatarsNever' };
+const FONT_LABELS: Record<FontChoice, DictKey> = {
+  inter: 'appearanceFontInter',
+  system: 'appearanceFontSystem',
+  rounded: 'appearanceFontRounded',
+  serif: 'appearanceFontSerif',
+  mono: 'appearanceFontMono',
+};
+/** Každá volba písma je napsaná tím písmem - je hned vidět, jak vypadá. */
+const FONT_PREVIEW: Record<FontChoice, string> = {
+  inter: "var(--font-inter, 'Inter'), sans-serif",
+  system: "system-ui, -apple-system, 'Segoe UI', 'Roboto', sans-serif",
+  rounded: "'Kine Rounded', ui-rounded, system-ui, sans-serif",
+  serif: "'Kine Serif', Georgia, serif",
+  mono: "'Kine Mono', ui-monospace, monospace",
+};
 
 /**
  * Nastavení -> Vzhled: motiv, klasický / skleněný styl, pozadí skla,
@@ -316,10 +343,48 @@ export default function AppearanceSettings() {
         </div>
       </div>
 
-      {/* Velikost a tvar: písmo, rohy, karty videí - a klidný režim bez animací. */}
+      {/* Písmo: každá volba je napsaná svým písmem. */}
+      <div>
+        <p className="appearance-label">{t('appearanceFontLabel')}</p>
+        <div className="appearance-themes appearance-font" role="radiogroup" aria-label={t('appearanceFontLabel')}>
+          {FONTS.map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={appearance.font === value}
+              className={appearance.font === value ? 'active' : ''}
+              style={{ fontFamily: FONT_PREVIEW[value] }}
+              onClick={() => change({ font: value })}
+            >
+              {t(FONT_LABELS[value])}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Velikost a tvar: písmo, rohy, karty videí, rozestupy - a klidný režim bez animací. */}
       {segmented('appearanceTextLabel', TEXT_SIZES, appearance.text, TEXT_LABELS, (v) => change({ text: v }), 'appearance-text')}
       {segmented('appearanceCornersLabel', CORNERS, appearance.corners, CORNER_LABELS, (v) => change({ corners: v }), 'appearance-corners')}
       {segmented('appearanceCardsLabel', CARD_SIZES, appearance.cards, CARD_LABELS, (v) => change({ cards: v }), 'appearance-cards')}
+      {segmented('appearanceDensityLabel', DENSITIES, appearance.density, DENSITY_LABELS, (v) => change({ density: v }), 'appearance-density')}
+      {segmented('appearanceAvatarsLabel', AVATAR_MOTIONS, appearance.avatars, AVATAR_LABELS, (v) => change({ avatars: v }), 'appearance-avatars')}
+
+      <WithHelp help={t('appearancePreviewsHint')} className="settings-option">
+        <label className="settings-check">
+          <input type="checkbox" className="appearance-previews" checked={appearance.previews} onChange={(e) => change({ previews: e.target.checked })} />
+          <UiIcon name="play" size={16} />
+          <span>{t('appearancePreviews')}</span>
+        </label>
+      </WithHelp>
+
+      <WithHelp help={t('appearanceContrastHint')} className="settings-option">
+        <label className="settings-check">
+          <input type="checkbox" className="appearance-contrast" checked={appearance.contrast} onChange={(e) => change({ contrast: e.target.checked })} />
+          <UiIcon name="sun" size={16} />
+          <span>{t('appearanceContrast')}</span>
+        </label>
+      </WithHelp>
 
       <WithHelp help={t('appearanceCalmHint')} className="settings-option">
         <label className="settings-check">

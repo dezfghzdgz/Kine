@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 import { formatTipAmount } from '@/lib/liveTips';
+import ProfileImage from './ProfileImage';
 
 type ReplayMessage = {
   id: number;
@@ -121,9 +122,9 @@ export default function ChatReplay({
           {shown.map((m) => {
             const tip = m.kind === 'tip' && m.tip_amount_cents && m.tip_currency ? formatTipAmount(m.tip_amount_cents, m.tip_currency, lang) : null;
             return (
-              <div key={m.id} className={`live-chat-msg ${tip ? 'tip' : ''}`}>
+              <div key={m.id} className={`live-chat-msg ${tip ? 'tip' : ''}`} data-anim-scope>
                 <span className="live-chat-avatar" aria-hidden="true">
-                  {m.profiles?.avatar_url ? <img src={m.profiles.avatar_url} alt="" loading="lazy" decoding="async" /> : null}
+                  {m.profiles?.avatar_url ? <ProfileImage src={m.profiles.avatar_url} /> : null}
                 </span>
                 <span className="live-chat-text">
                   <span className="live-chat-user">{m.profiles?.username ?? '—'}</span>

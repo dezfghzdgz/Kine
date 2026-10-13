@@ -16,6 +16,7 @@ import ExpandableText from '@/components/ExpandableText';
 import { FOLLOW_LIVE_MS, liveFrameUrl, preloadImage, setAmbientSource } from '@/lib/appearance';
 import AmbientCanvas from '@/components/AmbientCanvas';
 import { useAppearance } from '@/lib/useAppearance';
+import ProfileImage from '@/components/ProfileImage';
 
 type Status = {
   enabled: boolean;
@@ -178,7 +179,7 @@ export default function LivePage() {
     <div className="video-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
       <Link href={`/channel/${profile.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span className="profile-avatar-small" style={{ width: 32, height: 32 }}>
-          {profile.avatar_url ? <img loading="lazy" decoding="async" src={profile.avatar_url} alt={name} /> : null}
+          {profile.avatar_url ? <ProfileImage src={profile.avatar_url} alt={name} animate="always" /> : null}
         </span>
         <span>{name}</span>
         <VerifiedBadge tier={profile.verification_tier as any} />

@@ -7,6 +7,7 @@ import { liveElapsed } from '@/lib/liveChat';
 import { authHeaders } from '@/lib/authHeaders';
 import { announceLiveCount } from '@/lib/useLiveCount';
 import VerifiedBadge from './VerifiedBadge';
+import ProfileImage from './ProfileImage';
 
 export type LiveItem = {
   ownerId: string;
@@ -123,12 +124,12 @@ export function LiveCard({ item, now, showCategory = false }: { item: LiveItem; 
   const frame = item.videoUid && !thumbFailed ? `https://videodelivery.net/${item.videoUid}/thumbnails/thumbnail.jpg?height=360&t=${Math.floor(now / 60000)}` : null;
   const thumb = custom ?? frame;
   return (
-    <Link href={`/live/${item.ownerId}`} className="live-card">
+    <Link href={`/live/${item.ownerId}`} className="live-card" data-anim-scope>
       <div className="live-card-thumb">
         {thumb ? (
           <img src={thumb} alt="" loading="lazy" decoding="async" onError={() => (custom ? setCustomFailed(true) : setThumbFailed(true))} />
         ) : (
-          <span className="live-card-avatar">{item.profile.avatarUrl ? <img src={item.profile.avatarUrl} alt="" /> : null}</span>
+          <span className="live-card-avatar">{item.profile.avatarUrl ? <ProfileImage src={item.profile.avatarUrl} /> : null}</span>
         )}
         <span className="live-pill">● {t('liveBadge')}</span>
         {typeof item.viewers === 'number' && (
@@ -144,7 +145,7 @@ export function LiveCard({ item, now, showCategory = false }: { item: LiveItem; 
       </div>
       <div className="live-card-body">
         <span className="live-card-face" aria-hidden="true">
-          {item.profile.avatarUrl ? <img src={item.profile.avatarUrl} alt="" loading="lazy" decoding="async" /> : name.slice(0, 1).toUpperCase()}
+          {item.profile.avatarUrl ? <ProfileImage src={item.profile.avatarUrl} /> : name.slice(0, 1).toUpperCase()}
         </span>
         <div style={{ minWidth: 0 }}>
           <p className="video-card-title">{item.title || name}</p>

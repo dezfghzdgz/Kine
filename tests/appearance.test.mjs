@@ -71,6 +71,11 @@ test('atributy pro <html>: sklo jen když je zapnuté, síla jako --glass-k', ()
     'data-corners': null,
     'data-cards': null,
     'data-calm': null,
+    'data-font': null,
+    'data-density': null,
+    'data-contrast': null,
+    'data-previews': null,
+    'data-anim': null,
   });
   assert.equal(glass.glassK, '0.8');
   const classic = appearanceAttributes('dark', DEFAULT_APPEARANCE);
@@ -108,6 +113,24 @@ test('nové volby: písmo, rohy, karty, klidný režim, můj obrázek a jeho roz
   assert.equal(weird.attrs.get('data-corners'), undefined);
   assert.equal(weird.attrs.get('data-cards'), undefined);
   assert.equal(weird.vars.get('--blur-k'), String(DEFAULT_APPEARANCE.blur / 100));
+});
+
+test('další volby: písmo, rozestupy, kontrast, náhledy po najetí, animované profilovky, nové barvy pozadí', () => {
+  const a = sanitizeAppearance({ font: 'serif', density: 'compact', contrast: true, previews: false, avatars: 'never', backdrop: 'aurora' });
+  assert.deepEqual([a.font, a.density, a.contrast, a.previews, a.avatars, a.backdrop], ['serif', 'compact', true, false, 'never', 'aurora']);
+  const b = sanitizeAppearance({ font: 'comic', density: 'tight', contrast: 'ano', previews: 0, avatars: 'sometimes', backdrop: 'candy' });
+  assert.deepEqual([b.font, b.density, b.contrast, b.previews, b.avatars, b.backdrop], ['inter', 'normal', false, true, 'hover', 'candy']);
+  const attrs = appearanceAttributes('dark', a).attrs;
+  assert.deepEqual([attrs['data-font'], attrs['data-density'], attrs['data-contrast'], attrs['data-previews'], attrs['data-anim']], ['serif', 'compact', '1', '0', 'never']);
+  const plain = appearanceAttributes('dark', DEFAULT_APPEARANCE).attrs;
+  assert.deepEqual([plain['data-font'], plain['data-density'], plain['data-contrast'], plain['data-previews'], plain['data-anim']], [null, null, null, null, null]);
+  const { attrs: html } = fakeDocument({ 'kine-appearance': JSON.stringify({ font: 'mono', density: 'comfy', contrast: true, previews: false, avatars: 'always', backdrop: 'ember' }) });
+  assert.deepEqual(
+    ['data-font', 'data-density', 'data-contrast', 'data-previews', 'data-anim', 'data-backdrop'].map((k) => html.get(k)),
+    ['mono', 'comfy', '1', '0', 'always', 'ember']
+  );
+  const odd = fakeDocument({ 'kine-appearance': JSON.stringify({ font: '<x>', density: 'x', avatars: 'x', previews: 'no' }) });
+  assert.deepEqual(['data-font', 'data-density', 'data-anim', 'data-previews'].map((k) => odd.attrs.get(k)), [undefined, undefined, undefined, undefined]);
 });
 
 test('skript v <head>: uložený vzhled se nastaví hned (bez přebliknutí)', () => {

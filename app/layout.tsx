@@ -36,6 +36,7 @@ const inter = Inter({
   variable: '--font-inter',
 });
 
+
 /**
  * Viewport.
  *

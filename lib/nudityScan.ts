@@ -2,6 +2,7 @@ import { supabaseServer } from './supabaseServer';
 import { liveThumbnailPath } from './liveThumbnail';
 import { SERVER_FETCH_TOKEN_TTL_S, createStreamToken, signingKeyFromEnv } from './streamToken';
 import { syncVideoProtection } from './streamProtection';
+import { logLiveEvent } from './liveEvents';
 import {
   addLiveStrike,
   framesFromPredictions,
@@ -303,6 +304,10 @@ export async function scanLiveStreams(): Promise<void> {
       .update({ moderation_strikes: strikes, ...hiddenPatch })
       .eq('owner_id', row.owner_id);
     if (!hide) continue;
+    logLiveEvent(row.owner_id, 'hidden', 'skryto z Živě - automatická kontrola obsahu (možná nahota), čeká na moderátora', {
+      'snímky': strikes.map((s) => s.level).join(', '),
+      'porno / nahota (poslední snímek)': `${pornScore(f).toFixed(2)} / ${f.sexy.toFixed(2)}`,
+    });
     await openFlag({
       kind: 'live',
       channel_id: row.owner_id,

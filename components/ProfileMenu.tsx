@@ -11,6 +11,7 @@ import { isTvMode, setTvPreference } from '@/lib/tvMode';
 import { APPEARANCE_EVENT, readTheme, saveTheme, type Theme } from '@/lib/appearance';
 import UiIcon, { type UiIconName } from './UiIcon';
 import { goToSettingsSection } from '@/lib/settingsNav';
+import ProfileImage from './ProfileImage';
 
 /** Položka nabídky: ikona a krátký text (vpravo případně hodnota) - jde se podle ikon. */
 function ItemLabel({ icon, children }: { icon: UiIconName; children: ReactNode }) {
@@ -96,7 +97,7 @@ export default function ProfileMenu({
     <div className="profile-menu" ref={menuRef}>
       <button className="sidebar-link profile-trigger" onClick={() => { setOpen((v) => !v); setLangMenuOpen(false); }}>
         <span className="profile-avatar-small">
-          {avatarUrl ? <img loading="lazy" decoding="async" src={avatarUrl} alt={username} /> : null}
+          {avatarUrl ? <ProfileImage src={avatarUrl} alt={username} /> : null}
         </span>
         {username}
       </button>
@@ -105,7 +106,7 @@ export default function ProfileMenu({
         <div className="profile-dropdown">
           <div className="profile-dropdown-header">
             <span className="profile-avatar-small">
-              {avatarUrl ? <img loading="lazy" decoding="async" src={avatarUrl} alt={username} /> : null}
+              {avatarUrl ? <ProfileImage src={avatarUrl} alt={username} animate="always" /> : null}
             </span>
             <div>
               <p className="profile-dropdown-name">{username}</p>

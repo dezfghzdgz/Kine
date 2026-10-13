@@ -15,6 +15,7 @@ import type { Block } from '@/lib/homeRecommendation';
 import { loadHiddenContent, filterHidden, clearHiddenContent, NOTHING_HIDDEN } from '@/lib/hiddenContent';
 import type { HiddenContent } from '@/lib/hiddenContent';
 import { isSpark, nearMissSparks } from '@/lib/videoBlocks';
+import { VideoBlockRow } from '@/components/SparksShelf';
 
 const VIDEO_COLUMNS =
   'id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, hashtags, owner_id, cloudflare_video_id, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username)';
@@ -463,7 +464,7 @@ export default function HomePage() {
       {notices}
 
       {blocks.map((block, i) => (
-        <div key={i} className={block.type === 'sparks' ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 24 }}>
+        <VideoBlockRow key={i} type={block.type} style={{ marginBottom: 24 }}>
           {block.items.map((video: any) => (
             <VideoCard
               key={video.id}
@@ -475,7 +476,7 @@ export default function HomePage() {
               reason={reasonFor(video)}
             />
           ))}
-        </div>
+        </VideoBlockRow>
       ))}
 
       <div ref={sentinelRef} style={{ height: 1 }} />

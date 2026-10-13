@@ -8,6 +8,7 @@ import { CHAT_MAX_LENGTH } from '@/lib/liveChat';
 import { FOLLOW_MINUTES_OPTIONS, SLOW_MODE_OPTIONS } from '@/lib/liveChatRules';
 import { formatTipAmount } from '@/lib/liveTips';
 import { ChatSpeaker, TTS_MODES, readTtsMode, saveTtsMode, speechText, type TtsMode } from '@/lib/chatSpeech';
+import ProfileImage from './ProfileImage';
 
 type Message = {
   id: number;
@@ -512,9 +513,9 @@ export default function LiveChat({
           const own = m.user_id === userId;
           const tip = tipLabel(m, lang);
           return (
-            <div key={m.id} className={`live-chat-msg ${tip ? 'tip' : ''}`}>
+            <div key={m.id} className={`live-chat-msg ${tip ? 'tip' : ''}`} data-anim-scope>
               <span className="live-chat-avatar" aria-hidden="true">
-                {m.profiles?.avatar_url ? <img src={m.profiles.avatar_url} alt="" loading="lazy" decoding="async" /> : null}
+                {m.profiles?.avatar_url ? <ProfileImage src={m.profiles.avatar_url} /> : null}
               </span>
               <span className="live-chat-text">
                 <span className="live-chat-user">{m.profiles?.username ?? '—'}</span>

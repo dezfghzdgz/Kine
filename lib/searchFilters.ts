@@ -1,17 +1,20 @@
 /**
- * Filtry hledání (jako na YouTube): typ, kdy bylo nahráno, délka, řazení.
- * Server (app/search/page.tsx) je použije na výsledky, stránka je ukazuje
- * jako přepínače. Čistá logika - má test.
+ * Filtry hledání (jako na YouTube): typ, kdy bylo nahráno, délka, řazení,
+ * kategorie. Server (app/search/page.tsx) je použije na výsledky, stránka
+ * je ukazuje jako přepínače a panel u pole hledání (components/TopBar.tsx)
+ * je nastaví předem. Čistá logika - má test.
  */
+import { isCategoryKey } from './categories';
 
 export type SearchType = 'all' | 'long' | 'sparks';
 export type SearchDate = 'any' | 'hour' | 'today' | 'week' | 'month' | 'year';
 export type SearchDuration = 'any' | 'short' | 'medium' | 'long';
 export type SearchSort = 'relevance' | 'date' | 'views';
 
-export type SearchFilters = { type: SearchType; date: SearchDate; duration: SearchDuration; sort: SearchSort };
+/** 'any' = všechny kategorie, jinak klíč kategorie (lib/categories.ts - 'catGaming'...). */
+export type SearchFilters = { type: SearchType; date: SearchDate; duration: SearchDuration; sort: SearchSort; category: string };
 
-export const DEFAULT_FILTERS: SearchFilters = { type: 'all', date: 'any', duration: 'any', sort: 'relevance' };
+export const DEFAULT_FILTERS: SearchFilters = { type: 'all', date: 'any', duration: 'any', sort: 'relevance', category: 'any' };
 
 function pick<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
@@ -27,11 +30,12 @@ export function parseSearchFilters(params: Record<string, string | string[] | un
     date: pick(one('date'), ['any', 'hour', 'today', 'week', 'month', 'year'] as const, 'any'),
     duration: pick(one('duration'), ['any', 'short', 'medium', 'long'] as const, 'any'),
     sort: pick(one('sort'), ['relevance', 'date', 'views'] as const, 'relevance'),
+    category: isCategoryKey(one('category')) ? (one('category') as string) : 'any',
   };
 }
 
 export function filtersActive(f: SearchFilters): boolean {
-  return f.type !== 'all' || f.date !== 'any' || f.duration !== 'any' || f.sort !== 'relevance';
+  return f.type !== 'all' || f.date !== 'any' || f.duration !== 'any' || f.sort !== 'relevance' || f.category !== 'any';
 }
 
 const DATE_WINDOW_MS: Record<Exclude<SearchDate, 'any'>, number> = {
@@ -43,6 +47,7 @@ const DATE_WINDOW_MS: Record<Exclude<SearchDate, 'any'>, number> = {
 };
 
 type Row = {
+  category?: string | null;
   created_at?: string | null;
   scheduled_at?: string | null;
   is_premiere?: boolean | null;
@@ -69,6 +74,7 @@ export function applySearchFilters<T extends Row>(rows: T[], f: SearchFilters, i
   let out = rows.filter(published);
   if (f.type === 'sparks') out = out.filter(isSpark);
   if (f.type === 'long') out = out.filter((r) => !isSpark(r));
+  if (f.category !== 'any') out = out.filter((r) => r.category === f.category);
   if (f.date !== 'any') {
     // Premiéra, která ještě nezačala, "nahraná" ještě není - do filtru podle data nepatří.
     const since = now - DATE_WINDOW_MS[f.date];
@@ -97,5 +103,6 @@ export function searchHref(query: string, f: SearchFilters, change: Partial<Sear
   if (next.date !== 'any') params.set('date', next.date);
   if (next.duration !== 'any') params.set('duration', next.duration);
   if (next.sort !== 'relevance') params.set('sort', next.sort);
+  if (next.category && next.category !== 'any') params.set('category', next.category);
   return `/search?${params.toString()}`;
 }

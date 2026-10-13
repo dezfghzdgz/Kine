@@ -58,6 +58,8 @@ import { chooseEngine, shouldReportSlowStart, statsReport, vodVerdict, type Qual
 import { customerCodeFromUrl, manifestUrl } from '@/lib/streamSource';
 import { preloadHls, supportsNativeHls } from '@/lib/hlsAttach';
 import PlaybackStats, { bufferedAhead } from '@/components/PlaybackStats';
+import { VideoBlockRow } from '@/components/SparksShelf';
+import ProfileImage from '@/components/ProfileImage';
 
 const THEATER_KEY = 'kine-theater';
 const AUTOPLAY_KEY = 'kine-autoplay';
@@ -1953,7 +1955,7 @@ function WatchPageInner() {
         <div className="video-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <Link href={`/channel/${video.profiles?.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="profile-avatar-small" style={{ width: 28, height: 28 }}>
-              {video.profiles?.avatar_url ? <img loading="lazy" decoding="async" src={video.profiles.avatar_url} alt={creatorName} /> : null}
+              {video.profiles?.avatar_url ? <ProfileImage src={video.profiles.avatar_url} alt={creatorName} /> : null}
             </span>
             <span>{creatorName}</span>
             <VerifiedBadge tier={video.profiles?.verification_tier} />
@@ -1973,7 +1975,7 @@ function WatchPageInner() {
             <Link href={`/channel/${video.profiles?.id}`} className="collab-chip">
               <span className="profile-avatar-small" style={{ width: 26, height: 26 }}>
                 {video.profiles?.avatar_url ? (
-                  <img loading="lazy" decoding="async" src={video.profiles.avatar_url} alt={creatorName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <ProfileImage src={video.profiles.avatar_url} alt={creatorName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : null}
               </span>
               <span className="collab-chip-name">{creatorName}</span>
@@ -1984,7 +1986,7 @@ function WatchPageInner() {
               <Link key={c.id} href={`/channel/${c.id}`} className="collab-chip">
                 <span className="profile-avatar-small" style={{ width: 26, height: 26 }}>
                   {c.avatar_url ? (
-                    <img loading="lazy" decoding="async" src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <ProfileImage src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : null}
                 </span>
                 <span className="collab-chip-name">{c.username}</span>
@@ -2104,7 +2106,7 @@ function WatchPageInner() {
               uložit, playlist, nezajímá mě, nahlásit) a náhledu po najetí.
               Dřív tu byl vlastní zjednodušený odkaz bez nabídky. */}
           {otherVideos.length > 0 && buildVideoBlocks(otherVideos).map((block, bi) => (
-            <div key={bi} className={block.type === 'sparks' ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 20 }}>
+            <VideoBlockRow key={bi} type={block.type} style={{ marginBottom: 20 }}>
               {block.items.map((v: any) => (
                 <VideoCard
                   key={v.id}
@@ -2114,7 +2116,7 @@ function WatchPageInner() {
                   formatDuration={formatDuration}
                 />
               ))}
-            </div>
+            </VideoBlockRow>
           ))}
         </div>
       )}
@@ -2139,7 +2141,7 @@ function WatchPageInner() {
           <div className="creator-row">
             <div className="creator-avatar" style={{ overflow: 'hidden' }}>
               {video.profiles?.avatar_url ? (
-                <img loading="lazy" decoding="async" src={video.profiles.avatar_url} alt={creatorName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <ProfileImage src={video.profiles.avatar_url} alt={creatorName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : null}
             </div>
             <div>

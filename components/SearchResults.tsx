@@ -1,10 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n';
+import { CATEGORY_KEYS } from '@/lib/categories';
 import VideoCard from './VideoCard';
 import { formatDuration } from '@/lib/homeRecommendation';
 import { DEFAULT_FILTERS, searchHref, type SearchFilters } from '@/lib/searchFilters';
+import ProfileImage from './ProfileImage';
 
 /**
  * Výsledky hledání (app/search/page.tsx).
@@ -36,6 +39,7 @@ export default function SearchResults({
   minRating?: string | null;
 }) {
   const { t } = useLanguage();
+  const router = useRouter();
 
   if (!query) {
     return <p style={{ color: 'var(--text-faint)' }}>{t('searchEmptyPrompt')}</p>;
@@ -68,7 +72,7 @@ export default function SearchResults({
       key: 'duration',
       label: t('searchFilterDuration'),
       options: [
-        { value: 'any', label: t('searchFilterAny') },
+        { value: 'any', label: t('searchDurationAny') },
         { value: 'short', label: t('searchDurationShort') },
         { value: 'medium', label: t('searchDurationMedium') },
         { value: 'long', label: t('searchDurationLong') },
@@ -106,6 +110,40 @@ export default function SearchResults({
             ))}
           </div>
         ))}
+        <div className="search-filter-group">
+          <span className="search-filter-label">{t('searchFilterCreators')}</span>
+          <Link href={searchHref(query, filters, {}, null)} className={`search-chip ${!minRating ? 'active' : ''}`} aria-current={!minRating ? 'true' : undefined} scroll={false}>
+            {t('searchRatingAny')}
+          </Link>
+          <Link
+            href={searchHref(query, filters, {}, '80')}
+            className={`search-chip ${minRating ? 'active' : ''}`}
+            aria-current={minRating ? 'true' : undefined}
+            title={t('highRatingOnly')}
+            scroll={false}
+          >
+            {t('searchRating80')}
+          </Link>
+        </div>
+        <div className="search-filter-group">
+          <span className="search-filter-label">{t('searchFilterCategory')}</span>
+          {/* 15 kategorií by jako přepínače zabraly tři řádky - proto výběr. */}
+          <select
+            className="search-category-select"
+            value={filters.category}
+            onChange={(e) => router.push(searchHref(query, filters, { category: e.target.value }, minRating), { scroll: false })}
+            aria-label={t('searchFilterCategory')}
+          >
+            <option value="any">{t('searchCategoryAny')}</option>
+            {[...CATEGORY_KEYS]
+              .sort((a, b) => t(a).localeCompare(t(b)))
+              .map((key) => (
+                <option key={key} value={key}>
+                  {t(key)}
+                </option>
+              ))}
+          </select>
+        </div>
       </div>
 
       {creators.length > 0 && (
@@ -113,13 +151,8 @@ export default function SearchResults({
           <p className="panel-heading">{t('searchCreatorsHeading')}</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 420 }}>
             {creators.map((c: any) => (
-              <Link key={c.id} href={`/channel/${c.id}`} className="sidebar-link" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span className="profile-avatar-small">
-                  {c.avatar_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img loading="lazy" decoding="async" src={c.avatar_url} alt="" />
-                  ) : null}
-                </span>
+              <Link key={c.id} href={`/channel/${c.id}`} className="sidebar-link" style={{ display: 'flex', alignItems: 'center', gap: 10 }} data-anim-scope>
+                <span className="profile-avatar-small">{c.avatar_url ? <ProfileImage src={c.avatar_url} /> : null}</span>
                 {c.display_name ?? c.username}
               </Link>
             ))}

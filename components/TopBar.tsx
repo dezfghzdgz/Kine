@@ -5,8 +5,26 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useMobileNav } from '@/lib/mobileNavContext';
 import { useLanguage } from '@/lib/i18n';
 import { OPEN_SEARCH_EVENT } from './KeyboardShortcuts';
+import { CATEGORY_KEYS } from '@/lib/categories';
+import { DEFAULT_FILTERS, parseSearchFilters, searchHref, type SearchFilters } from '@/lib/searchFilters';
 
 const SCOPED_PATHS = ['/activity', '/downloaded', '/your-videos', '/playlists', '/subscriptions', '/watch-later'];
+
+/**
+ * Co už platí v adrese (/search?q=...&type=...&minRating=80): pole i panel
+ * filtrů se otevřou s tím, co divák právě vidí, ne prázdné. Čte se přímo
+ * z window.location - useSearchParams by v horní liště (je v každé stránce)
+ * chtěl obalit celou stránku do Suspense.
+ */
+function readSearchUrl(): { query: string; filters: SearchFilters; highRating: boolean } {
+  if (typeof window === 'undefined') return { query: '', filters: DEFAULT_FILTERS, highRating: false };
+  const params = new URLSearchParams(window.location.search);
+  const record: Record<string, string> = {};
+  params.forEach((value, key) => {
+    if (!(key in record)) record[key] = value;
+  });
+  return { query: params.get('q') ?? '', filters: parseSearchFilters(record), highRating: !!params.get('minRating') };
+}
 
 export default function TopBar() {
   const { open: mobileNavOpen, toggle: toggleMobileNav } = useMobileNav();
@@ -19,9 +37,29 @@ export default function TopBar() {
   const [query, setQuery] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [highRatingOnly, setHighRatingOnly] = useState(false);
-  const [contentType, setContentType] = useState<'all' | 'long' | 'sparks'>('all');
+  const [filters, setFilters] = useState<SearchFilters>(DEFAULT_FILTERS);
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const scoped = SCOPED_PATHS.includes(pathname);
+  const activeCount =
+    (highRatingOnly ? 1 : 0) +
+    (filters.type !== 'all' ? 1 : 0) +
+    (filters.date !== 'any' ? 1 : 0) +
+    (filters.duration !== 'any' ? 1 : 0) +
+    (filters.sort !== 'relevance' ? 1 : 0) +
+    (filters.category !== 'any' ? 1 : 0);
+  const setFilter = <K extends keyof SearchFilters>(key: K, value: SearchFilters[K]) => setFilters((f) => ({ ...f, [key]: value }));
+
+  /** Na stránce výsledků (nebo v hledání v sekci) vezme hledaný text a filtry z adresy. */
+  function syncFromUrl(withQuery: boolean) {
+    if (pathname !== '/search' && !scoped) return;
+    const fromUrl = readSearchUrl();
+    if (withQuery && fromUrl.query) setQuery((q) => q || fromUrl.query);
+    if (pathname === '/search') {
+      setFilters(fromUrl.filters);
+      setHighRatingOnly(fromUrl.highRating);
+    }
+  }
 
   // Kliknutí kamkoliv mimo celý vyhledávací blok ho zavře - jak
   // rozšířený panel s filtry, tak samotné pole (pokud je prázdné)
@@ -37,8 +75,14 @@ export default function TopBar() {
   }, [query]);
 
   function openSearch() {
+    syncFromUrl(true);
     setActive(true);
     setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  function toggleAdvanced() {
+    if (!advancedOpen) syncFromUrl(false);
+    setAdvancedOpen((v) => !v);
   }
 
   // Klávesa "/" kdekoliv v appce otevře tohle pole a rovnou do něj skočí.
@@ -48,48 +92,145 @@ export default function TopBar() {
     }
     window.addEventListener(OPEN_SEARCH_EVENT, handleOpenRequest);
     return () => window.removeEventListener(OPEN_SEARCH_EVENT, handleOpenRequest);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!query.trim()) return;
+  function handleSubmit(e?: React.FormEvent) {
+    e?.preventDefault();
+    const q = query.trim();
+    if (!q) {
+      inputRef.current?.focus();
+      return;
+    }
 
-    const params = new URLSearchParams();
-    params.set('q', query.trim());
-    if (highRatingOnly) params.set('minRating', '80');
-    if (contentType !== 'all') params.set('type', contentType);
-
-    if (SCOPED_PATHS.includes(pathname)) {
-      router.push(`${pathname}?${params.toString()}`);
+    // Hledání v sekci (Historie, Tvoje videa...) umí jen text. S filtry se
+    // hledá na celém Kine - jinak by je hledání v sekci potichu zahodilo.
+    if (scoped && activeCount === 0) {
+      router.push(`${pathname}?${new URLSearchParams({ q }).toString()}`);
     } else {
-      router.push(`/search?${params.toString()}`);
+      router.push(searchHref(q, filters, {}, highRatingOnly ? '80' : null));
     }
     setAdvancedOpen(false);
   }
+
+  function resetFilters() {
+    setFilters(DEFAULT_FILTERS);
+    setHighRatingOnly(false);
+  }
+
+  const chip = (selected: boolean, label: string, onClick: () => void, title?: string) => (
+    <button key={label} type="button" className={`search-chip ${selected ? 'active' : ''}`} aria-pressed={selected} onClick={onClick} title={title}>
+      {label}
+    </button>
+  );
+  const categories = [...CATEGORY_KEYS].sort((a, b) => t(a).localeCompare(t(b)));
 
   return (
     <div className="top-bar">
       <div ref={wrapRef} className="top-bar-slot" style={{ position: 'relative', display: 'flex' }}>
         {active ? (
-          <form onSubmit={handleSubmit} className="top-bar-search-form" style={{ flex: 1 }}>
-            <SearchIcon />
-            <input
-              ref={inputRef}
-              type="text"
-              placeholder={SCOPED_PATHS.includes(pathname) ? t('searchThisSection') : t('search')}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            <button
-              type="button"
-              className="icon-btn"
-              onClick={() => setAdvancedOpen((v) => !v)}
-              aria-label={t('advancedSearch')}
-              title={t('advancedSearch')}
-            >
-              <FilterIcon />
-            </button>
-          </form>
+          <div className="top-bar-search-wrap">
+            <form onSubmit={handleSubmit} className="top-bar-search-form" role="search">
+              <SearchIcon />
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder={scoped ? t('searchThisSection') : t('search')}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                enterKeyHint="search"
+              />
+              <button
+                type="button"
+                className={`icon-btn top-bar-filter-btn ${advancedOpen ? 'open' : ''}`}
+                onClick={toggleAdvanced}
+                aria-label={t('advancedSearch')}
+                aria-expanded={advancedOpen}
+                title={t('advancedSearch')}
+              >
+                <FilterIcon />
+                {activeCount > 0 && <span className="top-bar-filter-count">{activeCount}</span>}
+              </button>
+            </form>
+
+            {/* Panel visí přímo pod polem hledání (dřív byl u pravého kraje
+                celé lišty, daleko od pole). Filtry jsou stejné jako na
+                stránce výsledků - tady se dají nastavit předem. */}
+            {advancedOpen && (
+              <div className="profile-dropdown search-panel" role="group" aria-label={t('advancedSearch')}>
+                <p className="search-panel-title">{t('advancedSearch')}</p>
+
+                <div className="search-panel-row">
+                  <span className="search-filter-label">{t('searchFilterCreators')}</span>
+                  <div className="search-panel-chips">
+                    {chip(!highRatingOnly, t('searchRatingAny'), () => setHighRatingOnly(false))}
+                    {chip(highRatingOnly, t('searchRating80'), () => setHighRatingOnly(true), t('highRatingOnly'))}
+                  </div>
+                </div>
+
+                <div className="search-panel-row">
+                  <span className="search-filter-label">{t('searchFilterType')}</span>
+                  <div className="search-panel-chips">
+                    {chip(filters.type === 'all', t('contentTypeAll'), () => setFilter('type', 'all'))}
+                    {chip(filters.type === 'long', t('contentTypeVideos'), () => setFilter('type', 'long'))}
+                    {chip(filters.type === 'sparks', t('contentTypeSparks'), () => setFilter('type', 'sparks'))}
+                  </div>
+                </div>
+
+                <div className="search-panel-grid">
+                  <label className="search-panel-field">
+                    <span>{t('searchFilterDate')}</span>
+                    <select value={filters.date} onChange={(e) => setFilter('date', e.target.value as SearchFilters['date'])}>
+                      <option value="any">{t('searchFilterAny')}</option>
+                      <option value="hour">{t('searchDateHour')}</option>
+                      <option value="today">{t('searchDateToday')}</option>
+                      <option value="week">{t('searchDateWeek')}</option>
+                      <option value="month">{t('searchDateMonth')}</option>
+                      <option value="year">{t('searchDateYear')}</option>
+                    </select>
+                  </label>
+                  <label className="search-panel-field">
+                    <span>{t('searchFilterDuration')}</span>
+                    <select value={filters.duration} onChange={(e) => setFilter('duration', e.target.value as SearchFilters['duration'])}>
+                      <option value="any">{t('searchDurationAny')}</option>
+                      <option value="short">{t('searchDurationShort')}</option>
+                      <option value="medium">{t('searchDurationMedium')}</option>
+                      <option value="long">{t('searchDurationLong')}</option>
+                    </select>
+                  </label>
+                  <label className="search-panel-field">
+                    <span>{t('searchFilterSort')}</span>
+                    <select value={filters.sort} onChange={(e) => setFilter('sort', e.target.value as SearchFilters['sort'])}>
+                      <option value="relevance">{t('searchSortRelevance')}</option>
+                      <option value="date">{t('searchSortDate')}</option>
+                      <option value="views">{t('searchSortViews')}</option>
+                    </select>
+                  </label>
+                  <label className="search-panel-field">
+                    <span>{t('searchFilterCategory')}</span>
+                    <select value={filters.category} onChange={(e) => setFilter('category', e.target.value)}>
+                      <option value="any">{t('searchCategoryAny')}</option>
+                      {categories.map((key) => (
+                        <option key={key} value={key}>
+                          {t(key)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="search-panel-actions">
+                  <button type="button" className="search-panel-reset" onClick={resetFilters} disabled={activeCount === 0}>
+                    {t('searchResetFilters')}
+                  </button>
+                  <button type="button" className="search-panel-apply" onClick={() => handleSubmit()}>
+                    {scoped && activeCount > 0 ? t('searchAllKine') : t('searchApply')}
+                  </button>
+                </div>
+                {!query.trim() && <p className="search-panel-hint">{t('searchEmptyPrompt')}</p>}
+              </div>
+            )}
+          </div>
         ) : (
           <>
             <button
@@ -118,30 +259,6 @@ export default function TopBar() {
           </>
         )}
 
-        {advancedOpen && (
-          <div className="profile-dropdown" style={{ top: 'calc(100% + 8px)', bottom: 'auto', left: 'auto', right: 0, width: 260 }}>
-            <p style={{ fontSize: 11, color: 'var(--text-faint)', margin: '4px 8px 8px' }}>{t('advancedSearch')}</p>
-
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '6px 8px', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                style={{ width: 'auto' }}
-                checked={highRatingOnly}
-                onChange={(e) => setHighRatingOnly(e.target.checked)}
-              />
-              {t('highRatingOnly')}
-            </label>
-
-            <div style={{ padding: '6px 8px' }}>
-              <p style={{ fontSize: 12, color: 'var(--text-dim)', margin: '0 0 4px' }}>{t('contentTypeLabel')}</p>
-              <select value={contentType} onChange={(e) => setContentType(e.target.value as 'all' | 'long' | 'sparks')} style={{ width: '100%' }}>
-                <option value="all">{t('contentTypeAll')}</option>
-                <option value="long">{t('contentTypeVideos')}</option>
-                <option value="sparks">{t('contentTypeSparks')}</option>
-              </select>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

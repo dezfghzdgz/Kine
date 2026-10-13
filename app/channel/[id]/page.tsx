@@ -20,6 +20,11 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import LiveBadge from '@/components/LiveBadge';
 import { visibleNowFilter } from '@/lib/scheduling';
 import { setAmbientSource } from '@/lib/appearance';
+import { VideoBlockRow } from '@/components/SparksShelf';
+import ChannelBadges from '@/components/ChannelBadges';
+import UiIcon from '@/components/UiIcon';
+import type { BadgeStats } from '@/lib/badges';
+import ProfileImage from '@/components/ProfileImage';
 
 type Tab = 'home' | 'videos' | 'sparks' | 'posts' | 'playlists';
 
@@ -35,6 +40,8 @@ function ChannelPageInner() {
   const [videos, setVideos] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [isNewCreator, setIsNewCreator] = useState(false);
+  /** Podklady pro odznaky (lib/badges.ts) - vlastní zveřejněná videa, zhlédnutí, Sparks, vysílání. */
+  const [badgeStats, setBadgeStats] = useState<BadgeStats | null>(null);
   const [channelPlaylists, setChannelPlaylists] = useState<any[]>([]);
   const [savedPlaylistIds, setSavedPlaylistIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -102,7 +109,7 @@ function ChannelPageInner() {
         .eq('owner_id', channelId)
         .eq('status', 'ready');
       if (!ownChannel) videosQuery = videosQuery.or(visibleNowFilter());
-      const [{ data: videoData }, { data: collabRows }, { data: postData }, { data: playlistData }, { data: myPlaylists }] = await Promise.all([
+      const [{ data: videoData }, { data: collabRows }, { data: postData }, { data: playlistData }, { data: myPlaylists }, streamedRes] = await Promise.all([
         videosQuery.order('created_at', { ascending: false }),
         // Videa, kde je tenhle profil přidaný jako spolutvůrce - appka je
         // ukáže i tady, ne jen na kanálu toho, kdo je reálně nahrál. appka
@@ -133,6 +140,8 @@ function ChannelPageInner() {
               .eq('owner_id', authData.user.id)
               .not('saved_from', 'is', null)
           : Promise.resolve({ data: [] }),
+        // Vysílal živě? Záznam vysílání je video s live_started_at (bez migrace zive-2 chyba = ne).
+        supabase.from('videos').select('id', { count: 'exact', head: true }).eq('owner_id', channelId).not('live_started_at', 'is', null),
       ]);
 
       const collabVideos = (collabRows ?? [])
@@ -144,6 +153,16 @@ function ChannelPageInner() {
         .filter((v, i, arr) => arr.findIndex((x) => x.id === v.id) === i)
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setVideos(mergedVideos);
+      // Odznaky jen z vlastních videí, která už jsou venku (naplánovaná vidí jen majitel - ta se nepočítají).
+      const published = (videoData ?? []).filter((v: any) => !v.scheduled_at || Date.parse(v.scheduled_at) <= Date.now());
+      setBadgeStats({
+        joinedAt: profileData.created_at ?? null,
+        videos: published.length,
+        views: published.reduce((sum: number, v: any) => sum + (Number(v.views) || 0), 0),
+        subscribers: count ?? 0,
+        sparks: published.filter((v: any) => isSpark(v)).length,
+        streamed: !streamedRes.error && (streamedRes.count ?? 0) > 0,
+      });
       setPosts(postData ?? []);
       setChannelPlaylists(playlistData ?? []);
       setSavedPlaylistIds(new Set((myPlaylists ?? []).map((p: any) => p.saved_from)));
@@ -266,7 +285,7 @@ function ChannelPageInner() {
         }}
       >
         {profile.banner_url && (
-          <img loading="lazy" decoding="async" src={profile.banner_url} alt="banner" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <ProfileImage src={profile.banner_url} alt="banner" animate="always" eager style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         )}
       </div>
 
@@ -276,7 +295,7 @@ function ChannelPageInner() {
           style={{ width: 96, height: 96, overflow: 'hidden', border: '4px solid var(--bg)', flexShrink: 0 }}
         >
           {profile.avatar_url ? (
-            <img loading="lazy" decoding="async" src={profile.avatar_url} alt={profile.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <ProfileImage src={profile.avatar_url} alt={profile.username} animate="always" eager style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : null}
         </div>
 
@@ -286,18 +305,14 @@ function ChannelPageInner() {
             <VerifiedBadge tier={profile.verification_tier} />
             <PlusBadge userId={profile.id} size="md" />
             {trustRating !== null && trustRating >= 90 && (
-              <span title={t('highRatingTitle').replace('{rating}', String(trustRating))} style={{ marginLeft: 5, fontSize: 15 }}>⭐</span>
+              <span className="channel-star" title={t('highRatingTitle').replace('{rating}', String(trustRating))}>
+                <UiIcon name="starFilled" size={16} />
+              </span>
             )}
             {(trustRating === null || trustRating < 90) && isNewCreator && (
-              <span
-                title={t('newcomerBadgeTooltip')}
-                style={{
-                  marginLeft: 6, fontSize: 11, background: 'var(--panel-raised)', color: 'var(--text-faint)',
-                  border: '1px solid var(--border)', borderRadius: 999, padding: '2px 8px', verticalAlign: 'middle',
-                  whiteSpace: 'nowrap', display: 'inline-block',
-                }}
-              >
-                🆕 {t('newcomerBadgeLabel')}
+              <span className="channel-badge channel-badge-new" title={t('newcomerBadgeTooltip')}>
+                <UiIcon name="leaf" size={13} />
+                {t('newcomerBadgeLabel')}
               </span>
             )}
           </p>
@@ -305,6 +320,7 @@ function ChannelPageInner() {
             @{profile.username} · {subscriberCount} {t('subscribersSuffix')} · {videos.length} {t('videosSuffix')}
             {trustRating !== null && ` · Rating ${trustRating}%`}
           </p>
+          {badgeStats && <ChannelBadges stats={badgeStats} own={isOwner} />}
           {/* Kanál právě vysílá živě - odkaz na přenos (jinak se nevykreslí nic). */}
           <div style={{ margin: '6px 0' }}>
             <LiveBadge channelId={profile.id} withTitle />
@@ -413,7 +429,7 @@ function ChannelPageInner() {
       {tab === 'home' && (
         <div>
           {buildVideoBlocks(videos).map((block, i) => (
-            <div key={i} className={block.type === 'sparks' ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 20 }}>
+            <VideoBlockRow key={i} type={block.type} style={{ marginBottom: 20 }}>
               {block.items.map((video: any) => (
                 <Link
                   href={block.type === 'sparks' ? `/sparks?start=${video.id}` : `/watch/${video.id}`}
@@ -430,7 +446,7 @@ function ChannelPageInner() {
                   <p className="video-card-meta">{video.views} {t('views')}</p>
                 </Link>
               ))}
-            </div>
+            </VideoBlockRow>
           ))}
           {videos.length === 0 && <p style={{ color: 'var(--text-faint)' }}>{t('channelHasNoVideos')}</p>}
         </div>

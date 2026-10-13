@@ -72,8 +72,8 @@ test('odpočet', () => {
 });
 
 test('filtry hledání: čtení z adresy, nesmysly = výchozí', () => {
-  assert.deepEqual(sf.parseSearchFilters({ type: 'sparks', date: 'week', duration: 'long', sort: 'views' }), { type: 'sparks', date: 'week', duration: 'long', sort: 'views' });
-  assert.deepEqual(sf.parseSearchFilters({ type: 'x', sort: ['date'] }), { type: 'all', date: 'any', duration: 'any', sort: 'date' });
+  assert.deepEqual(sf.parseSearchFilters({ type: 'sparks', date: 'week', duration: 'long', sort: 'views', category: 'catGaming' }), { type: 'sparks', date: 'week', duration: 'long', sort: 'views', category: 'catGaming' });
+  assert.deepEqual(sf.parseSearchFilters({ type: 'x', sort: ['date'], category: 'nesmysl' }), { type: 'all', date: 'any', duration: 'any', sort: 'date', category: 'any' });
   assert.equal(sf.filtersActive(sf.DEFAULT_FILTERS), false);
 });
 
@@ -98,6 +98,19 @@ test('filtry hledání: typ, datum, délka, řazení a naplánovaná videa', () 
   assert.deepEqual(ids({ duration: 'long' }), ['c']);
   assert.deepEqual(ids({ sort: 'views' }), ['c', 'b', 'a', 'e']);
   assert.deepEqual(ids({ sort: 'date' }), ['e', 'a', 'b', 'c']);
+});
+
+test('filtry hledání: kategorie', () => {
+  const rows = [
+    { id: 'g', category: 'catGaming', created_at: '2026-09-24T09:30:00Z', duration_seconds: 300, views: 1 },
+    { id: 'm', category: 'catMusic', created_at: '2026-09-24T09:30:00Z', duration_seconds: 300, views: 1 },
+    { id: 'n', category: null, created_at: '2026-09-24T09:30:00Z', duration_seconds: 300, views: 1 },
+  ];
+  const ids = (f) => sf.applySearchFilters(rows, { ...sf.DEFAULT_FILTERS, ...f }, () => false, Date.parse('2026-09-24T10:00:00Z')).map((r) => r.id);
+  assert.deepEqual(ids({}), ['g', 'm', 'n']);
+  assert.deepEqual(ids({ category: 'catGaming' }), ['g']);
+  assert.equal(sf.filtersActive({ ...sf.DEFAULT_FILTERS, category: 'catMusic' }), true);
+  assert.equal(sf.searchHref('x', sf.DEFAULT_FILTERS, { category: 'catMusic' }), '/search?q=x&category=catMusic');
 });
 
 test('odkaz se změněným filtrem nechá ostatní', () => {

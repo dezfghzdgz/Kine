@@ -17,6 +17,7 @@ import { customerCodeFromUrl } from '@/lib/streamSource';
 import { useMusicCommands } from '@/lib/musicPlayer';
 import { isTvMode } from '@/lib/tvMode';
 import { SPARK_WARM_FALLBACK_MS, sparkSlot, type SparkEngine } from '@/lib/sparksPlayback';
+import ProfileImage from '@/components/ProfileImage';
 
 const SPARK_FIELDS =
   'id, title, description, cloudflare_video_id, thumbnail_url, duration_seconds, width, height, created_at, profiles!videos_owner_id_fkey(id, username, display_name, avatar_url, verification_tier)';
@@ -347,11 +348,7 @@ function SparksPageInner() {
             <div className="creator-row">
               <div className="creator-avatar" style={{ overflow: 'hidden' }}>
                 {videos[activeIndex].profiles?.avatar_url ? (
-                  <img loading="lazy" decoding="async"
-                    src={videos[activeIndex].profiles.avatar_url}
-                    alt=""
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
+                  <ProfileImage src={videos[activeIndex].profiles.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : null}
               </div>
               <div>

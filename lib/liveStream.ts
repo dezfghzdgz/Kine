@@ -2,6 +2,7 @@ import { supabaseServer } from './supabaseServer';
 import { appPingFresh, appSignalTrusted, connectedFromInputStatus, decideLive, revivedStartedAt, sameStreamReturns, staleWithoutCloudflare } from './liveSignal';
 import { autoPublishAfterStream } from './liveRecording';
 import { chatSessionSince } from './liveChat';
+import { logLiveEvent, secondsSince } from './liveEvents';
 import { liveHiddenNow } from './nudityRules';
 
 export { appPingFresh, appSignalTrusted, APP_PING_FRESH_MS, APP_UNCONFIRMED_MAX_MS } from './liveSignal';
@@ -263,6 +264,26 @@ export async function inputSeen(inputId: string): Promise<{ live: boolean | null
   return { live: await inputStatusFromApi(inputId), videoUid: null };
 }
 
+/**
+ * Co Cloudflare právě vysílá (seznam běžících přenosů celého účtu) - pro
+ * diagnostiku na /admin/live. Na rozdíl od srovnání (syncLiveStreams) nic
+ * nemění, jen čte.
+ */
+export async function cloudflareLiveListing(): Promise<{ ok: boolean; error: string | null; byInput: Map<string, { uid: string; created: string | null }> }> {
+  const byInput = new Map<string, { uid: string; created: string | null }>();
+  if (!cloudflare()) return { ok: false, error: 'Cloudflare Stream není na serveru nastavený (CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_STREAM_API_TOKEN).', byInput };
+  try {
+    const result = await cfFetch('?status=live-inprogress&asc=false');
+    for (const v of Array.isArray(result) ? result : []) {
+      if (String(v.status?.state ?? v.state ?? '') !== 'live-inprogress' || !v.liveInput) continue;
+      if (!byInput.has(v.liveInput)) byInput.set(v.liveInput, { uid: String(v.uid), created: v.created ?? null });
+    }
+    return { ok: true, error: null, byInput };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message, byInput };
+  }
+}
+
 /** Ukončí přenos v databázi (a zveřejní záznam, když si to tvůrce zapnul). */
 async function endStream(row: LiveStreamRow, nowIso: string): Promise<void> {
   // Čerstvé hlášení, kterému se už nevěří (Cloudflare přenos dlouho nevidí):
@@ -283,8 +304,19 @@ async function endSilentStreams(): Promise<void> {
   const { data: rows } = await supabaseServer.from('live_streams').select('*').eq('is_live', true).limit(200);
   const nowIso = new Date().toISOString();
   for (const row of (rows ?? []) as LiveStreamRow[]) {
-    if (staleWithoutCloudflare(row)) await endStream(row, nowIso);
+    if (!staleWithoutCloudflare(row)) continue;
+    logLiveEvent(row.owner_id, 'silent-end', 'ukončeno - Cloudflare dlouho neodpovídá a appka o přenosu nehlásí', {
+      'Cloudflare naposledy potvrdil (s)': secondsSince(lastConfirmedIso(row)),
+      'appka naposledy hlásila (s)': secondsSince(row.app_ping_at),
+      'začátek (s)': secondsSince(row.started_at),
+    });
+    await endStream(row, nowIso);
   }
+}
+
+/** Kdy přenos naposledy potvrdil Cloudflare (sloupec cf_confirmed_at, bez migrace checked_at). */
+function lastConfirmedIso(row: LiveStreamRow): string | null {
+  return row.cf_confirmed_at !== undefined ? row.cf_confirmed_at ?? null : row.checked_at;
 }
 
 /**
@@ -357,6 +389,15 @@ export async function syncLiveStreams(options: { force?: boolean } = {}): Promis
           const uid = lifeUid || (video ? String(video.uid) : null) || (row.is_live || resumed ? row.current_video_uid ?? null : null);
           // Čas potvrzení od Cloudflare (jen když už sloupec v databázi je).
           const confirmedNow = Object.prototype.hasOwnProperty.call(row, 'cf_confirmed_at') ? { cf_confirmed_at: nowIso } : {};
+          if (!row.is_live) {
+            logLiveEvent(row.owner_id, 'confirm', resumed ? 'zase živě - Cloudflare vidí tentýž přenos' : 'živě - Cloudflare potvrdil vysílání', {
+              'lifecycle (přijímá vysílání)': life ? life.live : 'nejde zjistit',
+              'v seznamu běžících': !!video,
+              'video': uid,
+              'konec minulého (s)': secondsSince(row.ended_at),
+              'appka hlásila (s)': secondsSince(row.app_ping_at),
+            });
+          }
           if (!row.is_live || row.current_video_uid !== uid) {
             await supabaseServer
               .from('live_streams')
@@ -381,6 +422,14 @@ export async function syncLiveStreams(options: { force?: boolean } = {}): Promis
             await supabaseServer.from('live_streams').update({ current_video_uid: null }).eq('owner_id', row.owner_id);
           }
         } else if (decision === 'end') {
+          logLiveEvent(row.owner_id, 'end', 'ukončeno - Cloudflare přenos nevidí', {
+            'lifecycle (přijímá vysílání)': life ? life.live : 'nejde zjistit',
+            'v seznamu běžících': !!video,
+            'appka hlásila (s)': secondsSince(row.app_ping_at),
+            'appce se věří': appSignalTrusted(row),
+            'Cloudflare naposledy potvrdil (s)': secondsSince(lastConfirmedIso(row)),
+            'začátek (s)': secondsSince(row.started_at),
+          });
           await endStream(row, nowIso);
         }
       }
@@ -470,6 +519,7 @@ export async function appLiveSignal(
   };
 
   if (action === 'stopped') {
+    if (row.is_live) logLiveEvent(ownerId, 'stop', 'ukončeno v appce (Ukončit)', { 'začátek (s)': secondsSince(row.started_at) });
     await write({ ...stopPatch, ended_at: row.is_live ? nowIso : row.ended_at });
     // Záznam rovnou na Kine, když si to tvůrce zapnul (studio / appka).
     const published = row.is_live ? await autoPublishAfterStream(ownerId) : null;
@@ -479,6 +529,12 @@ export async function appLiveSignal(
   const wasLive = row.is_live;
   // Ukončený přenos (appkou nebo pro dlouhé nepotvrzení) oživí jen "začal jsem", ne "pořád vysílám".
   const revive = action === 'started' || wasLive || !!row.app_ping_at;
+  if (action === 'started') {
+    logLiveEvent(ownerId, 'start', wasLive ? 'appka začala vysílat (přenos už byl živě)' : 'appka začala vysílat', {
+      'konec minulého (s)': secondsSince(row.ended_at),
+      'databáze má sloupec app_ping_at': migrated,
+    });
+  }
   if (revive) {
     await write({
       app_ping_at: nowIso,
@@ -499,6 +555,11 @@ export async function appLiveSignal(
 
   if (migrated && after?.is_live && !confirmed && !appSignalTrusted(after)) {
     // Cloudflare přenos dlouho nevidí (špatný klíč, nic se neposílá...) - z "Živě" pryč.
+    logLiveEvent(ownerId, 'unconfirmed', 'ukončeno - appka hlásí vysílání, ale Cloudflare ho minuty nevidí (špatný klíč? nic nejde ven?)', {
+      'začátek (s)': secondsSince(after.started_at),
+      'Cloudflare naposledy potvrdil (s)': secondsSince(lastConfirmedIso(after)),
+      'vstup Cloudflare': after.cf_input_id,
+    });
     await write({ ...stopPatch, ended_at: nowIso });
     return { confirmed: false, migrated, viewers: null };
   }

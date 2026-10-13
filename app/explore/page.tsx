@@ -8,6 +8,7 @@ import { buildVideoBlocks, isSpark } from '@/lib/videoBlocks';
 import { computeTrustRatingClient } from '@/lib/trustRatingClient';
 import { useLanguage } from '@/lib/i18n';
 import { useWatchProgress } from '@/lib/useWatchProgress';
+import { VideoBlockRow } from '@/components/SparksShelf';
 
 type Tab = 'popular' | 'trending' | 'newest' | 'shorts' | 'surprise';
 
@@ -180,7 +181,7 @@ function ExploreInner() {
         </div>
       ) : (
         buildVideoBlocks(videos).map((block, bi) => (
-          <div key={bi} className={block.type === 'sparks' ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 20 }}>
+          <VideoBlockRow key={bi} type={block.type} style={{ marginBottom: 20 }}>
             {block.items.map((video: any) => (
               <VideoCard
                 key={video.id}
@@ -190,7 +191,7 @@ function ExploreInner() {
                 progressPercent={watchProgress[video.id]}
               />
             ))}
-          </div>
+          </VideoBlockRow>
         ))
       )}
     </div>

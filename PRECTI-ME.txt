@@ -1,3 +1,105 @@
+KINE - hledání s filtry u pole, Sparks až ke kraji, odznaky, animované profilovky, víc vzhledu,
+nové vítání, pravidla, diagnostika živého vysílání (dodávka kine-filtry-odznaky-2026-10-12)
+==========================================================================================
+
+Web + appka (Kine do PC / Kine Clipper 0.10.2). V Supabase ani na Vercelu nic nenastavuješ.
+- Web: rozbal kine-web-filtry-odznaky.zip do kořene repa Kine a přepiš, nahraj na GitHub
+  (přetažením - i s novou složkou public/fonts) a pusť node zkontroluj-soubory.mjs.
+- Appka: rozbal kine-desktop-0.10.2.zip do kořene repa kine-desktop, nahraj a pusť Vydání.
+
+ŽIVÉ VYSÍLÁNÍ: "v appce jsem online, ale na druhém účtu se nevidím"
+- Proč přesně, se odsud zjistit nedá (do ostré databáze ani na Cloudflare nevidím). Proto
+  je tu teď nástroj, který to řekne: Živě - diagnostika (/admin/live; v menu ho vidí jen tým
+  Kine, tedy i tvůj účet). U každého přenosu ukáže, jestli ho vidí ostatní a když ne, proč
+  (shadow-ban, zablokovaný účet, skryté kontrolou obsahu, offline), co hlásí appka (kdy
+  naposledy), co Cloudflare (přijímá signál? je v seznamu běžících?), jak by o přenosu
+  rozhodl server a deník: začal / potvrzen / skončil (proč) / skryté kontrolou.
+- Co udělat: pusť vysílání z appky, na svém účtu otevři Živě - diagnostika, počkej ~30 s,
+  klikni "Kopírovat přehled" a pošli mi to. Podle toho to opravím napřímo.
+- Deník se zapisuje do hlášení chyb (druh "live"), v /admin/errors je jako
+  "živé vysílání - deník". lib/liveEvents.ts, app/api/admin/live, app/admin/live.
+
+SPARKS NA HLAVNÍ STRÁNCE
+- Řada Sparks končí u pravého kraje stejně jako videa: spočítá se, kolik karet se vejde
+  (200-280 px), řádek je vyplní a zbytek je pod "Zobrazit víc (N)"; nahoře "Všechny Sparks".
+  Platí všude, kde se Sparks míchají s videi (hlavní, Prozkoumat, kanál, video, hashtag...).
+
+HLEDÁNÍ
+- Rozšířené hledání se otevírá hned pod polem (dřív u pravého kraje obrazovky). Filtry:
+  tvůrci (všichni / rating 80 %+), typ (vše / videa / Sparks), nahráno, délka, řazení
+  a nově kategorie. Počet zapnutých filtrů je na ikoně, "Vymazat filtry" je vrátí.
+- Na stránce výsledků jsou nově i přepínače "Tvůrci: Všichni / Rating 80 %+" a výběr
+  kategorie. Pole i panel se na výsledcích otevřou s tím, co právě platí.
+- V sekcích (Historie, Tvoje videa...) Enter dál hledá v sekci; s filtry na celém Kine.
+
+ANIMOVANÉ PROFILOVKY A BANNERY
+- Nastavení -> Profil: jde nahrát animovaný GIF nebo WebP (i APNG), profilovka do 4 MB,
+  banner do 8 MB (jiné typy a větší soubory to slušně odmítne).
+- U animace se nahraje i první snímek. V seznamech (chat, menu, hledání, video, odběry...)
+  je vidět snímek a animace hraje po najetí myší; na kanálu hraje pořád.
+- Vzhled -> "Animované profilovky a bannery": vždy / po najetí / nikdy. Klidný režim
+  nebo "omezit pohyb" v systému animace vypne. lib/animatedImage.ts, components/ProfileImage.tsx.
+
+VZHLED (k tomu, co už je)
+- Písmo: Kine (Inter), systémové, zaoblené, patkové, strojové - každá volba je napsaná
+  svým písmem. Písma jsou v public/fonts (licence OFL), stáhnou se až po zvolení.
+- Rozestupy: úsporné / normální / vzdušné.
+- Vysoký kontrast (světlejší vedlejší text, výraznější okraje).
+- Náhled videa po najetí myší jde vypnout.
+- Sklo má 4 nové barvy: Polární záře, Cukrová vata, Žhavé uhlíky, Bez barev.
+
+ODZNAKY (první verze)
+- Pod jménem kanálu: zhlédnutí (1 000+ ... 10 mil.+), odběratelé (100+ ...), videa (první
+  video, 10+ ...), Sparks (10+ ...), Streamer (vysílal živě), roky na Kine a Průkopník
+  (registrace do konce 2026). Vyšší stupeň = výraznější barva. Majitel kanálu vidí i "Další
+  odznak: ... (chybí X)". Nic se neukládá - počítá se z kanálu. lib/badges.ts.
+- "Nováček" a hvězda za rating 90 %+ u jména jsou teď ikony místo emoji.
+
+PRVNÍ REGISTRACE
+- Registrace: vlevo co Kine je (videa a Sparks, živě, klipy z her, svoboda slova), vpravo
+  formulář. Jméno se kontroluje hned při psaní (obsazené / neplatné / volné), heslo jde
+  ukázat, odkaz na přihlášení. Na telefonu napřed formulář.
+- Po registraci průvodce /welcome v jednom okně: 1) pravidla v kostce (v jazyce appky),
+  2) k čemu Kine chceš, 3) jak hodnotit, 4) co sleduješ radši - s tečkami postupu, Zpět
+  a Přeskočit (zůstane výchozí). Na konci rozcestník: prozkoumat, nahrát první video
+  (tvůrci), kdo je živě, vzhled, appka do PC. Ikony místo emoji. Kdo už má něco vyplněné,
+  začne u prvního chybějícího kroku. Staré adresy (/agree-to-rules, /choose-purpose,
+  /choose-rating-mode, /choose-content-preference) sem přesměrují.
+
+PRAVIDLA, PODMÍNKY, OCHRANA ÚDAJŮ
+- Přepsané česky i anglicky (česky pro češtinu a slovenštinu, nahoře přepínač), podle toho,
+  co Kine opravdu dělá: živé vysílání a chat, podpory a předplatné (Stripe), Kine Plus,
+  Kine do PC a Kine Clipper, automatická kontrola obsahu a titulky, kdo údaje zpracovává
+  (Supabase, Cloudflare, Vercel, Stripe, GitHub, Google), práva podle GDPR, ČOI pro
+  spotřebitele. Kontakt jen kinesupport@gmail.com. Zmizelo "[add date]" a "pracovní verze".
+- Svoboda slova zůstává základ (názor se hodnotí, nemaže); zakázané věci jsou vypsané.
+- Nejsem právník - viz zpráva (co by stálo za kontrolu, až Kine poroste). lib/legal.ts.
+
+KINE DO PC / KINE CLIPPER 0.10.2 (zip kine-desktop-0.10.2.zip, pak Vydání)
+- Zvuk hry i u Logitech G HUB, Razer Synapse, Oculus, Steam Streaming - jako v OBS: když
+  zvuk nejde otevřít běžnou cestou, appka sama pustí pomocníka, který zařízení otevře jako
+  OBS (WASAPI loopback v jeho formátu, 7.1 -> stereo). Kamarád nemusí nic nastavovat.
+  V Nastavení -> Záznam -> Zvuk je vidět "přímo z Windows (jako v OBS)".
+- Přehrávač klipu: ikona celé obrazovky vpravo dole jako u videí na Kine (dovnitř i ven),
+  přes celou obrazovku zůstávají šipky na další klip. Dvojklik a F fungují dál.
+- Podrobně v README.md (Novinky 0.10.2).
+
+OVĚŘENO
+- web: tsc, next build, unit testy (nové: animatedImage, badges, welcome; filtry hledání
+  s kategorií, vzhled), prohlížeč: Sparks až ke kraji, panel filtrů pod polem (počítač
+  i telefon), výsledky s kategorií a ratingem, diagnostika živě, odznaky, animace
+  profilovky (snímek / po najetí / nikdy), vzhled (písmo se opravdu stáhne a platí,
+  kontrast, rozestupy, vypnuté náhledy), průvodce (kroky, Zpět, Přeskočit, uložení),
+  registrace (obsazené/volné jméno), pravidla CS/EN + starší testy stránek.
+- appka: unit testy (nové: protokol pomocníka, převod formátů v C# 5 přes mono, celý
+  skript v PowerShellu), e2e Kine do PC, Kine Clipper, zvuk, falešný pomocník (tón 440 Hz
+  ze "zařízení 7.1" je v klipu, posun zvuku srovnaný), celá obrazovka skutečnými kliky.
+
+==========================================================================================
+PŘEDCHOZÍ DODÁVKA (kine-sparks-zive-2026-10-12) - už nahraná, nic z toho znovu
+nedělej.
+==========================================================================================
+
 KINE - Sparks na vlastním přehrávači, Živě: přenos skrytý napořád (dodávka kine-sparks-zive-2026-10-12)
 ======================================================================================================
 

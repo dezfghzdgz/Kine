@@ -13,6 +13,38 @@ import UiIcon, { type UiIconName } from '@/components/UiIcon';
 import { PanelHeading, WithHelp } from '@/components/HelpTip';
 import { ThumbsDownIcon, ThumbsUpIcon } from '@/components/ReactionIcons';
 import { SETTINGS_SECTION_EVENT } from '@/lib/settingsNav';
+import ProfileImage from '@/components/ProfileImage';
+import {
+  PROFILE_IMAGE_MAX_BYTES,
+  STILL_MAX_SIDE,
+  isAnimatedImage,
+  profileImageExtension,
+  profileImagePaths,
+  type ProfileImageKind,
+} from '@/lib/animatedImage';
+
+const PROFILE_IMAGE_ACCEPT = 'image/gif,image/webp,image/png,image/apng,image/jpeg,image/avif';
+
+/** První snímek obrázku (u animace) jako statický WebP - na seznamy, kde animace hraje až po najetí. */
+async function stillFrame(file: Blob, maxSide: number): Promise<Blob | null> {
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    return null;
+  }
+  const scale = Math.min(1, maxSide / Math.max(1, bitmap.width), maxSide / Math.max(1, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  // Safari WebP neumí uložit - dá PNG (i to je v pořádku, typ jde s ním).
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), 'image/webp', 0.88));
+}
 
 /**
  * Nastavení po oddílech: nahoře řada ikon (profil, vzhled, domovská
@@ -218,55 +250,79 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Profilovka / banner: GIF, WebP, PNG (i animované), JPEG, AVIF do 4 / 8 MB.
+   * Soubor jde nahoru tak, jak je (animace zůstane); u animace se k ní
+   * nahraje i první snímek (lib/animatedImage.ts - seznamy ho ukazují,
+   * dokud na něj nenajedeš myší).
+   */
+  async function uploadProfileImage(kind: ProfileImageKind, file: File): Promise<string | null> {
+    if (!userId) return null;
+    const failed = kind === 'avatar' ? t('settingsPhotoFailed') : t('settingsBannerFailed');
+    const extension = profileImageExtension(file.type);
+    if (!extension) {
+      setToast({ message: `${failed}: ${t('profileImageType')}`, type: 'error' });
+      return null;
+    }
+    const maxBytes = PROFILE_IMAGE_MAX_BYTES[kind];
+    if (file.size > maxBytes) {
+      setToast({ message: `${failed}: ${t('profileImageTooBig').replace('{mb}', String(Math.round(maxBytes / 1024 / 1024)))}`, type: 'error' });
+      return null;
+    }
+    const bucket = kind === 'avatar' ? 'avatars' : 'banners';
+    const animated = isAnimatedImage(new Uint8Array(await file.arrayBuffer()));
+    const paths = profileImagePaths(userId, kind, extension, animated);
+    if (paths.still) {
+      // První snímek napřed - jakmile je v profilu adresa animace, seznamy ho hned chtějí.
+      const still = await stillFrame(file, STILL_MAX_SIDE[kind]);
+      if (still) {
+        const { error } = await supabase.storage.from(bucket).upload(paths.still, still, { upsert: true, contentType: still.type || 'image/webp' });
+        if (error) {
+          setToast({ message: `${failed}: ${error.message}`, type: 'error' });
+          return null;
+        }
+      } else {
+        // Snímek nejde vytáhnout (prohlížeč animaci neumí přečíst) - starý snímek z minulé
+        // animace pryč, jinak by ho seznamy ukazovaly; bez něj ukážou rovnou animaci.
+        await supabase.storage.from(bucket).remove([paths.still]);
+      }
+    }
+    const { error: uploadError } = await supabase.storage.from(bucket).upload(paths.main, file, { upsert: true, contentType: file.type });
+    if (uploadError) {
+      setToast({ message: `${failed}: ${uploadError.message}`, type: 'error' });
+      return null;
+    }
+    const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(paths.main);
+    const url = `${publicUrlData.publicUrl}?t=${Date.now()}`;
+    const { error: saveError } = await supabase.from('profiles').update(kind === 'avatar' ? { avatar_url: url } : { banner_url: url }).eq('id', userId);
+    if (saveError) {
+      setToast({ message: `${failed}: ${saveError.message}`, type: 'error' });
+      return null;
+    }
+    return url;
+  }
+
   async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file || !userId) return;
-
     setUploading(true);
-    const filePath = `${userId}/avatar.${file.name.split('.').pop()}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, file, { upsert: true });
-
-    if (uploadError) {
-      setToast({ message: `${t('settingsPhotoFailed')}: ${uploadError.message}`, type: 'error' });
-      setUploading(false);
-      return;
-    }
-
-    const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
-    const newAvatarUrl = `${publicUrlData.publicUrl}?t=${Date.now()}`;
-
-    await supabase.from('profiles').update({ avatar_url: newAvatarUrl }).eq('id', userId);
-
-    setAvatarUrl(newAvatarUrl);
+    const url = await uploadProfileImage('avatar', file);
     setUploading(false);
+    if (!url) return;
+    setAvatarUrl(url);
     setToast({ message: t('settingsPhotoUpdated'), type: 'success' });
   }
 
   async function handleBannerChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file || !userId) return;
-
     setUploadingBanner(true);
-    const filePath = `${userId}/banner.${file.name.split('.').pop()}`;
-
-    const { error: uploadError } = await supabase.storage.from('banners').upload(filePath, file, { upsert: true });
-
-    if (uploadError) {
-      setToast({ message: `${t('settingsBannerFailed')}: ${uploadError.message}`, type: 'error' });
-      setUploadingBanner(false);
-      return;
-    }
-
-    const { data: publicUrlData } = supabase.storage.from('banners').getPublicUrl(filePath);
-    const newBannerUrl = `${publicUrlData.publicUrl}?t=${Date.now()}`;
-
-    await supabase.from('profiles').update({ banner_url: newBannerUrl }).eq('id', userId);
-
-    setBannerUrl(newBannerUrl);
+    const url = await uploadProfileImage('banner', file);
     setUploadingBanner(false);
+    if (!url) return;
+    setBannerUrl(url);
     setToast({ message: t('settingsBannerUpdated'), type: 'success' });
   }
 
@@ -390,27 +446,29 @@ export default function SettingsPage() {
           <div className="panel">
             <PanelHeading icon="image" title={t('channelBannerLabel')} />
             <div className="settings-banner">
-              {bannerUrl ? <img loading="lazy" decoding="async" src={bannerUrl} alt="" /> : null}
+              {bannerUrl ? <ProfileImage src={bannerUrl} animate="always" /> : null}
             </div>
             <label htmlFor="banner-upload" className="settings-file-button">
               <UiIcon name="upload" size={16} />
               <span>{uploadingBanner ? t('uploadingBanner') : t('uploadBanner')}</span>
-              <input id="banner-upload" type="file" accept="image/*" onChange={handleBannerChange} disabled={uploadingBanner} style={{ display: 'none' }} />
+              <input id="banner-upload" type="file" accept={PROFILE_IMAGE_ACCEPT} onChange={handleBannerChange} disabled={uploadingBanner} style={{ display: 'none' }} />
             </label>
+            <p className="settings-hint">{t('profileImageAnimatedHint').replace('{mb}', '8')}</p>
           </div>
 
           <div className="panel">
             <PanelHeading icon="user" title={t('profilePhotoLabel')} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
               <div className="creator-avatar" style={{ width: 72, height: 72, overflow: 'hidden' }}>
-                {avatarUrl ? <img loading="lazy" decoding="async" src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                {avatarUrl ? <ProfileImage src={avatarUrl} animate="always" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
               </div>
               <label htmlFor="avatar-upload" className="settings-file-button">
                 <UiIcon name="camera" size={16} />
                 <span>{uploading ? t('uploadingPhoto') : t('uploadNewPhoto')}</span>
-                <input id="avatar-upload" type="file" accept="image/*" onChange={handleAvatarChange} disabled={uploading} style={{ display: 'none' }} />
+                <input id="avatar-upload" type="file" accept={PROFILE_IMAGE_ACCEPT} onChange={handleAvatarChange} disabled={uploading} style={{ display: 'none' }} />
               </label>
             </div>
+            <p className="settings-hint">{t('profileImageAnimatedHint').replace('{mb}', '4')}</p>
           </div>
 
           <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

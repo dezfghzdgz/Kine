@@ -14,7 +14,10 @@
  *  - pohyb barev: barevné pozadí skla se pomalu přelévá,
  *  - vlastní obrázek za sklem (jako tapeta) a jak moc ho rozmazat,
  *  - velikost písma, zaoblení rohů, velikost karet videí a klidný režim
- *    (bez animací).
+ *    (bez animací),
+ *  - písmo (Inter, systémové, zaoblené, patkové, strojové), rozestupy
+ *    (úsporné / normální / vzdušné), vysoký kontrast, náhledy videí po
+ *    najetí myší a kdy hrají animované profilovky (vždy / po najetí / nikdy).
  *
  * Ukládá se do zařízení (localStorage), ne k účtu - jako na YouTube: na
  * televizi chceš možná jiný vzhled než na telefonu. Kine do PC má web
@@ -26,16 +29,22 @@
  * a CSS (app/globals.css, oddíl VZHLED):
  *   data-theme="gray|light", data-look="glass", data-backdrop="...",
  *   data-ambient="1|0", data-motion="1", data-text="s|l",
- *   data-corners="sharp|round", data-cards="s|l", data-calm="1"
+ *   data-corners="sharp|round", data-cards="s|l", data-calm="1",
+ *   data-font="system|rounded|serif|mono", data-density="compact|comfy",
+ *   data-contrast="1", data-previews="0", data-anim="always|never"
  *   a proměnné --glass-k (síla skla 0-1) a --blur-k (rozmazání obrázku 0-1).
  */
 
 export type Theme = 'dark' | 'gray' | 'light';
 export type Look = 'classic' | 'glass';
-export type Backdrop = 'auto' | 'brand' | 'night' | 'sunset' | 'forest' | 'ocean' | 'neon' | 'image';
+export type Backdrop = 'auto' | 'brand' | 'night' | 'sunset' | 'forest' | 'ocean' | 'neon' | 'aurora' | 'candy' | 'ember' | 'mono' | 'image';
 export type TextSize = 's' | 'm' | 'l';
 export type Corners = 'sharp' | 'normal' | 'round';
 export type CardSize = 's' | 'm' | 'l';
+export type FontChoice = 'inter' | 'system' | 'rounded' | 'serif' | 'mono';
+export type Density = 'compact' | 'normal' | 'comfy';
+/** Kdy hrají animované profilovky a bannery (lib/animatedImage.ts). */
+export type AvatarMotion = 'always' | 'hover' | 'never';
 
 export type Appearance = {
   look: Look;
@@ -58,14 +67,27 @@ export type Appearance = {
   cards: CardSize;
   /** Klidný režim: bez animací a přechodů (i když systém o omezení pohybu neví). */
   calm: boolean;
+  /** Písmo celé appky. */
+  font: FontChoice;
+  /** Rozestupy: úsporné (víc obsahu na obrazovce), normální, vzdušné. */
+  density: Density;
+  /** Vysoký kontrast: světlejší vedlejší text a výraznější okraje. */
+  contrast: boolean;
+  /** Náhled videa po najetí myší na kartu. */
+  previews: boolean;
+  /** Animované profilovky a bannery: vždy / po najetí myší / nikdy. */
+  avatars: AvatarMotion;
 };
 
 export const THEMES: readonly Theme[] = ['dark', 'gray', 'light'];
 export const LOOKS: readonly Look[] = ['classic', 'glass'];
-export const BACKDROPS: readonly Backdrop[] = ['auto', 'brand', 'night', 'sunset', 'forest', 'ocean', 'neon', 'image'];
+export const BACKDROPS: readonly Backdrop[] = ['auto', 'brand', 'night', 'sunset', 'forest', 'ocean', 'neon', 'aurora', 'candy', 'ember', 'mono', 'image'];
 export const TEXT_SIZES: readonly TextSize[] = ['s', 'm', 'l'];
 export const CORNERS: readonly Corners[] = ['sharp', 'normal', 'round'];
 export const CARD_SIZES: readonly CardSize[] = ['s', 'm', 'l'];
+export const FONTS: readonly FontChoice[] = ['inter', 'system', 'rounded', 'serif', 'mono'];
+export const DENSITIES: readonly Density[] = ['compact', 'normal', 'comfy'];
+export const AVATAR_MOTIONS: readonly AvatarMotion[] = ['always', 'hover', 'never'];
 
 export const THEME_KEY = 'kine-theme';
 export const APPEARANCE_KEY = 'kine-appearance';
@@ -86,6 +108,11 @@ export const DEFAULT_APPEARANCE: Appearance = {
   corners: 'normal',
   cards: 'm',
   calm: false,
+  font: 'inter',
+  density: 'normal',
+  contrast: false,
+  previews: true,
+  avatars: 'hover',
 };
 
 export function parseTheme(value: unknown): Theme {
@@ -109,6 +136,11 @@ export function sanitizeAppearance(raw: unknown): Appearance {
     corners: CORNERS.includes(r.corners as Corners) ? (r.corners as Corners) : DEFAULT_APPEARANCE.corners,
     cards: CARD_SIZES.includes(r.cards as CardSize) ? (r.cards as CardSize) : DEFAULT_APPEARANCE.cards,
     calm: typeof r.calm === 'boolean' ? r.calm : DEFAULT_APPEARANCE.calm,
+    font: FONTS.includes(r.font as FontChoice) ? (r.font as FontChoice) : DEFAULT_APPEARANCE.font,
+    density: DENSITIES.includes(r.density as Density) ? (r.density as Density) : DEFAULT_APPEARANCE.density,
+    contrast: typeof r.contrast === 'boolean' ? r.contrast : DEFAULT_APPEARANCE.contrast,
+    previews: typeof r.previews === 'boolean' ? r.previews : DEFAULT_APPEARANCE.previews,
+    avatars: AVATAR_MOTIONS.includes(r.avatars as AvatarMotion) ? (r.avatars as AvatarMotion) : DEFAULT_APPEARANCE.avatars,
   };
 }
 
@@ -127,6 +159,11 @@ export function appearanceAttributes(theme: Theme, a: Appearance): { attrs: Reco
       'data-corners': a.corners === 'normal' ? null : a.corners,
       'data-cards': a.cards === 'm' ? null : a.cards,
       'data-calm': a.calm ? '1' : null,
+      'data-font': a.font === 'inter' ? null : a.font,
+      'data-density': a.density === 'normal' ? null : a.density,
+      'data-contrast': a.contrast ? '1' : null,
+      'data-previews': a.previews ? null : '0',
+      'data-anim': a.avatars === 'hover' ? null : a.avatars,
     },
     glassK: String(a.strength / 100),
     blurK: String(a.blur / 100),
@@ -279,7 +316,7 @@ export function onAmbientSource(fn: (url: string | null) => void): () => void {
  * ještě před prvním vykreslením. Schválně samostatný a malý - nesmí nic
  * importovat a při jakékoli chybě nechá výchozí vzhled.
  */
-export const APPEARANCE_BOOT_SCRIPT = `(function(){try{var d=document.documentElement,s=window.localStorage;var t=s.getItem('${THEME_KEY}');if(t==='gray'||t==='light'||t==='dark')d.setAttribute('data-theme',t);var a=null;try{a=JSON.parse(s.getItem('${APPEARANCE_KEY}')||'null')}catch(e){}a=a&&typeof a==='object'?a:{};if(a.look==='glass')d.setAttribute('data-look','glass');var b=${JSON.stringify(BACKDROPS)};d.setAttribute('data-backdrop',b.indexOf(a.backdrop)>=0?a.backdrop:'auto');d.setAttribute('data-ambient',a.ambient===false?'0':'1');if(a.motion===true)d.setAttribute('data-motion','1');if(a.text==='s'||a.text==='l')d.setAttribute('data-text',a.text);if(a.corners==='sharp'||a.corners==='round')d.setAttribute('data-corners',a.corners);if(a.cards==='s'||a.cards==='l')d.setAttribute('data-cards',a.cards);if(a.calm===true)d.setAttribute('data-calm','1');var k=Number(a.strength);d.style.setProperty('--glass-k',String((isFinite(k)?Math.max(0,Math.min(100,k)):${DEFAULT_APPEARANCE.strength})/100));var u=Number(a.blur);d.style.setProperty('--blur-k',String((isFinite(u)?Math.max(0,Math.min(100,u)):${DEFAULT_APPEARANCE.blur})/100))}catch(e){}})();`;
+export const APPEARANCE_BOOT_SCRIPT = `(function(){try{var d=document.documentElement,s=window.localStorage;var t=s.getItem('${THEME_KEY}');if(t==='gray'||t==='light'||t==='dark')d.setAttribute('data-theme',t);var a=null;try{a=JSON.parse(s.getItem('${APPEARANCE_KEY}')||'null')}catch(e){}a=a&&typeof a==='object'?a:{};if(a.look==='glass')d.setAttribute('data-look','glass');var b=${JSON.stringify(BACKDROPS)};d.setAttribute('data-backdrop',b.indexOf(a.backdrop)>=0?a.backdrop:'auto');d.setAttribute('data-ambient',a.ambient===false?'0':'1');if(a.motion===true)d.setAttribute('data-motion','1');if(a.text==='s'||a.text==='l')d.setAttribute('data-text',a.text);if(a.corners==='sharp'||a.corners==='round')d.setAttribute('data-corners',a.corners);if(a.cards==='s'||a.cards==='l')d.setAttribute('data-cards',a.cards);if(a.calm===true)d.setAttribute('data-calm','1');var f=${JSON.stringify(FONTS)};if(a.font!=='inter'&&f.indexOf(a.font)>=0)d.setAttribute('data-font',a.font);if(a.density==='compact'||a.density==='comfy')d.setAttribute('data-density',a.density);if(a.contrast===true)d.setAttribute('data-contrast','1');if(a.previews===false)d.setAttribute('data-previews','0');if(a.avatars==='always'||a.avatars==='never')d.setAttribute('data-anim',a.avatars);var k=Number(a.strength);d.style.setProperty('--glass-k',String((isFinite(k)?Math.max(0,Math.min(100,k)):${DEFAULT_APPEARANCE.strength})/100));var u=Number(a.blur);d.style.setProperty('--blur-k',String((isFinite(u)?Math.max(0,Math.min(100,u)):${DEFAULT_APPEARANCE.blur})/100))}catch(e){}})();`;
 
 /**
  * Snímek z videa v daném čase (Cloudflare umí náhled odkudkoli z videa) -

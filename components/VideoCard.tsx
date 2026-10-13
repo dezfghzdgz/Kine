@@ -142,6 +142,8 @@ function VideoCard({
 
   function startHover() {
     if (!video.cloudflare_video_id || upcomingPremiere) return;
+    // Náhledy po najetí vypnuté v Nastavení -> Vzhled.
+    if (document.documentElement.getAttribute('data-previews') === '0') return;
     // Neveřejné video (soukromé, pro odběratele) hraje jen s podepsaným
     // tokenem (lib/streamProtection.ts) - náhled po najetí by skončil
     // chybou Cloudflare. Bez viditelnosti v datech se bere jako veřejné.

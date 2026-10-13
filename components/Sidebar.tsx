@@ -20,6 +20,7 @@ import {
   HowToIcon, HeartHandIcon, SportsIcon, ScienceIcon, EducationIcon,
   EntertainmentIcon, NewsIcon, PetIcon,
 } from './ReactionIcons';
+import ProfileImage from './ProfileImage';
 
 function baseLinks(t: (key: any) => string) {
   return [
@@ -253,6 +254,12 @@ export default function Sidebar() {
             🐞 {t('clientErrorsLabel')}
           </Link>
         )}
+        {(isModerator || isAdmin) && (
+          <Link href="/admin/live" className={`sidebar-link ${pathname === '/admin/live' ? 'active' : ''}`}>
+            <span className="sidebar-live-icon" aria-hidden="true" />
+            {t('liveDiagnosticsLabel')}
+          </Link>
+        )}
         {/* Co je Kine a naše appky - pro každého, i nepřihlášeného. */}
         <Link href="/about" className={`sidebar-link sidebar-about ${pathname === '/about' ? 'active' : ''}`}>
           <AboutIcon />
@@ -300,7 +307,7 @@ export default function Sidebar() {
       {user ? (
         <Link href="/channel/me" className="mobile-nav-item">
           <span className="mobile-nav-avatar">
-            {user.avatar_url ? <img loading="lazy" decoding="async" src={user.avatar_url} alt="" /> : <ProfileIcon />}
+            {user.avatar_url ? <ProfileImage src={user.avatar_url} /> : <ProfileIcon />}
           </span>
         </Link>
       ) : (
@@ -458,6 +465,12 @@ export default function Sidebar() {
           {isAdmin && (
             <Link href="/admin/errors" className="sidebar-link" onClick={closeMobileNav}>
               🐞 {t('clientErrorsLabel')}
+            </Link>
+          )}
+          {(isModerator || isAdmin) && (
+            <Link href="/admin/live" className="sidebar-link" onClick={closeMobileNav}>
+              <span className="sidebar-live-icon" aria-hidden="true" />
+              {t('liveDiagnosticsLabel')}
             </Link>
           )}
           {isAdmin && (

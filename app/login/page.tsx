@@ -108,13 +108,10 @@ export default function LoginPage() {
             color: '#3a5a8a',
             is_system: true,
           });
-          redirectTo = '/agree-to-rules';
-        } else if (!account?.agreed_to_rules) {
-          redirectTo = '/agree-to-rules';
-        } else if (!existingProfile.rating_mode) {
-          redirectTo = '/choose-rating-mode';
-        } else if (!existingProfile.content_preference) {
-          redirectTo = '/choose-content-preference';
+          redirectTo = '/welcome';
+        } else if (!account?.agreed_to_rules || !existingProfile.rating_mode || !existingProfile.content_preference) {
+          // Průvodce vítáním začne u prvního nevyplněného kroku (lib/welcome.ts).
+          redirectTo = '/welcome';
         }
       }
 

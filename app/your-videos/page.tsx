@@ -8,6 +8,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { buildVideoBlocks } from '@/lib/videoBlocks';
+import { VideoBlockRow } from '@/components/SparksShelf';
 
 function YourVideosPageInner() {
   const { t } = useLanguage();
@@ -159,7 +160,7 @@ function YourVideosPageInner() {
     <div>
       <p className="section-title">{t('yourVideosTitle')}</p>
       {buildVideoBlocks(filtered).map((block, bi) => (
-        <div key={bi} className={block.type === 'sparks' ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 20 }}>
+        <VideoBlockRow key={bi} type={block.type} style={{ marginBottom: 20 }}>
           {block.items.map((video: any) => (
             <div key={video.id} style={{ width: '100%' }}>
               <Link href={`/watch/${video.id}`} className="video-card">
@@ -193,7 +194,7 @@ function YourVideosPageInner() {
               </div>
             </div>
           ))}
-        </div>
+        </VideoBlockRow>
       ))}
 
       {confirmVideoId && (

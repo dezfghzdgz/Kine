@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { buildVideoBlocks } from '@/lib/videoBlocks';
 import WatchCalendar, { dayKey } from '@/components/WatchCalendar';
 import { videoCountLabel } from '@/lib/plural';
+import { VideoBlockRow } from '@/components/SparksShelf';
 
 type Tab = 'liked' | 'disliked' | 'star5' | 'star4' | 'star3' | 'star2' | 'star1' | 'history';
 
@@ -157,7 +158,7 @@ function ActivityPageInner() {
 
   function renderVideoGrid(list: any[]) {
     return buildVideoBlocks(list).map((block, bi) => (
-      <div key={bi} className={block.type === 'sparks' ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 20 }}>
+      <VideoBlockRow key={bi} type={block.type} style={{ marginBottom: 20 }}>
         {block.items.map((video: any) => (
           <Link
             href={block.type === 'sparks' ? `/sparks?start=${video.id}` : `/watch/${video.id}`}
@@ -176,7 +177,7 @@ function ActivityPageInner() {
             </p>
           </Link>
         ))}
-      </div>
+      </VideoBlockRow>
     ));
   }
 

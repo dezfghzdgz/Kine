@@ -1,11 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import Toast, { ToastType } from '@/components/Toast';
 import { useLanguage } from '@/lib/i18n';
 import { validateUsername } from '@/lib/username';
+import UiIcon, { type UiIconName } from '@/components/UiIcon';
+
+/** "%" a "_" jsou v ILIKE zástupné znaky - jméno se porovnává doslova (bez ohledu na velikost písmen, jako v databázi). */
+function escapeLike(text: string): string {
+  return text.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+const PITCH: { icon: UiIconName; title: 'signupPitchVideosTitle' | 'signupPitchLiveTitle' | 'signupPitchClipsTitle' | 'signupPitchFreeTitle'; text: 'signupPitchVideos' | 'signupPitchLive' | 'signupPitchClips' | 'signupPitchFree' }[] = [
+  { icon: 'film', title: 'signupPitchVideosTitle', text: 'signupPitchVideos' },
+  { icon: 'broadcast', title: 'signupPitchLiveTitle', text: 'signupPitchLive' },
+  { icon: 'gamepad', title: 'signupPitchClipsTitle', text: 'signupPitchClips' },
+  { icon: 'chat', title: 'signupPitchFreeTitle', text: 'signupPitchFree' },
+];
 
 export default function SignupPage() {
   const router = useRouter();
@@ -17,6 +31,31 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  /** Je jméno volné? null = nevíme (prázdné, neplatné, ještě se ptáme). */
+  const [nameFree, setNameFree] = useState<boolean | null>(null);
+
+  // Volné jméno se ověří hned při psaní (s malou prodlevou), ne až po odeslání.
+  useEffect(() => {
+    setNameFree(null);
+    const name = username.trim();
+    if (!name || validateUsername(name)) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const { count, error: lookupError } = await supabase
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .ilike('username', escapeLike(name));
+      // Bez čísla (síť, cizí odpověď) se nic netvrdí - rozhodne databáze při registraci.
+      if (!cancelled && !lookupError && typeof count === 'number') setNameFree(count === 0);
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [username]);
+
+  const usernameProblem = username.trim() ? validateUsername(username) : null;
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
@@ -75,7 +114,7 @@ export default function SignupPage() {
       });
 
       setToast({ message: t('signupSuccess'), type: 'success' });
-      setTimeout(() => router.push('/agree-to-rules'), 900);
+      setTimeout(() => router.push('/welcome'), 900);
       return;
     }
 
@@ -87,65 +126,93 @@ export default function SignupPage() {
   return (
     <>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      <form className="form-container" onSubmit={handleSignup}>
-        <h1>{t('createAccount')}</h1>
-        <div>
+      <div className="signup">
+        {/* Co Kine je - aby registrace nebyla jen formulář bez kontextu. */}
+        <aside className="signup-pitch">
+          <p className="signup-kicker">Kine</p>
+          <h2>{t('signupPitchTitle')}</h2>
+          <ul>
+            {PITCH.map((p) => (
+              <li key={p.icon}>
+                <span className="signup-pitch-icon" aria-hidden="true">
+                  <UiIcon name={p.icon} size={20} />
+                </span>
+                <span>
+                  <b>{t(p.title)}</b>
+                  <span>{t(p.text)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </aside>
+
+        <form className="signup-form" onSubmit={handleSignup}>
+          <h1>{t('createAccount')}</h1>
+          <div>
+            <input
+              type="text"
+              placeholder={t('username')}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              aria-invalid={!!usernameProblem || nameFree === false}
+              required
+            />
+            <p className={`signup-hint ${usernameProblem || nameFree === false ? 'bad' : nameFree ? 'good' : ''}`}>
+              {usernameProblem ? t(usernameProblem) : nameFree === false ? t('signupNameTaken') : nameFree ? t('signupNameFree') : t('usernameHint')}
+            </p>
+          </div>
+          <div>
+            <input type="email" placeholder={t('email')} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
+            <p className="signup-hint">{t('emailHint')}</p>
+          </div>
+          <div>
+            <div className="signup-password">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder={t('password') + ' (min. 6)'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                minLength={6}
+                autoComplete="new-password"
+                required
+              />
+              <button
+                type="button"
+                className="signup-eye"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? t('signupHidePassword') : t('signupShowPassword')}
+                title={showPassword ? t('signupHidePassword') : t('signupShowPassword')}
+              >
+                <UiIcon name={showPassword ? 'lock' : 'eye'} size={16} />
+              </button>
+            </div>
+            <p className="signup-hint">{t('passwordHint')}</p>
+          </div>
           <input
-            type="text"
-            placeholder={t('username')}
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-          />
-          <p style={{ fontSize: 11.5, color: 'var(--text-faint)', marginTop: 4 }}>
-            {t('usernameHint')}
-          </p>
-        </div>
-        <div>
-          <input
-            type="email"
-            placeholder={t('email')}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <p style={{ fontSize: 11.5, color: 'var(--text-faint)', marginTop: 4 }}>
-            {t('emailHint')}
-          </p>
-        </div>
-        <div>
-          <input
-            type="password"
-            placeholder={t('password') + ' (min. 6)'}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            type={showPassword ? 'text' : 'password'}
+            placeholder={t('repeatPassword')}
+            value={passwordConfirm}
+            onChange={(e) => setPasswordConfirm(e.target.value)}
             minLength={6}
+            autoComplete="new-password"
             required
           />
-          <p style={{ fontSize: 11.5, color: 'var(--text-faint)', marginTop: 4 }}>
-            {t('passwordHint')}
+          <label className="signup-agree">
+            <input type="checkbox" required />
+            <span>
+              {t('agreeToTerms')} <a href="/terms" target="_blank">{t('termsOfService')}</a> {t('and')} <a href="/privacy" target="_blank">{t('privacyPolicy')}</a>.
+            </span>
+          </label>
+          {error && <p className="error-text">{error}</p>}
+          <button type="submit" className="signup-submit" disabled={loading || nameFree === false}>
+            {loading ? t('creatingAccount') : t('signUpButton')}
+          </button>
+          <p className="signup-login">
+            {t('haveAccount')} <Link href="/login">{t('loginLink')}</Link>
           </p>
-        </div>
-        <input
-          type="password"
-          placeholder={t('repeatPassword')}
-          value={passwordConfirm}
-          onChange={(e) => setPasswordConfirm(e.target.value)}
-          minLength={6}
-          required
-        />
-        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12.5, color: 'var(--text-dim)' }}>
-          <input type="checkbox" required style={{ width: 'auto', marginTop: 3 }} />
-          <span>
-            {t('agreeToTerms')} <a href="/terms" target="_blank" style={{ color: 'var(--text)' }}>{t('termsOfService')}</a> {t('and')}{' '}
-            <a href="/privacy" target="_blank" style={{ color: 'var(--text)' }}>{t('privacyPolicy')}</a>.
-          </span>
-        </label>
-        {error && <p className="error-text">{error}</p>}
-        <button type="submit" disabled={loading}>
-          {loading ? t('creatingAccount') : t('signUpButton')}
-        </button>
-      </form>
+        </form>
+      </div>
     </>
   );
 }
