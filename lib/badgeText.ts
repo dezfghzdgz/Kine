@@ -1,5 +1,5 @@
 import { DATE_LOCALES, type DictKey, type Lang } from './i18n';
-import type { Badge, BadgeId } from './badges';
+import { isSpecialBadge, type Badge, type BadgeId } from './badges';
 import type { UiIconName } from '@/components/UiIcon';
 
 /**
@@ -9,6 +9,13 @@ import type { UiIconName } from '@/components/UiIcon';
  */
 
 export const BADGE_ICONS: Record<BadgeId, UiIconName> = {
+  owner: 'starFilled',
+  dev: 'keyboard',
+  team: 'users',
+  moderator: 'shield',
+  betaTester: 'bolt',
+  partner: 'heart',
+  bugHunter: 'bug',
   early: 'sparkle',
   years: 'timer',
   videos: 'film',
@@ -30,6 +37,8 @@ export const BADGE_ICONS: Record<BadgeId, UiIconName> = {
  * Průkopník a Streamer mají vlastní.
  */
 export function badgeTierClass(b: Pick<Badge, 'id' | 'level'>): string {
+  // Speciální (od týmu Kine) - vlastní vzhled, Majitel ještě zvlášť.
+  if (isSpecialBadge(b.id)) return `tier-special special-${b.id}`;
   if (b.id === 'early') return 'tier-pioneer';
   if (b.id === 'streamer') return 'tier-live';
   return `tier-${Math.max(0, Math.min(Number.isFinite(b.level) ? b.level : 0, 7))}`;
@@ -65,6 +74,20 @@ export function badgeTexts(t: T, lang: Lang) {
 
   const label = (id: BadgeId, value: number): string => {
     switch (id) {
+      case 'owner':
+        return t('badgeOwner');
+      case 'dev':
+        return t('badgeDev');
+      case 'team':
+        return t('badgeTeam');
+      case 'moderator':
+        return t('badgeModerator');
+      case 'betaTester':
+        return t('badgeBetaTester');
+      case 'partner':
+        return t('badgePartner');
+      case 'bugHunter':
+        return t('badgeBugHunter');
       case 'early':
         return t('badgeEarly');
       case 'streamer':
@@ -96,6 +119,20 @@ export function badgeTexts(t: T, lang: Lang) {
 
   const tip = (id: BadgeId, value: number): string => {
     switch (id) {
+      case 'owner':
+        return t('badgeOwnerTip');
+      case 'dev':
+        return t('badgeDevTip');
+      case 'team':
+        return t('badgeTeamTip');
+      case 'moderator':
+        return t('badgeModeratorTip');
+      case 'betaTester':
+        return t('badgeBetaTesterTip');
+      case 'partner':
+        return t('badgePartnerTip');
+      case 'bugHunter':
+        return t('badgeBugHunterTip');
       case 'early':
         return t('badgeEarlyTip');
       case 'streamer':
@@ -128,6 +165,20 @@ export function badgeTexts(t: T, lang: Lang) {
   /** Název řady pro sbírku (u zamčené řady bez čísla). */
   const series = (id: BadgeId): string => {
     switch (id) {
+      case 'owner':
+        return t('badgeOwner');
+      case 'dev':
+        return t('badgeDev');
+      case 'team':
+        return t('badgeTeam');
+      case 'moderator':
+        return t('badgeModerator');
+      case 'betaTester':
+        return t('badgeBetaTester');
+      case 'partner':
+        return t('badgePartner');
+      case 'bugHunter':
+        return t('badgeBugHunter');
       case 'early':
         return t('badgeEarly');
       case 'streamer':

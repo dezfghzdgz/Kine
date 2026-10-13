@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { PAYMENTS_ENABLED, PAYMENTS_OFF } from '@/lib/payments';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isMissingTable, userFromRequest } from '@/lib/apiUser';
 import { tipFeePercent, TIP_LIMITS } from '@/lib/liveTips';
@@ -58,6 +59,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  // Placení zatím neběží (lib/payments.ts) - nic se nezaplatí ani omylem.
+  if (!PAYMENTS_ENABLED) return NextResponse.json(PAYMENTS_OFF, { status: 503 });
   const user = await userFromRequest(req);
   if (!user) return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });
   const body = await req.json().catch(() => ({}));

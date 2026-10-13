@@ -11660,3 +11660,192 @@ button.secondary {
 button.secondary:hover:not(:disabled) {
   background-color: var(--glass-fill-strong-hover);
 }
+
+/* ---------- Přehrávač živého vysílání (components/LivePlayer.tsx) ---------- */
+/* Prohlížeč nepustil zvuk bez kliknutí - přenos jede ztlumeně, tlačítko nahoře vlevo
+   (dole má přehrávač Cloudflare vlastní ovládání). */
+.live-unmute-btn {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 7;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  background: rgba(12, 12, 15, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), var(--shadow-md);
+  color: #fff;
+  font-weight: 600;
+  animation: content-fade-in var(--dur-3) var(--ease) both;
+}
+
+.live-unmute-btn:hover {
+  background: rgba(20, 20, 24, 0.85);
+}
+
+/* Zamrzlý obraz - přehrávač se načítá znovu. */
+.live-recovering {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 7;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  background: rgba(12, 12, 15, 0.72);
+  color: #fff;
+  font-size: var(--fs-sm);
+  pointer-events: none;
+}
+
+.live-recovering-spin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  animation: player-loading-spin 0.9s linear infinite;
+}
+
+/* Vysílání hlášené z appky, Cloudflare ho ještě nepotvrdil - místo stojícího obrázku. */
+.live-connecting {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 14px;
+  text-align: center;
+  padding: 24px;
+  border-radius: var(--radius-lg);
+  background: radial-gradient(circle at 50% 40%, #1b1530, #0b0b0e 70%);
+  color: var(--text-dim);
+}
+
+.live-connecting p {
+  margin: 0;
+  max-width: 420px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-recovering-spin {
+    animation-duration: 2.4s;
+  }
+}
+
+/* ---------- Připravujeme (placení zatím neběží - lib/payments.ts) ---------- */
+.coming-soon-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--brand);
+  background: rgba(var(--brand-rgb, 0, 201, 167), 0.12);
+  box-shadow: inset 0 0 0 1px rgba(var(--brand-rgb, 0, 201, 167), 0.35);
+  white-space: nowrap;
+}
+
+.coming-soon {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.coming-soon > .ui-icon {
+  color: var(--brand);
+  flex: none;
+  margin-top: 2px;
+}
+
+.coming-soon-title {
+  margin: 0;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.coming-soon-text {
+  margin: 4px 0 0;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+}
+
+/* ---------- Speciální odznaky od týmu Kine (lib/badges.ts - SPECIAL_BADGES) ---------- */
+.tier-special { --tier-a: #93c5fd; --tier-b: #1d4ed8; --tier-text: #bfdbfe; }
+.special-owner { --tier-a: #fde68a; --tier-b: #b45309; --tier-text: #fde68a; }
+.special-dev { --tier-a: #86efac; --tier-b: #15803d; --tier-text: #bbf7d0; }
+.special-team { --tier-a: #7dd3fc; --tier-b: #0369a1; --tier-text: #bae6fd; }
+.special-moderator { --tier-a: #a5b4fc; --tier-b: #4338ca; --tier-text: #c7d2fe; }
+.special-betaTester { --tier-a: #f0abfc; --tier-b: #a21caf; --tier-text: #f5d0fe; }
+.special-partner { --tier-a: #fda4af; --tier-b: #be123c; --tier-text: #fecdd3; }
+.special-bugHunter { --tier-a: #fdba74; --tier-b: #c2410c; --tier-text: #fed7aa; }
+.tier-special .badge-medal,
+.badge-medal.tier-special {
+  color: #fff;
+}
+/* Majitel: zlatý lesk (jako diamant), ať je na první pohled vidět. */
+.badge-medal.special-owner::after,
+.special-owner .badge-medal::after {
+  content: '';
+  position: absolute;
+  inset: -40%;
+  background: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, 0.6) 50%, transparent 60%);
+  transform: translateX(-60%);
+  animation: badge-shine 3.6s ease-in-out infinite;
+}
+.badge-pill.special-owner {
+  box-shadow: inset 0 0 0 1px rgba(253, 230, 138, 0.55), 0 0 14px rgba(245, 158, 11, 0.25);
+}
+.badge-modal-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ---------- Správce: speciální odznaky (app/admin/badges) ---------- */
+.admin-badges-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+.admin-badges-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.admin-badges-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 180px;
+}
+.admin-badges-handle {
+  display: block;
+  font-size: var(--fs-sm);
+  color: var(--text-faint);
+}
+.admin-badges-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.admin-badges-chips .badge-pill {
+  cursor: pointer;
+  border: none;
+}
+.admin-badges-chips .badge-pill.admin-badge-off {
+  opacity: 0.6;
+}
+.admin-badges-chips .badge-pill:disabled {
+  cursor: progress;
+}

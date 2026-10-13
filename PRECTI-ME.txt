@@ -1,3 +1,75 @@
+KINE - živé vysílání (zamrzlý obraz, "živě" po konci, mazání záznamu), placení
+"Připravujeme", odznaky (žádný / speciální), bez diagnostiky Živě; appka 0.10.5
+(dodávka kine-zive-odznaky-2026-10-13)
+==========================================================================================
+
+Web + appka (Kine do PC / Kine Clipper 0.10.5).
+- Web: rozbal kine-web-zive-odznaky.zip do kořene repa Kine a přepiš, nahraj na GitHub
+  (přetažením) a pusť node zkontroluj-soubory.mjs.
+- Supabase -> SQL Editor: supabase-migration-zive-odznaky.sql (konec vysílání z appky platí,
+  speciální odznaky; účtu bezejmena dá odznak Majitel Kine). Bez ní web běží dál, jen bez
+  speciálních odznaků a konec vysílání se pozná jako dřív.
+- Appka: rozbal kine-desktop-0.10.5.zip do kořene repa kine-desktop, nahraj a pusť Vydání.
+  Nejdřív web (a migrace), pak appka - Zahodit záznam a hlídání obrazu potřebují nový web.
+- Na GitHubu smaž (drag & drop nemaže): app/admin/live/page.tsx a app/api/admin/live/route.ts
+  (diagnostika Živě) a z dřívějška tests/username.test.mjs, supabase-migration-zarizeni-
+  chyby-jmena.sql, app/tests/playerStart.test.mjs, kine-web-live.patch, CTI-ME.txt.
+- Placení zapneš později jednou proměnnou: Vercel -> Environment Variables
+  NEXT_PUBLIC_PAYMENTS = 1 a Redeploy. Vrátí se Kine Plus, Podpořit Kine, předplatné kanálu,
+  podpory ve vysílání i výplaty - kód zůstal.
+
+ŽIVĚ: ZAMRZLÝ OBRAZ
+- Stránka přenosu hlídá, že obraz běží. Když 20 s stojí, přehrávač se načte znovu sám
+  ("Obnovuji přenos…"), další pokusy s odstupem. Když prohlížeč nepustí zvuk bez kliknutí,
+  přenos jede ztlumeně a nahoře je "Zapnout zvuk" (dřív stál první snímek). Přehrávač vstupu
+  se už nevymění za náhradní adresu, kdyby ji server jednou poslal (zbytečné načítání znovu).
+- Dokud Cloudflare přenos nepotvrdí a server nezná kód zákazníka, stránka ukáže "Přenos právě
+  začíná" místo přehrávače, který by mohl ukazovat jen stojící obrázek. Kód zákazníka Cloudflare
+  si server teď zjistí sám (NEXT_PUBLIC_STREAM_CUSTOMER_CODE ve Vercelu to jen zrychlí).
+- Appka 0.10.5 si sama ověřuje, že diváci obraz vidí: čte playlist vysílání u Cloudflare
+  (jako divák) a v záložce Živě ukáže "Diváci tě vidí". Když u Cloudflare nepřibývají nové
+  kousky (zamrzlý obraz), přepne se do kompatibilního režimu: ffmpeg obraz zakóduje znovu
+  (pevné snímky za sekundu, klíčový snímek každé 2 s - jako OBS) a když to pomůže, zapamatuje
+  si to. Jde i ručně: Živě -> Jak vysílat -> Kompatibilní režim vysílání.
+
+ŽIVĚ: PO KONCI POŘÁD "ŽIVĚ"
+- Ukončit v appce platí hned a napořád. Cloudflare po odpojení ještě minuty hlásí záznam jako
+  běžící a Kine ho po 90 s "oživilo" - teď se tentýž záznam po Ukončit sám nevrátí (jen nové
+  vysílání). Konec se zapíše vždy (dřív jen u přenosu, který Kine mělo jako živý) a appka
+  "skončil jsem" pošle znovu, když napoprvé nedojde.
+
+ZÁZNAM VYSÍLÁNÍ: ZAHODIT
+- Zahodit v appce už nekončí "Nevím, který záznam to byl": appka zná id záznamu z průběhu
+  vysílání, a když ne, Kine najde záznamy z času tohohle vysílání (i víc, když se vysílání na
+  déle přerušilo) a smaže je. Záznam, který Cloudflare po konci ještě zakládá nebo uzavírá,
+  se zkouší smazat znovu (až 3 minuty, "Mažu záznam…"). Ani studio na webu už neodmítá
+  smazat záznam jen proto, že ho Kine po konci ještě mělo za běžící.
+- Čas vysílání se počítá v čase serveru (appka pošle i své hodiny), takže záznam se najde,
+  i když hodiny v počítači jdou jinak, a záznam minulého krátkého vysílání těsně před tímhle
+  se nesmaže s ním.
+
+PLACENÍ: PŘIPRAVUJEME
+- Podpořit Kine zmizelo z menu i ze stránky O Kine (/donate ukáže "Připravujeme"); Kine Plus
+  má "Připravujeme" a žádná tlačítka; Nastavení -> Výdělky a studio -> Podpory taky; tlačítko
+  podpory ve vysílání, "Jen podpory" ve čtení chatu a předplatné kanálu nejsou. Platební cesty
+  na serveru odpoví 503 - nic se nezaplatí ani omylem. V appce je místo odkazu na Plus štítek
+  "Připravujeme".
+
+ODZNAKY
+- Ve sbírce (tužka u odznaků) je "Žádný na kanálu" - kanál pak nemá žádný odznak.
+- Speciální odznaky od týmu Kine: Majitel Kine, Vývojář, Tým Kine, Moderátor, Beta tester,
+  Partner, Lovec chyb (vlastní barvy, Majitel zlatý s leskem). Přiděluješ je v menu správce
+  -> Speciální odznaky (/admin/badges): najdi uživatele a klikni na odznak. Na kanálu jsou
+  první (dokud si majitel nevybere jinak) a dotyčný dostane oslavu a oznámení jako u každého
+  nového odznaku. Sám si je nikdo dát nemůže (zapisuje jen server). Účtu "bezejmena" dá
+  migrace Majitele Kine; když se tvůj účet jmenuje jinak, přiděl si ho na /admin/badges.
+
+DIAGNOSTIKA ŽIVĚ PRYČ
+- /admin/live i odkazy v menu jsou pryč; deník živého vysílání se už nezapisuje do databáze,
+  jen do logu Vercelu (hledat "Kine živě").
+
+==========================================================================================
+
 KINE - rychlost, mobilní data, příspěvky a ankety, odznaky (8 stupňů), vzhled (vzor
 a předvolby), komentáře, přepis, obraz v obraze; appka: klipy samy z Rocket League
 (dodávka kine-rychlost-posty-odznaky-2026-10-13)

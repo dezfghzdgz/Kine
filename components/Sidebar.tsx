@@ -14,6 +14,7 @@ import SparksNavButton from './SparksNavButton';
 import { useUserRole } from '@/lib/useUserRole';
 import { isInDesktopApp } from '@/lib/desktopRelease';
 import { useLiveCount } from '@/lib/useLiveCount';
+import { PAYMENTS_ENABLED } from '@/lib/payments';
 import {
   FireIcon, SparkleIcon, DiceIcon,
   CarIcon, PlaneIcon, FilmIcon, GamepadIcon, MusicIcon, ComedyIcon, BlogIcon,
@@ -234,7 +235,8 @@ export default function Sidebar() {
             {t('goLiveLink')}
           </Link>
         )}
-        {user && (
+        {/* Podpora Kine (platba) - až poběží placení (lib/payments.ts). */}
+        {user && PAYMENTS_ENABLED && (
           <Link href="/donate" className={`sidebar-link ${pathname === '/donate' ? 'active' : ''}`}>
             <DonateIcon />
             {t('donateSidebarLabel')}
@@ -258,10 +260,10 @@ export default function Sidebar() {
             {t('clientErrorsLabel')}
           </Link>
         )}
-        {(isModerator || isAdmin) && (
-          <Link href="/admin/live" className={`sidebar-link ${pathname === '/admin/live' ? 'active' : ''}`}>
-            <span className="sidebar-live-icon" aria-hidden="true" />
-            {t('liveDiagnosticsLabel')}
+        {isAdmin && (
+          <Link href="/admin/badges" className={`sidebar-link ${pathname === '/admin/badges' ? 'active' : ''}`}>
+            <UiIcon name="trophy" size={20} />
+            {t('specialBadgesAdminLabel')}
           </Link>
         )}
         {/* Co je Kine a naše appky - pro každého, i nepřihlášeného. */}
@@ -430,7 +432,7 @@ export default function Sidebar() {
               {t('goLiveLink')}
             </Link>
           )}
-          {user && (
+          {user && PAYMENTS_ENABLED && (
             <Link href="/donate" className="sidebar-link" onClick={closeMobileNav}>
               <DonateIcon />
               {t('donateSidebarLabel')}
@@ -474,10 +476,10 @@ export default function Sidebar() {
               {t('clientErrorsLabel')}
             </Link>
           )}
-          {(isModerator || isAdmin) && (
-            <Link href="/admin/live" className="sidebar-link" onClick={closeMobileNav}>
-              <span className="sidebar-live-icon" aria-hidden="true" />
-              {t('liveDiagnosticsLabel')}
+          {isAdmin && (
+            <Link href="/admin/badges" className="sidebar-link" onClick={closeMobileNav}>
+              <UiIcon name="trophy" size={20} />
+              {t('specialBadgesAdminLabel')}
             </Link>
           )}
           {isAdmin && (

@@ -5,6 +5,7 @@ import { publicLive, syncLiveStreamsForViewers, type LiveStreamRow } from '@/lib
 import type { LiveRestriction } from '@/lib/liveNow';
 import { liveHiddenNow } from '@/lib/nudityRules';
 import { runInBackground } from '@/lib/background';
+import { PAYMENTS_ENABLED } from '@/lib/payments';
 import { tipTarget } from '@/lib/liveTipsServer';
 import { tipFeePercent } from '@/lib/liveTips';
 
@@ -102,7 +103,7 @@ export async function GET(req: NextRequest) {
     const privileged = own || (await isStaff());
     if (!privileged) {
       return NextResponse.json(
-        { enabled: true, live: true, held: true, profile: publicProfile, stream: { ...stream, playerUrl: null, inputId: null, videoUid: null, thumbnailUrl: null } },
+        { enabled: true, live: true, held: true, profile: publicProfile, stream: { ...stream, playerUrl: null, hlsUrl: null, inputId: null, videoUid: null, thumbnailUrl: null } },
         { headers: { 'Cache-Control': 'no-store' } }
       );
     }
@@ -112,7 +113,8 @@ export async function GET(req: NextRequest) {
     );
   }
   // Podpory ve vysílání (tlačítko 💛 u přenosu): jen když kanál běží a umí je přijmout.
-  const tips = stream.live ? { enabled: await tipsEnabled(channel), feePercent: tipFeePercent(process.env.LIVE_TIP_FEE_PERCENT) } : { enabled: false, feePercent: 0 };
+  // Podpory ve vysílání jsou placené - dokud placení neběží (lib/payments.ts), nejsou.
+  const tips = stream.live && PAYMENTS_ENABLED ? { enabled: await tipsEnabled(channel), feePercent: tipFeePercent(process.env.LIVE_TIP_FEE_PERCENT) } : { enabled: false, feePercent: 0 };
   // Po vysílání: odkaz na záznam (když ho tvůrce zveřejnil) - kdo přišel pozdě, pustí si ho.
   const lastRecording = stream.live ? null : await latestRecording(channel);
   return NextResponse.json(

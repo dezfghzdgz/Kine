@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { PAYMENTS_ENABLED, PAYMENTS_OFF } from '@/lib/payments';
 import { stripeServer } from '@/lib/stripeServer';
 import { siteUrlFrom } from '@/lib/siteUrl';
 import { userFromRequest } from '@/lib/apiUser';
@@ -7,6 +8,8 @@ import { userFromRequest } from '@/lib/apiUser';
 // appky konkrétního tvůrce - to appka řešit později v rámci většího
 // systému předplatných).
 export async function POST(req: NextRequest) {
+  // Placení zatím neběží (lib/payments.ts) - nic se nezaplatí ani omylem.
+  if (!PAYMENTS_ENABLED) return NextResponse.json(PAYMENTS_OFF, { status: 503 });
   try {
     const { amountEur, amountCzk } = await req.json();
 

@@ -11,7 +11,27 @@
  * Čistá logika - má test (tests/badges.test.mjs).
  */
 
+/**
+ * Speciální odznaky - nepočítají se, přiděluje je tým Kine (/admin/badges,
+ * tabulka profile_special_badges): Majitel, Vývojář, Tým Kine, Moderátor,
+ * Beta tester, Partner, Lovec chyb. Na kanálu jsou první (dokud si majitel
+ * kanálu nevybere jinak - i "žádný").
+ */
+export const SPECIAL_BADGES = ['owner', 'dev', 'team', 'moderator', 'betaTester', 'partner', 'bugHunter'] as const;
+export type SpecialBadgeId = (typeof SPECIAL_BADGES)[number];
+
+export function isSpecialBadge(value: unknown): value is SpecialBadgeId {
+  return typeof value === 'string' && (SPECIAL_BADGES as readonly string[]).includes(value);
+}
+
+/** Speciální odznaky z databáze: jen známé, bez opakování, v pevném pořadí. */
+export function sanitizeSpecial(value: unknown): SpecialBadgeId[] {
+  if (!Array.isArray(value)) return [];
+  return SPECIAL_BADGES.filter((id) => value.includes(id));
+}
+
 export type BadgeId =
+  | SpecialBadgeId
   | 'early'
   | 'years'
   | 'videos'
@@ -50,6 +70,8 @@ export type BadgeStats = {
   comments?: number;
   /** Přijaté spolupráce na cizích videích. */
   collabs?: number;
+  /** Speciální odznaky od týmu Kine (Majitel, Beta tester...). */
+  special?: readonly string[];
 };
 
 export type Badge = { id: BadgeId; /** Stupeň v řadě (0 = první). */ level: number; /** Číslo do textu: hranice stupně (10 videí, 1000 zhlédnutí, 2 roky). */ value: number };
@@ -80,15 +102,15 @@ type Tiered = keyof typeof BADGE_TIERS;
 
 const YEAR_MS = 365.25 * 24 * 3600 * 1000;
 
-/** Pořadí na kanálu: nejdřív to, co o tvůrci říká nejvíc. */
-const ORDER: BadgeId[] = ['subscribers', 'views', 'hit', 'likes', 'videos', 'sparks', 'streamHours', 'streamer', 'posts', 'comments', 'collabs', 'years', 'early'];
+/** Pořadí na kanálu: nejdřív speciální (od týmu Kine), pak to, co o tvůrci říká nejvíc. */
+const ORDER: BadgeId[] = [...SPECIAL_BADGES, 'subscribers', 'views', 'hit', 'likes', 'videos', 'sparks', 'streamHours', 'streamer', 'posts', 'comments', 'collabs', 'years', 'early'];
 
 /**
  * Pořadí pro odznaky na kanálu, dokud tvůrce sám nic nevybral: původní řady
  * v původním pořadí, nové až za nimi. Kanálům se tak nové řady nepřehodily
  * (a "Hit" se neukazuje hned vedle skoro stejného "N+ zhlédnutí").
  */
-const DEFAULT_SHOWCASE_ORDER: BadgeId[] = ['subscribers', 'views', 'videos', 'sparks', 'streamer', 'years', 'early', 'likes', 'streamHours', 'posts', 'comments', 'collabs', 'hit'];
+const DEFAULT_SHOWCASE_ORDER: BadgeId[] = [...SPECIAL_BADGES, 'subscribers', 'views', 'videos', 'sparks', 'streamer', 'years', 'early', 'likes', 'streamHours', 'posts', 'comments', 'collabs', 'hit'];
 
 /** Řady, které se u "dalšího odznaku" nabízejí až když v nich tvůrce něco má (jinak by "0 z 1" strašilo každého). */
 const OPTIONAL_SERIES: readonly Tiered[] = ['sparks', 'streamHours', 'posts', 'comments', 'collabs', 'hit'];
@@ -126,6 +148,7 @@ export function computeBadges(stats: BadgeStats, now = Date.now()): Badge[] {
     if (level >= 0) out.push({ id: kind, level, value: tiers[level] });
   }
   if (stats.streamed) out.push({ id: 'streamer', level: 0, value: 1 });
+  for (const id of sanitizeSpecial(stats.special)) out.push({ id, level: 0, value: 1 });
   const joined = stats.joinedAt ? Date.parse(stats.joinedAt) : NaN;
   if (Number.isFinite(joined) && joined < EARLY_MEMBER_BEFORE) out.push({ id: 'early', level: 0, value: 1 });
   return out.sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
@@ -225,9 +248,10 @@ export type BadgeProgress = {
 
 export function badgeProgress(stats: BadgeStats, now = Date.now()): BadgeProgress[] {
   const earned = computeBadges(stats, now);
-  return ORDER.map((id) => {
+  // Speciální odznaky jsou ve sbírce jen u toho, kdo je má (zamčené by nikoho nemotivovaly).
+  return ORDER.filter((id) => !isSpecialBadge(id) || earned.some((b) => b.id === id)).map((id) => {
     const badge = earned.find((b) => b.id === id) ?? null;
-    if (id === 'early' || id === 'streamer') return { id, badge, tiers: 1, next: null, current: badge ? 1 : 0 };
+    if (id === 'early' || id === 'streamer' || isSpecialBadge(id)) return { id, badge, tiers: 1, next: null, current: badge ? 1 : 0 };
     const tiers = BADGE_TIERS[id];
     const value = current(stats, id, now);
     const next = tiers.find((t) => value < t) ?? null;

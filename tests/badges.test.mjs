@@ -133,5 +133,29 @@ test('sbírka: každá řada se stupněm, dalším cílem a postupem', () => {
   assert.equal(b.badgeProgress({ ...base, views: 1e12 }, NOW).find((x) => x.id === 'views').next, null);
 });
 
+test('speciální odznaky (od týmu Kine): jen známé, první na kanálu, ve sbírce jen u toho, kdo je má', () => {
+  const stats = { joinedAt: '2026-10-01T00:00:00Z', videos: 57, views: 12_345, subscribers: 1_000, sparks: 12, streamed: true, special: ['betaTester', 'nesmysl', 'owner', 'owner'] };
+  const earned = b.computeBadges(stats, NOW);
+  assert.deepEqual(earned.slice(0, 2).map((x) => x.id), ['owner', 'betaTester'], 'v pevném pořadí, bez nesmyslu a opakování');
+  // dokud majitel kanálu nevybíral: speciální první
+  assert.deepEqual(b.showcaseBadges(earned, null).map((x) => x.id), ['owner', 'betaTester', 'subscribers']);
+  // schválně žádný = žádný (i speciální)
+  assert.deepEqual(b.showcaseBadges(earned, []).map((x) => x.id), []);
+  // vybrat jde i speciální; podvržený (nemá ho) se neukáže
+  assert.deepEqual(b.showcaseBadges(earned, ['views', 'owner']).map((x) => x.id), ['views', 'owner']);
+  assert.deepEqual(b.showcaseBadges(b.computeBadges({ ...stats, special: [] }, NOW), ['owner', 'views']).map((x) => x.id), ['views']);
+  assert.equal(b.isSpecialBadge('dev'), true);
+  assert.equal(b.isSpecialBadge('views'), false);
+  assert.deepEqual(b.sanitizeSpecial(['partner', 'x', 'dev']), ['dev', 'partner']);
+  assert.deepEqual(b.sanitizeSpecial(null), []);
+  // sbírka: speciální jen ty, které má (zamčené ne)
+  const p = b.badgeProgress(stats, NOW).map((x) => x.id);
+  assert.deepEqual(p.slice(0, 2), ['owner', 'betaTester']);
+  assert.ok(!p.includes('dev'));
+  assert.ok(!b.badgeProgress({ ...stats, special: undefined }, NOW).some((x) => b.isSpecialBadge(x.id)));
+  // oznámení o novém (přidělený odznak = nový odznak)
+  assert.deepEqual(b.unseenBadges(earned, b.mergeSeen([], b.computeBadges({ ...stats, special: [] }, NOW))).map(b.badgeKey), ['owner:1', 'betaTester:1']);
+});
+
 console.log(`\n${prosly} prošlo, ${padly} padlo`);
 if (padly > 0) process.exit(1);

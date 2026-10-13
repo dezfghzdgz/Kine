@@ -9,6 +9,8 @@ import { fetchAllRows } from '@/lib/loadAll';
 import dynamic from 'next/dynamic';
 import UiIcon, { type UiIconName } from '@/components/UiIcon';
 import { ThumbsDownIcon, ThumbsUpIcon } from '@/components/ReactionIcons';
+import ComingSoon from '@/components/ComingSoon';
+import { PAYMENTS_ENABLED } from '@/lib/payments';
 
 // Grafy (knihovna recharts, ~100 kB) se stáhnou až po kliknutí na dlaždici - stránka
 // statistik se tak otevře o dost rychleji (dřív se stahovaly hned s ní).
@@ -786,6 +788,11 @@ export default function ChannelStatsPage() {
           <button className={`tab-btn ${earningsView === 'payout' ? 'active' : ''}`} onClick={() => setEarningsView('payout')}>
             {t('nextPayoutTab')}
           </button>
+          {!PAYMENTS_ENABLED && (
+            <span style={{ marginLeft: 'auto', alignSelf: 'center' }}>
+              <ComingSoon pill />
+            </span>
+          )}
         </div>
 
         {earningsView === 'chart' ? (

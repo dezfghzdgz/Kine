@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 import { allPriceLabels, hasPlus, normalizePlan, type PaidTier } from '@/lib/plus';
+import { PAYMENTS_ENABLED } from '@/lib/payments';
+import ComingSoon from '@/components/ComingSoon';
 
 /**
  * Předplatné Kine - tři varianty (lib/plus.ts):
@@ -67,7 +69,8 @@ function PlusPageInner() {
   const [me, setMe] = useState<{ plan: string | null; planUntil: string | null; loggedIn: boolean } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const prices = allPriceLabels();
+  // Placení zatím neběží (lib/payments.ts): bez cen jsou karty "Připravujeme" a nic se nekupuje.
+  const prices = PAYMENTS_ENABLED ? allPriceLabels() : { kine: null, clips: null, all: null };
 
   async function load() {
     const { data } = await supabase.auth.getUser();
@@ -158,6 +161,11 @@ function PlusPageInner() {
         <h1>{t('plusHeroTitle')}</h1>
         <p>{t('plusHeroText')}</p>
       </header>
+      {!PAYMENTS_ENABLED && (
+        <div style={{ marginBottom: 14 }}>
+          <ComingSoon text={t('comingSoonPlus')} />
+        </div>
+      )}
 
       {me?.loggedIn && active && (
         <div className="panel plus-status">
@@ -170,9 +178,11 @@ function PlusPageInner() {
             </p>
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button type="button" onClick={() => call('/api/plus/portal')} disabled={busy !== null}>
-              {t('plusManage')}
-            </button>
+            {PAYMENTS_ENABLED && (
+              <button type="button" onClick={() => call('/api/plus/portal')} disabled={busy !== null}>
+                {t('plusManage')}
+              </button>
+            )}
             <Link href="/download" className="reaction-btn" style={{ display: 'inline-flex', textDecoration: 'none' }}>
               {t('desktopAppLink')}
             </Link>

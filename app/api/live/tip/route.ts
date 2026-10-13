@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { PAYMENTS_ENABLED, PAYMENTS_OFF } from '@/lib/payments';
 import { stripeServer } from '@/lib/stripeServer';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isMissingTable, userFromRequest } from '@/lib/apiUser';
@@ -24,6 +25,8 @@ const MAX_PENDING_PER_10_MIN = 6;
  * chatu kanálu (zakázaná slova, zákaz psaní) - odkazy ve vzkazu nikdy.
  */
 export async function POST(req: NextRequest) {
+  // Placení zatím neběží (lib/payments.ts) - nic se nezaplatí ani omylem.
+  if (!PAYMENTS_ENABLED) return NextResponse.json(PAYMENTS_OFF, { status: 503 });
   const user = await userFromRequest(req);
   if (!user) return NextResponse.json({ error: 'Musíš být přihlášený.', code: 'login' }, { status: 401 });
   const body = await req.json().catch(() => ({}));

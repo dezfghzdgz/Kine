@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
+import { PAYMENTS_ENABLED } from '@/lib/payments';
+import ComingSoon from '@/components/ComingSoon';
 
 const PRESET_AMOUNTS = [2, 5, 10, 20];
 
@@ -51,6 +53,16 @@ export default function DonatePage() {
   }
 
   if (checkingAuth) return null;
+
+  // Podpora Kine (platba) zatím neběží - živnost se zakládá (lib/payments.ts).
+  if (!PAYMENTS_ENABLED) {
+    return (
+      <div style={{ maxWidth: 520 }}>
+        <p className="section-title">{t('donatePageTitle')}</p>
+        <ComingSoon />
+      </div>
+    );
+  }
 
   if (!userId) {
     return (

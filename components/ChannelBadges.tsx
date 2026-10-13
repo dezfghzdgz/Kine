@@ -154,7 +154,8 @@ function BadgeCollection({
     setPicked([...picked, id]);
   }
 
-  async function save() {
+  /** Uložit výběr (prázdný = na kanálu schválně žádný odznak). */
+  async function save(next: BadgeId[] = picked) {
     setSaving(true);
     setError(null);
     const { data: auth } = await supabase.auth.getUser();
@@ -162,13 +163,13 @@ function BadgeCollection({
       setSaving(false);
       return;
     }
-    const { error: saveError } = await supabase.from('profiles').update({ badge_showcase: picked }).eq('id', auth.user.id);
+    const { error: saveError } = await supabase.from('profiles').update({ badge_showcase: next }).eq('id', auth.user.id);
     setSaving(false);
     if (saveError) {
       setError(t('badgesSaveFailed').replace('{error}', saveError.message));
       return;
     }
-    onSaved(picked);
+    onSaved(next);
   }
 
   const unchanged = savedPick !== null && JSON.stringify(picked) === JSON.stringify(savedPick);
@@ -244,9 +245,24 @@ function BadgeCollection({
         {own && (
           <div className="badge-modal-actions">
             {error ? <p className="error-text badge-modal-error">{error}</p> : <span className="badge-modal-picked">{t('badgesShownCount').replace('{n}', String(picked.length)).replace('{max}', String(SHOWCASE_MAX))}</span>}
-            <button type="button" className="badge-modal-save" onClick={() => void save()} disabled={saving || unchanged}>
-              {saving ? '…' : t('save')}
-            </button>
+            <div className="badge-modal-buttons">
+              {/* Žádný odznak na kanálu - dřív šlo jen odznaky přehazovat, aspoň jeden zůstal vidět. */}
+              <button
+                type="button"
+                className="badge-modal-none"
+                onClick={() => {
+                  setPicked([]);
+                  setFull(false);
+                  void save([]);
+                }}
+                disabled={saving || (savedPick !== null && savedPick.length === 0)}
+              >
+                {t('badgesNoneButton')}
+              </button>
+              <button type="button" className="badge-modal-save" onClick={() => void save()} disabled={saving || unchanged}>
+                {saving ? '…' : t('save')}
+              </button>
+            </div>
           </div>
         )}
       </div>

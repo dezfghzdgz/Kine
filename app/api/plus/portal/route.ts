@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { PAYMENTS_ENABLED, PAYMENTS_OFF } from '@/lib/payments';
 import { stripeServer } from '@/lib/stripeServer';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { siteUrlFrom } from '@/lib/siteUrl';
@@ -9,6 +10,8 @@ import { siteUrlFrom } from '@/lib/siteUrl';
  * (Settings -> Billing -> Customer portal), jinak Stripe vrátí chybu.
  */
 export async function POST(req: NextRequest) {
+  // Placení zatím neběží (lib/payments.ts) - nic se nezaplatí ani omylem.
+  if (!PAYMENTS_ENABLED) return NextResponse.json(PAYMENTS_OFF, { status: 503 });
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
   if (!token) return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });
 

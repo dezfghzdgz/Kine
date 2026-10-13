@@ -18,6 +18,9 @@ import AmbientCanvas from '@/components/AmbientCanvas';
 import { useAppearance } from '@/lib/useAppearance';
 import ProfileImage from '@/components/ProfileImage';
 import UiIcon from '@/components/UiIcon';
+import LivePlayer from '@/components/LivePlayer';
+import { nextPlayerUrl } from '@/lib/livePlayback';
+import { PAYMENTS_ENABLED } from '@/lib/payments';
 
 type Status = {
   enabled: boolean;
@@ -37,7 +40,8 @@ type Status = {
     category: string | null;
     startedAt: string | null;
     endedAt: string | null;
-    playerUrl: string;
+    /** null = přehrávač zatím nejde (Cloudflare přenos ještě nepotvrdil). */
+    playerUrl: string | null;
     videoUid: string | null;
     /** Od kdy ukazovat chat - každé vysílání má svůj (lib/liveChat.ts). Starší server ho neposílá. */
     chatSince?: string | null;
@@ -93,7 +97,10 @@ export default function LivePage() {
         }
         setFailed(false);
         setStatus(body);
-        if (body.live && body.stream?.playerUrl) setPlayerUrl((current) => current ?? body.stream.playerUrl);
+        // Adresa přehrávače se mění jen s novým přenosem (nové video) nebo když se z náhradní
+        // stane adresa vstupu - stejná adresa iframe znovu nenačte (lib/livePlayback.ts).
+        const incomingUrl = body.live ? body.stream?.playerUrl ?? null : null;
+        if (incomingUrl) setPlayerUrl((current) => nextPlayerUrl(current, incomingUrl));
         if (!body.live) setPlayerUrl(null);
       } catch {
         if (!cancelled) setFailed(true);
@@ -191,7 +198,7 @@ export default function LivePage() {
             {t('liveStudioTitle')}
           </Link>
         )}
-        {!isOwner && status.live && status.tips?.enabled && (
+        {!isOwner && status.live && status.tips?.enabled && PAYMENTS_ENABLED && (
           <button type="button" className="live-tip-btn" onClick={() => setTipOpen(true)}>
             💛 {t('tipButton')}
           </button>
@@ -223,6 +230,27 @@ export default function LivePage() {
               <p>{t('liveHeldText')}</p>
             </div>
           </div>
+          {channelRow}
+        </div>
+        <LiveChat {...chatProps} />
+      </div>
+    );
+  }
+
+  if (status.live && !playerUrl) {
+    // Appka hlásí vysílání, Cloudflare ho ale ještě nepotvrdil - přehrávač by ukázal jen
+    // stojící obrázek. Stránka se ptá každých 6 s a přehrávač ukáže, jakmile to jde.
+    return (
+      <div className="live-layout">
+        <div className="live-main">
+          <div className="player-wrap live-player live-connecting" style={{ aspectRatio: '16/9' }} role="status">
+            <span className="player-loading-spinner" aria-hidden="true" />
+            <p>{t('liveConnecting')}</p>
+          </div>
+          <h1 className="video-title" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span className="live-pill">● {t('liveBadge')}</span>
+            {stream?.title || name}
+          </h1>
           {channelRow}
         </div>
         <LiveChat {...chatProps} />
@@ -281,15 +309,7 @@ export default function LivePage() {
           </div>
         )}
         <div className="live-player-ambient-host" style={{ position: 'relative' }}>
-          <div className="player-wrap live-player" style={{ aspectRatio: '16/9' }}>
-            <iframe
-              src={playerUrl}
-              style={{ width: '100%', height: '100%', border: 'none' }}
-              allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen;"
-              allowFullScreen
-              title={stream?.title || name}
-            />
-          </div>
+          <LivePlayer url={playerUrl} title={stream?.title || name} />
           {liveUid && (
             <div className="player-ambient" aria-hidden="true">
               <AmbientCanvas src={liveFrame ?? liveStill} />

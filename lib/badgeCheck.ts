@@ -1,6 +1,6 @@
 import { supabaseServer } from './supabaseServer';
 import { isSpark } from './videoBlocks';
-import { badgeKey, computeBadges, mergeSeen, unseenBadges, type Badge, type BadgeStats } from './badges';
+import { badgeKey, computeBadges, mergeSeen, sanitizeSpecial, unseenBadges, type Badge, type BadgeStats } from './badges';
 
 /**
  * Oznámení o nově odemčeném odznaku (lib/badges.ts).
@@ -71,7 +71,7 @@ export async function badgeStatsFor(userId: string, joinedAt: string | null, now
   const rows = await ownVideos(userId);
   if (!rows) return null;
   const published = rows.filter((v) => !v.scheduled_at || Date.parse(v.scheduled_at) <= now);
-  const [subs, streamed, likes, posts, comments, collabs, liveSeconds] = await Promise.all([
+  const [subs, streamed, likes, posts, comments, collabs, liveSeconds, special] = await Promise.all([
     supabaseServer.from('subscriptions').select('*', { count: 'exact', head: true }).eq('channel_id', userId),
     countOf(supabaseServer.from('videos').select('id', { count: 'exact', head: true }).eq('owner_id', userId).not('live_started_at', 'is', null)),
     // Lajky u vlastních videí (jedním dotazem přes vztah reakce -> video).
@@ -89,6 +89,11 @@ export async function badgeStatsFor(userId: string, joinedAt: string | null, now
     (async () => {
       const { data, error } = await supabaseServer.from('profiles').select('live_seconds').eq('id', userId).maybeSingle();
       return error ? 0 : Number((data as { live_seconds?: number | null } | null)?.live_seconds) || 0;
+    })(),
+    // Speciální odznaky od týmu Kine (tabulka z migrace zive-odznaky; bez ní žádné).
+    (async () => {
+      const { data, error } = await supabaseServer.from('profile_special_badges').select('badge').eq('profile_id', userId);
+      return error ? [] : sanitizeSpecial(((data ?? []) as { badge: string }[]).map((r) => r.badge));
     })(),
   ]);
   if (subs.error) return null;
@@ -108,6 +113,7 @@ export async function badgeStatsFor(userId: string, joinedAt: string | null, now
     posts,
     comments,
     collabs,
+    ...(special.length > 0 ? { special } : {}),
   };
 }
 

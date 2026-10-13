@@ -48,6 +48,58 @@ test('viditelnost záznamu: jen povolené hodnoty', () => {
   assert.equal(r.parseRecordingVisibility(null), null);
 });
 
+test('Zahodit podle času vysílání: záznamy z okna, bez zveřejněných a bez běžícího', () => {
+  const at = (minutes) => new Date(NOW - minutes * 60 * 1000).toISOString();
+  const list = [
+    { uid: 'pred', created: at(130) },        // dávno před vysíláním
+    { uid: 'kratke', created: at(63) },       // minulé krátké vysílání těsně před tímhle - zůstane
+    { uid: 'start', created: at(60.5) },      // Cloudflare ho založil chvíli před "vysílám" v appce
+    { uid: 'vypadek', created: at(30) },      // výpadek delší než minuta = druhý záznam
+    { uid: 'zverejneny', created: at(20) },   // už je video na Kine
+    { uid: 'po', created: at(1) },            // nové vysílání po konci
+    { uid: 'bezcasu', created: null },
+  ];
+  const window = { since: NOW - 60 * 60 * 1000, until: NOW - 10 * 60 * 1000 };
+  const picked = r.recordingsInWindow(list, window, { published: new Set(['zverejneny']) }).map((x) => x.uid);
+  assert.deepEqual(picked, ['start', 'vypadek']);
+  assert.deepEqual(r.recordingsInWindow(list, window, { keep: 'vypadek' }).map((x) => x.uid), ['start', 'zverejneny']);
+  assert.deepEqual(r.recordingsInWindow([], window), []);
+});
+
+test('okno vysílání: hodiny počítače jinak než server -> posun podle clientNow', () => {
+  // appce jdou hodiny o 5 min pozadu: server okno posune o +5 min
+  const skew = 5 * 60 * 1000;
+  assert.equal(r.clockSkew(NOW - skew, NOW), skew);
+  assert.equal(r.clockSkew(String(NOW + 2000), NOW), -2000);
+  assert.equal(r.clockSkew(undefined, NOW), 0);
+  assert.equal(r.clockSkew('x', NOW), 0);
+  assert.equal(r.clockSkew(NOW - 8 * 86400e3, NOW), 0, 'nesmysl (víc než týden) se nebere');
+  const w = r.parseStreamWindow(NOW - 3600e3 - skew, NOW - 60e3 - skew, NOW, NOW - skew);
+  assert.deepEqual(w, { since: NOW - 3600e3, until: NOW - 60e3 });
+  // záznam založený 30 s před začátkem (čas serveru / Cloudflare) se najde, i když appka hlásí čas o 5 min jinak
+  const rec = [{ uid: 'start', created: new Date(NOW - 3600e3 - 30e3).toISOString() }];
+  assert.deepEqual(r.recordingsInWindow(rec, w).map((x) => x.uid), ['start']);
+  // appce jdou hodiny o 5 min napřed: bez posunu by okno začalo pozdě a záznam by se nenašel, s posunem ano
+  const ahead = r.parseStreamWindow(NOW - 3600e3 + skew, NOW - 60e3 + skew, NOW, NOW + skew);
+  assert.deepEqual(ahead, { since: NOW - 3600e3, until: NOW - 60e3 });
+  assert.deepEqual(r.recordingsInWindow(rec, ahead).map((x) => x.uid), ['start']);
+  assert.deepEqual(r.recordingsInWindow(rec, { since: NOW - 3600e3 + skew, until: NOW - 60e3 + skew }).map((x) => x.uid), []);
+});
+
+test('okno vysílání z appky: jen rozumné hodnoty', () => {
+  assert.deepEqual(r.parseStreamWindow(NOW - 3600e3, NOW - 60e3, NOW), { since: NOW - 3600e3, until: NOW - 60e3 });
+  assert.equal(r.parseStreamWindow('x', NOW, NOW), null);
+  assert.equal(r.parseStreamWindow(NOW, NOW - 1000, NOW), null, 'konec před začátkem');
+  assert.equal(r.parseStreamWindow(NOW - 3 * 86400e3, NOW, NOW), null, 'delší než 2 dny');
+  assert.equal(r.parseStreamWindow(NOW, NOW + 3600e3, NOW), null, 'budoucnost');
+  assert.equal(r.parseStreamWindow(NOW - 9 * 86400e3, NOW - 8 * 86400e3, NOW), null, 'staré');
+  assert.equal(r.parseStreamWindow(0, NOW, NOW), null);
+  assert.equal(r.parseStreamWindow(null, NOW, NOW, NOW), null);
+  assert.equal(r.parseStreamWindow('', NOW, NOW, NOW - 5000), null, 'prázdný začátek ani s posunem hodin');
+  // budoucnost se posuzuje až po posunu: appce jdou hodiny o hodinu napřed - konec "za hodinu" je teď
+  assert.deepEqual(r.parseStreamWindow(NOW, NOW + 3600e3, NOW, NOW + 3600e3 + 1000), { since: NOW - 3600e3 - 1000, until: NOW - 1000 });
+});
+
 test('výchozí název záznamu', () => {
   assert.equal(r.defaultRecordingTitle('2026-10-11T20:00:00Z'), 'Live stream 2026-10-11');
 });

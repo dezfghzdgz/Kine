@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
 import { DESKTOP_APP_NAMES } from '@/lib/desktopRelease';
+import { PAYMENTS_ENABLED } from '@/lib/payments';
 
 /**
  * O Kine - veřejná stránka pro kohokoli (i bez přihlášení): co Kine je,
@@ -172,9 +173,11 @@ export default function AboutPage() {
           <a href="mailto:kinesupport@gmail.com" className="streams-btn">
             ✉ {t('aboutContact')}
           </a>
-          <Link href="/donate" className="streams-btn">
-            💛 {t('aboutSupportKine')}
-          </Link>
+          {PAYMENTS_ENABLED && (
+            <Link href="/donate" className="streams-btn">
+              💛 {t('aboutSupportKine')}
+            </Link>
+          )}
           <Link href="/plus" className="streams-btn">
             ✦ Kine Plus
           </Link>

@@ -26,6 +26,10 @@ type SignalRow = {
   checked_at: string | null;
   /** Kdy přenos naposledy viděl Cloudflare (sloupec z migrace bezpecnost-rijen; bez ní se bere checked_at). */
   cf_confirmed_at?: string | null;
+  /** Kdy appka řekla "skončil jsem" (Ukončit). Sloupec z migrace supabase-migration-zive-odznaky.sql. */
+  app_stopped_at?: string | null;
+  /** Záznam (video u Cloudflare), který při Ukončit v appce skončil. */
+  stopped_video_uid?: string | null;
 };
 
 function ms(value: string | null | undefined): number {
@@ -109,7 +113,29 @@ export type CloudflareSeen = {
   connected: boolean | null;
   /** Kdy vzniklo video, které Cloudflare hlásí (začátek přenosu u Cloudflare). */
   videoCreatedAt?: string | null;
+  /** Které video to je (lifecycle, jinak seznam běžících); null = nevíme. */
+  videoUid?: string | null;
 };
+
+/**
+ * Po Ukončit v appce se tentýž přenos sám nevrátí. Cloudflare po odpojení
+ * ještě dlouho hlásí video jako běžící (seznam i lifecycle) - a přenos pak
+ * "po konci pořád visel v Živě". Znovu živě jen nové vysílání (jiné video,
+ * nebo video vzniklé po Ukončit) nebo "začal jsem" z appky. Když nejde
+ * poznat, které video Cloudflare hlásí, bere se jako nové až po téhle době
+ * (tentýž záznam drží Cloudflare po odpojení nejvýš minutu - timeoutSeconds).
+ */
+export const APP_STOP_IDENTITY_MS = 3 * 60 * 1000;
+
+/** Skončil poslední přenos tlačítkem Ukončit v appce (ne výpadkem nebo podle Cloudflare)? */
+function endedByApp(row: SignalRow & { ended_at?: string | null }): number | null {
+  const stopped = ms(row.app_stopped_at);
+  if (!Number.isFinite(stopped)) return null;
+  const ended = ms(row.ended_at);
+  // Konec zapsaný později (třeba vysílání z OBS po Ukončit) - pak už neplatí.
+  if (Number.isFinite(ended) && ended > stopped + 5000) return null;
+  return stopped;
+}
 
 /**
  * - confirm: je živě (potvrdit - video, čas potvrzení),
@@ -159,6 +185,17 @@ export function decideLive(
   if (!streaming) return 'none';
   const ended = ms(row.ended_at);
   const created = ms(cf.videoCreatedAt);
+  const appStopped = endedByApp(row);
+  if (appStopped !== null) {
+    // Ukončeno v appce: tentýž záznam ne, ani po čekání (viz APP_STOP_IDENTITY_MS).
+    const stoppedUid = row.stopped_video_uid ?? null;
+    if (cf.videoUid && stoppedUid) {
+      if (cf.videoUid === stoppedUid) return 'none';
+      return !Number.isFinite(created) || created > appStopped ? 'confirm' : 'none';
+    }
+    if (Number.isFinite(created)) return created > appStopped ? 'confirm' : 'none';
+    return sure && now - appStopped >= APP_STOP_IDENTITY_MS ? 'confirm' : 'none';
+  }
   // Nové vysílání: kanál ještě nevysílal, nebo Cloudflare hlásí video, které vzniklo po konci.
   if (!Number.isFinite(ended) || (Number.isFinite(created) && created > ended)) return 'confirm';
   // Pořád ten skončený záznam. Seznam samotný ho neoživí (to byl ten "skončil

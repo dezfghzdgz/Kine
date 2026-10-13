@@ -1,15 +1,8 @@
-import { supabaseServer } from './supabaseServer';
-import { runInBackground } from './background';
-
 /**
- * Deník živého vysílání: kdy přenos začal, kdy ho Cloudflare potvrdil,
- * kdy a PROČ skončil (a kdy ho skryla kontrola obsahu). Bez toho se
- * "appka hlásí, že vysílám, ale na webu nejsem" nedalo dohledat - stav se
- * mění každých pár vteřin a z databáze je vidět jen ten poslední.
- *
- * Zapisuje se do client_errors (druh "live", tabulka už je a čte ji jen
- * správce) - přehled je na /admin/live (časová osa) a /admin/errors
- * (seskupené podle kanálu a události). Nic nového v Supabase.
+ * Deník živého vysílání: kdy přenos začal, kdy ho Cloudflare potvrdil, kdy
+ * a PROČ skončil (a kdy ho skryla kontrola obsahu). Píše se jen do logu
+ * serveru (Vercel -> Logs, hledat "Kine živě") - stránka s diagnostikou
+ * (/admin/live) je pryč a do databáze se nic nezapisuje.
  */
 
 export type LiveEventKind = 'start' | 'confirm' | 'end' | 'stop' | 'unconfirmed' | 'silent-end' | 'hidden' | 'unseen';
@@ -18,7 +11,7 @@ export type LiveEventKind = 'start' | 'confirm' | 'end' | 'stop' | 'unconfirmed'
 const SAME_EVENT_GAP_MS = 15 * 1000;
 const lastWritten = new Map<string, number>();
 
-/** Krátké podrobnosti na řádky "klíč: hodnota" (čte je člověk na /admin/live). */
+/** Krátké podrobnosti na řádky "klíč: hodnota". */
 export function liveEventDetails(details: Record<string, unknown>): string {
   return Object.entries(details)
     .filter(([, v]) => v !== undefined)
@@ -35,8 +28,7 @@ export function secondsSince(iso: string | null | undefined, now: number = Date.
 }
 
 /**
- * Zapíše událost (na pozadí - odpověď divákovi ani appce kvůli tomu nečeká).
- * Chyba zápisu se jen spolkne: deník nesmí rozbít vysílání.
+ * Zapíše událost do logu serveru (nic nečeká, nic nemůže rozbít vysílání).
  */
 export function logLiveEvent(ownerId: string, kind: LiveEventKind, summary: string, details: Record<string, unknown> = {}): void {
   const key = `${ownerId}:${kind}`;
@@ -47,18 +39,5 @@ export function logLiveEvent(ownerId: string, kind: LiveEventKind, summary: stri
   if (lastWritten.size > 2000) {
     for (const [k, at] of lastWritten) if (now - at > SAME_EVENT_GAP_MS) lastWritten.delete(k);
   }
-  const write = (async () => {
-    const { error } = await supabaseServer.from('client_errors').insert({
-      kind: 'live',
-      message: `Živě: ${summary}`.slice(0, 500),
-      stack: liveEventDetails(details) || null,
-      url: `/live/${ownerId}`,
-      user_agent: 'kine-server',
-      device: null,
-      user_id: ownerId,
-      fingerprint: `live:${ownerId}:${kind}`,
-    });
-    if (error) throw new Error(error.message);
-  })();
-  runInBackground(write, 'deník živého vysílání');
+  console.info(`Kine živě [${kind}] ${ownerId}: ${summary}`, liveEventDetails(details).replace(/\n/g, ' | '));
 }

@@ -7,6 +7,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { prelozit } from './prelozit.mjs';
 
@@ -193,6 +194,33 @@ test('Cloudflare: vrácený přenos si nechá začátek, jen když je to opravdu
   assert.equal(live.sameStreamReturns({ ...ended, started_at: null }, { lifeUid: 'A' }, T0 + 22 * MIN), false);
 });
 
+test('Ukončit v appce: tentýž záznam se už sám nevrátí (dřív "po konci pořád živě")', () => {
+  const stopAt = T0 + 20 * MIN;
+  const stopped = { ...endedRow, ended_at: iso(stopAt), app_stopped_at: iso(stopAt), stopped_video_uid: 'A' };
+  // Cloudflare minuty po odpojení hlásí tentýž záznam jako běžící (seznam i lifecycle) - pořád nic
+  for (const after of [5000, 95000, 10 * MIN, 60 * MIN]) {
+    assert.equal(live.decideLive(stopped, { listed: true, connected: true, videoCreatedAt: iso(T0), videoUid: 'A' }, stopAt + after), 'none', String(after));
+    assert.equal(live.decideLive(stopped, { listed: true, connected: null, videoCreatedAt: iso(T0), videoUid: 'A' }, stopAt + after), 'none', String(after));
+  }
+  // id záznamu nevíme (Cloudflare přenos nepotvrdil), video vzniklo před Ukončit: taky nic, ani po čekání
+  const noUid = { ...stopped, stopped_video_uid: null };
+  assert.equal(live.decideLive(noUid, { listed: true, connected: true, videoCreatedAt: iso(T0), videoUid: 'A' }, stopAt + 30 * MIN), 'none');
+  // nové vysílání (jiné video po Ukončit) hned
+  assert.equal(live.decideLive(stopped, { listed: true, connected: true, videoCreatedAt: iso(stopAt + 60000), videoUid: 'B' }, stopAt + 70000), 'confirm');
+  assert.equal(live.decideLive(noUid, { listed: true, connected: null, videoCreatedAt: iso(stopAt + 60000), videoUid: 'B' }, stopAt + 70000), 'confirm');
+  // jiné video, o kterém nevíme, kdy vzniklo (jen lifecycle): nové vysílání
+  assert.equal(live.decideLive(stopped, { listed: false, connected: true, videoCreatedAt: null, videoUid: 'B' }, stopAt + 70000), 'confirm');
+  // nevíme nic (lifecycle bez id): až po APP_STOP_IDENTITY_MS, a jen jistě vysílající vstup
+  assert.equal(live.decideLive(noUid, { listed: false, connected: true, videoCreatedAt: null, videoUid: null }, stopAt + 2 * MIN), 'none');
+  assert.equal(live.decideLive(noUid, { listed: false, connected: true, videoCreatedAt: null, videoUid: null }, stopAt + live.APP_STOP_IDENTITY_MS + 1000), 'confirm');
+  assert.equal(live.decideLive(noUid, { listed: true, connected: null, videoCreatedAt: null, videoUid: null }, stopAt + 30 * MIN), 'none');
+  // pozdější konec (vysílání z OBS po Ukončit skončilo samo): pravidlo appky už neplatí, platí čekání jako dřív
+  const laterObs = { ...stopped, ended_at: iso(stopAt + 40 * MIN) };
+  assert.equal(live.decideLive(laterObs, { listed: true, connected: true, videoCreatedAt: iso(stopAt + 20 * MIN), videoUid: 'C' }, stopAt + 40 * MIN + 95000), 'confirm');
+  // živý řádek se tím nemění (appka znovu "začal jsem" -> is_live)
+  assert.equal(live.decideLive({ ...liveRow, app_stopped_at: iso(T0 - MIN), stopped_video_uid: 'Z' }, { listed: true, connected: true, videoUid: 'A' }, T0 + 11 * MIN), 'confirm');
+});
+
 test('Cloudflare: stav vstupu z API (záloha za lifecycle)', () => {
   assert.equal(live.connectedFromInputStatus('connected'), true);
   assert.equal(live.connectedFromInputStatus('reconnected'), true);
@@ -223,6 +251,16 @@ test('Cloudflare neodpovídá: nepotvrzený přenos po 10 minutách zmizí', () 
   // nikdy nepotvrzený přenos se počítá od začátku
   assert.equal(live.staleWithoutCloudflare({ ...liveRow, cf_confirmed_at: null }, T0 + 9 * MIN), false);
   assert.equal(live.staleWithoutCloudflare({ ...liveRow, cf_confirmed_at: null }, T0 + 11 * MIN), true);
+});
+
+test('přenos skrytý kontrolou obsahu: divák bez práv nedostane přehrávač ani HLS vstupu', () => {
+  // Stránka přenosu (app/api/live/status): v odpovědi "held" nesmí zůstat nic, čím by se šlo k obrazu dostat.
+  const src = readFileSync(new URL('../app/api/live/status/route.ts', import.meta.url), 'utf8');
+  const held = src.split('\n').find((line) => line.includes('held: true'));
+  assert.ok(held, 'odpověď held se nenašla');
+  for (const field of ['playerUrl', 'hlsUrl', 'inputId', 'videoUid', 'thumbnailUrl']) {
+    assert.ok(new RegExp(`\\b${field}: null\\b`).test(held), `${field} není v odpovědi held vynulovaný`);
+  }
 });
 
 console.log(`\n${prosly} prošlo, ${padly} spadlo`);

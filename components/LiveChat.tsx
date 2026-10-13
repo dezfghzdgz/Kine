@@ -7,6 +7,7 @@ import { useLanguage } from '@/lib/i18n';
 import { CHAT_MAX_LENGTH } from '@/lib/liveChat';
 import { FOLLOW_MINUTES_OPTIONS, SLOW_MODE_OPTIONS } from '@/lib/liveChatRules';
 import { formatTipAmount } from '@/lib/liveTips';
+import { PAYMENTS_ENABLED } from '@/lib/payments';
 import { ChatSpeaker, TTS_MODES, readTtsMode, saveTtsMode, speechText, type TtsMode } from '@/lib/chatSpeech';
 import ProfileImage from './ProfileImage';
 import UiIcon, { type UiIconName } from './UiIcon';
@@ -372,7 +373,8 @@ export default function LiveChat({
             {ttsMenu && (
               <span className="live-chat-tts-menu" role="menu">
                 {!ttsSupported && <span className="live-chat-panel-note">{t('ttsUnsupported')}</span>}
-                {TTS_MODES.map((m) => (
+                {/* "Jen podpory" až s placením (lib/payments.ts) - bez podpor by nečetlo nic. */}
+                {TTS_MODES.filter((m) => m !== 'tips' || PAYMENTS_ENABLED || ttsMode === 'tips').map((m) => (
                   <button
                     key={m}
                     type="button"

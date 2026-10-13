@@ -15,6 +15,8 @@ import PlaybackSettings from '@/components/PlaybackSettings';
 import { ThumbsDownIcon, ThumbsUpIcon } from '@/components/ReactionIcons';
 import { SETTINGS_SECTION_EVENT } from '@/lib/settingsNav';
 import ProfileImage from '@/components/ProfileImage';
+import ComingSoon from '@/components/ComingSoon';
+import { PAYMENTS_ENABLED } from '@/lib/payments';
 import {
   PROFILE_IMAGE_MAX_BYTES,
   STILL_MAX_SIDE,
@@ -583,7 +585,10 @@ export default function SettingsPage() {
       {section === 'earnings' && (
         <div className="panel" id="earnings">
           <PanelHeading icon="coins" title={t('creatorEarningsTitle')} help={t('creatorEarningsIntro')} />
-          {!stripeOnboardingComplete ? (
+          {/* Placení zatím neběží (lib/payments.ts) - předplatné kanálu a napojení výplat přijdou s ním. */}
+          {!PAYMENTS_ENABLED ? (
+            <ComingSoon text={t('comingSoonEarnings')} />
+          ) : !stripeOnboardingComplete ? (
             <>
               <button type="button" onClick={startStripeOnboarding} disabled={connectLoading} className="settings-icon-button">
                 <UiIcon name="link" size={16} />

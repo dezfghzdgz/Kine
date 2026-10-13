@@ -8,6 +8,8 @@ import { CATEGORY_KEYS } from '@/lib/categories';
 import { channelRoom, liveElapsed } from '@/lib/liveChat';
 import LiveChat from '@/components/LiveChat';
 import LiveTipsPanel from '@/components/LiveTipsPanel';
+import ComingSoon from '@/components/ComingSoon';
+import { PAYMENTS_ENABLED } from '@/lib/payments';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import Toast, { ToastType } from '@/components/Toast';
 import { PanelHeading, WithHelp } from '@/components/HelpTip';
@@ -25,7 +27,8 @@ type Setup = {
     live: boolean;
     startedAt: string | null;
     endedAt: string | null;
-    playerUrl: string;
+    /** null = Cloudflare přenos ještě nepotvrdil (a kód zákazníka není znám) - náhled zatím není. */
+    playerUrl: string | null;
     /** Od kdy ukazovat chat - každé vysílání má svůj (lib/liveChat.ts). */
     chatSince?: string | null;
     /** Vlastní náhled přenosu (null = snímek z vysílání). */
@@ -423,7 +426,7 @@ export default function LiveStudioPage() {
                   <span>{t('liveHeldOwner')}</span>
                 </div>
               )}
-              {stream?.live && (
+              {stream?.live && stream.playerUrl && (
                 <div className="player-wrap" style={{ aspectRatio: '16/9', marginTop: 12 }}>
                   <iframe
                     src={`${stream.playerUrl}${stream.playerUrl.includes('?') ? '&' : '?'}muted=true`}
@@ -692,7 +695,7 @@ export default function LiveStudioPage() {
             </div>
 
             {/* Podpory ve vysílání: zapnutí, poslední podpory, překryv pro OBS se čtením nahlas. */}
-            <LiveTipsPanel token={token} userId={userId} onCopy={copy} />
+            {PAYMENTS_ENABLED ? <LiveTipsPanel token={token} userId={userId} onCopy={copy} /> : <ComingSoon text={t('comingSoonTips')} />}
 
             <div className="panel">
               <PanelHeading icon="chat" title={t('liveChatToolsHeading')} help={t('liveChatObsOverlayHint')} />

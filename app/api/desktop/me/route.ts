@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { PAYMENTS_ENABLED } from '@/lib/payments';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { allPriceLabels, anyTierAvailable, hasClipsPlus, hasKinePlus, normalizePlan, FREE_CLIP_MAX_SECONDS, PLUS_CLIP_MAX_SECONDS } from '@/lib/plus';
 import { sweepProcessing } from '@/lib/markVideoReady';
@@ -38,7 +39,8 @@ export async function GET(req: NextRequest) {
 
   const clipsPlus = hasClipsPlus(profile?.plan, profile?.plan_until);
   const kinePlus = hasKinePlus(profile?.plan, profile?.plan_until);
-  const prices = allPriceLabels();
+  // Placení zatím neběží (lib/payments.ts): nic se nedá koupit - appka místo odkazu ukáže "Připravujeme".
+  const prices = PAYMENTS_ENABLED ? allPriceLabels() : { kine: null, clips: null, all: null };
   // Appka se ptá při startu a občas - dobrá chvíle dodělat videa, která
   // po nahrání z appky zůstala viset jako "processing" (viz markVideoReady).
   await sweepProcessing();
@@ -53,7 +55,7 @@ export async function GET(req: NextRequest) {
     kinePlus,
     maxClipSeconds: clipsPlus ? PLUS_CLIP_MAX_SECONDS : FREE_CLIP_MAX_SECONDS,
     /** Dá se něco koupit? (je nastavená aspoň jedna cena u Stripe) */
-    plusAvailable: anyTierAvailable(),
+    plusAvailable: PAYMENTS_ENABLED && anyTierAvailable(),
     prices,
     /** Starší appky: cena "Plus" = varianta s klipy. */
     plusPriceLabel: prices.clips ?? prices.all,

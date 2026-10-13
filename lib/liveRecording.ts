@@ -4,7 +4,7 @@ import { refreshFromCloudflare } from './markVideoReady';
 import { protectionConfigured, shouldBeProtected, syncVideoProtection } from './streamProtection';
 import { createStreamToken, DOWNLOAD_TOKEN_TTL_S, signingKeyFromEnv, swapPlaybackId } from './streamToken';
 import { channelRoom } from './liveChat';
-import { defaultRecordingTitle, parseRecordingVisibility, pickRecording, type RecordingVisibility } from './liveRecordingRules';
+import { defaultRecordingTitle, parseRecordingVisibility, pickRecording, recordingsInWindow, type RecordingVisibility } from './liveRecordingRules';
 
 export { defaultRecordingTitle, parseRecordingVisibility, pickRecording, RECORDING_VISIBILITIES, type RecordingVisibility } from './liveRecordingRules';
 
@@ -145,7 +145,7 @@ export async function autoPublishAfterStream(ownerId: string): Promise<PublishRe
 async function ownRecording(
   ownerId: string,
   wanted: string
-): Promise<{ ok: true; rec: LiveRecording; videoId: string | null; streamLive: boolean } | { ok: false; status: number; error: string }> {
+): Promise<{ ok: true; rec: LiveRecording; videoId: string | null; streamLive: boolean; liveUid: string | null } | { ok: false; status: number; error: string }> {
   const { data: input } = await supabaseServer.from('live_inputs').select('cf_input_id').eq('owner_id', ownerId).maybeSingle();
   if (!input?.cf_input_id) return { ok: false, status: 404, error: 'Nemáš založené živé vysílání.' };
   let recordings: LiveRecording[];
@@ -158,12 +158,28 @@ async function ownRecording(
   if (!rec) return { ok: false, status: 404, error: wanted === 'latest' ? 'Záznam vysílání zatím není - zkus to za minutu.' : 'Záznam nenalezen.' };
   const [{ data: video }, { data: stream }] = await Promise.all([
     supabaseServer.from('videos').select('id').eq('owner_id', ownerId).eq('cloudflare_video_id', rec.uid).maybeSingle(),
-    supabaseServer.from('live_streams').select('is_live').eq('owner_id', ownerId).maybeSingle(),
+    supabaseServer.from('live_streams').select('is_live, current_video_uid').eq('owner_id', ownerId).maybeSingle(),
   ]);
-  return { ok: true, rec, videoId: (video?.id as string | undefined) ?? null, streamLive: !!stream?.is_live };
+  return {
+    ok: true,
+    rec,
+    videoId: (video?.id as string | undefined) ?? null,
+    streamLive: !!stream?.is_live,
+    liveUid: stream?.is_live ? ((stream.current_video_uid as string | null) ?? null) : null,
+  };
 }
 
-export type RecordingActionResult = { ok: true; uid: string } | { ok: false; status: number; error: string };
+export type RecordingActionResult = { ok: true; uid: string; uids?: string[] } | { ok: false; status: number; error: string; retry?: boolean };
+
+/**
+ * Běží tenhle záznam ještě živě? Jen když vysílání opravdu běží a je to jeho
+ * video (nebo se neví, které video běží). Po Ukončit v appce Cloudflare ještě
+ * minutu i déle hlásí záznam jako "live-inprogress" - ten už zahodit jde.
+ */
+function stillOnAir(rec: LiveRecording, streamLive: boolean, liveUid: string | null): boolean {
+  if (!streamLive || rec.state !== 'live-inprogress') return false;
+  return !liveUid || liveUid === rec.uid;
+}
 
 /**
  * "Zahodit": záznam pryč hned (jinak ho Cloudflare smaže po 30 dnech sám).
@@ -175,13 +191,51 @@ export async function discardRecording(ownerId: string, wanted: string): Promise
   const found = await ownRecording(ownerId, wanted);
   if (!found.ok) return found;
   if (found.videoId) return { ok: false, status: 409, error: 'Záznam už je video na Kine - smaž ho v Tvoje videa.' };
-  if (found.rec.state === 'live-inprogress' && found.streamLive) return { ok: false, status: 409, error: 'Vysílání ještě běží.' };
+  if (stillOnAir(found.rec, found.streamLive, found.liveUid)) return { ok: false, status: 409, error: 'Vysílání ještě běží.', retry: true };
   try {
     await deleteCloudflareVideo(found.rec.uid);
   } catch (e) {
-    return { ok: false, status: 502, error: (e as Error).message };
+    return { ok: false, status: 502, error: (e as Error).message, retry: true };
   }
-  return { ok: true, uid: found.rec.uid };
+  return { ok: true, uid: found.rec.uid, uids: [found.rec.uid] };
+}
+
+/**
+ * "Zahodit" z appky, která nezná id záznamu (Cloudflare přenos za vysílání
+ * nepotvrdil): smažou se záznamy vlastního vstupu vzniklé během vysílání
+ * (lib/liveRecordingRules.ts, recordingsInWindow). Když tam ještě žádný není
+ * (Cloudflare ho po konci chvíli zakládá), odpověď řekne "zkus znovu".
+ */
+export async function discardStreamRecordings(ownerId: string, window: { since: number; until: number }): Promise<RecordingActionResult> {
+  const { data: input } = await supabaseServer.from('live_inputs').select('cf_input_id').eq('owner_id', ownerId).maybeSingle();
+  if (!input?.cf_input_id) return { ok: false, status: 404, error: 'Nemáš založené živé vysílání.' };
+  let recordings: LiveRecording[];
+  try {
+    recordings = await listInputVideos(input.cf_input_id);
+  } catch (e) {
+    return { ok: false, status: 502, error: (e as Error).message, retry: true };
+  }
+  const uids = recordings.map((r) => r.uid);
+  const [{ data: videos }, { data: stream }] = await Promise.all([
+    uids.length > 0 ? supabaseServer.from('videos').select('cloudflare_video_id').eq('owner_id', ownerId).in('cloudflare_video_id', uids) : Promise.resolve({ data: [] as any[] }),
+    supabaseServer.from('live_streams').select('is_live, current_video_uid').eq('owner_id', ownerId).maybeSingle(),
+  ]);
+  const published = new Set<string>(((videos ?? []) as any[]).map((v) => String(v.cloudflare_video_id)));
+  const liveUid = stream?.is_live ? ((stream.current_video_uid as string | null) ?? null) : null;
+  const candidates = recordingsInWindow(recordings, window, { published, keep: liveUid }).filter((r) => !stillOnAir(r, !!stream?.is_live, liveUid));
+  if (candidates.length === 0) return { ok: false, status: 404, error: 'Záznam vysílání zatím není - zkouším to znovu.', retry: true };
+  const deleted: string[] = [];
+  let lastError: string | null = null;
+  for (const rec of candidates) {
+    try {
+      await deleteCloudflareVideo(rec.uid);
+      deleted.push(rec.uid);
+    } catch (e) {
+      lastError = (e as Error).message;
+    }
+  }
+  if (deleted.length === 0) return { ok: false, status: 502, error: lastError ?? 'Cloudflare záznam nesmazal.', retry: true };
+  return { ok: true, uid: deleted[0], uids: deleted };
 }
 
 export type DownloadResult =
@@ -197,7 +251,7 @@ export type DownloadResult =
 export async function recordingDownload(ownerId: string, wanted: string): Promise<DownloadResult> {
   const found = await ownRecording(ownerId, wanted);
   if (!found.ok) return found;
-  if (found.rec.state === 'live-inprogress' && found.streamLive) return { ok: false, status: 409, error: 'Vysílání ještě běží.' };
+  if (stillOnAir(found.rec, found.streamLive, found.liveUid)) return { ok: false, status: 409, error: 'Vysílání ještě běží.' };
   if (found.rec.state === 'error') return { ok: false, status: 502, error: 'Cloudflare záznam nezpracoval - stáhnout nejde.' };
   // Záznam se po konci vysílání ještě minutu uzavírá a pak zpracovává - "chystá se", zeptat se znovu.
   if (found.rec.state === 'live-inprogress' || !found.rec.readyToStream) return { ok: true, uid: found.rec.uid, status: 'inprogress', url: null, percent: null };

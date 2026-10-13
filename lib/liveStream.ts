@@ -46,6 +46,9 @@ export type LiveStreamRow = {
   cf_confirmed_at?: string | null;
   /** Vlastní náhled přenosu (app/api/live/thumbnail). Sloupec je z migrace supabase-migration-zive-3.sql. */
   thumbnail_url?: string | null;
+  /** Kdy appka řekla "skončil jsem" a který záznam tím skončil (migrace supabase-migration-zive-odznaky.sql). */
+  app_stopped_at?: string | null;
+  stopped_video_uid?: string | null;
 };
 
 /** Nejvýš jednou za tolik se Cloudflare ptá, kdo vysílá. */
@@ -72,7 +75,21 @@ export function codeFromUrl(url: string | null | undefined): string | null {
   return m ? m[1] : null;
 }
 
-/** Kód zákazníka: z nastavení, z posledního dotazu na Cloudflare, nebo z náhledu libovolného videa v databázi. */
+/** Kód zákazníka z videa od Cloudflare (náhled, náhledový přehrávač, HLS) - první, který se najde. */
+export function codeFromCloudflareVideo(video: any): string | null {
+  if (!video || typeof video !== 'object') return null;
+  return codeFromUrl(video.thumbnail) ?? codeFromUrl(video.preview) ?? codeFromUrl(video.playback?.hls) ?? codeFromUrl(video.playback?.dash) ?? null;
+}
+
+/** Kdy se naposledy ptalo Cloudflare na kód - ať se to nezkouší při každém dotazu. */
+let codeLookupAt = 0;
+
+/**
+ * Kód zákazníka: z nastavení (NEXT_PUBLIC_STREAM_CUSTOMER_CODE), z posledního
+ * dotazu na Cloudflare, z náhledu videa v databázi, nebo přímo od Cloudflare
+ * (každé video na účtu ho má v adrese náhledu). Bez kódu nejde přehrávač
+ * vstupu ani HLS vstupu (appka podle něj hlídá, že diváci obraz vidí).
+ */
 export async function streamCustomerCode(): Promise<string | null> {
   if (customerCode) return customerCode;
   try {
@@ -84,15 +101,40 @@ export async function streamCustomerCode(): Promise<string | null> {
     const code = codeFromUrl(data?.[0]?.thumbnail_url);
     if (code) customerCode = code;
   } catch {
-    // Bez kódu se přehrávač přenosu vezme přes videodelivery.net.
+    // zkusí se Cloudflare
+  }
+  if (!customerCode && cloudflare() && Date.now() - codeLookupAt > 60 * 1000) {
+    codeLookupAt = Date.now();
+    try {
+      const list = await Promise.race([cfFetch('?limit=3'), new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500))]);
+      for (const v of Array.isArray(list) ? list : []) {
+        const code = codeFromCloudflareVideo(v);
+        if (code) {
+          customerCode = code;
+          break;
+        }
+      }
+    } catch {
+      // Bez kódu se přehrávač přenosu vezme podle id videa (až ho Cloudflare potvrdí).
+    }
   }
   return customerCode;
 }
 
-/** Adresa přehrávače: vstup (hraje, co zrovna běží) na doméně zákazníka, jinak přenos podle id videa. */
-export function livePlayerUrl(inputId: string, videoUid: string | null, code: string | null): string {
+/**
+ * Adresa přehrávače: vstup (hraje, co zrovna běží) na doméně zákazníka, jinak
+ * přenos podle id videa. Bez obojího null - přehrávač podle id VSTUPU na
+ * videodelivery.net není doložený (stránka místo něj ukáže "přenos začíná").
+ */
+export function livePlayerUrl(inputId: string, videoUid: string | null, code: string | null): string | null {
   if (code) return `https://customer-${code}.cloudflarestream.com/${inputId}/iframe?autoplay=true&letterboxColor=transparent`;
-  return `https://iframe.videodelivery.net/${videoUid ?? inputId}?autoplay=true`;
+  return videoUid ? `https://iframe.videodelivery.net/${videoUid}?autoplay=true` : null;
+}
+
+/** HLS vstupu (totéž, co hraje přehrávač) - appka si podle něj ověří, že diváci obraz opravdu vidí. */
+export function liveHlsUrl(inputId: string, code: string | null): string | null {
+  if (!code || !/^[a-z0-9]+$/i.test(inputId)) return null;
+  return `https://customer-${code}.cloudflarestream.com/${inputId}/manifest/video.m3u8`;
 }
 
 async function cfFetch(path: string, init: RequestInit = {}): Promise<any> {
@@ -418,7 +460,12 @@ export async function syncLiveStreams(options: { force?: boolean } = {}): Promis
       for (const row of rows) {
         const video = liveInputs.get(row.cf_input_id);
         const life = seen.get(row.cf_input_id) ?? null;
-        const decision = decideLive(row, { listed: !!video, connected: life ? life.live : null, videoCreatedAt: video?.created ?? null });
+        const decision = decideLive(row, {
+          listed: !!video,
+          connected: life ? life.live : null,
+          videoCreatedAt: video?.created ?? null,
+          videoUid: life?.videoUid ?? (video ? String(video.uid) : null),
+        });
         if (decision === 'confirm') {
           const lifeUid = life?.live && life.videoUid ? life.videoUid : null;
           // Návrat téhož přenosu (stejný záznam u Cloudflare): začátek zůstává - čas vysílání
@@ -534,8 +581,17 @@ export async function liveViewerCount(inputId: string): Promise<number | null> {
   }
 }
 
-function isMissingPingColumn(error: { message?: string; code?: string } | null): boolean {
-  return !!error && (error.code === '42703' || /app_ping_at/i.test(error.message ?? ''));
+/** Sloupce live_streams z pozdějších migrací - bez nich se zapisuje bez nich. */
+const OPTIONAL_LIVE_COLUMNS = ['app_ping_at', 'app_stopped_at', 'stopped_video_uid'];
+
+/** Které z volitelných sloupců zápis shodil (chybějící sloupec); [] = jiná chyba. */
+export function optionalColumnsToDrop(error: { message?: string; code?: string } | null, patch: Record<string, unknown>): string[] {
+  if (!error) return [];
+  const present = OPTIONAL_LIVE_COLUMNS.filter((c) => Object.prototype.hasOwnProperty.call(patch, c));
+  const named = present.filter((c) => new RegExp(`\\b${c}\\b`, 'i').test(error.message ?? ''));
+  if (named.length > 0) return named;
+  // Neznámý sloupec bez jména v hlášce: pryč se všemi volitelnými (zbytek se zapíše).
+  return error.code === '42703' || error.code === 'PGRST204' ? present : [];
 }
 
 /**
@@ -574,13 +630,20 @@ export async function appLiveSignal(
   // Bez migrace (sloupec app_ping_at chybí) funguje všechno postaru - stav jen podle Cloudflare.
   let migrated = Object.prototype.hasOwnProperty.call(row, 'app_ping_at');
 
+  /**
+   * Zápis stavu. Sloupce z novějších migrací (hlášení z appky, Ukončit v appce) můžou
+   * chybět - pak se zapíše zbytek (stav jen podle Cloudflare, jako dřív).
+   */
   async function write(patch: Record<string, unknown>): Promise<void> {
-    const first = await supabaseServer.from('live_streams').update(patch).eq('owner_id', ownerId);
-    if (isMissingPingColumn(first.error)) {
-      // Migrace ještě není pustěná: stav se dá uložit i bez hlášení (jen ho pak srovná Cloudflare sám).
-      migrated = false;
-      const { app_ping_at: _drop, ...rest } = patch;
-      await supabaseServer.from('live_streams').update(rest).eq('owner_id', ownerId);
+    let current: Record<string, unknown> = { ...patch };
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { error } = await supabaseServer.from('live_streams').update(current).eq('owner_id', ownerId);
+      if (!error) return;
+      const drop = optionalColumnsToDrop(error, current);
+      if (drop.length === 0) return;
+      // Migrace s hlášením z appky ještě není pustěná.
+      if (drop.includes('app_ping_at')) migrated = false;
+      current = Object.fromEntries(Object.entries(current).filter(([key]) => !drop.includes(key)));
     }
   }
 
@@ -595,8 +658,13 @@ export async function appLiveSignal(
   if (action === 'stopped') {
     if (row.is_live) logLiveEvent(ownerId, 'stop', 'ukončeno v appce (Ukončit)', { 'začátek (s)': secondsSince(row.started_at) });
     // Který záznam patří k tomuhle vysílání: video, které Cloudflare právě nahrával; když ho
-    // Kine už nemá (přenos skončil dřív), nejnovější záznam od začátku vysílání.
+    // Kine nemá (Cloudflare přenos nepotvrdil), co hlásí lifecycle vstupu, a nakonec
+    // nejnovější záznam od začátku vysílání.
     let recordingUid: string | null = row.current_video_uid ?? null;
+    if (!recordingUid && row.cf_input_id) {
+      const life = await inputLifecycle(row.cf_input_id).catch(() => null);
+      if (life?.videoUid) recordingUid = life.videoUid;
+    }
     if (!recordingUid && row.cf_input_id && row.started_at) {
       try {
         const since = Date.parse(row.started_at) - 2 * 60 * 1000;
@@ -606,7 +674,10 @@ export async function appLiveSignal(
         recordingUid = null;
       }
     }
-    await write({ ...stopPatch, ended_at: row.is_live ? nowIso : row.ended_at });
+    // Konec vždycky teď (dřív jen u živého řádku - starý konec pak Cloudflare oživil
+    // dobíhající záznam jako "nové vysílání") a značka, že skončilo tlačítkem v appce:
+    // tentýž záznam se už sám nevrátí (lib/liveSignal.ts, decideLive).
+    await write({ ...stopPatch, ended_at: nowIso, app_stopped_at: nowIso, stopped_video_uid: recordingUid });
     if (row.is_live) await addLiveSeconds(row, nowIso);
     // Záznam rovnou na Kine, když si to tvůrce zapnul (studio / appka).
     const published = row.is_live ? await autoPublishAfterStream(ownerId) : null;
@@ -630,6 +701,8 @@ export async function appLiveSignal(
       // Nepotvrzený přenos z poslední čtvrthodiny si nechá původní začátek (lib/liveSignal.ts).
       started_at: wasLive && row.started_at ? row.started_at : revivedStartedAt(row),
       ...(wasLive ? {} : { current_video_uid: null }),
+      // Nové vysílání z appky: minulé Ukončit už neplatí.
+      ...(row.app_stopped_at || row.stopped_video_uid ? { app_stopped_at: null, stopped_video_uid: null } : {}),
       updated_at: nowIso,
     });
   }
@@ -652,7 +725,9 @@ export async function appLiveSignal(
   }
 
   const viewers = confirmed && after ? await liveViewerCount(after.cf_input_id) : null;
-  return { confirmed, migrated, viewers, hidden: !!after?.is_live && liveHiddenNow(after as any) };
+  // Záznam běžícího vysílání (appka ho zná hned - Zahodit po konci pak míří přesně na něj).
+  const recordingUid = confirmed && after ? after.current_video_uid ?? null : null;
+  return { confirmed, migrated, viewers, recordingUid, hidden: !!after?.is_live && liveHiddenNow(after as any) };
 }
 
 /**
@@ -704,7 +779,10 @@ export type PublicLive = {
   endedAt: string | null;
   inputId: string;
   videoUid: string | null;
-  playerUrl: string;
+  /** Přehrávač Cloudflare; null = zatím nejde (Cloudflare přenos ještě nepotvrdil a kód zákazníka není znám). */
+  playerUrl: string | null;
+  /** HLS vstupu (appka si podle něj ověřuje, že diváci obraz vidí); null = kód zákazníka není znám. */
+  hlsUrl: string | null;
   /** Od kdy ukazovat chat - každé vysílání má svůj (lib/liveChat.ts). */
   chatSince: string | null;
   /** Vlastní náhled přenosu; null = snímek z vysílání od Cloudflare. */
@@ -726,5 +804,6 @@ export async function publicLive(row: LiveStreamRow): Promise<PublicLive> {
     inputId: row.cf_input_id,
     videoUid: row.current_video_uid,
     playerUrl: livePlayerUrl(row.cf_input_id, row.current_video_uid, code),
+    hlsUrl: liveHlsUrl(row.cf_input_id, code),
   };
 }
