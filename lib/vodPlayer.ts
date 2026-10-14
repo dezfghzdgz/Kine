@@ -1,7 +1,7 @@
 'use client';
 
 import { preloadHls, supportsNativeHls } from './hlsAttach';
-import { fragmentSample, qualityOptions, startEstimate, type FragmentSample, type QualityLevel } from './vodPlayerCore';
+import { fragmentSample, qualityOptions, startEstimateFor, type FragmentSample, type QualityLevel } from './vodPlayerCore';
 import {
   LIGHT_START_ESTIMATE,
   LIGHT_UPGRADE_BANDWIDTH,
@@ -27,6 +27,16 @@ function rememberedBandwidth(): number | null {
   try {
     const n = Number(localStorage.getItem(BANDWIDTH_KEY));
     return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Rychlost připojení podle prohlížeče (Chrome, Edge: navigator.connection.downlink v Mb/s); null = neví. */
+function browserDownlink(): number | null {
+  try {
+    const d = Number((navigator as any)?.connection?.downlink);
+    return Number.isFinite(d) && d > 0 ? d : null;
   } catch {
     return null;
   }
@@ -262,8 +272,12 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
         // První kus podle odhadu připojení (malý), pak hls.js kvalitu sám zvedne.
         startLevel: -1,
         testBandwidth: false,
-        // Lehký režim začíná ještě níž (lib/netQuality.ts).
-        abrEwmaDefaultEstimate: mode === 'light' ? LIGHT_START_ESTIMATE : startEstimate(rememberedBandwidth()),
+        // Lehký režim začíná ještě níž (lib/netQuality.ts); počítač s dobrým připojením rovnou
+        // v plné kvalitě, telefon s malým prvním kusem (lib/vodPlayerCore.ts - startEstimateFor).
+        abrEwmaDefaultEstimate:
+          mode === 'light'
+            ? LIGHT_START_ESTIMATE
+            : startEstimateFor({ remembered: rememberedBandwidth(), device: detectDeviceClass(), downlinkMbps: browserDownlink(), small: !measure }),
         // Do malého okna se nestahuje 1080p; na celé obrazovce kvalita vyskočí.
         capLevelToPlayerSize: true,
         // Telefon s hustým displejem (3x) nepotřebuje video na trojnásobek okna - stačí 2x (o dost míň dat).

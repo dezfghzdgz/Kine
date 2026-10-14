@@ -26,10 +26,18 @@ export default function LiveBadge({ channelId, withTitle = false }: { channelId:
       }
     }
     load();
-    const timer = setInterval(load, 30 * 1000);
+    // Jen když je karta vidět (stav přenosu se ptá Cloudflare); po návratu hned.
+    const timer = setInterval(() => {
+      if (!document.hidden) load();
+    }, 30 * 1000);
+    const onVisible = () => {
+      if (!document.hidden) load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       cancelled = true;
       clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [channelId]);
 

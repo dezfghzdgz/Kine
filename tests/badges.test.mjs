@@ -157,5 +157,70 @@ test('speciální odznaky (od týmu Kine): jen známé, první na kanálu, ve sb
   assert.deepEqual(b.unseenBadges(earned, b.mergeSeen([], b.computeBadges({ ...stats, special: [] }, NOW))).map(b.badgeKey), ['owner:1', 'betaTester:1']);
 });
 
+test('vlastní odznaky (od týmu Kine): za speciálními, s názvem a vzhledem; jen platné', () => {
+  const A = '11111111-1111-4111-8111-111111111111';
+  const B = '22222222-2222-4222-8222-222222222222';
+  const stats = {
+    ...base,
+    joinedAt: '2026-10-01T00:00:00Z',
+    subscribers: 150,
+    special: ['owner'],
+    custom: [
+      { id: A, name: '  Beta   tester VIP ', description: 'Za první testy', icon: 'gamepad', color: '#22C55E', image: null },
+      { id: B, name: 'GIF', description: null, icon: 'nesmysl', color: 'red', image: 'https://x.supabase.co/storage/v1/object/public/thumbnails/badges/a.gif' },
+      { id: 'neni-uuid', name: 'X', icon: 'star', color: '#ffffff' },
+      { id: A, name: 'dvakrát', icon: 'star', color: '#ffffff' },
+      { id: '33333333-3333-4333-8333-333333333333', name: '   ', icon: 'star', color: '#ffffff' },
+      { id: '44444444-4444-4444-8444-444444444444', name: 'zlá adresa', icon: 'star', color: '#ffffff', image: 'javascript:alert(1)' },
+    ],
+  };
+  const earned = b.computeBadges(stats, NOW);
+  assert.deepEqual(earned.map((x) => x.id), ['owner', `custom:${A}`, `custom:${B}`, 'custom:44444444-4444-4444-8444-444444444444', 'subscribers', 'years', 'early']);
+  const a = earned[1].custom;
+  assert.deepEqual(a, { id: A, name: 'Beta tester VIP', description: 'Za první testy', icon: 'gamepad', color: '#22c55e', image: null });
+  // neznámá ikona / barva -> výchozí; cizí "adresa" obrázku pryč
+  assert.equal(earned[2].custom.icon, 'starFilled');
+  assert.equal(earned[2].custom.color, b.CUSTOM_BADGE_COLORS[1]);
+  assert.equal(earned[2].custom.image, 'https://x.supabase.co/storage/v1/object/public/thumbnails/badges/a.gif');
+  assert.equal(earned[3].custom.image, null);
+  // výběr na kanál: vlastní jde vybrat (i velkými písmeny), neznámé id ne
+  assert.ok(b.isBadgeId(`custom:${A}`));
+  assert.ok(!b.isBadgeId('custom:nesmysl'));
+  assert.deepEqual(b.sanitizeShowcase([`custom:${A.toUpperCase()}`, 'custom:x', 'views']), [`custom:${A}`, 'views']);
+  assert.deepEqual(b.showcaseBadges(earned, [`custom:${B}`, 'subscribers']).map((x) => x.id), [`custom:${B}`, 'subscribers']);
+  // dokud nevybíral: speciální, pak vlastní, pak počítané
+  assert.deepEqual(b.showcaseBadges(earned, null).map((x) => x.id), ['owner', `custom:${A}`, `custom:${B}`]);
+  // sbírka: vlastní hned za speciálními; u cizího kanálu jen získané
+  const prog = b.badgeProgress(stats, NOW).map((p) => p.id);
+  assert.deepEqual(prog.slice(0, 4), ['owner', `custom:${A}`, `custom:${B}`, 'custom:44444444-4444-4444-8444-444444444444']);
+  assert.ok(prog.includes('views'), 'zamčené řady majitel vidí');
+  const others = b.earnedProgress(stats, NOW);
+  assert.ok(others.every((p) => p.badge !== null));
+  assert.deepEqual(others.map((p) => p.id), earned.map((x) => x.id));
+});
+
+test('vlastní odznak z formuláře: název povinný, ikona z nabídky, barva #rrggbb, obrázek jen z úložiště Kine', () => {
+  const base = 'https://x.supabase.co/storage/v1/object/public/thumbnails/badges/';
+  const ok = b.customBadgeInput({ name: '  Lovec   bugů ', description: '', icon: 'bug', color: '#A855F7', image: `${base}1.gif` }, { imageBase: base });
+  assert.deepEqual(ok, { ok: true, value: { name: 'Lovec bugů', description: null, icon: 'bug', color: '#a855f7', image: `${base}1.gif` } });
+  assert.equal(b.customBadgeInput({ name: ' ', icon: 'bug', color: '#ffffff' }, { imageBase: base }).ok, false);
+  assert.equal(b.customBadgeInput({ name: 'x'.repeat(33), icon: 'bug', color: '#ffffff' }, { imageBase: base }).ok, false);
+  assert.equal(b.customBadgeInput({ name: 'A', icon: 'rm -rf', color: '#ffffff' }, { imageBase: base }).ok, false);
+  assert.equal(b.customBadgeInput({ name: 'A', icon: 'bug', color: 'red' }, { imageBase: base }).ok, false);
+  assert.equal(b.customBadgeInput({ name: 'A', icon: 'bug', color: '#ffffff', image: 'https://evil.example/track.gif' }, { imageBase: base }).ok, false);
+  // úprava: jen co přišlo
+  assert.deepEqual(b.customBadgeInput({ color: '#000000' }, { partial: true, imageBase: base }), { ok: true, value: { color: '#000000' } });
+  assert.deepEqual(b.customBadgeInput({ image: null }, { partial: true, imageBase: base }), { ok: true, value: { image: null } });
+});
+
+test('obrázek odznaku: druh podle obsahu (PNG, JPG, GIF, WebP), ne podle přípony', () => {
+  assert.deepEqual(b.badgeImageKind(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), { ext: 'png', type: 'image/png' });
+  assert.deepEqual(b.badgeImageKind(new Uint8Array([0xff, 0xd8, 0xff, 0xe0])), { ext: 'jpg', type: 'image/jpeg' });
+  assert.deepEqual(b.badgeImageKind(new TextEncoder().encode('GIF89a......')), { ext: 'gif', type: 'image/gif' });
+  assert.deepEqual(b.badgeImageKind(new TextEncoder().encode('RIFF\u0000\u0000\u0000\u0000WEBPVP8 ')), { ext: 'webp', type: 'image/webp' });
+  assert.equal(b.badgeImageKind(new TextEncoder().encode('<svg onload=alert(1)>')), null);
+  assert.equal(b.badgeImageKind(new Uint8Array([])), null);
+});
+
 console.log(`\n${prosly} prošlo, ${padly} padlo`);
 if (padly > 0) process.exit(1);

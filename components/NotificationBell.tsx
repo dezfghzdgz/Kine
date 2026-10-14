@@ -23,6 +23,91 @@ type Notification = {
 };
 
 /**
+ * Jeden zdroj oznámení pro všechny zvonečky naráz (postranní panel, spodní
+ * lišta na telefonu, menu) - dřív se každý ptal databáze sám, každých 30 s
+ * i ve skryté kartě. Teď jeden dotaz za 30 s, jen když je karta vidět
+ * (a hned po návratu do ní); změny (přečteno, smazáno) vidí všechny zvonečky.
+ */
+type NotificationSnapshot = { userId: string | null; list: Notification[] };
+let notificationSnapshot: NotificationSnapshot = { userId: null, list: [] };
+const notificationListeners = new Set<(s: NotificationSnapshot) => void>();
+let notificationsInflight: Promise<void> | null = null;
+let notificationPoll: ReturnType<typeof setInterval> | null = null;
+const NOTIFICATION_POLL_MS = 30000;
+
+function emitNotifications(next: NotificationSnapshot) {
+  notificationSnapshot = next;
+  for (const fn of notificationListeners) fn(next);
+}
+
+function fetchNotifications(): Promise<void> {
+  if (notificationsInflight) return notificationsInflight;
+  notificationsInflight = (async () => {
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
+      emitNotifications({ userId: null, list: [] });
+      return;
+    }
+    const me = authData.user.id;
+    // select('*'): sloupec sender_id přidává migrace bezpecnost-rijen - bez ní by výčet sloupců spadl.
+    const { data } = await supabase.from('notifications').select('*').eq('user_id', me).order('created_at', { ascending: false }).limit(30);
+    // U oznámení od lidí (ne od Kine) je vidět, kdo je poslal - podvrh za
+    // "systémovou" zprávu se tak pozná na první pohled.
+    const rows = (data ?? []) as Notification[];
+    const senderIds = Array.from(new Set(rows.map((r) => r.sender_id).filter((id): id is string => !!id && id !== me)));
+    let names: Record<string, string> = {};
+    if (senderIds.length > 0) {
+      const { data: senders } = await supabase.from('profiles').select('id, username').in('id', senderIds);
+      names = Object.fromEntries((senders ?? []).map((p: { id: string; username: string }) => [p.id, p.username]));
+    }
+    emitNotifications({ userId: me, list: rows.map((r) => ({ ...r, senderName: r.sender_id ? names[r.sender_id] ?? null : null })) });
+  })()
+    .catch(() => {
+      // Výpadek sítě - zvonečky si nechají poslední stav, zkusí se to příště.
+    })
+    .finally(() => {
+      notificationsInflight = null;
+    });
+  return notificationsInflight;
+}
+
+function onNotificationsVisible() {
+  if (!document.hidden) void fetchNotifications();
+}
+function onNotificationsRefresh() {
+  void fetchNotifications();
+}
+
+function subscribeNotifications(fn: (s: NotificationSnapshot) => void): () => void {
+  notificationListeners.add(fn);
+  fn(notificationSnapshot);
+  if (notificationListeners.size === 1) {
+    void fetchNotifications();
+    notificationPoll = setInterval(() => {
+      if (!document.hidden) void fetchNotifications();
+    }, NOTIFICATION_POLL_MS);
+    document.addEventListener('visibilitychange', onNotificationsVisible);
+    // Nový odznak (components/BadgeWatcher.tsx) - oznámení hned, ne až za 30 s.
+    window.addEventListener(NOTIFICATIONS_REFRESH_EVENT, onNotificationsRefresh);
+  }
+  return () => {
+    notificationListeners.delete(fn);
+    if (notificationListeners.size === 0) {
+      if (notificationPoll) clearInterval(notificationPoll);
+      notificationPoll = null;
+      document.removeEventListener('visibilitychange', onNotificationsVisible);
+      window.removeEventListener(NOTIFICATIONS_REFRESH_EVENT, onNotificationsRefresh);
+    }
+  };
+}
+
+/** Změna seznamu (přečteno, smazáno) pro všechny zvonečky naráz. */
+function patchNotifications(update: Notification[] | ((prev: Notification[]) => Notification[])) {
+  const list = typeof update === 'function' ? update(notificationSnapshot.list) : update;
+  emitNotifications({ ...notificationSnapshot, list });
+}
+
+/**
  * Každý druh oznámení má vlastní barvu, ikonku a název druhu.
  *
  * Dřív měla polovina typů stejnou šedou a lajky splývaly s dary, takže se
@@ -65,29 +150,22 @@ const NAV_SHORTCUT_OPTIONS = [
 export default function NotificationBell({ mobileTrigger = false }: { mobileTrigger?: boolean }) {
   const { t, lang } = useLanguage();
   const router = useRouter();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [snapshot, setSnapshot] = useState<NotificationSnapshot>(notificationSnapshot);
+  const notifications = snapshot.list;
+  const userId = snapshot.userId;
+  const setNotifications = patchNotifications;
   const [open, setOpen] = useState(false);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [chosenIcon, setChosenIcon] = useState('notifications');
   const clickCountRef = useRef(0);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
   // Chyba se drží pro každou pozvánku zvlášť (klíč = id oznámení), jinak by
   // se hláška z jedné pozvánky ukazovala pod všemi ostatními.
   const [collabErrors, setCollabErrors] = useState<Record<string, string>>({});
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    load();
-    const interval = setInterval(load, 30000); // obnovit každých 30s
-    // Nový odznak (components/BadgeWatcher.tsx) - oznámení hned, ne až za 30 s.
-    const refresh = () => load();
-    window.addEventListener(NOTIFICATIONS_REFRESH_EVENT, refresh);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener(NOTIFICATIONS_REFRESH_EVENT, refresh);
-    };
-  }, []);
+  // Společný zdroj pro všechny zvonečky (viz subscribeNotifications výš).
+  useEffect(() => subscribeNotifications(setSnapshot), []);
 
   useEffect(() => {
     const saved = localStorage.getItem('kine-notification-icon');
@@ -131,32 +209,6 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  async function load() {
-    const { data: authData } = await supabase.auth.getUser();
-    if (!authData.user) return;
-    setUserId(authData.user.id);
-
-    // select('*'): sloupec sender_id přidává migrace bezpecnost-rijen - bez ní by výčet sloupců spadl.
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', authData.user.id)
-      .order('created_at', { ascending: false })
-      .limit(30);
-
-    // U oznámení od lidí (ne od Kine) je vidět, kdo je poslal - podvrh za
-    // "systémovou" zprávu se tak pozná na první pohled.
-    const rows = (data ?? []) as Notification[];
-    const me = authData.user.id;
-    const senderIds = Array.from(new Set(rows.map((r) => r.sender_id).filter((id): id is string => !!id && id !== me)));
-    let names: Record<string, string> = {};
-    if (senderIds.length > 0) {
-      const { data: senders } = await supabase.from('profiles').select('id, username').in('id', senderIds);
-      names = Object.fromEntries((senders ?? []).map((p: { id: string; username: string }) => [p.id, p.username]));
-    }
-    setNotifications(rows.map((r) => ({ ...r, senderName: r.sender_id ? names[r.sender_id] ?? null : null })));
-  }
 
   async function handleClick(n: Notification) {
     if (!n.read) {

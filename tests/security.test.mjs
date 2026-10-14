@@ -221,6 +221,42 @@ test('Ukončit v appce: tentýž záznam se už sám nevrátí (dřív "po konci
   assert.equal(live.decideLive({ ...liveRow, app_stopped_at: iso(T0 - MIN), stopped_video_uid: 'Z' }, { listed: true, connected: true, videoUid: 'A' }, T0 + 11 * MIN), 'confirm');
 });
 
+test('Appka vysílá a HLS vstupu běží: živě, i když lifecycle a seznam mlčí (dřív "diváci tě vidí" a Kine "nikdo nevysílá")', () => {
+  const at = T0 + 30 * MIN;
+  // přenos z appky: hlášení čerstvé, Cloudflare ho dosud nepotvrdil, začal před 5 minutami (okno důvěry pryč)
+  const appRow = { ...liveRow, app_ping_at: iso(at - 10000), started_at: iso(at - 5 * MIN), checked_at: null, cf_confirmed_at: null, current_video_uid: null };
+  assert.equal(live.decideLive(appRow, { listed: false, connected: null, hls: true }, at), 'confirm');
+  assert.equal(live.decideLive(appRow, { listed: false, connected: false, hls: true }, at), 'confirm');
+  // bez HLS (nebo HLS skončil) a bez potvrzení: konec jako dřív
+  assert.equal(live.decideLive(appRow, { listed: false, connected: null, hls: null }, at), 'end');
+  assert.equal(live.decideLive(appRow, { listed: false, connected: null, hls: false }, at), 'end');
+  // HLS bez čerstvého hlášení z appky se nebere (skončený přenos ho neoživí)
+  assert.equal(live.decideLive({ ...appRow, app_ping_at: iso(at - 5 * MIN) }, { listed: false, connected: null, hls: true }, at), 'end');
+  assert.equal(live.decideLive(endedRow, { listed: false, connected: null, hls: true }, T0 + 21 * MIN), 'none');
+});
+
+test('"Pořád vysílám" u přenosu, který Kine ukončila: zpátky jen s důkazem od Cloudflare', () => {
+  const at = T0 + 40 * MIN;
+  const unconfirmedEnd = { ...endedRow, ended_at: iso(at - 2 * MIN), app_ping_at: null, app_stopped_at: null, stopped_video_uid: null };
+  // Cloudflare vstup vidí (běžící záznam vstupu / lifecycle / HLS) - zpátky
+  assert.equal(live.pingRevives(unconfirmedEnd, { listed: true, connected: null, videoUid: 'V', videoCreatedAt: iso(at - 6 * MIN) }, at), true);
+  assert.equal(live.pingRevives(unconfirmedEnd, { listed: false, connected: true }, at), true);
+  assert.equal(live.pingRevives(unconfirmedEnd, { listed: false, connected: null, hls: true }, at), true);
+  // bez důkazu ne (samotné hlášení appky do Živě nepustí)
+  assert.equal(live.pingRevives(unconfirmedEnd, { listed: false, connected: null, hls: null }, at), false);
+  assert.equal(live.pingRevives(unconfirmedEnd, { listed: false, connected: false, hls: false }, at), false);
+  // po Ukončit v appce: tentýž záznam ne (zpožděné "pořád vysílám"), nové video ano
+  const stopAt = at - 30000;
+  const stopped = { ...unconfirmedEnd, ended_at: iso(stopAt), app_stopped_at: iso(stopAt), stopped_video_uid: 'A' };
+  assert.equal(live.pingRevives(stopped, { listed: true, connected: true, videoUid: 'A', videoCreatedAt: iso(stopAt - 10 * MIN) }, at), false);
+  assert.equal(live.pingRevives(stopped, { listed: true, connected: null, videoUid: null, videoCreatedAt: iso(stopAt - 10 * MIN) }, at), false);
+  assert.equal(live.pingRevives(stopped, { listed: true, connected: true, videoUid: 'B', videoCreatedAt: iso(stopAt + 10000) }, at), true);
+  assert.equal(live.pingRevives(stopped, { listed: false, connected: true, videoUid: 'B', videoCreatedAt: null }, at), true);
+  // nevíme, které video to je: až po APP_STOP_IDENTITY_MS
+  assert.equal(live.pingRevives({ ...stopped, stopped_video_uid: null }, { listed: false, connected: null, hls: true }, at), false);
+  assert.equal(live.pingRevives({ ...stopped, stopped_video_uid: null }, { listed: false, connected: null, hls: true }, stopAt + live.APP_STOP_IDENTITY_MS + 1000), true);
+});
+
 test('Cloudflare: stav vstupu z API (záloha za lifecycle)', () => {
   assert.equal(live.connectedFromInputStatus('connected'), true);
   assert.equal(live.connectedFromInputStatus('reconnected'), true);

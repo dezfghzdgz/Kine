@@ -115,6 +115,11 @@ export type CloudflareSeen = {
   videoCreatedAt?: string | null;
   /** Které video to je (lifecycle, jinak seznam běžících); null = nevíme. */
   videoUid?: string | null;
+  /**
+   * HLS vstupu u Cloudflare (totéž, co hraje divák): true = živý playlist, false = není,
+   * null = nevíme / neptalo se. Bere se jen spolu s čerstvým hlášením z appky.
+   */
+  hls?: boolean | null;
 };
 
 /**
@@ -173,6 +178,10 @@ export function decideLive(
   // (jinak "jistý") občas chvíli zaostává - tady se věří seznamu, ať se přenos potvrdí
   // (bez potvrzení by appce po 3 minutách přestalo platit "pořád vysílám").
   if (!streaming && cf.listed && row.is_live && appPingFresh(row, now)) streaming = true;
+  // Appka vysílá a playlist vstupu u Cloudflare běží (to samé vidí divák): vysílá, i když
+  // lifecycle a seznam zrovna mlčí - dřív appka hlásila "diváci tě vidí" a Kine přenos
+  // po 3 minutách bez potvrzení stáhla ("nikdo nevysílá").
+  if (!streaming && cf.hls === true && appPingFresh(row, now)) streaming = true;
 
   if (row.is_live) {
     if (streaming) return 'confirm';
@@ -202,6 +211,31 @@ export function decideLive(
   // jsem, a v Živě visím dál"); jistě vysílající vstup ano, po chvíli.
   if (!sure) return 'none';
   return now - ended >= CF_REVIVE_HOLDOFF_MS ? 'confirm' : 'none';
+}
+
+/**
+ * "Pořád vysílám" z appky u přenosu, který Kine mezitím ukončila (Cloudflare ho
+ * minuty nepotvrdil): vrátit ho, když Cloudflare vstup teď opravdu vidí
+ * (lifecycle, běžící záznam vstupu, nebo živý HLS). Bez důkazu od Cloudflare
+ * ne - samotné hlášení appky přenos do "Živě" nevrátí. Po Ukončit v appce
+ * tentýž záznam ne (zpožděný "pořád vysílám" po konci).
+ */
+export function pingRevives(
+  row: SignalRow & { ended_at?: string | null },
+  seen: { listed: boolean; connected: boolean | null; hls?: boolean | null; videoUid?: string | null; videoCreatedAt?: string | null },
+  now: number = Date.now()
+): boolean {
+  const live = seen.connected === true || seen.listed || seen.hls === true;
+  if (!live) return false;
+  const appStopped = endedByApp(row);
+  if (appStopped === null) return true;
+  const created = ms(seen.videoCreatedAt);
+  const stoppedUid = row.stopped_video_uid ?? null;
+  // Stejná pravidla jako decideLive po Ukončit: jiné video (vzniklé po Ukončit) ano, tentýž záznam ne.
+  if (seen.videoUid && stoppedUid) return seen.videoUid !== stoppedUid && (!Number.isFinite(created) || created > appStopped);
+  if (Number.isFinite(created)) return created > appStopped;
+  // Nevíme, které video to je ani kdy vzniklo: tentýž záznam drží Cloudflare po odpojení nejvýš minutu.
+  return now - appStopped >= APP_STOP_IDENTITY_MS;
 }
 
 /** Přenos, který se do tolika po konci vrátí (stejný záznam u Cloudflare), pokračuje i se svým začátkem. */

@@ -1,5 +1,6 @@
+import type { CSSProperties } from 'react';
 import { DATE_LOCALES, type DictKey, type Lang } from './i18n';
-import { isSpecialBadge, type Badge, type BadgeId } from './badges';
+import { CUSTOM_BADGE_ICONS, isCustomBadgeId, isSpecialBadge, type AnyBadgeId, type Badge, type BadgeId, type CustomBadgeDef } from './badges';
 import type { UiIconName } from '@/components/UiIcon';
 
 /**
@@ -37,11 +38,46 @@ export const BADGE_ICONS: Record<BadgeId, UiIconName> = {
  * Průkopník a Streamer mají vlastní.
  */
 export function badgeTierClass(b: Pick<Badge, 'id' | 'level'>): string {
+  // Vlastní odznak (od týmu Kine): barvu dává badgeStyle.
+  if (isCustomBadgeId(b.id)) return 'tier-special special-custom';
   // Speciální (od týmu Kine) - vlastní vzhled, Majitel ještě zvlášť.
   if (isSpecialBadge(b.id)) return `tier-special special-${b.id}`;
   if (b.id === 'early') return 'tier-pioneer';
   if (b.id === 'streamer') return 'tier-live';
   return `tier-${Math.max(0, Math.min(Number.isFinite(b.level) ? b.level : 0, 7))}`;
+}
+
+/** Ikona odznaku - vlastní odznak má svou (z CUSTOM_BADGE_ICONS). */
+export function badgeIcon(b: Pick<Badge, 'id' | 'custom'>): UiIconName {
+  if (isCustomBadgeId(b.id)) {
+    const icon = b.custom?.icon;
+    return icon && (CUSTOM_BADGE_ICONS as readonly string[]).includes(icon) ? (icon as UiIconName) : 'starFilled';
+  }
+  return BADGE_ICONS[b.id];
+}
+
+function mixHex(hex: string, toward: number, amount: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (shift: number) => {
+    const v = (n >> shift) & 255;
+    return Math.round(v + (toward - v) * amount)
+      .toString(16)
+      .padStart(2, '0');
+  };
+  return `#${ch(16)}${ch(8)}${ch(0)}`;
+}
+
+/** Barvy vlastního odznaku (proměnné medaile a textu); u ostatních nic - mají třídu. */
+export function badgeStyle(b: Pick<Badge, 'id' | 'custom'>): CSSProperties | undefined {
+  if (!isCustomBadgeId(b.id) || !b.custom || !/^#[0-9a-f]{6}$/i.test(b.custom.color)) return undefined;
+  const c = b.custom.color;
+  return { '--tier-a': mixHex(c, 255, 0.35), '--tier-b': mixHex(c, 0, 0.35), '--tier-text': mixHex(c, 255, 0.55) } as CSSProperties;
+}
+
+/** Vlastní obrázek odznaku (PNG, JPG, GIF, WebP) místo ikony; null = ikona. */
+export function badgeImage(b: Pick<Badge, 'custom'>): string | null {
+  const url = b.custom?.image ?? null;
+  return url && /^https:\/\//.test(url) ? url : null;
 }
 
 const TIER_NAME_KEYS: DictKey[] = ['badgeTier0', 'badgeTier1', 'badgeTier2', 'badgeTier3', 'badgeTier4', 'badgeTier5', 'badgeTier6', 'badgeTier7'];
@@ -72,7 +108,8 @@ export function badgeTexts(t: T, lang: Lang) {
     return rule === 'one' ? 'badgeYearsOne' : rule === 'few' ? 'badgeYearsFew' : 'badgeYearsMany';
   };
 
-  const label = (id: BadgeId, value: number): string => {
+  const label = (id: AnyBadgeId, value: number, custom?: CustomBadgeDef): string => {
+    if (isCustomBadgeId(id)) return custom?.name || t('badgeCustomFallback');
     switch (id) {
       case 'owner':
         return t('badgeOwner');
@@ -117,7 +154,8 @@ export function badgeTexts(t: T, lang: Lang) {
     }
   };
 
-  const tip = (id: BadgeId, value: number): string => {
+  const tip = (id: AnyBadgeId, value: number, custom?: CustomBadgeDef): string => {
+    if (isCustomBadgeId(id)) return custom?.description || t('badgeCustomTip');
     switch (id) {
       case 'owner':
         return t('badgeOwnerTip');
@@ -163,7 +201,8 @@ export function badgeTexts(t: T, lang: Lang) {
   };
 
   /** Název řady pro sbírku (u zamčené řady bez čísla). */
-  const series = (id: BadgeId): string => {
+  const series = (id: AnyBadgeId, custom?: CustomBadgeDef): string => {
+    if (isCustomBadgeId(id)) return custom?.name || t('badgeCustomFallback');
     switch (id) {
       case 'owner':
         return t('badgeOwner');
@@ -208,7 +247,10 @@ export function badgeTexts(t: T, lang: Lang) {
     }
   };
 
-  return { number, label, tip, series };
+  /** Název a popisek přímo z odznaku (vlastní odznak nese svůj název). */
+  const of = (b: Pick<Badge, 'id' | 'value' | 'custom'>) => ({ label: label(b.id, b.value, b.custom), tip: tip(b.id, b.value, b.custom) });
+
+  return { number, label, tip, series, of };
 }
 
 /**
@@ -222,6 +264,9 @@ export function badgeNotificationText(message: string, t: T, lang: Lang): string
     if (!(id in BADGE_ICONS)) return null;
     return t('badgeNotif').replace('{badge}', badgeTexts(t, lang).label(id, Number(one[2])));
   }
+  // Vlastní odznak od týmu Kine: název je přímo ve zprávě (lib/badgeCheck.ts).
+  const custom = /^badge-custom:(.{1,40})$/.exec(message);
+  if (custom) return t('badgeNotif').replace('{badge}', custom[1]);
   const all = /^badges:(\d+)$/.exec(message);
   if (all) return t('badgesNotifFirst').replace('{n}', all[1]);
   // Víc nových odznaků naráz (třeba po přidání nových řad) - jedno oznámení, ne pět.

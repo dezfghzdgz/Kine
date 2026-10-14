@@ -10809,8 +10809,18 @@ a.live-small-btn.live-rec-save {
   background-size: calc(180px * var(--pattern-scale, 1)) auto;
   opacity: calc(0.06 + var(--pattern-k, 0.4) * 0.6);
 }
-html[data-theme="light"] .kine-pattern:not(.kine-pattern-custom) {
+html[data-theme="light"] .kine-pattern:not(.kine-pattern-custom):not(.kine-pattern-photo) {
   opacity: calc(0.05 + var(--pattern-k, 0.4) * 0.28);
+}
+/* Jedna fotka nebo GIF přes celé pozadí (Nastavení -> Vzhled -> Vzor -> Fotka / GIF). */
+.kine-pattern-photo {
+  background-color: transparent;
+  -webkit-mask-image: none;
+  mask-image: none;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+  opacity: calc(0.12 + var(--pattern-k, 0.4) * 0.88);
 }
 .kine-pattern-dots,
 .appearance-pattern-swatch-dots {
@@ -10895,12 +10905,18 @@ html[data-theme="light"] .kine-pattern:not(.kine-pattern-custom) {
   mask-size: var(--pattern-tile, 24px);
 }
 .appearance-pattern-swatch-none::after,
-.appearance-pattern-swatch-custom::after {
+.appearance-pattern-swatch-custom::after,
+.appearance-pattern-swatch-photo::after {
   display: none;
 }
 .appearance-pattern-swatch-custom {
   background-repeat: repeat;
   background-size: 40px auto;
+}
+.appearance-pattern-swatch-photo {
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
 }
 .appearance-presets {
   display: grid;
@@ -11848,4 +11864,149 @@ button.secondary:hover:not(:disabled) {
 }
 .admin-badges-chips .badge-pill:disabled {
   cursor: progress;
+}
+
+/* ---------- Vlastní odznaky od týmu Kine (lib/badges.ts - custom; app/admin/badges) ---------- */
+.special-custom .badge-medal,
+.badge-medal.special-custom {
+  color: #fff;
+}
+/* Vlastní obrázek (i GIF) místo ikony - celá medaile. */
+.badge-medal.badge-medal-image {
+  background: var(--panel-raised);
+}
+.badge-medal.badge-medal-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+.admin-custom-badges {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.admin-custom-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.admin-custom-new,
+.admin-custom-save,
+.admin-custom-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.admin-custom-cancel {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.admin-custom-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.admin-custom-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.admin-custom-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.admin-custom-preview {
+  padding: 6px 0;
+}
+.admin-custom-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.admin-custom-field > span {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.admin-custom-icons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 6px;
+}
+.admin-custom-icon {
+  display: grid;
+  place-items: center;
+  height: 40px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.admin-custom-icon.active {
+  color: var(--brand);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px rgba(var(--brand-rgb), 0.25);
+}
+.admin-custom-colors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.admin-custom-color {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+.admin-custom-color.active {
+  border-color: var(--text);
+}
+.admin-custom-color-input {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 2px dashed var(--border);
+  border-radius: 50%;
+  background: none;
+  overflow: hidden;
+  cursor: pointer;
+}
+.admin-custom-color-input::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+.admin-custom-color-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+.admin-custom-color-input::-moz-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+.admin-custom-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.admin-custom-chip {
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+.admin-custom-chip .badge-pill {
+  cursor: pointer;
 }

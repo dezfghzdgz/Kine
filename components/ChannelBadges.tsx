@@ -7,15 +7,16 @@ import { supabase } from '@/lib/supabaseClient';
 import {
   badgeProgress,
   computeBadges,
+  earnedProgress,
   nextBadge,
   sanitizeShowcase,
   showcaseBadges,
   SHOWCASE_MAX,
+  type AnyBadgeId,
   type Badge,
-  type BadgeId,
   type BadgeStats,
 } from '@/lib/badges';
-import { BADGE_ICONS, badgeTexts, badgeTierClass, badgeTierName } from '@/lib/badgeText';
+import { BADGE_ICONS, badgeIcon, badgeImage, badgeStyle, badgeTexts, badgeTierClass, badgeTierName } from '@/lib/badgeText';
 import UiIcon from './UiIcon';
 
 /**
@@ -23,9 +24,11 @@ import UiIcon from './UiIcon';
  *
  * Na kanálu jsou nejvýš tři - ty, které si majitel vybral (jako v Clash
  * Royale), dokud nevybral, tři nejvýraznější. Barva podle stupně: bronz,
- * stříbro, zlato, platina, diamant. "+N" a tužka otevřou sbírku: všechny
- * řady, získané i zamčené, s postupem k dalšímu stupni; majitel v ní
- * vybírá, které ukáže. Majitel navíc vidí, který odznak má nejblíž.
+ * stříbro, zlato, platina, diamant. "+N" a tužka otevřou sbírku: majitel
+ * v ní vidí všechny řady (získané i zamčené, s postupem) a vybírá, které
+ * ukáže - i speciální a vlastní odznaky od týmu Kine. U cizího kanálu je
+ * sbírka jen ke čtení a jen s tím, co dotyčný opravdu má. Majitel navíc
+ * vidí, který odznak má nejblíž.
  */
 export default function ChannelBadges({
   stats,
@@ -38,7 +41,7 @@ export default function ChannelBadges({
   own: boolean;
   /** profiles.badge_showcase - null = ještě nevybíral (nebo chybí migrace). */
   showcase: unknown;
-  onShowcaseSaved?: (next: BadgeId[]) => void;
+  onShowcaseSaved?: (next: AnyBadgeId[]) => void;
   /** Otevřít sbírku hned (odkaz z oznámení: ?badges=1). */
   openOnLoad?: boolean;
 }) {
@@ -60,7 +63,7 @@ export default function ChannelBadges({
     <>
       <div className="channel-badges" aria-label={t('badgesLabel')}>
         {shown.map((b) => (
-          <BadgePill key={b.id} badge={b} label={text.label(b.id, b.value)} tip={text.tip(b.id, b.value)} />
+          <BadgePill key={b.id} badge={b} label={text.of(b).label} tip={text.of(b).tip} />
         ))}
         {hidden > 0 && (
           <button type="button" className="channel-badge-more" onClick={() => setOpen(true)} title={t('badgesAll')}>
@@ -98,11 +101,25 @@ export default function ChannelBadges({
 /** Odznak jako medaile s textem - stejný v hlavičce kanálu i v oslavném okénku. */
 export function BadgePill({ badge, label, tip, size = 'md' }: { badge: Badge; label: string; tip?: string; size?: 'md' | 'lg' }) {
   return (
-    <span className={`badge-pill ${badgeTierClass(badge)} ${size === 'lg' ? 'badge-pill-lg' : ''}`} title={tip}>
-      <span className="badge-medal" aria-hidden="true">
-        <UiIcon name={BADGE_ICONS[badge.id]} size={size === 'lg' ? 18 : 13} />
-      </span>
+    <span className={`badge-pill ${badgeTierClass(badge)} ${size === 'lg' ? 'badge-pill-lg' : ''}`} title={tip} style={badgeStyle(badge)}>
+      <BadgeMedal badge={badge} size={size === 'lg' ? 18 : 13} />
       {label}
+    </span>
+  );
+}
+
+/** Medaile odznaku: ikona, nebo vlastní obrázek (i GIF) u vlastního odznaku od týmu Kine. */
+export function BadgeMedal({ badge, size = 13, large = false, withTier = false }: { badge: Badge; size?: number; large?: boolean; withTier?: boolean }) {
+  const image = badgeImage(badge);
+  // withTier: medaile sama nese stupeň a barvy (sbírka) - jinak je má plaketka kolem.
+  const tier = withTier ? badgeTierClass(badge) : '';
+  return (
+    <span
+      className={`badge-medal ${large ? 'badge-medal-lg' : ''} ${image ? 'badge-medal-image' : ''} ${tier}`.replace(/\s+/g, ' ').trim()}
+      style={withTier ? badgeStyle(badge) : undefined}
+      aria-hidden="true"
+    >
+      {image ? <img src={image} alt="" loading="lazy" decoding="async" /> : <UiIcon name={badgeIcon(badge)} size={size} />}
     </span>
   );
 }
@@ -119,13 +136,14 @@ function BadgeCollection({
   own: boolean;
   showcase: unknown;
   onClose: () => void;
-  onSaved: (picked: BadgeId[]) => void;
+  onSaved: (picked: AnyBadgeId[]) => void;
 }) {
   const { t, lang } = useLanguage();
   const text = badgeTexts(t, lang);
-  const progress = badgeProgress(stats);
+  // Cizí kanál: jen to, co dotyčný má (zamčené řady a postup patří majiteli).
+  const progress = own ? badgeProgress(stats) : earnedProgress(stats);
   const earned = computeBadges(stats);
-  const [picked, setPicked] = useState<BadgeId[]>(() => showcaseBadges(earned, showcase).map((b) => b.id));
+  const [picked, setPicked] = useState<AnyBadgeId[]>(() => showcaseBadges(earned, showcase).map((b) => b.id));
   const [full, setFull] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -140,7 +158,7 @@ function BadgeCollection({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  function toggle(id: BadgeId) {
+  function toggle(id: AnyBadgeId) {
     setError(null);
     if (picked.includes(id)) {
       setPicked(picked.filter((x) => x !== id));
@@ -154,22 +172,35 @@ function BadgeCollection({
     setPicked([...picked, id]);
   }
 
-  /** Uložit výběr (prázdný = na kanálu schválně žádný odznak). */
-  async function save(next: BadgeId[] = picked) {
+  /**
+   * Uložit výběr (prázdný = na kanálu schválně žádný odznak). Ukládá server
+   * (app/api/badges/showcase): ověří, že odznaky opravdu máš, a zapíše výběr
+   * i tam, kde by zápis z prohlížeče zastavila práva v databázi - dřív se
+   * výběr občas "nedal uložit".
+   */
+  async function save(next: AnyBadgeId[] = picked) {
     setSaving(true);
     setError(null);
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth.user) {
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) return;
+      const res = await fetch('/api/badges/showcase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ showcase: next }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(t('badgesSaveFailed').replace('{error}', String(body?.error ?? res.status)));
+        return;
+      }
+      onSaved(sanitizeShowcase(body?.showcase) ?? next);
+    } catch (e) {
+      setError(t('badgesSaveFailed').replace('{error}', (e as Error).message));
+    } finally {
       setSaving(false);
-      return;
     }
-    const { error: saveError } = await supabase.from('profiles').update({ badge_showcase: next }).eq('id', auth.user.id);
-    setSaving(false);
-    if (saveError) {
-      setError(t('badgesSaveFailed').replace('{error}', saveError.message));
-      return;
-    }
-    onSaved(next);
   }
 
   const unchanged = savedPick !== null && JSON.stringify(picked) === JSON.stringify(savedPick);
@@ -186,7 +217,7 @@ function BadgeCollection({
           </span>
           <div className="badge-modal-title">
             <p className="panel-heading" style={{ margin: 0 }}>
-              {t('badgesLabel')} <span className="badge-modal-count">{earned.length}/{progress.length}</span>
+              {t('badgesLabel')} <span className="badge-modal-count">{own ? `${earned.length}/${progress.length}` : earned.length}</span>
             </p>
             {own && <p className={`badge-modal-hint ${full ? 'warn' : ''}`}>{full ? t('badgesPickFull') : t('badgesPickHint')}</p>}
           </div>
@@ -203,10 +234,14 @@ function BadgeCollection({
             const ratio = p.next ? Math.max(0, Math.min(1, p.current / p.next)) : 1;
             const body = (
               <>
-                <span className={`badge-medal badge-medal-lg ${badge ? badgeTierClass(badge) : 'tier-locked'}`} aria-hidden="true">
-                  <UiIcon name={badge ? BADGE_ICONS[p.id] : 'lock'} size={22} />
-                </span>
-                <span className="badge-tile-name">{badge ? text.label(p.id, badge.value) : text.series(p.id)}</span>
+                {badge ? (
+                  <BadgeMedal badge={badge} size={22} large withTier />
+                ) : (
+                  <span className="badge-medal badge-medal-lg tier-locked" aria-hidden="true">
+                    <UiIcon name="lock" size={22} />
+                  </span>
+                )}
+                <span className="badge-tile-name">{badge ? text.of(badge).label : text.series(p.id)}</span>
                 <span className="badge-tile-meta">
                   {badge && p.tiers > 1
                     ? `${badgeTierName(badge.level, t)} · ${
@@ -229,7 +264,7 @@ function BadgeCollection({
                 {selected && <span className="badge-tile-order">{order}</span>}
               </>
             );
-            const tip = badge ? text.tip(p.id, badge.value) : text.tip(p.id, p.next ?? 1);
+            const tip = badge ? text.of(badge).tip : text.tip(p.id, p.next ?? 1);
             return own && badge ? (
               <button key={p.id} type="button" className={`badge-tile ${selected ? 'selected' : ''}`} aria-pressed={selected} onClick={() => toggle(p.id)} title={tip}>
                 {body}

@@ -90,7 +90,7 @@ export default function BadgeWatcher() {
       </div>
       <div className="badge-toast-badges">
         {fresh.badges.slice(0, 3).map((b) => (
-          <BadgePill key={`${b.id}:${b.value}`} badge={b} label={text.label(b.id, b.value)} size="lg" />
+          <BadgePill key={`${b.id}:${b.value}`} badge={b} label={text.of(b).label} size="lg" />
         ))}
       </div>
       <Link href={`/channel/${fresh.userId}?badges=1`} className="badge-toast-link" onClick={() => setFresh(null)}>

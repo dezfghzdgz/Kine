@@ -260,7 +260,8 @@ export default function Sidebar() {
             {t('clientErrorsLabel')}
           </Link>
         )}
-        {isAdmin && (
+        {/* Odznaky spravuje celý tým Kine - moderátor i správce. */}
+        {(isAdmin || isModerator) && (
           <Link href="/admin/badges" className={`sidebar-link ${pathname === '/admin/badges' ? 'active' : ''}`}>
             <UiIcon name="trophy" size={20} />
             {t('specialBadgesAdminLabel')}
@@ -476,7 +477,7 @@ export default function Sidebar() {
               {t('clientErrorsLabel')}
             </Link>
           )}
-          {isAdmin && (
+          {(isAdmin || isModerator) && (
             <Link href="/admin/badges" className="sidebar-link" onClick={closeMobileNav}>
               <UiIcon name="trophy" size={20} />
               {t('specialBadgesAdminLabel')}

@@ -46,7 +46,7 @@ export type Density = 'compact' | 'normal' | 'comfy';
 /** Kdy hrají animované profilovky a bannery (lib/animatedImage.ts). */
 export type AvatarMotion = 'always' | 'hover' | 'never';
 /** Vzor přes pozadí celé appky (v barvě appky) - nebo vlastní obrázek jako dlaždice. */
-export type Pattern = 'none' | 'dots' | 'grid' | 'diagonal' | 'waves' | 'plus' | 'circles' | 'zigzag' | 'custom';
+export type Pattern = 'none' | 'dots' | 'grid' | 'diagonal' | 'waves' | 'plus' | 'circles' | 'zigzag' | 'custom' | 'photo';
 
 export type Appearance = {
   look: Look;
@@ -96,7 +96,7 @@ export const CARD_SIZES: readonly CardSize[] = ['s', 'm', 'l'];
 export const FONTS: readonly FontChoice[] = ['inter', 'system', 'rounded', 'serif', 'mono'];
 export const DENSITIES: readonly Density[] = ['compact', 'normal', 'comfy'];
 export const AVATAR_MOTIONS: readonly AvatarMotion[] = ['always', 'hover', 'never'];
-export const PATTERNS: readonly Pattern[] = ['none', 'dots', 'grid', 'diagonal', 'waves', 'plus', 'circles', 'zigzag', 'custom'];
+export const PATTERNS: readonly Pattern[] = ['none', 'dots', 'grid', 'diagonal', 'waves', 'plus', 'circles', 'zigzag', 'custom', 'photo'];
 
 export const THEME_KEY = 'kine-theme';
 export const APPEARANCE_KEY = 'kine-appearance';
@@ -106,6 +106,8 @@ export const BACKDROP_IMAGE_KEY = 'kine-backdrop-image';
 export const PATTERN_IMAGE_KEY = 'kine-pattern-image';
 /** Událost na window, když se vzhled změní (nabídka profilu, pozadí, nastavení). */
 export const APPEARANCE_EVENT = 'kine-appearance';
+/** Kdy se naposledy změnila fotka / GIF na pozadí (samotný soubor je v IndexedDB) - ať o tom ví i další karty. */
+export const PHOTO_STAMP_KEY = 'kine-photo-stamp';
 
 export const DEFAULT_APPEARANCE: Appearance = {
   look: 'classic',
@@ -288,6 +290,148 @@ export async function patternImageFromFile(file: Blob): Promise<string | null> {
   // WebP (menší, s průhledností); prohlížeč, který ho neumí, vrátí PNG.
   const url = canvas.toDataURL('image/webp', 0.9);
   return /^data:image\/(webp|png);base64,/.test(url) ? url : null;
+}
+
+// ---- jedna fotka nebo GIF přes celé pozadí --------------------------------------------
+
+/**
+ * "Fotka / GIF" místo vzoru: jeden obrázek přes celé pozadí appky (ne dlaždice).
+ * Soubor je v IndexedDB (localStorage by velkou fotku ani GIF nepobral) -
+ * fotka zmenšená na nejvýš 2560 px, GIF tak, jak je (jinak by se zastavil),
+ * nejvýš PHOTO_MAX_GIF_BYTES.
+ */
+export const PHOTO_MAX_GIF_BYTES = 8 * 1024 * 1024;
+export const PHOTO_MAX_SIDE = 2560;
+const PHOTO_DB = 'kine-appearance';
+const PHOTO_STORE = 'files';
+const PHOTO_KEY = 'photo';
+
+function openPhotoDb(): Promise<IDBDatabase | null> {
+  return new Promise((resolve) => {
+    try {
+      if (typeof indexedDB === 'undefined') return resolve(null);
+      const req = indexedDB.open(PHOTO_DB, 1);
+      req.onupgradeneeded = () => {
+        if (!req.result.objectStoreNames.contains(PHOTO_STORE)) req.result.createObjectStore(PHOTO_STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+      req.onblocked = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+/** Uložená fotka / GIF na pozadí, nebo null. */
+export async function readPhotoBlob(): Promise<Blob | null> {
+  const db = await openPhotoDb();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    try {
+      const req = db.transaction(PHOTO_STORE, 'readonly').objectStore(PHOTO_STORE).get(PHOTO_KEY);
+      req.onsuccess = () => {
+        const value = req.result;
+        resolve(value instanceof Blob && value.size > 0 ? value : null);
+        db.close();
+      };
+      req.onerror = () => {
+        resolve(null);
+        db.close();
+      };
+    } catch {
+      resolve(null);
+      db.close();
+    }
+  });
+}
+
+/** Uloží (nebo smaže, null) fotku / GIF na pozadí. false = nešlo (soukromé okno, plný disk). */
+export async function savePhotoBlob(blob: Blob | null): Promise<boolean> {
+  const db = await openPhotoDb();
+  if (!db) return false;
+  const ok = await new Promise<boolean>((resolve) => {
+    try {
+      const tx = db.transaction(PHOTO_STORE, 'readwrite');
+      const store = tx.objectStore(PHOTO_STORE);
+      if (blob) store.put(blob, PHOTO_KEY);
+      else store.delete(PHOTO_KEY);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+      tx.onabort = () => resolve(false);
+    } catch {
+      resolve(false);
+    }
+  });
+  db.close();
+  if (ok) {
+    try {
+      storage()?.setItem(PHOTO_STAMP_KEY, String(Date.now()));
+    } catch {
+      // jen ostatní karty se to dozví až po obnovení
+    }
+    announce();
+  }
+  return ok;
+}
+
+/** GIF podle obsahu (ne podle přípony). */
+async function isGif(file: Blob): Promise<boolean> {
+  try {
+    const head = new Uint8Array(await file.slice(0, 6).arrayBuffer());
+    return head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x38;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Obrázek z disku -> fotka na pozadí: GIF beze změny (do PHOTO_MAX_GIF_BYTES,
+ * jinak by přestal hrát), ostatní zmenšené na PHOTO_MAX_SIDE jako JPEG.
+ */
+export async function photoFromFile(file: Blob): Promise<{ blob: Blob } | { error: 'too-big' | 'unreadable' }> {
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    return { error: 'unreadable' };
+  }
+  if (await isGif(file)) {
+    bitmap.close();
+    if (file.size > PHOTO_MAX_GIF_BYTES) return { error: 'too-big' };
+    return { blob: file.type === 'image/gif' ? file : new Blob([file], { type: 'image/gif' }) };
+  }
+  const scale = Math.min(1, PHOTO_MAX_SIDE / Math.max(1, bitmap.width), PHOTO_MAX_SIDE / Math.max(1, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    bitmap.close();
+    return { error: 'unreadable' };
+  }
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.88));
+  return blob ? { blob } : { error: 'unreadable' };
+}
+
+/** První snímek GIFu jako obrázek (klidný režim: pozadí se nehýbe). null = nejde. */
+export async function stillFrame(blob: Blob): Promise<Blob | null> {
+  try {
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    return await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
+  } catch {
+    return null;
+  }
 }
 
 // ---- vlastní obrázek za sklem ------------------------------------------------------

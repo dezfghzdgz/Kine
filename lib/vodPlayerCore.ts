@@ -37,6 +37,37 @@ export function startEstimate(rememberedBps: number | null | undefined): number 
   return Math.round(Math.max(MIN_START_BPS, Math.min(MAX_START_BPS, rememberedBps * 0.6)));
 }
 
+/** Počítač (a televize) bez paměti a bez údaje o připojení: rovnou kolem 1080p. */
+export const DESKTOP_DEFAULT_START_BPS = 5_000_000;
+/** Nejvýš tak vysoko se na počítači začíná (strop pro zapamatovaný odhad). */
+export const DESKTOP_MAX_START_BPS = 15_000_000;
+
+/**
+ * Odhad, se kterým přehrávač začíná, podle zařízení. Telefon a tablet jako dřív
+ * (první kus malý - rozjede se rychle i na datech). Počítač a televize mají
+ * skoro vždycky wifi nebo kabel: tam se začíná rovnou v kvalitě, na kterou
+ * připojení stačí (zapamatovaný odhad, jinak co řekne prohlížeč, jinak ~1080p) -
+ * dřív i na rychlé wifi běžely první vteřiny rozmazaně ("komprese na začátku").
+ * Když je připojení pomalé, hls.js po prvním kusu kvalitu sníží a příště se
+ * začne podle zapamatovaného (nízkého) odhadu. `small` = náhled po najetí
+ * myší - ten se dál začíná malý.
+ */
+export function startEstimateFor(opts: {
+  remembered: number | null | undefined;
+  device: 'phone' | 'tablet' | 'desktop' | 'tv';
+  /** navigator.connection.downlink (Mb/s, Chrome ho ořízne na 10); null = nevíme. */
+  downlinkMbps?: number | null;
+  small?: boolean;
+}): number {
+  if (opts.small || opts.device === 'phone' || opts.device === 'tablet') return startEstimate(opts.remembered);
+  const clamp = (bps: number) => Math.round(Math.max(MIN_START_BPS, Math.min(DESKTOP_MAX_START_BPS, bps)));
+  const remembered = opts.remembered;
+  if (remembered && Number.isFinite(remembered) && remembered > 0) return clamp(remembered * 0.8);
+  const down = opts.downlinkMbps;
+  if (typeof down === 'number' && Number.isFinite(down) && down > 0) return clamp(down * 1_000_000 * 0.8);
+  return DESKTOP_DEFAULT_START_BPS;
+}
+
 export type EngineChoice = 'native' | 'iframe';
 
 /** Vlastní přehrávač, nebo iframe Cloudflare? (vynucený Cloudflare = ?player=cloudflare, záchrana při potížích) */

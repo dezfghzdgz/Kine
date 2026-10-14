@@ -1,6 +1,6 @@
 import { supabaseServer } from './supabaseServer';
 import { isSpark } from './videoBlocks';
-import { badgeKey, computeBadges, mergeSeen, sanitizeSpecial, unseenBadges, type Badge, type BadgeStats } from './badges';
+import { badgeKey, computeBadges, mergeSeen, sanitizeCustom, sanitizeSpecial, unseenBadges, type Badge, type BadgeStats, type CustomBadgeDef } from './badges';
 
 /**
  * Oznámení o nově odemčeném odznaku (lib/badges.ts).
@@ -71,7 +71,7 @@ export async function badgeStatsFor(userId: string, joinedAt: string | null, now
   const rows = await ownVideos(userId);
   if (!rows) return null;
   const published = rows.filter((v) => !v.scheduled_at || Date.parse(v.scheduled_at) <= now);
-  const [subs, streamed, likes, posts, comments, collabs, liveSeconds, special] = await Promise.all([
+  const [subs, streamed, likes, posts, comments, collabs, liveSeconds, special, custom] = await Promise.all([
     supabaseServer.from('subscriptions').select('*', { count: 'exact', head: true }).eq('channel_id', userId),
     countOf(supabaseServer.from('videos').select('id', { count: 'exact', head: true }).eq('owner_id', userId).not('live_started_at', 'is', null)),
     // Lajky u vlastních videí (jedním dotazem přes vztah reakce -> video).
@@ -95,6 +95,8 @@ export async function badgeStatsFor(userId: string, joinedAt: string | null, now
       const { data, error } = await supabaseServer.from('profile_special_badges').select('badge').eq('profile_id', userId);
       return error ? [] : sanitizeSpecial(((data ?? []) as { badge: string }[]).map((r) => r.badge));
     })(),
+    // Vlastní odznaky od týmu Kine (migrace odznaky-vlastni; bez ní žádné) - v pořadí přidělení.
+    customBadgesOf(userId),
   ]);
   if (subs.error) return null;
   // Hodiny živě: počítadlo vysílání, nebo aspoň zveřejněné záznamy (dřívější vysílání, než počítadlo vzniklo).
@@ -114,7 +116,29 @@ export async function badgeStatsFor(userId: string, joinedAt: string | null, now
     comments,
     collabs,
     ...(special.length > 0 ? { special } : {}),
+    ...(custom.length > 0 ? { custom } : {}),
   };
+}
+
+/** Vlastní odznaky jednoho uživatele (s tím, jak vypadají); chyba / bez migrace = žádné. */
+export async function customBadgesOf(userId: string): Promise<CustomBadgeDef[]> {
+  try {
+    const { data, error } = await supabaseServer
+      .from('profile_custom_badges')
+      .select('granted_at, custom_badges(id, name, description, icon, color, image_url)')
+      .eq('profile_id', userId)
+      .order('granted_at', { ascending: true })
+      .limit(50);
+    if (error) return [];
+    return sanitizeCustom(
+      ((data ?? []) as any[]).map((r) => {
+        const d = Array.isArray(r.custom_badges) ? r.custom_badges[0] : r.custom_badges;
+        return d ? { id: d.id, name: d.name, description: d.description ?? null, icon: d.icon, color: d.color, image: d.image_url ?? null } : null;
+      })
+    );
+  } catch {
+    return [];
+  }
 }
 
 export type BadgeCheckResult =
@@ -123,6 +147,8 @@ export type BadgeCheckResult =
 
 /** Text oznámení: stroj čitelný, přeloží si ho prohlížeč (components/NotificationBell.tsx). */
 export function badgeNotificationMessage(badge: Badge): string {
+  // Vlastní odznak: název přímo do zprávy (jiný prohlížeč ho jinak nemá odkud vzít).
+  if (badge.custom) return `badge-custom:${badge.custom.name.replace(/[\r\n]+/g, ' ').slice(0, 40)}`;
   return `badge:${badge.id}:${badge.value}`;
 }
 

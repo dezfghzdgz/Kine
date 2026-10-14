@@ -191,7 +191,8 @@ function ChannelPageInner() {
       // Nejvýš 8 s - odznaky z toho, co stránka už má, jsou vidět hned a čekání na server nic neblokuje.
       const statsAbort = new AbortController();
       const statsTimer = setTimeout(() => statsAbort.abort(), 8000);
-      fetch(`/api/badges/stats?channel=${encodeURIComponent(channelId)}`, { signal: statsAbort.signal })
+      // Vlastní kanál bez mezipaměti (nový odznak od týmu Kine, právě vybrané) - cizí z CDN (5 min).
+      fetch(`/api/badges/stats?channel=${encodeURIComponent(channelId)}${ownChannel ? '&fresh=1' : ''}`, { signal: statsAbort.signal })
         .then((res) => (res.ok ? res.json() : null))
         .then((body) => {
           if (body?.stats && typeof body.stats === 'object') setBadgeStats(body.stats as BadgeStats);

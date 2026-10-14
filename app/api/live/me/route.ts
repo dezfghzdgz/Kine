@@ -79,6 +79,9 @@ export async function POST(req: NextRequest) {
         recordingUid: result.recordingUid ?? null,
         // Přenos skrytý kontrolou obsahu (čeká na moderátora): appka nemá hlásit "vše v pořádku".
         hidden: result.hidden ? 'moderation' : null,
+        // Je přenos teď na Kine živě a co o vstupu říká Cloudflare (appka to ukáže a zapíše do deníku).
+        live: typeof result.live === 'boolean' ? result.live : null,
+        cloudflare: result.cloudflare ?? null,
       },
       { headers: { 'Cache-Control': 'no-store' } }
     );

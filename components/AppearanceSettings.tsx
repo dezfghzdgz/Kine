@@ -13,15 +13,19 @@ import {
   FONTS,
   PATTERNS,
   TEXT_SIZES,
+  PHOTO_STAMP_KEY,
   backdropImageFromFile,
   patternImageFromFile,
+  photoFromFile,
   readAppearance,
   readBackdropImage,
   readPatternImage,
+  readPhotoBlob,
   readTheme,
   saveAppearance,
   saveBackdropImage,
   savePatternImage,
+  savePhotoBlob,
   saveTheme,
   type Appearance,
   type AvatarMotion,
@@ -63,6 +67,7 @@ const PATTERN_LABELS: Record<Pattern, DictKey> = {
   circles: 'appearancePatternCircles',
   zigzag: 'appearancePatternZigzag',
   custom: 'appearancePatternCustom',
+  photo: 'appearancePatternPhoto',
 };
 
 /**
@@ -126,6 +131,11 @@ export default function AppearanceSettings() {
   const [patternImage, setPatternImage] = useState<string | null>(null);
   const [patternError, setPatternError] = useState<string | null>(null);
   const patternInput = useRef<HTMLInputElement>(null);
+  // Jedna fotka / GIF přes celé pozadí (soubor v IndexedDB; tady jen adresa pro náhled).
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoStamp, setPhotoStamp] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const sync = () => {
@@ -133,12 +143,34 @@ export default function AppearanceSettings() {
       setAppearance(readAppearance());
       setWallpaper(readBackdropImage());
       setPatternImage(readPatternImage());
+      let stamp: string | null = null;
+      try {
+        stamp = window.localStorage.getItem(PHOTO_STAMP_KEY);
+      } catch {
+        stamp = null;
+      }
+      setPhotoStamp(stamp);
     };
     sync();
     setBrand(currentBrandColor());
     window.addEventListener(APPEARANCE_EVENT, sync);
     return () => window.removeEventListener(APPEARANCE_EVENT, sync);
   }, []);
+
+  // Náhled uložené fotky / GIFu (jen když se fotka změní).
+  useEffect(() => {
+    let cancelled = false;
+    let url: string | null = null;
+    void readPhotoBlob().then((blob) => {
+      if (cancelled) return;
+      url = blob ? URL.createObjectURL(blob) : null;
+      setPhotoUrl(url);
+    });
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [photoStamp]);
 
   function change(patch: Partial<Appearance>) {
     const next = { ...appearance, ...patch };
@@ -186,6 +218,32 @@ export default function AppearanceSettings() {
     }
     setPatternImage(url);
     change({ pattern: 'custom' });
+  }
+
+  /** Fotka / GIF přes celé pozadí: fotka se zmenší, GIF zůstane (jinak by se zastavil); vzor se na ni přepne. */
+  async function pickPhoto(file: File) {
+    setPatternError(null);
+    setPhotoBusy(true);
+    try {
+      const result = await photoFromFile(file);
+      if ('error' in result) {
+        setPatternError(result.error === 'too-big' ? t('appearancePhotoTooBig') : t('appearanceImageUnreadable'));
+        return;
+      }
+      if (!(await savePhotoBlob(result.blob))) {
+        setPatternError(t('appearanceImageTooBig'));
+        return;
+      }
+      change({ pattern: 'photo' });
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  async function removePhoto() {
+    await savePhotoBlob(null);
+    setPhotoUrl(null);
+    if (appearance.pattern === 'photo') change({ pattern: 'none' });
   }
 
   function applyPreset(preset: Preset) {
@@ -398,17 +456,28 @@ export default function AppearanceSettings() {
               className={`appearance-pattern-chip ${appearance.pattern === value ? 'active' : ''}`}
               data-pattern={value}
               onClick={() => {
-                // Vlastní vzor bez obrázku: rovnou výběr souboru.
+                // Vlastní vzor / fotka bez obrázku: rovnou výběr souboru.
                 if (value === 'custom' && !patternImage) patternInput.current?.click();
+                else if (value === 'photo' && !photoUrl) photoInput.current?.click();
                 else change({ pattern: value });
               }}
             >
               <span
                 className={`appearance-pattern-swatch appearance-pattern-swatch-${value}`}
                 aria-hidden="true"
-                style={value === 'custom' && patternImage ? { backgroundImage: `url(${patternImage})` } : undefined}
+                style={
+                  value === 'custom' && patternImage
+                    ? { backgroundImage: `url(${patternImage})` }
+                    : value === 'photo' && photoUrl
+                      ? { backgroundImage: `url(${photoUrl})` }
+                      : undefined
+                }
               >
-                {value === 'custom' && !patternImage ? <UiIcon name="plus" size={16} /> : value === 'none' ? <UiIcon name="close" size={14} /> : null}
+                {(value === 'custom' && !patternImage) || (value === 'photo' && !photoUrl) ? (
+                  <UiIcon name={value === 'photo' ? 'image' : 'plus'} size={16} />
+                ) : value === 'none' ? (
+                  <UiIcon name="close" size={14} />
+                ) : null}
               </span>
               {t(PATTERN_LABELS[value])}
             </button>
@@ -426,9 +495,34 @@ export default function AppearanceSettings() {
             if (file) void pickPattern(file);
           }}
         />
+        <input
+          ref={photoInput}
+          type="file"
+          accept="image/*"
+          hidden
+          className="appearance-photo-input"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (file) void pickPhoto(file);
+          }}
+        />
+        {photoBusy && <p className="appearance-label" style={{ marginTop: 8 }}>{t('appearancePhotoSaving')}</p>}
         {patternError && <p className="appearance-error">{patternError}</p>}
         {appearance.pattern !== 'none' && (
           <div className="appearance-wallpaper">
+            {appearance.pattern === 'photo' && photoUrl && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                <button type="button" className="appearance-reset" onClick={() => photoInput.current?.click()}>
+                  <UiIcon name="image" size={15} />
+                  <span>{t('appearanceImageChange')}</span>
+                </button>
+                <button type="button" className="appearance-reset appearance-photo-remove" onClick={() => void removePhoto()}>
+                  <UiIcon name="close" size={15} />
+                  <span>{t('appearanceImageRemove')}</span>
+                </button>
+              </div>
+            )}
             {appearance.pattern === 'custom' && patternImage && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
                 <button type="button" className="appearance-reset" onClick={() => patternInput.current?.click()}>
@@ -463,7 +557,8 @@ export default function AppearanceSettings() {
               />
               <span>{t('appearancePatternBold')}</span>
             </label>
-            <p className="appearance-label" style={{ marginTop: 12 }}>{t('appearancePatternSize')}</p>
+            {appearance.pattern !== 'photo' && <p className="appearance-label" style={{ marginTop: 12 }}>{t('appearancePatternSize')}</p>}
+            {appearance.pattern !== 'photo' && (
             <label className="appearance-range">
               <span>{t('appearancePatternSmaller')}</span>
               <input
@@ -477,6 +572,7 @@ export default function AppearanceSettings() {
               />
               <span>{t('appearancePatternBigger')}</span>
             </label>
+            )}
           </div>
         )}
       </div>

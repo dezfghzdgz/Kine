@@ -22,5 +22,7 @@ export async function GET(req: NextRequest) {
   if (!profile) return NextResponse.json({ error: 'Kanál nenalezen.' }, { status: 404 });
   const stats = await badgeStatsFor(channel, (profile as { created_at?: string | null }).created_at ?? null);
   if (!stats) return NextResponse.json({ error: 'Čísla se teď nepodařilo spočítat.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
-  return NextResponse.json({ stats }, { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' } });
+  // Majitel na svém kanálu (?fresh=1) hned po přidělení / výběru odznaku - bez mezipaměti CDN.
+  const fresh = req.nextUrl.searchParams.get('fresh') === '1';
+  return NextResponse.json({ stats }, { headers: { 'Cache-Control': fresh ? 'private, no-store' : 'public, s-maxage=300, stale-while-revalidate=600' } });
 }

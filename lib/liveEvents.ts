@@ -5,7 +5,7 @@
  * (/admin/live) je pryč a do databáze se nic nezapisuje.
  */
 
-export type LiveEventKind = 'start' | 'confirm' | 'end' | 'stop' | 'unconfirmed' | 'silent-end' | 'hidden' | 'unseen';
+export type LiveEventKind = 'start' | 'confirm' | 'end' | 'stop' | 'unconfirmed' | 'silent-end' | 'hidden' | 'unseen' | 'revive';
 
 /** Stejná událost téhož kanálu nejvýš jednou za tolik (jedna instance serveru) - deník nezaplaví ani blikání. */
 const SAME_EVENT_GAP_MS = 15 * 1000;

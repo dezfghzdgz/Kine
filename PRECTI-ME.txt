@@ -1,3 +1,61 @@
+KINE - živé vysílání se na Kine ukazuje, vlastní odznaky (i pro moderátory), výběr
+odznaků jde uložit, pozadí z fotky / GIFu, video na PC hned v plné kvalitě; appka 0.10.6
+(dodávka kine-zive-odznaky-2-2026-10-13)
+==========================================================================================
+
+Web + appka (Kine do PC / Kine Clipper 0.10.6).
+- Web: rozbal kine-web-zive-odznaky-2.zip do kořene repa Kine a přepiš, nahraj na GitHub
+  (přetažením) a pusť node zkontroluj-soubory.mjs.
+- Supabase -> SQL Editor: supabase-migration-odznaky-vlastni.sql (vlastní odznaky, výběr
+  odznaků na kanál, oznámení o odznaku; pro jistotu i to z dřívějších migrací odznaků).
+  Jde spustit i víckrát.
+- Appka: rozbal kine-desktop-0.10.6.zip do kořene repa kine-desktop, nahraj a pusť Vydání.
+  Nejdřív web, pak appka.
+- Na GitHubu webu pořád zůstává 7 starých souborů (přetažení nemaže) - smaž je ručně:
+  app/admin/live/page.tsx, app/api/admin/live/route.ts, tests/username.test.mjs,
+  app/tests/playerStart.test.mjs, supabase-migration-zarizeni-chyby-jmena.sql,
+  kine-web-live.patch, CTI-ME.txt. Vypíše je i node zkontroluj-soubory.mjs.
+
+ŽIVĚ: STREAM SE NA KINE NEUKAZOVAL
+- Appka hlásila "Viewers can see you" (Cloudflare vysílal), a Kine přitom "nikdo nevysílá":
+  server poznával vysílání jen podle seznamu běžících přenosů celého účtu a lifecycle - a ty
+  mlčely. Přenos, který Cloudflare "nepotvrdil", Kine po 3 minutách stáhla a už ho nevrátila
+  (a nový start do 15 minut stáhla hned).
+- Teď server přenos potvrdí i podle seznamu videí vstupu (ten samý, podle kterého jde
+  záznam zahodit - ten fungoval) a podle HLS vstupu (to, co čte divák i appka). Lifecycle
+  se ptá bez API klíče. Přenos, který Kine stáhla, vrátí další "pořád vysílám" z appky,
+  jakmile ho Cloudflare vidí; bez důkazu od Cloudflare ne (samotná appka do Živě nikoho
+  nepustí) a po Ukončit ne (tentýž záznam).
+- Když Cloudflare neodpoví na seznam běžících přenosů celého účtu, server živé přenosy
+  srovná podle jejich vstupů (dřív se pak nepotvrdilo nic a po 10 minutách přenos zmizel).
+- Appka 0.10.6 ukazuje v záložce Live dva řádky: "Diváci tě vidí" a "Na Kine jsi živě" /
+  "Kine tě teď neukazuje". Co o přenosu říká Kine a Cloudflare, zapisuje do deníku -
+  kdyby to zase nešlo: appka -> Settings -> About -> Copy diagnostics a poslat.
+
+ODZNAKY
+- Spravovat je smí moderátor i správce (dřív jen správce): menu -> Speciální odznaky
+  (/admin/badges). Nově VLASTNÍ odznaky: název, popis, ikona, barva, klidně vlastní obrázek
+  nebo GIF (PNG/JPG/GIF/WebP do 2 MB). Vytvoříš, přidělíš komu chceš, upravíš, smažeš.
+  Majitele Kine přiděluje jen správce.
+- Výběr odznaků na kanál ukládá server (ověří, že odznak opravdu máš) - dřív se výběr
+  občas "nedal uložit". Jdou vybrat i speciální a vlastní odznaky.
+- Cizí kanál: sbírka jen ke čtení a jen s odznaky, které dotyčný opravdu má.
+- Svůj kanál vidíš hned po změně (bez 5minutové mezipaměti).
+
+VZHLED: FOTKA / GIF NA POZADÍ
+- Nastavení -> Vzhled -> Vzor -> "Fotka / GIF": jeden obrázek přes celé pozadí (ne dlaždice),
+  i animovaný GIF (do 8 MB). Síla vzoru = jak moc je vidět. V klidném režimu GIF stojí.
+  Obrázek je jen v tomhle prohlížeči (IndexedDB), nikam se nenahrává.
+
+RYCHLOST
+- Video na počítači (a televizi) začíná rovnou v kvalitě, na kterou připojení stačí - dřív
+  i na rychlé wifi běžely první vteřiny rozmazaně. Telefon dál začíná malým kouskem; na
+  pomalém připojení se kvalita sníží sama (a příště se začne níž).
+- Oznámení (zvoneček): jeden dotaz za 30 s pro všechny zvonečky naráz (byly až 3) a ve
+  skryté kartě žádný. Odznak "ŽIVĚ" u kanálu se ve skryté kartě taky neptá.
+
+==========================================================================================
+
 KINE - živé vysílání (zamrzlý obraz, "živě" po konci, mazání záznamu), placení
 "Připravujeme", odznaky (žádný / speciální), bez diagnostiky Živě; appka 0.10.5
 (dodávka kine-zive-odznaky-2026-10-13)
