@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
 import { liveElapsed } from '@/lib/liveChat';
-import { authHeaders } from '@/lib/authHeaders';
+import { authHeaders, cacheableUrl } from '@/lib/authHeaders';
 import { announceLiveCount } from '@/lib/useLiveCount';
 import VerifiedBadge from './VerifiedBadge';
 import ProfileImage from './ProfileImage';
@@ -71,7 +71,8 @@ export default function LiveNowRow() {
       if (document.hidden) return;
       try {
         // S přihlášením: vlastní přenos a odebírané kanály jdou dopředu (lib/liveNow.ts).
-        const res = await fetch('/api/live/now', { cache: 'no-store', headers: await authHeaders() });
+        const headers = await authHeaders();
+        const res = await fetch(cacheableUrl('/api/live/now', headers), { cache: 'no-store', headers });
         const body = await res.json().catch(() => null);
         if (!cancelled && res.ok && body && Array.isArray(body.streams)) {
           loadedAt = Date.now();

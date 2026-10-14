@@ -122,7 +122,8 @@ export async function GET(req: NextRequest) {
   const lastRecording = stream.live ? null : await latestRecording(channel);
   // Bez přihlášení je odpověď pro všechny stejná (stránka přenosu se ptá každých 6 s, odznak
   // u kanálu každých 30 s) - pár vteřin ji podrží CDN. Přihlášeným (majitel, tým Kine) vždy čerstvá.
-  const anonymous = !req.headers.get('authorization');
+  // Jen dotaz bez přihlášení s "anon=1" v adrese (lib/authHeaders.ts - cacheableUrl) - přihlášený má jinou adresu.
+  const anonymous = !req.headers.get('authorization') && req.nextUrl.searchParams.get('anon') === '1';
   return NextResponse.json(
     { enabled: true, live: stream.live, profile: publicProfile, stream, tips, lastRecording, ...(restricted ? { moderation: { hidden: false, restricted } } : {}) },
     { headers: anonymous && !restricted ? { 'Cache-Control': 'public, s-maxage=3, stale-while-revalidate=5', Vary: 'Authorization' } : { 'Cache-Control': 'private, no-store' } }

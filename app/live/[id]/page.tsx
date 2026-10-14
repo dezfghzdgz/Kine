@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
-import { authHeaders } from '@/lib/authHeaders';
+import { authHeaders, cacheableUrl } from '@/lib/authHeaders';
 import { channelRoom, liveElapsed } from '@/lib/liveChat';
 import { categoryLabel } from '@/lib/categories';
 import LiveChat from '@/components/LiveChat';
@@ -88,7 +88,8 @@ export default function LivePage() {
     let cancelled = false;
     async function load() {
       try {
-        const res = await fetch(`/api/live/status?channel=${encodeURIComponent(channelId)}`, { cache: 'no-store', headers: await authHeaders() });
+        const headers = await authHeaders();
+        const res = await fetch(cacheableUrl(`/api/live/status?channel=${encodeURIComponent(channelId)}`, headers), { cache: 'no-store', headers });
         const body = await res.json().catch(() => null);
         if (cancelled) return;
         if (!res.ok || !body) {

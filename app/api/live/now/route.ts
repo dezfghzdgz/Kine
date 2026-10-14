@@ -115,6 +115,9 @@ export async function GET(req: NextRequest) {
   const countOnly = params.get('countOnly') === '1';
   const withViewers = params.get('viewers') === '1';
   const wantsDiag = params.get('diag') === '1' && !countOnly;
+  // Do mezipaměti CDN jen dotaz bez přihlášení s "anon=1" v adrese (lib/authHeaders.ts - cacheableUrl):
+  // přihlášený má jinou adresu, takže mu CDN nikdy nevrátí seznam určený nepřihlášeným.
+  const publicRequest = !req.headers.get('authorization') && params.get('anon') === '1';
   const limitRaw = Number(params.get('limit'));
   const limit = Number.isFinite(limitRaw) && limitRaw >= 1 ? Math.min(60, Math.floor(limitRaw)) : 24;
   // Srovnání s Cloudflare běží na pozadí; seznam se nečeká (stav drží appka a srovnání - lib/liveStream.ts).
@@ -172,7 +175,7 @@ export async function GET(req: NextRequest) {
   if (countOnly) {
     return NextResponse.json(
       { enabled: true, count: publicCount },
-      { headers: viewer ? { 'Cache-Control': 'private, no-store' } : { 'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=15', Vary: 'Authorization' } }
+      { headers: publicRequest ? { 'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=15', Vary: 'Authorization' } : { 'Cache-Control': 'private, no-store' } }
     );
   }
   const arranged = all.slice(0, limit);
@@ -229,7 +232,7 @@ export async function GET(req: NextRequest) {
   // Bez přihlášení je seznam pro všechny stejný - pár vteřin ho podrží CDN (rychlejší hlavní
   // stránka a Živě, méně volání serveru). S přihlášením (vlastní přenos, odběry) vždy čerstvý.
   // Vary: Authorization - přihlášenému (vlastní přenos, odběry, skryté) se nesmí podstrčit odpověď pro nepřihlášené.
-  const anonymous = !req.headers.get('authorization') && !diag;
+  const anonymous = publicRequest && !diag;
   return NextResponse.json(
     { enabled: true, streams, total: all.length, publicTotal: publicCount, ...(diag ? { diag } : {}) },
     {

@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import LiveChat from '@/components/LiveChat';
 import { channelRoom } from '@/lib/liveChat';
 import { parseTtsMode } from '@/lib/chatSpeech';
-import { authHeaders } from '@/lib/authHeaders';
+import { authHeaders, cacheableUrl } from '@/lib/authHeaders';
 import { useLanguage } from '@/lib/i18n';
 
 /** Jak často se okno chatu ptá, jestli vysílání začalo / skončilo (každé vysílání má svůj chat). */
@@ -44,7 +44,8 @@ function LiveChatPopout() {
     const fallback = () => setSession((current) => current ?? { since: null, ended: false });
     async function load() {
       try {
-        const res = await fetch(`/api/live/status?channel=${encodeURIComponent(channelId)}`, { cache: 'no-store', headers: await authHeaders() });
+        const headers = await authHeaders();
+        const res = await fetch(cacheableUrl(`/api/live/status?channel=${encodeURIComponent(channelId)}`, headers), { cache: 'no-store', headers });
         const body = await res.json().catch(() => null);
         if (cancelled) return;
         if (!res.ok || !body) return fallback();

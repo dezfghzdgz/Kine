@@ -1,3 +1,39 @@
+KINE - Živě: diagnostika ukáže i stav profilu a odkud odpověď přišla, přihlášený nikdy
+nedostane seznam z mezipaměti; appka 0.10.8: celé ovládání přehrávače v jedné liště
+u posuvníku, nastavení přeuspořádané (dodávka kine-zive-4-2026-10-14)
+==========================================================================================
+
+Web + appka (Kine do PC / Kine Clipper 0.10.8).
+- Web: rozbal kine-web-zive-4.zip do kořene repa Kine a přepiš, nahraj na GitHub
+  (přetažením) a pusť node zkontroluj-soubory.mjs. Žádná nová migrace.
+- Appka: rozbal kine-desktop-0.10.8.zip do kořene repa kine-desktop, nahraj a pusť Vydání.
+- Na GitHubu webu pořád zůstává 7 starých souborů (přetažení nemaže) - smaž je ručně:
+  app/admin/live/page.tsx, app/api/admin/live/route.ts, tests/username.test.mjs,
+  app/tests/playerStart.test.mjs, supabase-migration-zarizeni-chyby-jmena.sql,
+  kine-web-live.patch, CTI-ME.txt. Vypíše je i node zkontroluj-soubory.mjs.
+
+ŽIVĚ
+- Profil (odznak LIVE, stránka přenosu) i záložka Live čtou stejný stav z databáze -
+  když se rozcházejí, je potřeba vidět, co server vrací na produkci. Diagnostika dole na
+  stránce Živě (jen tým Kine) teď ukáže i: stav tvého kanálu tak, jak ho vidí profil,
+  jestli odpověď přišla z mezipaměti CDN Vercelu, region serveru a jestli šel dotaz
+  s přihlášením. Objeví se hned (dřív až po dalším obnovení za 20 s). Během vysílání:
+  Živě -> dole "Diagnostika Živě" -> Zkopírovat -> poslat Claudovi.
+- Mezipaměť CDN: odpověď pro nepřihlášené má v adrese "anon=1" (seznam, stav kanálu,
+  číslo v menu) - přihlášený má jinou adresu, takže mu CDN nikdy nevrátí seznam určený
+  nepřihlášeným (bez skrytých přenosů, bez vlastního přenosu navrchu).
+
+APPKA 0.10.8
+- Přehrávač klipů: vlastní ovládání - dole posuvník a pod ním jedna řada: přehrát,
+  hlasitost, čas, vpravo Hra / Mikrofon (klipy se zvlášť nahraným zvukem), rychlost
+  a celá obrazovka. Všechno u posuvníku, nic na ploše videa; pryč jsou tři tečky
+  se "zvukovou stopou". Stejné i přes celou obrazovku; při přehrávání se lišta po chvíli
+  bez pohybu myši schová. Klik do obrazu = přehrát / pozastavit, dvojklik = celá obrazovka.
+- Nastavení: Záznam má jen nahrávání (zkratky, kvalita, zvuk, výkon, úložiště). Vzhled,
+  Obecné a O appce jsou v nové položce Appka (místo O appce, položek je stejně).
+
+==========================================================================================
+
 KINE - Živě: přenos nesmí mizet, diagnostika pro tým Kine, rychlejší Živě a stránka
 přenosu; appka 0.10.7: zvuk hry / mikrofon a rychlost přehrávání v přehrávači klipů
 (dodávka kine-zive-3-2026-10-14)

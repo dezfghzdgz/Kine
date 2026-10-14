@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
-import { authHeaders } from '@/lib/authHeaders';
+import { authHeaders, cacheableUrl } from '@/lib/authHeaders';
 
 /**
  * "● ŽIVĚ" u kanálu, který právě vysílá (odkaz na stránku přenosu).
@@ -18,7 +18,8 @@ export default function LiveBadge({ channelId, withTitle = false }: { channelId:
     async function load() {
       try {
         // S přihlášením: majitel shadow-banovaného kanálu svůj přenos vidí (ostatní ne).
-        const res = await fetch(`/api/live/status?channel=${encodeURIComponent(channelId)}`, { cache: 'no-store', headers: await authHeaders() });
+        const headers = await authHeaders();
+        const res = await fetch(cacheableUrl(`/api/live/status?channel=${encodeURIComponent(channelId)}`, headers), { cache: 'no-store', headers });
         const body = await res.json().catch(() => null);
         if (!cancelled) setLive(body?.live ? { title: body.stream?.title ?? '' } : null);
       } catch {

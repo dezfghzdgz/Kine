@@ -30,7 +30,7 @@ export function useLiveCount(): number {
     async function load() {
       if (document.hidden) return;
       try {
-        const res = await fetch('/api/live/now?countOnly=1');
+        const res = await fetch('/api/live/now?countOnly=1&anon=1');
         const body = await res.json().catch(() => null);
         if (!cancelled && body && typeof body.count === 'number' && Date.now() - announcedAt > 45 * 1000) setCount(body.count);
       } catch {

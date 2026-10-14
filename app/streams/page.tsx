@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n';
-import { authHeaders } from '@/lib/authHeaders';
+import { authHeaders, cacheableUrl } from '@/lib/authHeaders';
 import { useUserRole } from '@/lib/useUserRole';
 import { announceLiveCount } from '@/lib/useLiveCount';
 import { categoryLabel, isCategoryKey } from '@/lib/categories';
@@ -54,8 +54,10 @@ const sec = (v: number | null | undefined) => (typeof v === 'number' ? `${v} s` 
 
 /** Diagnostika v řádcích - čitelná na obrazovce i zkopírovaná do zprávy. */
 function diagLines(d: LiveDiag, status: string): string[] {
-  if (d.error) return [`${status} · chyba diagnostiky: ${d.error}`];
-  const lines = [`${status} · ${d.at ?? ''} · instance ${d.instance ?? '?'} · odpověď ${d.ms?.total ?? '?'} ms (srovnání ${d.ms?.sync ?? '?'} ms)`];
+  // První řádek stavu (HTTP, čas, CDN, region, přihlášení), pod ním případně stav kanálu podle profilu.
+  const [head, ...more] = status.split('\n');
+  if (d.error) return [`${head} · chyba diagnostiky: ${d.error}`, ...more];
+  const lines = [`${head} · ${d.at ?? ''} · instance ${d.instance ?? '?'} · odpověď ${d.ms?.total ?? '?'} ms (srovnání ${d.ms?.sync ?? '?'} ms)`, ...more];
   if (d.sync) {
     lines.push(`Cloudflare seznam běžících: ${d.sync.listingOk ? 'ok' : `CHYBA ${d.sync.error ?? ''}`} · běží ${d.sync.listed} · řádků ${d.sync.rows} · ${d.sync.at}`);
   } else lines.push('Srovnání s Cloudflare na téhle instanci zatím neproběhlo.');
@@ -114,6 +116,10 @@ function StreamsInner() {
   const { isAdmin, isModerator } = useUserRole();
   const staffRef = useRef(false);
   staffRef.current = isAdmin || isModerator;
+  /** Načtení seznamu zvenku (role týmu Kine se zjistí až po načtení stránky - diagnostika pak hned). */
+  const loadRef = useRef<(() => void) | null>(null);
+  /** Seznam už přišel i s diagnostikou (dotaz za tým Kine). */
+  const staffLoadedRef = useRef(false);
   const [diag, setDiag] = useState<{ data: LiveDiag; status: string } | null>(null);
   // Seznam z minula (hlavní stránka, předchozí návštěva) hned - obnoví se potichu.
   const [streams, setStreams] = useState<LiveItem[] | null>(() => recentLiveList()?.streams ?? null);
@@ -136,15 +142,39 @@ function StreamsInner() {
     async function load() {
       if (document.hidden) return;
       const staff = staffRef.current;
+      if (staff) staffLoadedRef.current = true;
       const started = Date.now();
       try {
         // S přihlášením jde tvůj přenos a odebírané kanály dopředu (lib/liveNow.ts).
-        const res = await fetch(`/api/live/now?limit=60&viewers=1${staff ? '&diag=1' : ''}`, { cache: 'no-store', headers: await authHeaders() });
+        const headers = await authHeaders();
+        const res = await fetch(cacheableUrl(`/api/live/now?limit=60&viewers=1${staff ? '&diag=1' : ''}`, headers), { cache: 'no-store', headers });
         const body = await res.json().catch(() => null);
         if (cancelled) return;
         if (staff) {
-          const status = `HTTP ${res.status} · ${Date.now() - started} ms`;
-          setDiag(body?.diag ? { data: body.diag as LiveDiag, status } : res.ok ? null : { data: { error: String(body?.error ?? res.statusText) }, status });
+          // Odkud odpověď přišla (mezipaměť CDN Vercelu, region) a jestli šla s přihlášením - a pro srovnání
+          // stav vlastního kanálu tak, jak ho vidí profil (odznak LIVE, stránka přenosu - /api/live/status).
+          const vercelCache = res.headers.get('x-vercel-cache');
+          const region = (res.headers.get('x-vercel-id') ?? '').split('::').slice(0, -1).join('>');
+          const status = `HTTP ${res.status} · ${Date.now() - started} ms${vercelCache ? ` · CDN ${vercelCache}` : ''}${region ? ` · ${region}` : ''} · přihlášení ${headers.Authorization ? 'ano' : 'ne'}`;
+          let profileCheck: string | null = null;
+          const ownId = typeof body?.diag?.viewer === 'string' ? (body.diag.viewer as string) : null;
+          if (ownId) {
+            try {
+              const sres = await fetch(`/api/live/status?channel=${encodeURIComponent(ownId)}`, { cache: 'no-store', headers });
+              const sbody = await sres.json().catch(() => null);
+              profileCheck = `Profil (stav kanálu jako u odznaku LIVE): HTTP ${sres.status} · živě ${sbody?.live ? 'ano' : 'ne'}${sbody?.held ? ' (čeká na kontrolu)' : ''}${sbody?.moderation?.restricted ? ` (${sbody.moderation.restricted})` : ''}`;
+            } catch (e) {
+              profileCheck = `Profil: chyba ${(e as Error).message}`;
+            }
+          }
+          if (cancelled) return;
+          setDiag(
+            body?.diag
+              ? { data: body.diag as LiveDiag, status: profileCheck ? `${status}\n${profileCheck}` : status }
+              : res.ok
+                ? null
+                : { data: { error: String(body?.error ?? res.statusText) }, status }
+          );
         }
         if (res.ok && body && Array.isArray(body.streams)) {
           loadedAt = Date.now();
@@ -165,6 +195,7 @@ function StreamsInner() {
       }
     }
     load();
+    loadRef.current = () => void load();
     const refresh = setInterval(load, 20 * 1000);
     const tick = setInterval(() => {
       setNow(Date.now());
@@ -190,11 +221,18 @@ function StreamsInner() {
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       cancelled = true;
+      loadRef.current = null;
       clearInterval(refresh);
       clearInterval(tick);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
+
+  // Role týmu Kine dorazí až po prvním načtení seznamu: diagnostika hned, ne až při dalším obnovení (20 s).
+  const staffNow = isAdmin || isModerator;
+  useEffect(() => {
+    if (staffNow && !staffLoadedRef.current) loadRef.current?.();
+  }, [staffNow]);
 
   // Volby v adrese - odkaz jde poslat ("koukni, kdo hraje hry").
   function choose(next: { sort?: Sort; category?: string | null }) {
