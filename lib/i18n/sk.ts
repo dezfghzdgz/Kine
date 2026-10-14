@@ -1677,4 +1677,9 @@ export const sk: Record<DictKey, string> = {
   appearancePatternPhoto: 'Fotka / GIF',
   appearancePhotoTooBig: 'GIF je príliš veľký (najviac 8 MB).',
   appearancePhotoSaving: 'Ukladám obrázok…',
+  liveDiagTitle: 'Diagnostika Naživo (len tím Kine)',
+  liveDiagHint: 'Prečo prenos v zozname je, alebo nie je. Keď tu tvoj prenos chýba, skopíruj to a pošli.',
+  liveDiagCopy: 'Skopírovať',
+  liveDiagCopied: 'Skopírované',
+  liveDiagOwnMissing: 'Tvoj prenos beží, ale v zozname chýba.',
 };

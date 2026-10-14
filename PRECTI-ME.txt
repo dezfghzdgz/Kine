@@ -1,3 +1,58 @@
+KINE - Živě: přenos nesmí mizet, diagnostika pro tým Kine, rychlejší Živě a stránka
+přenosu; appka 0.10.7: zvuk hry / mikrofon a rychlost přehrávání v přehrávači klipů
+(dodávka kine-zive-3-2026-10-14)
+==========================================================================================
+
+Web + appka (Kine do PC / Kine Clipper 0.10.7).
+- Web: rozbal kine-web-zive-3.zip do kořene repa Kine a přepiš, nahraj na GitHub
+  (přetažením) a pusť node zkontroluj-soubory.mjs. Žádná nová migrace.
+- Appka: rozbal kine-desktop-0.10.7.zip do kořene repa kine-desktop, nahraj a pusť Vydání.
+- Na GitHubu webu pořád zůstává 7 starých souborů (přetažení nemaže) - smaž je ručně:
+  app/admin/live/page.tsx, app/api/admin/live/route.ts, tests/username.test.mjs,
+  app/tests/playerStart.test.mjs, supabase-migration-zarizeni-chyby-jmena.sql,
+  kine-web-live.patch, CTI-ME.txt. Vypíše je i node zkontroluj-soubory.mjs.
+
+ŽIVĚ
+- Srovnání s Cloudflare (běží při každém otevření Živě, stránky přenosu...) přečte stav
+  přenosu, pak se pár vteřin ptá Cloudflare a podle toho zapíše. Když mezitím appka
+  nahlásila vysílání, dřív i tak zapsalo konec podle starých údajů - přenos na chvíli
+  zmizel ze Živě. Teď se zápis udělá jen, když se přenos mezitím nezměnil (a skončený
+  přenos se neoživí, když mezitím přišlo Ukončit).
+- Stránka Živě: když se seznam nenačte, píše "nepodařilo se načíst" - dřív ukázala
+  "nikdo nevysílá" podle starého prázdného seznamu z hlavní stránky.
+- Diagnostika pro tým Kine (moderátor / správce) dole na stránce Živě: proč přenos
+  v seznamu je, nebo není (stav, kdy hlásila appka, kdy potvrdil Cloudflare, co by srovnání
+  udělalo). Když tvůj přenos běží a v seznamu chybí, otevře se sama - zkopíruj a pošli.
+  Je dočasná, až bude Živě jisté, zmizí.
+- Appka ukáže, když kontrola obsahu přenos skryje z Živě (dřív psala "Na Kine jsi živě").
+
+RYCHLOST
+- Živě, řada Živě na hlavní stránce, stránka přenosu a odznak ŽIVĚ u kanálu na Cloudflare
+  skoro nečekají (nejvýš čtvrt vteřiny, dřív až 1,2 s při každém obnovení) - stav drží
+  appka a srovnání doběhne na pozadí.
+- Kontrola obsahu přenosu (náročná na procesor) už nezdržuje seznam Živě a nespouští ji
+  číslo u Živě v menu.
+- Nepřihlášeným jde seznam přenosů a stav kanálu pár vteřin z CDN Vercelu (rychlejší,
+  méně volání serveru). Proto i next.config.js: pravidlo "API se necachuje" přidávalo
+  no-store i ke stavu kanálu a mezipaměť by tam nikdy nezabrala.
+- DOPORUČENÍ (minuta, zdarma): Vercel -> projekt -> Settings -> Functions -> Function
+  Regions -> vyber region nejblíž databázi Supabase (Supabase ve Frankfurtu = Frankfurt,
+  fra1). Výchozí je Washington (iad1) - každý dotaz serveru do databáze v Evropě pak letí
+  přes oceán a zpátky.
+
+APPKA 0.10.7
+- Přehrávač klipů: vpravo dole nad ovládáním (i přes celou obrazovku) tlačítka Hra
+  a Mikrofon - kliknutím ztlumíš / zapneš hned v tom, co hraje (dřív šel zvuk vybrat jen
+  v úpravách a v náhledu se nic neztlumilo). Úpravy pak klip uloží tak, jak ho slyšíš.
+  Tlačítka jsou u klipů, kde se hra a mikrofon nahrály zvlášť (nastavení "Hra a mikrofon
+  i zvlášť", zapnuté od začátku) - u klipu jen se zvukem hry nebo starého klipu se
+  smíchaným zvukem nejsou, tam stačí normální ztlumení.
+- Klipy s jednou stopou: "Odstranit zvuk" v úpravách ztlumí i náhled; po zavření úprav hraje
+  zase se zvukem.
+- Vedle rychlost přehrávání 0,25× až 2× (výchozí 1×), i přes celou obrazovku; klávesy < a >.
+
+==========================================================================================
+
 KINE - živé vysílání se na Kine ukazuje, vlastní odznaky (i pro moderátory), výběr
 odznaků jde uložit, pozadí z fotky / GIFu, video na PC hned v plné kvalitě; appka 0.10.6
 (dodávka kine-zive-odznaky-2-2026-10-13)

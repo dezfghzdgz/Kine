@@ -6461,6 +6461,44 @@ input:focus, textarea:focus, select:focus {
   line-height: 1.55;
 }
 
+/* Diagnostika Živě pro tým Kine (proč přenos v seznamu je / není). */
+.streams-diag {
+  margin-top: 28px;
+  padding: 12px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  max-width: 980px;
+}
+
+.streams-diag summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.streams-diag-warn {
+  color: #f59e0b;
+}
+
+.streams-diag-hint {
+  margin: 8px 0;
+  color: var(--text-faint);
+}
+
+.streams-diag-text {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(127, 127, 127, 0.08);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 360px;
+  overflow: auto;
+}
+
 /* Odkaz Živě v menu: počet přenosů v červeném kolečku. */
 .sidebar-live-count {
   margin-left: auto;

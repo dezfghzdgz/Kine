@@ -1677,4 +1677,9 @@ export const fr: Record<DictKey, string> = {
   appearancePatternPhoto: 'Photo / GIF',
   appearancePhotoTooBig: 'Le GIF est trop lourd (8 Mo max).',
   appearancePhotoSaving: "Enregistrement de l'image…",
+  liveDiagTitle: 'Diagnostic du direct (équipe Kine uniquement)',
+  liveDiagHint: "Pourquoi un live est ou n'est pas dans la liste. Si le tien manque, copie ceci et envoie-le.",
+  liveDiagCopy: 'Copier',
+  liveDiagCopied: 'Copié',
+  liveDiagOwnMissing: 'Ton live tourne, mais il manque dans la liste.',
 };

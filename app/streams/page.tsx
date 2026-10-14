@@ -1,10 +1,11 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n';
 import { authHeaders } from '@/lib/authHeaders';
+import { useUserRole } from '@/lib/useUserRole';
 import { announceLiveCount } from '@/lib/useLiveCount';
 import { categoryLabel, isCategoryKey } from '@/lib/categories';
 import { LiveCard, recentLiveList, rememberLiveList, type LiveItem } from '@/components/LiveNowRow';
@@ -21,10 +22,99 @@ export default function StreamsPage() {
   );
 }
 
+/** Diagnostika ze serveru (jen tým Kine, ?diag=1) - app/api/live/now. */
+type LiveDiag = {
+  at?: string;
+  instance?: string;
+  viewer?: string;
+  error?: string;
+  ms?: { sync: number; total: number };
+  sync?: { at: string; listingOk: boolean; listed: number; rows: number; error: string | null } | null;
+  rows?: DiagRow[];
+  own?: (DiagRow & { now?: { evidence: DiagEvidence; wouldDecide: string; appPingFresh: boolean; appTrusted: boolean } }) | null;
+};
+type DiagEvidence = { lifecycle: boolean | null; listed: boolean; hls: boolean | null; videoUid: string | null };
+type DiagRow = {
+  owner: string;
+  username: string | null;
+  isLive: boolean;
+  inList: boolean;
+  why: string | null;
+  startedS: number | null;
+  endedS: number | null;
+  appPingS: number | null;
+  confirmedS: number | null;
+  stoppedS: number | null;
+  hiddenS: number | null;
+  lastDecision: { decision: string; atS: number | null; silent: boolean; skipped: boolean; evidence: DiagEvidence } | null;
+};
+
+const yn = (v: boolean | null | undefined) => (v === true ? 'ano' : v === false ? 'ne' : '?');
+const sec = (v: number | null | undefined) => (typeof v === 'number' ? `${v} s` : '-');
+
+/** Diagnostika v řádcích - čitelná na obrazovce i zkopírovaná do zprávy. */
+function diagLines(d: LiveDiag, status: string): string[] {
+  if (d.error) return [`${status} · chyba diagnostiky: ${d.error}`];
+  const lines = [`${status} · ${d.at ?? ''} · instance ${d.instance ?? '?'} · odpověď ${d.ms?.total ?? '?'} ms (srovnání ${d.ms?.sync ?? '?'} ms)`];
+  if (d.sync) {
+    lines.push(`Cloudflare seznam běžících: ${d.sync.listingOk ? 'ok' : `CHYBA ${d.sync.error ?? ''}`} · běží ${d.sync.listed} · řádků ${d.sync.rows} · ${d.sync.at}`);
+  } else lines.push('Srovnání s Cloudflare na téhle instanci zatím neproběhlo.');
+  const row = (r: DiagRow) => {
+    const dec = r.lastDecision
+      ? `${r.lastDecision.decision}${r.lastDecision.skipped ? ' (nezapsáno)' : ''}${r.lastDecision.silent ? ' (bez Cloudflare)' : ''} před ${sec(r.lastDecision.atS)} [lifecycle ${yn(r.lastDecision.evidence.lifecycle)}, záznam ${yn(r.lastDecision.evidence.listed)}, HLS ${yn(r.lastDecision.evidence.hls)}]`
+      : 'zatím nic';
+    return `@${r.username ?? r.owner.slice(0, 8)}: ${r.isLive ? 'ŽIVĚ' : 'neživě'} · v seznamu ${yn(r.inList)}${r.why ? ` (${r.why})` : ''} · začátek ${sec(r.startedS)} · konec ${sec(r.endedS)} · appka ${sec(r.appPingS)} · potvrzeno ${sec(r.confirmedS)} · Ukončit ${sec(r.stoppedS)} · skryto ${sec(r.hiddenS)} · srovnání: ${dec}`;
+  };
+  for (const r of d.rows ?? []) lines.push(row(r));
+  if (d.own?.now) {
+    const n = d.own.now;
+    lines.push(`Tvůj přenos teď: lifecycle ${yn(n.evidence.lifecycle)} · záznam vstupu ${yn(n.evidence.listed)} · HLS ${yn(n.evidence.hls)} · srovnání by: ${n.wouldDecide} · appka čerstvá ${yn(n.appPingFresh)} · appce se věří ${yn(n.appTrusted)}`);
+  } else if (!d.own) lines.push('Tvůj kanál nemá přenos (ani nedávno skončený).');
+  return lines;
+}
+
+/** Diagnostika pro tým Kine pod seznamem: proč přenos v Živě je / není (dočasně, než se Živě vyladí). */
+function LiveDiagBox({ diag, status, ownMissing }: { diag: LiveDiag; status: string; ownMissing: boolean }) {
+  const { t } = useLanguage();
+  const [copied, setCopied] = useState(false);
+  const lines = diagLines(diag, status);
+  return (
+    <details className="streams-diag" open={ownMissing || undefined}>
+      <summary>
+        {t('liveDiagTitle')}
+        {ownMissing && <span className="streams-diag-warn"> · {t('liveDiagOwnMissing')}</span>}
+      </summary>
+      <p className="streams-diag-hint">{t('liveDiagHint')}</p>
+      <pre className="streams-diag-text">{lines.join('\n')}</pre>
+      <button
+        type="button"
+        className="streams-btn streams-diag-copy"
+        onClick={() => {
+          const text = `${lines.join('\n')}\n\n${JSON.stringify(diag)}`;
+          void navigator.clipboard?.writeText(text).then(
+            () => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            },
+            () => undefined
+          );
+        }}
+      >
+        {copied ? t('liveDiagCopied') : t('liveDiagCopy')}
+      </button>
+    </details>
+  );
+}
+
 function StreamsInner() {
   const { t } = useLanguage();
   const params = useSearchParams();
   const router = useRouter();
+  // Tým Kine dostane k seznamu diagnostiku (proč přenos je / není v Živě).
+  const { isAdmin, isModerator } = useUserRole();
+  const staffRef = useRef(false);
+  staffRef.current = isAdmin || isModerator;
+  const [diag, setDiag] = useState<{ data: LiveDiag; status: string } | null>(null);
   // Seznam z minula (hlavní stránka, předchozí návštěva) hned - obnoví se potichu.
   const [streams, setStreams] = useState<LiveItem[] | null>(() => recentLiveList()?.streams ?? null);
   const [enabled, setEnabled] = useState(true);
@@ -45,11 +135,17 @@ function StreamsInner() {
     let loadedAt = recentLiveList()?.at ?? 0;
     async function load() {
       if (document.hidden) return;
+      const staff = staffRef.current;
+      const started = Date.now();
       try {
         // S přihlášením jde tvůj přenos a odebírané kanály dopředu (lib/liveNow.ts).
-        const res = await fetch('/api/live/now?limit=60&viewers=1', { cache: 'no-store', headers: await authHeaders() });
+        const res = await fetch(`/api/live/now?limit=60&viewers=1${staff ? '&diag=1' : ''}`, { cache: 'no-store', headers: await authHeaders() });
         const body = await res.json().catch(() => null);
         if (cancelled) return;
+        if (staff) {
+          const status = `HTTP ${res.status} · ${Date.now() - started} ms`;
+          setDiag(body?.diag ? { data: body.diag as LiveDiag, status } : res.ok ? null : { data: { error: String(body?.error ?? res.statusText) }, status });
+        }
         if (res.ok && body && Array.isArray(body.streams)) {
           loadedAt = Date.now();
           setStreams(body.streams);
@@ -61,8 +157,11 @@ function StreamsInner() {
           announceLiveCount(publicTotal);
           rememberLiveList(body.streams, publicTotal);
         } else setFailed(true);
-      } catch {
-        if (!cancelled) setFailed(true);
+      } catch (e) {
+        if (!cancelled) {
+          setFailed(true);
+          if (staff) setDiag({ data: { error: (e as Error).message }, status: `síť · ${Date.now() - started} ms` });
+        }
       }
     }
     load();
@@ -183,7 +282,9 @@ function StreamsInner() {
             <div key={i} className="streams-skeleton" />
           ))}
         </div>
-      ) : failed && streams === null ? (
+      ) : failed && total === 0 ? (
+        // Nový seznam nepřišel: "nikdo nevysílá" by nemusela být pravda (dřív se ukazovalo
+        // podle starého prázdného seznamu z hlavní stránky).
         <p style={{ color: 'var(--text-faint)' }}>{t('streamsLoadFailed')}</p>
       ) : total === 0 ? (
         <div className="streams-empty panel">
@@ -216,6 +317,14 @@ function StreamsInner() {
             <LiveCard key={s.ownerId} item={s} now={now} showCategory={!category} />
           ))}
         </div>
+      )}
+
+      {diag && (
+        <LiveDiagBox
+          diag={diag.data}
+          status={diag.status}
+          ownMissing={!!diag.data.own?.isLive && !diag.data.own?.inList}
+        />
       )}
 
       <details className="streams-how">

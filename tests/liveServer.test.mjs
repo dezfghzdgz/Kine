@@ -124,6 +124,8 @@ const cf = {
   videos: [], // seznam videí vstupu
   hls: 'live', // 'live' | 'ended' | 'none'
   calls: [],
+  /** Jednou při dotazu na lifecycle (souběžné hlášení appky během srovnání). */
+  onLifecycle: null,
 };
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 globalThis.fetch = async (input, init = {}) => {
@@ -146,6 +148,11 @@ globalThis.fetch = async (input, init = {}) => {
     return json(404, { success: false, errors: [{ message: 'not found ' + path }] });
   }
   if (url === `https://customer-${CODE}.cloudflarestream.com/${INPUT}/lifecycle`) {
+    if (cf.onLifecycle) {
+      const hook = cf.onLifecycle;
+      cf.onLifecycle = null;
+      hook();
+    }
     if (cf.lifecycle === 'error') return json(500, {});
     if (cf.lifecycle === 'auth-only-fails' && auth) return json(401, {});
     return json(200, { isInput: true, live: cf.lifecycleLive, videoUID: cf.lifecycleLive ? cf.lifecycleVideo : null });
@@ -350,6 +357,50 @@ await test('Seznam účtu nejde, ale lifecycle jistě říká "nevysílá": pře
   } finally {
     Object.assign(cf, { accountListingMode: 'ok', apiDown: false });
   }
+});
+
+await test('Srovnání se starými údaji neukončí přenos, který appka mezitím nahlásila (dřív "Živě" přenos chvíli neukazovalo)', async () => {
+  const now = Date.now();
+  resetRow({ is_live: true, started_at: iso(now - 5 * MIN), ended_at: null, app_ping_at: iso(now - 70 * 1000), cf_confirmed_at: iso(now - 4 * MIN), checked_at: iso(now - 4 * MIN), current_video_uid: null, app_stopped_at: null, stopped_video_uid: null, updated_at: iso(now - 70 * 1000) });
+  Object.assign(cf, { accountListing: [], accountListingMode: 'ok', apiDown: false, lifecycle: 'ok', lifecycleLive: false, inputStatus: null, inputVideos: 'ok', hls: 'none' });
+  cf.videos = [];
+  // Během dotazů na Cloudflare přijde "pořád vysílám" z appky (zapíše řádek).
+  cf.onLifecycle = () => Object.assign(row(), { app_ping_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+  await ls.syncLiveStreams({ force: true });
+  assert.equal(row().is_live, true, 'přenos zůstal živě');
+  assert.equal(ls.liveDecisionNote(OWNER)?.decision, 'end');
+  assert.equal(ls.liveDecisionNote(OWNER)?.skipped, true, 'konec se nezapsal');
+  // Bez souběžného hlášení (appka mlčí) srovnání přenos ukončí jako dřív.
+  posun += 30 * 1000;
+  row().app_ping_at = iso(Date.now() - 70 * 1000);
+  await ls.syncLiveStreams({ force: true });
+  assert.equal(row().is_live, false);
+});
+
+await test('Srovnání se starými údaji neoživí přenos, který appka mezitím ukončila (Ukončit)', async () => {
+  const now = Date.now();
+  resetRow({ is_live: false, started_at: iso(now - 20 * MIN), ended_at: iso(now - 10 * MIN), app_ping_at: null, cf_confirmed_at: iso(now - 11 * MIN), app_stopped_at: null, stopped_video_uid: null, updated_at: iso(now - 10 * MIN) });
+  // Cloudflare hlásí nové vysílání (OBS) - srovnání by ho potvrdilo.
+  Object.assign(cf, { accountListing: [{ uid: 'V9', status: { state: 'live-inprogress' }, created: iso(now - 30 * 1000), liveInput: INPUT }], lifecycle: 'ok', lifecycleLive: true, lifecycleVideo: 'V9', inputVideos: 'ok', hls: 'live' });
+  cf.onLifecycle = () => Object.assign(row(), { app_stopped_at: new Date().toISOString(), stopped_video_uid: 'V9', updated_at: new Date().toISOString() });
+  await ls.syncLiveStreams({ force: true });
+  assert.equal(row().is_live, false, 'Ukončit z appky platí');
+  assert.equal(ls.liveDecisionNote(OWNER)?.skipped, true);
+  cf.accountListing = [];
+});
+
+await test('Diagnostika: co Cloudflare o přenosu říká teď a co by srovnání udělalo (nic nemění)', async () => {
+  const now = Date.now();
+  resetRow({ is_live: true, started_at: iso(now - 2 * MIN), ended_at: null, app_ping_at: iso(now - 5000), cf_confirmed_at: iso(now - 20 * 1000), current_video_uid: 'V1', app_stopped_at: null, stopped_video_uid: null });
+  Object.assign(cf, { accountListing: [], lifecycle: 'ok', lifecycleLive: true, lifecycleVideo: 'V1', inputVideos: 'ok', hls: 'live' });
+  cloudflareLive('V1');
+  const before = JSON.stringify(row());
+  const d = await ls.diagnoseLiveRow(row());
+  assert.equal(d.evidence.lifecycle, true);
+  assert.equal(d.evidence.listed, true);
+  assert.equal(d.wouldDecide, 'confirm');
+  assert.equal(d.appPingFresh, true);
+  assert.equal(JSON.stringify(row()), before, 'řádek se nezměnil');
 });
 
 console.log(`\n${prosly} prošlo, ${padly} spadlo`);

@@ -1683,6 +1683,11 @@ export const cs = {
   appearancePatternPhoto: 'Fotka / GIF',
   appearancePhotoTooBig: 'GIF je moc velký (nejvýš 8 MB).',
   appearancePhotoSaving: 'Ukládám obrázek…',
+  liveDiagTitle: 'Diagnostika Živě (jen tým Kine)',
+  liveDiagHint: 'Proč přenos v seznamu je, nebo není. Když tu tvůj přenos chybí, zkopíruj to a pošli.',
+  liveDiagCopy: 'Zkopírovat',
+  liveDiagCopied: 'Zkopírováno',
+  liveDiagOwnMissing: 'Tvůj přenos běží, ale v seznamu chybí.',
 } as const;
 
 export type DictKey = keyof typeof cs;

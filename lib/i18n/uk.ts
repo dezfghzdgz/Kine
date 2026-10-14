@@ -1677,4 +1677,9 @@ export const uk: Record<DictKey, string> = {
   appearancePatternPhoto: 'Фото / GIF',
   appearancePhotoTooBig: 'GIF завеликий (максимум 8 МБ).',
   appearancePhotoSaving: 'Зберігаю зображення…',
+  liveDiagTitle: 'Діагностика трансляцій (лише команда Kine)',
+  liveDiagHint: 'Чому трансляція є чи немає в списку. Якщо твоєї тут немає, скопіюй це й надішли.',
+  liveDiagCopy: 'Копіювати',
+  liveDiagCopied: 'Скопійовано',
+  liveDiagOwnMissing: 'Твоя трансляція йде, але її немає в списку.',
 };

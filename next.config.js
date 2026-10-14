@@ -91,10 +91,13 @@ const nextConfig = {
       },
       {
         // API endpointy nesmí být cachovány proxy servery. Výjimky si hlavičku
-        // nastavují samy: /api/live/now (počet přenosů pro menu jde chvíli
-        // z mezipaměti CDN, jinak by každá otevřená stránka volala server)
-        // a /api/badges/stats (součty pro odznaky kanálu, 5 minut).
-        source: '/api/:path((?!live/now|badges/stats).*)',
+        // nastavují samy: /api/live/now (počet přenosů pro menu a seznam Živě
+        // bez přihlášení jdou chvíli z mezipaměti CDN, jinak by každá otevřená
+        // stránka volala server), /api/live/status (stav přenosu pro diváky bez
+        // přihlášení, pár vteřin) a /api/badges/stats (součty pro odznaky kanálu,
+        // 5 minut). Next hlavičku odsud k té z odpovědi přidává (ne nahrazuje) -
+        // "no-store" by tak cache vypnulo i tam, kde ji odpověď povoluje.
+        source: '/api/:path((?!live/now|live/status|badges/stats).*)',
         headers: [
           { key: 'Cache-Control', value: 'no-store, no-cache, must-revalidate' },
         ],

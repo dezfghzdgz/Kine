@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isMissingTable, isStaffUser, userFromRequest } from '@/lib/apiUser';
-import { publicLive, syncLiveStreamsForViewers, type LiveStreamRow } from '@/lib/liveStream';
+import { LIST_SYNC_BUDGET_MS, publicLive, syncLiveStreamsForViewers, type LiveStreamRow } from '@/lib/liveStream';
 import type { LiveRestriction } from '@/lib/liveNow';
 import { liveHiddenNow } from '@/lib/nudityRules';
 import { runInBackground } from '@/lib/background';
@@ -59,18 +59,21 @@ async function latestRecording(channel: string): Promise<{ id: string; title: st
  */
 export async function GET(req: NextRequest) {
   const channel = req.nextUrl.searchParams.get('channel') ?? '';
-  if (!UUID.test(channel)) return NextResponse.json({ error: 'Neplatný kanál.' }, { status: 400 });
+  // Hlavičku Cache-Control si tahle cesta nastavuje sama (next.config.js ji vynechává) -
+  // do mezipaměti CDN smí jen úspěšná odpověď pro nepřihlášené (dole), jinak vždy no-store.
+  if (!UUID.test(channel)) return NextResponse.json({ error: 'Neplatný kanál.' }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
 
-  await syncLiveStreamsForViewers();
+  // Srovnání s Cloudflare na pozadí - stránka se ptá každých pár vteřin, stav v databázi drží appka.
+  await syncLiveStreamsForViewers(LIST_SYNC_BUDGET_MS);
   const [{ data: row, error }, { data: profile }] = await Promise.all([
     supabaseServer.from('live_streams').select('*').eq('owner_id', channel).maybeSingle(),
     supabaseServer.from('profiles').select('id, username, display_name, avatar_url, verification_tier, is_banned, is_shadow_banned').eq('id', channel).maybeSingle(),
   ]);
   const { is_banned: banned, is_shadow_banned: shadowBanned, ...publicProfile } = (profile ?? {}) as Record<string, any>;
-  if (isMissingTable(error)) return NextResponse.json({ enabled: false, live: false, profile: profile ? publicProfile : null });
+  if (isMissingTable(error)) return NextResponse.json({ enabled: false, live: false, profile: profile ? publicProfile : null }, { headers: { 'Cache-Control': 'no-store' } });
   // Výpadek databáze: chyba, ne "nevysílá" - stránka přenosu si nechá poslední stav.
   if (error) return NextResponse.json({ error: 'Stav přenosu se teď nepodařilo načíst.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
-  if (!profile) return NextResponse.json({ error: 'Kanál nenalezen.' }, { status: 404 });
+  if (!profile) return NextResponse.json({ error: 'Kanál nenalezen.' }, { status: 404, headers: { 'Cache-Control': 'no-store' } });
   // Kdo se ptá a jestli je z týmu Kine - zjišťuje se jen když je to potřeba
   // (stránka se ptá často, ověření přihlášení stojí dotaz na Supabase).
   let requester: { id: string } | null | undefined;
@@ -117,8 +120,11 @@ export async function GET(req: NextRequest) {
   const tips = stream.live && PAYMENTS_ENABLED ? { enabled: await tipsEnabled(channel), feePercent: tipFeePercent(process.env.LIVE_TIP_FEE_PERCENT) } : { enabled: false, feePercent: 0 };
   // Po vysílání: odkaz na záznam (když ho tvůrce zveřejnil) - kdo přišel pozdě, pustí si ho.
   const lastRecording = stream.live ? null : await latestRecording(channel);
+  // Bez přihlášení je odpověď pro všechny stejná (stránka přenosu se ptá každých 6 s, odznak
+  // u kanálu každých 30 s) - pár vteřin ji podrží CDN. Přihlášeným (majitel, tým Kine) vždy čerstvá.
+  const anonymous = !req.headers.get('authorization');
   return NextResponse.json(
     { enabled: true, live: stream.live, profile: publicProfile, stream, tips, lastRecording, ...(restricted ? { moderation: { hidden: false, restricted } } : {}) },
-    { headers: { 'Cache-Control': 'no-store' } }
+    { headers: anonymous && !restricted ? { 'Cache-Control': 'public, s-maxage=3, stale-while-revalidate=5', Vary: 'Authorization' } : { 'Cache-Control': 'private, no-store' } }
   );
 }

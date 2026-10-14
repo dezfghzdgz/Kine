@@ -1677,4 +1677,9 @@ export const de: Record<DictKey, string> = {
   appearancePatternPhoto: 'Foto / GIF',
   appearancePhotoTooBig: 'Das GIF ist zu groß (höchstens 8 MB).',
   appearancePhotoSaving: 'Bild wird gespeichert…',
+  liveDiagTitle: 'Live-Diagnose (nur Kine-Team)',
+  liveDiagHint: 'Warum ein Stream in der Liste ist oder nicht. Fehlt dein Stream hier, kopiere das und schick es.',
+  liveDiagCopy: 'Kopieren',
+  liveDiagCopied: 'Kopiert',
+  liveDiagOwnMissing: 'Dein Stream läuft, fehlt aber in der Liste.',
 };
