@@ -3,7 +3,7 @@ import { supabaseServer } from '@/lib/supabaseServer';
 import { RESUMABLE_FROM_BYTES, base64Ascii } from '@/lib/tusUpload';
 import { checkUpload, declaredDuration, uploadsPaused } from '@/lib/uploadLimits';
 import { createTicket, limitsForProfile, uploadProfile, uploadUsage } from '@/lib/uploadTickets';
-import { cloudflareStreamCreds, deleteStreamVideo, streamApiUrl } from '@/lib/cloudflareVideos';
+import { cloudflareStorageFull, cloudflareStreamCreds, deleteStreamVideo, streamApiUrl } from '@/lib/cloudflareVideos';
 import { outdatedAppResponse } from '@/lib/desktopGate';
 import { kineAppFrom } from '@/lib/desktopClient';
 
@@ -70,7 +70,18 @@ export async function POST(req: NextRequest) {
   const created = resumable
     ? await createResumableUpload(cf.accountId, cf.token, fileSize, reserve, user.id)
     : await createBasicUpload(cf.accountId, cf.token, reserve, user.id);
-  if (!created.ok) return NextResponse.json({ error: created.error, details: created.details }, { status: 502 });
+  if (!created.ok) {
+    // Do logů Vercelu - podle toho jde poznat, co Cloudflare vadilo.
+    console.error('create-upload-url: Cloudflare odmítl nahrávání', created.error, JSON.stringify(created.details ?? null).slice(0, 800));
+    // Plné úložiště u Cloudflare (minuty předplatného Stream): ať je jasné, že nejde o chybu appky.
+    if (cloudflareStorageFull(created.details)) {
+      return NextResponse.json(
+        { error: 'Úložiště videí Kine je teď plné - nahrávání chvíli nepůjde. Dej prosím vědět správci Kine.', code: 'cf-storage' },
+        { status: 507, headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
+    return NextResponse.json({ error: created.error, details: created.details }, { status: 502 });
+  }
 
   const ticket = await createTicket({
     userId: user.id,

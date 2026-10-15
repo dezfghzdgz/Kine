@@ -29,7 +29,7 @@ const nove = L.uploadLimitsFor({ staff: false, plus: false, accountCreatedAt: fr
 const tym = L.uploadLimitsFor({ staff: true, plus: false, accountCreatedAt: fresh }, {}, now);
 
 test('výchozí limity zdarma / Plus / nový účet / tým', () => {
-  assert.deepEqual(free, { tier: 'free', maxVideoSeconds: 7200, perDay: 20, secondsPerDay: 14400, storageSeconds: 108000, pending: 2 });
+  assert.deepEqual(free, { tier: 'free', maxVideoSeconds: 7200, perDay: 20, secondsPerDay: 14400, storageSeconds: 108000, pending: 2, clipPending: 10, clipsPerDay: 20, maxAttempts: 60 });
   assert.equal(plus.tier, 'plus');
   assert.equal(plus.maxVideoSeconds, 21600, 'Plus: 3x delší video');
   assert.equal(plus.perDay, 60);
@@ -38,6 +38,8 @@ test('výchozí limity zdarma / Plus / nový účet / tým', () => {
   assert.equal(nove.maxVideoSeconds, 15 * 60);
   assert.equal(nove.perDay, 3);
   assert.equal(nove.pending, 1);
+  assert.equal(nove.clipsPerDay, 10, 'nový účet: klipů 10 denně (videí 3)');
+  assert.equal(nove.clipPending, 10);
   assert.equal(tym.tier, 'staff');
   assert.equal(tym.storageSeconds, 0, 'tým bez stropu úložiště');
   assert.equal(L.uploadLimitsFor({ staff: false, plus: true, accountCreatedAt: fresh }, {}, now).tier, 'plus', 'Plus není "nový účet"');
@@ -76,9 +78,77 @@ test('moc dlouhé video, rozpracovaná nahrávání, počet za den', () => {
   assert.equal(dlouhé.code, 'too-long');
   assert.equal(dlouhé.status, 413);
   assert.match(L.checkUpload(nove, L.NO_USAGE, 20 * 60).message, /Nový účet/);
-  assert.equal(L.checkUpload(free, { ...L.NO_USAGE, pending: 2 }, 60).code, 'busy');
-  assert.equal(L.checkUpload(free, { ...L.NO_USAGE, uploadsToday: 20 }, 60).code, 'daily-count');
-  assert.equal(L.checkUpload(free, { ...L.NO_USAGE, uploadsToday: 19 }, 60).ok, true);
+  assert.equal(L.checkUpload(free, { ...L.NO_USAGE, pending: 2 }, 600).code, 'busy');
+  assert.equal(L.checkUpload(free, { ...L.NO_USAGE, pending: 2 }, null).code, 'busy', 'neznámá délka = video');
+  assert.equal(L.checkUpload(free, { ...L.NO_USAGE, uploadsToday: 20 }, 600).code, 'daily-count');
+  assert.equal(L.checkUpload(free, { ...L.NO_USAGE, uploadsToday: 19 }, 600).ok, true);
+});
+
+test('klipy (do 5 minut): vlastních 10 naráz, dlouhé video je nebrzdí', () => {
+  assert.equal(L.isClipLength(60), true);
+  assert.equal(L.isClipLength(300), true);
+  assert.equal(L.isClipLength(301), false);
+  assert.equal(L.isClipLength(null), false);
+  assert.equal(L.isClipLength(0), false);
+  // Nahrává se video (2 rozpracovaná) - klip projde.
+  assert.equal(L.checkUpload(free, { ...L.NO_USAGE, pending: 2 }, 45).ok, true, 'klip neblokují rozpracovaná videa');
+  assert.equal(L.checkUpload(nove, { ...L.NO_USAGE, pending: 1 }, 45).ok, true, 'ani u nového účtu');
+  assert.equal(L.checkUpload(free, { ...L.NO_USAGE, pendingClips: 9 }, 45).ok, true);
+  const deset = L.checkUpload(free, { ...L.NO_USAGE, pendingClips: 10 }, 45);
+  assert.equal(deset.code, 'busy');
+  assert.match(deset.message, /10 klipů naráz/);
+  assert.equal(L.checkUpload(free, { ...L.NO_USAGE, pendingClips: 10 }, 600).ok, true, 'rozpracované klipy video neblokují');
+});
+
+test('nový účet: 3 videa a zvlášť 10 klipů za den; jinak dohromady', () => {
+  const tri = { ...L.NO_USAGE, uploadsToday: 3, clipsToday: 0 };
+  assert.equal(L.checkUpload(nove, tri, 600).code, 'daily-count', '4. video ne');
+  assert.equal(L.checkUpload(nove, tri, 45).ok, true, 'klip ano');
+  const devetKlipu = { ...L.NO_USAGE, uploadsToday: 12, clipsToday: 9 };
+  assert.equal(L.checkUpload(nove, devetKlipu, 45).ok, true, '10. klip ano');
+  assert.equal(L.checkUpload(nove, devetKlipu, 600).code, 'daily-count', 'videa už 3');
+  const desetKlipu = { ...L.NO_USAGE, uploadsToday: 10, clipsToday: 10 };
+  const r = L.checkUpload(nove, desetKlipu, 45);
+  assert.equal(r.code, 'daily-count');
+  assert.match(r.message, /nejvýš 10 klipů/);
+  assert.equal(L.checkUpload(nove, desetKlipu, 600).ok, true, 'klipy se do videí nepočítají');
+  // Zdarma: dohromady 20.
+  assert.equal(L.checkUpload(free, { ...L.NO_USAGE, uploadsToday: 20, clipsToday: 20 }, 45).code, 'daily-count');
+  assert.equal(L.checkUpload(free, { ...L.NO_USAGE, uploadsToday: 20, clipsToday: 15 }, 600).code, 'daily-count');
+  assert.equal(L.checkUpload(free, { ...L.NO_USAGE, uploadsToday: 19, clipsToday: 19 }, 45).ok, true);
+});
+
+test('pokusy za den (i zrušené) mají strop', () => {
+  assert.equal(L.checkUpload(free, { ...L.NO_USAGE, attemptsToday: 59 }, 45).ok, true);
+  const r = L.checkUpload(free, { ...L.NO_USAGE, attemptsToday: 60 }, 45);
+  assert.equal(r.code, 'attempts');
+  assert.equal(r.status, 429);
+  assert.equal(L.checkUpload(nove, { ...L.NO_USAGE, attemptsToday: 39 }, 45).code, 'attempts');
+  assert.equal(L.checkUpload(tym, { ...L.NO_USAGE, attemptsToday: 500 }, 45).ok, true);
+});
+
+test('počty z lístků: zrušené se nepočítají, opuštěné po 6 h nedrží místo', () => {
+  const h = 3600 * 1000;
+  const at = (ms) => new Date(now - ms).toISOString();
+  const until = (ms) => new Date(now + ms).toISOString();
+  const rows = [
+    { status: 'used', declared_seconds: 600, reserved_seconds: 660, created_at: at(2 * h), expires_at: until(22 * h) },
+    { status: 'used', declared_seconds: 40, reserved_seconds: 72, created_at: at(3 * h), expires_at: until(21 * h) },
+    { status: 'pending', declared_seconds: 30, reserved_seconds: 62, created_at: at(10 * 60 * 1000), expires_at: until(23 * h) },
+    { status: 'pending', declared_seconds: 1200, reserved_seconds: 1290, created_at: at(30 * 60 * 1000), expires_at: until(23 * h) },
+    { status: 'pending', declared_seconds: null, reserved_seconds: 7200, created_at: at(8 * h), expires_at: until(16 * h) },
+    { status: 'failed', declared_seconds: 30, reserved_seconds: 62, created_at: at(1 * h), expires_at: until(23 * h) },
+    { status: 'expired', declared_seconds: 30, reserved_seconds: 62, created_at: at(20 * h), expires_at: at(1 * h) },
+    { status: 'pending', declared_seconds: 30, reserved_seconds: 62, created_at: at(23.5 * h), expires_at: at(1000) },
+    { status: 'used', declared_seconds: 30, reserved_seconds: 62, created_at: at(30 * h), expires_at: at(6 * h) },
+  ];
+  const u = L.ticketUsage(rows, now);
+  assert.equal(u.attemptsToday, 8, 'všechno za 24 h');
+  assert.equal(u.uploadsToday, 5, 'hotové + otevřené (zrušené, vypršelé a prošlé ne)');
+  assert.equal(u.clipsToday, 2);
+  assert.equal(u.pendingClips, 1);
+  assert.equal(u.pending, 1, 'video starší než 6 h už nedrží místo');
+  assert.equal(u.pendingSeconds, 62 + 1290 + 7200, 'rezerva ale ano, dokud lístek platí');
 });
 
 test('minuty za den', () => {

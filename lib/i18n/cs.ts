@@ -1742,7 +1742,7 @@ export const cs = {
   uploadQuotaToday: 'Dnes můžeš nahrát ještě {left} z {perDay} videí, každé nejvýš {max}.',
   uploadQuotaStorage: 'Úložiště kanálu: {used} z {total}',
   uploadQuotaTooLong: 'Tohle video má {length} - nahrát jde video nejvýš do {max}.',
-  uploadQuotaNewAccount: 'Nový účet: první den videa do {max} a nejvýš {perDay} denně (ochrana proti spamu). Pak se limity zvednou.',
+  uploadQuotaNewAccount: 'Nový účet: první den videa do {max} a nejvýš {perDay} denně, klipů do {clipMax} až {clips} (ochrana proti spamu). Pak se limity zvednou.',
   uploadPausedNote: 'Nahrávání videí je teď na chvíli pozastavené (údržba).',
   imageUploadBadType: 'Tenhle obrázek nejde nahrát - použij JPG, PNG, WebP, GIF nebo AVIF.',
   imageUploadTooBig: 'Obrázek je moc velký - nejvýš {mb} MB.',

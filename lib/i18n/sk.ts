@@ -1736,7 +1736,7 @@ export const sk: Record<DictKey, string> = {
   uploadQuotaToday: 'Dnes môžeš nahrať ešte {left} z {perDay} videí, každé najviac {max}.',
   uploadQuotaStorage: 'Úložisko kanála: {used} z {total}',
   uploadQuotaTooLong: 'Toto video má {length} - nahrať ide video najviac do {max}.',
-  uploadQuotaNewAccount: 'Nový účet: prvý deň videá do {max} a najviac {perDay} denne (ochrana proti spamu). Potom sa limity zvýšia.',
+  uploadQuotaNewAccount: 'Nový účet: prvý deň videá do {max} a najviac {perDay} denne, klipov do {clipMax} až {clips} (ochrana proti spamu). Potom sa limity zvýšia.',
   uploadPausedNote: 'Nahrávanie videí je teraz na chvíľu pozastavené (údržba).',
   imageUploadBadType: 'Tento obrázok sa nedá nahrať - použi JPG, PNG, WebP, GIF alebo AVIF.',
   imageUploadTooBig: 'Obrázok je príliš veľký - najviac {mb} MB.',

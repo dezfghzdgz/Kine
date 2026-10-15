@@ -293,6 +293,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
   );
 
   async function run(job: UploadJob) {
+    // Nahrávání založené u Cloudflare, dokud není uložené na Kine - po chybě se uvolní.
+    let openUpload: { uid: string; token: string | undefined } | null = null;
     try {
       // Rozměry (hromadný výběr je nezná - soubory se nikde nepřehrávají; ať
       // Sparks poznají svislé video hned) a délka (server podle ní hlídá limity).
@@ -311,6 +313,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       });
       const urlData = await urlRes.json();
       if (!urlRes.ok) throw new Error(urlData.error || 'Nepodařilo se připravit upload.');
+      if (typeof urlData.videoId === 'string') openUpload = { uid: urlData.videoId, token };
 
       // Průběh + odhad, kolik ještě zbývá (u dlouhých videí se nahrává i desítky minut).
       const zacatek = Date.now();
@@ -358,6 +361,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
       const confirmData = await confirmRes.json();
       const newVideoId = confirmData.video.id;
+      // Uložené na Kine - od teď už nic neuvolňovat (video patří k videu na Kine).
+      openUpload = null;
       uprav({ videoId: newVideoId });
 
       // Vlastní náhled (typ a velikost ohlídala stránka nahrávání; úložiště pustí jen obrázek k vlastnímu videu).
@@ -434,6 +439,9 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         failedInvites: failed.length > 0 ? { videoId: newVideoId, names: failed } : null,
       });
     } catch (err: any) {
+      // Nepovedené nahrávání nesmí dál držet místo mezi rozpracovanými (a rezervu
+      // u Cloudflare) - jinak by další nahrávání čekalo, až lístek vyprší.
+      if (openUpload) releaseUpload(openUpload.uid, openUpload.token);
       finishJob('error', { error: err?.message ?? 'Nahrávání se nepovedlo.' });
     }
   }
@@ -451,6 +459,21 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       <StateContext.Provider value={state}>{children}</StateContext.Provider>
     </CommandsContext.Provider>
   );
+}
+
+/**
+ * Uvolní nepovedené nahrávání (/api/videos/cancel-upload): přestane se počítat
+ * mezi rozpracovaná a rezerva u Cloudflare se smaže. Na pozadí, chyba nevadí -
+ * lístek jinak vyprší sám.
+ */
+function releaseUpload(uid: string, token: string | undefined): void {
+  if (!token) return;
+  void fetch('/api/videos/cancel-upload', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cloudflareVideoId: uid }),
+    keepalive: true,
+  }).catch(() => undefined);
 }
 
 /**

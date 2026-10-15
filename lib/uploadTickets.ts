@@ -1,8 +1,8 @@
 import { supabaseServer } from './supabaseServer';
 import { isMissingTable } from './apiUser';
 import { hasKinePlus } from './plus';
-import { NO_USAGE, uploadLimitsFor, type UploadLimits, type UploadUsage } from './uploadLimits';
-import { cloudflareUidInUse, deleteOrQueue, getStreamVideo, isCloudflareUid } from './cloudflareVideos';
+import { NO_USAGE, ticketUsage, uploadLimitsFor, type TicketRow, type UploadLimits, type UploadUsage } from './uploadLimits';
+import { cloudflareUidInUse, deleteOrQueue, deleteStreamVideo, getStreamVideo, isCloudflareUid } from './cloudflareVideos';
 
 /**
  * Lístky na nahrání (tabulka upload_tickets, migrace
@@ -50,14 +50,36 @@ export function limitsForProfile(profile: Profile | null, accountCreatedAt: stri
 
 /** Kolik toho člověk nahrál (24 h, rozpracované, celé úložiště). */
 export async function uploadUsage(userId: string): Promise<{ usage: UploadUsage; tickets: boolean }> {
-  const rpc = await supabaseServer.rpc('kine_upload_usage', { p_user: userId });
+  const now = Date.now();
+  const dayAgo = new Date(now - 24 * 3600 * 1000).toISOString();
+  const nowIso = new Date(now).toISOString();
+  // Minuty a úložiště spočítá databáze (potřebuje skutečné délky videí); počty z lístků
+  // tady (klipy zvlášť, zrušená nahrání se nepočítají, opuštěná nedrží místo napořád).
+  const [rpc, list] = await Promise.all([
+    supabaseServer.rpc('kine_upload_usage', { p_user: userId }),
+    supabaseServer
+      .from('upload_tickets')
+      .select('status, declared_seconds, reserved_seconds, created_at, expires_at')
+      .eq('user_id', userId)
+      .or(`created_at.gt.${dayAgo},and(status.eq.pending,expires_at.gt.${nowIso})`)
+      .limit(5000),
+  ]);
   if (!rpc.error && rpc.data && typeof rpc.data === 'object') {
     const d = rpc.data as Record<string, unknown>;
     const n = (k: string) => (Number.isFinite(Number(d[k])) ? Math.max(0, Number(d[k])) : 0);
-    return {
-      usage: { uploadsToday: n('uploadsToday'), secondsToday: n('secondsToday'), pending: n('pending'), pendingSeconds: n('pendingSeconds'), storedSeconds: n('storedSeconds') },
-      tickets: true,
+    const base: UploadUsage = {
+      ...NO_USAGE,
+      uploadsToday: n('uploadsToday'),
+      attemptsToday: n('uploadsToday'),
+      secondsToday: n('secondsToday'),
+      pending: n('pending'),
+      pendingSeconds: n('pendingSeconds'),
+      storedSeconds: n('storedSeconds'),
     };
+    if (!list.error && Array.isArray(list.data)) {
+      return { usage: { ...base, ...ticketUsage(list.data as TicketRow[], now) }, tickets: true };
+    }
+    return { usage: base, tickets: true };
   }
   // Bez migrace: jako dřív - počítají se videa za posledních 24 hodin (bez klipů od diváků).
   const since = Date.now() - 24 * 3600 * 1000;
@@ -185,6 +207,52 @@ export async function expireTickets(max = 10): Promise<number> {
     // Úklid nesmí shodit dotaz, ze kterého se volá.
   }
   return expired;
+}
+
+export type CancelOutcome = 'canceled' | 'already' | 'used' | 'not-found' | 'other-user' | 'error';
+
+/**
+ * Zrušení nahrávání (tlačítko Zrušit v appce, nebo appka / stránka po
+ * nepovedeném pokusu): lístek se uvolní (status "failed" - do denního počtu
+ * se nepočítá) a rezerva u Cloudflare se hned smaže. Hotové video (lístek
+ * "used") se tudy nesmaže - na to je /api/videos/delete.
+ */
+export async function cancelTicket(userId: string, cfUid: string): Promise<CancelOutcome> {
+  if (!isCloudflareUid(cfUid)) return 'not-found';
+  const updated = await supabaseServer
+    .from('upload_tickets')
+    .update({ status: 'failed' })
+    .eq('cf_uid', cfUid)
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .select('id');
+  if (!updated.error && (updated.data ?? []).length > 0) {
+    await deleteOrQueue(cfUid, 'nahrání zrušené');
+    return 'canceled';
+  }
+  if (updated.error && !isMissingTable(updated.error)) return 'error';
+
+  if (!updated.error) {
+    const existing = await supabaseServer.from('upload_tickets').select('user_id, status').eq('cf_uid', cfUid).maybeSingle();
+    if (existing.error) return 'error';
+    const t = existing.data as { user_id: string; status: string } | null;
+    if (t) {
+      if (t.user_id !== userId) return 'other-user';
+      if (t.status === 'used') return 'used';
+      // Už zrušené / vypršelé - co u Cloudflare případně zbylo, pryč (jen nepoužité).
+      await deleteOrQueue(cfUid, 'nahrání zrušené');
+      return 'already';
+    }
+  }
+
+  // Bez lístku (nahrávání z doby před lístky, nebo bez migrace): jen vlastní a nepoužité.
+  const video = await getStreamVideo(cfUid);
+  if (video === undefined) return 'error';
+  if (video === null) return 'already';
+  if (video.liveInput || typeof video.creator !== 'string' || video.creator !== userId) return 'other-user';
+  if (await cloudflareUidInUse(cfUid)) return 'used';
+  const outcome = await deleteStreamVideo(cfUid);
+  return outcome === 'failed' ? 'error' : 'canceled';
 }
 
 /** Zpracování u Cloudflare selhalo (třeba delší video, než se ohlásilo) - lístek se uvolní. */

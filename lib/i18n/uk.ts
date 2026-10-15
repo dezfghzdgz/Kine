@@ -1736,7 +1736,7 @@ export const uk: Record<DictKey, string> = {
   uploadQuotaToday: 'Сьогодні можеш завантажити ще {left} з {perDay} відео, кожне до {max}.',
   uploadQuotaStorage: 'Сховище каналу: {used} з {total}',
   uploadQuotaTooLong: 'Це відео триває {length} - можна завантажувати відео до {max}.',
-  uploadQuotaNewAccount: 'Новий акаунт: першого дня відео до {max} і не більше {perDay} на день (захист від спаму). Потім ліміти зростуть.',
+  uploadQuotaNewAccount: 'Новий акаунт: першого дня відео до {max} і не більше {perDay} на день, а кліпів до {clipMax} - до {clips} (захист від спаму). Потім ліміти зростуть.',
   uploadPausedNote: 'Завантаження відео зараз ненадовго призупинено (технічні роботи).',
   imageUploadBadType: 'Це зображення не можна завантажити - використай JPG, PNG, WebP, GIF або AVIF.',
   imageUploadTooBig: 'Зображення завелике - максимум {mb} МБ.',

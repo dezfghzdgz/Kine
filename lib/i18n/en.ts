@@ -1736,7 +1736,7 @@ export const en: Record<DictKey, string> = {
   uploadQuotaToday: 'You can upload {left} more of {perDay} videos today, each up to {max}.',
   uploadQuotaStorage: 'Channel storage: {used} of {total}',
   uploadQuotaTooLong: 'This video is {length} long - you can upload videos up to {max}.',
-  uploadQuotaNewAccount: 'New account: on the first day, videos up to {max} and at most {perDay} a day (spam protection). The limits go up after that.',
+  uploadQuotaNewAccount: 'New account: on the first day, videos up to {max} and at most {perDay} a day, plus up to {clips} clips (up to {clipMax}) (spam protection). The limits go up after that.',
   uploadPausedNote: 'Video uploads are paused for a while (maintenance).',
   imageUploadBadType: 'This image can\'t be uploaded - use JPG, PNG, WebP, GIF or AVIF.',
   imageUploadTooBig: 'The image is too big - {mb} MB max.',

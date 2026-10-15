@@ -14,6 +14,9 @@ type Summary = {
   secondsToday: number;
   storageSeconds: number;
   storedSeconds: number;
+  /** Klipy (videa do clipMaxSeconds) - nový účet je má zvlášť (novější server). */
+  clipsPerDay?: number;
+  clipMaxSeconds?: number;
   paused?: boolean;
 };
 
@@ -79,7 +82,15 @@ export default function UploadQuota({
           </>
         )}
       </p>
-      {summary.tier === 'new' && <p className="upload-quota-note">{t('uploadQuotaNewAccount').replace('{max}', formatDuration(summary.maxVideoSeconds)).replace('{perDay}', String(summary.perDay))}</p>}
+      {summary.tier === 'new' && (
+        <p className="upload-quota-note">
+          {t('uploadQuotaNewAccount')
+            .replace('{max}', formatDuration(summary.maxVideoSeconds))
+            .replace('{perDay}', String(summary.perDay))
+            .replace('{clips}', String(summary.clipsPerDay ?? summary.perDay))
+            .replace('{clipMax}', formatDuration(summary.clipMaxSeconds ?? 300))}
+        </p>
+      )}
     </div>
   );
 }

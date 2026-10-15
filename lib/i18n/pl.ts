@@ -1736,7 +1736,7 @@ export const pl: Record<DictKey, string> = {
   uploadQuotaToday: 'Dziś możesz przesłać jeszcze {left} z {perDay} filmów, każdy do {max}.',
   uploadQuotaStorage: 'Miejsce na kanale: {used} z {total}',
   uploadQuotaTooLong: 'Ten film trwa {length} - możesz przesyłać filmy do {max}.',
-  uploadQuotaNewAccount: 'Nowe konto: pierwszego dnia filmy do {max} i najwyżej {perDay} dziennie (ochrona przed spamem). Potem limity rosną.',
+  uploadQuotaNewAccount: 'Nowe konto: pierwszego dnia filmy do {max} i najwyżej {perDay} dziennie, klipów do {clipMax} nawet {clips} (ochrona przed spamem). Potem limity rosną.',
   uploadPausedNote: 'Przesyłanie filmów jest na chwilę wstrzymane (konserwacja).',
   imageUploadBadType: 'Tego obrazu nie da się przesłać - użyj JPG, PNG, WebP, GIF lub AVIF.',
   imageUploadTooBig: 'Obraz jest za duży - maksymalnie {mb} MB.',

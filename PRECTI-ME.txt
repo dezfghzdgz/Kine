@@ -1,3 +1,51 @@
+KINE Clipper 0.11.1: tlačítka Zrušit a Znovu u nahrávání, klipy už nečekají za dlouhým
+videem; Kine: klipy (do 5 minut) mají vlastní limit 10 (dodávka kine-klipy-2026-10-15)
+==========================================================================================
+
+Web + appka (Kine do PC / Kine Clipper 0.11.1). Předchozí dodávku (kine-zabezpeceni,
+appka 0.11.0) už máš na GitHubu - ZIPy obsahují jen to, co je nové.
+- Web: rozbal kine-web-klipy.zip do kořene repa Kine a přepiš, nahraj na GitHub
+  (přetažením) a pusť node zkontroluj-soubory.mjs. Žádná nová migrace - jen pokud jsi
+  ještě nepustil supabase-migration-zabezpeceni-a-limity.sql z minulé dodávky, pusť ji
+  (Supabase -> SQL Editor; web už ji od minula čeká).
+- Appka: rozbal kine-desktop-0.11.1.zip do kořene repa kine-desktop, nahraj a pusť Vydání.
+- Kamarád si pak appku aktualizuje (O appce -> Aktualizovat; nabídne se sama). Appka
+  starší než 0.11.0 už na Kine nahrávat nebude (0.11.0 je venku).
+
+PROČ KAMARÁDOVI NEŠLY NAHRÁT KLIPY
+- Appka nahrávala všechno v jedné frontě, jedno po druhém. Když se nahrávalo dlouhé video
+  (nahrávka zápasu), klipy stály ve frontě a čekaly, až se dohraje - u dlouhého videa
+  i hodinu. Teď jsou dva pruhy: klipy jedou vedle dlouhého videa.
+- Kine s lístky (předchozí dodávka): nepovedené nebo opuštěné nahrávání drželo místo mezi
+  rozpracovanými až 24 hodin. Naráz jdou 2 videa (nový účet 1), takže stačily dva spadlé
+  pokusy a další nahrávání hlásilo "Nahráváš už 2 videa naráz", i když se nic nenahrávalo.
+  Teď zrušené i nepovedené nahrávání appka (i web) hned uvolní, opuštěné přestane blokovat
+  po 6 hodinách a klipy mají vlastní limit.
+- Web, který teď běží na playkine.com: každé nahrávání si u Cloudflare rezervovalo 6 hodin
+  místa. Video + klipy naráz tak mohly rezervacemi "zaplnit" úložiště Cloudflare a ten pak
+  další nahrání odmítl. To opravuje už předchozí dodávka (rezervuje se jen skutečná délka).
+  Kdyby místo u Cloudflare došlo doopravdy, appka i web teď napíšou "Úložiště videí Kine je
+  teď plné - dej vědět správci Kine" (a ve Vercelu -> Logs je přesná odpověď Cloudflare).
+
+APPKA 0.11.1
+- U nahrávaného klipu (karta v knihovně i hlavička přehrávače) je Zrušit: nahrávání se
+  zastaví, klip zůstane v appce nenahraný a jde kdykoli nahrát znovu. U běžícího je navíc
+  Znovu - zkusí to od začátku (když se zasekne). Nepovedený klip má jako dřív Zkusit znovu.
+- Dva pruhy nahrávání: klipy (do 5 minut) a dlouhá videa / nahrávky zápasů zvlášť.
+- Příprava a uložení nahrávání na Kine má strop 60 s - zaseknutý dotaz už nezastaví frontu.
+
+KINE (web)
+- Klipy (videa do 5 minut) mají vlastní limit: až 10 nahrávání naráz, zvlášť od videí -
+  nahrávání dlouhého videa je nebrzdí. Nový účet smí první den 10 klipů (videí dál 3).
+  Denní počet 20 a minuty za den platí pro videa i klipy dohromady.
+- Zrušení nahrávání (/api/videos/cancel-upload) uvolní místo hned a smaže rezervu
+  u Cloudflare. Zrušené a nepovedené pokusy se do denního počtu nepočítají (jen do pojistky:
+  nejvýš 60 pokusů za den, nový účet 39).
+- Web po nepovedeném nahrání taky hned uvolní místo; stránka nahrávání u nového účtu
+  ukazuje i limit klipů.
+
+==========================================================================================
+
 KINE - Před spuštěním pro veřejnost: Clipper jen zdarma (placené až se zapnutými
 platbami), server hlídá předplatné i verzi appky, limity nahrávání a úložiště, bezpečné
 mazání videí, Sparks dopředu; appka 0.11.0 (dodávka kine-zabezpeceni-2026-10-15)

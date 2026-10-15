@@ -1736,7 +1736,7 @@ export const de: Record<DictKey, string> = {
   uploadQuotaToday: 'Heute kannst du noch {left} von {perDay} Videos hochladen, jedes bis {max}.',
   uploadQuotaStorage: 'Kanalspeicher: {used} von {total}',
   uploadQuotaTooLong: 'Dieses Video ist {length} lang - hochladen kannst du Videos bis {max}.',
-  uploadQuotaNewAccount: 'Neues Konto: am ersten Tag Videos bis {max} und höchstens {perDay} pro Tag (Spamschutz). Danach steigen die Limits.',
+  uploadQuotaNewAccount: 'Neues Konto: am ersten Tag Videos bis {max} und höchstens {perDay} pro Tag, Clips bis {clipMax} bis zu {clips} (Spamschutz). Danach steigen die Limits.',
   uploadPausedNote: 'Video-Uploads sind gerade kurz pausiert (Wartung).',
   imageUploadBadType: 'Dieses Bild kann nicht hochgeladen werden - nutze JPG, PNG, WebP, GIF oder AVIF.',
   imageUploadTooBig: 'Das Bild ist zu groß - höchstens {mb} MB.',

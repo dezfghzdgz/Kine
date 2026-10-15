@@ -20,6 +20,12 @@ export function isCloudflareUid(value: unknown): value is string {
   return typeof value === 'string' && CLOUDFLARE_UID.test(value);
 }
 
+/** Odpověď Cloudflare o plném úložišti Stream (došly minuty předplatného)? */
+export function cloudflareStorageFull(details: unknown): boolean {
+  const text = typeof details === 'string' ? details : JSON.stringify(details ?? '');
+  return /storage capacity|capacity exceeded|insufficient storage|storage limit|storage quota|out of storage/i.test(text);
+}
+
 export function cloudflareStreamCreds(): { accountId: string; token: string } | null {
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const token = process.env.CLOUDFLARE_STREAM_API_TOKEN;
