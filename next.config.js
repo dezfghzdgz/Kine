@@ -94,10 +94,11 @@ const nextConfig = {
         // nastavují samy: /api/live/now (počet přenosů pro menu a seznam Živě
         // bez přihlášení jdou chvíli z mezipaměti CDN, jinak by každá otevřená
         // stránka volala server), /api/live/status (stav přenosu pro diváky bez
-        // přihlášení, pár vteřin) a /api/badges/stats (součty pro odznaky kanálu,
-        // 5 minut). Next hlavičku odsud k té z odpovědi přidává (ne nahrazuje) -
-        // "no-store" by tak cache vypnulo i tam, kde ji odpověď povoluje.
-        source: '/api/:path((?!live/now|live/status|badges/stats).*)',
+        // přihlášení, pár vteřin), /api/badges/stats (součty pro odznaky kanálu,
+        // 5 minut) a /api/live/chat/emotes (emoty kanálu, půl minuty). Next
+        // hlavičku odsud k té z odpovědi přidává (ne nahrazuje) - "no-store" by
+        // tak cache vypnulo i tam, kde ji odpověď povoluje.
+        source: '/api/:path((?!live/now|live/status|live/chat/emotes|badges/stats).*)',
         headers: [
           { key: 'Cache-Control', value: 'no-store, no-cache, must-revalidate' },
         ],

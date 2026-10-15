@@ -1,5 +1,5 @@
 import { cache } from 'react';
-import { supabaseServer } from './supabaseServer';
+import { supabaseServer, supabaseServerCached } from './supabaseServer';
 
 /**
  * Veřejné video pro server: náhledy odkazů, vložitelný přehrávač, oEmbed,
@@ -8,6 +8,9 @@ import { supabaseServer } from './supabaseServer';
  *
  * `cache` z Reactu: v jednom požadavku se stejné video načte jednou, i když
  * si o něj řekne metadata i tělo stránky (app/watch/[id]/layout.tsx).
+ *
+ * `revalidate`: stránka s ISR (layout videa, vložitelný přehrávač) smí odpověď
+ * podržet tolik vteřin; bez něj (API - oEmbed) se čte vždy čerstvě.
  */
 
 export type PublicVideo = {
@@ -32,10 +35,10 @@ function firstOf<T>(value: T | T[] | null | undefined): T | null {
   return value ?? null;
 }
 
-export const loadPublicVideo = cache(async (id: string): Promise<PublicVideo | null> => {
+export const loadPublicVideo = cache(async (id: string, revalidate?: number): Promise<PublicVideo | null> => {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
   try {
-    const { data } = await supabaseServer
+    const { data } = await (revalidate ? supabaseServerCached(revalidate) : supabaseServer)
       .from('videos')
       // Jeden doslovný řetězec, ne skládaný: Supabase z textu výběru odvozuje
       // typ řádku a ze skládaného odvodí "chybu" (na tom už jednou spadl build).

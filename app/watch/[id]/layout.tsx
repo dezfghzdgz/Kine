@@ -23,7 +23,7 @@ export const revalidate = 300;
  * prozradit ani název - loadPublicVideo je vůbec nevrátí.
  */
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const video = await loadPublicVideo(params.id);
+  const video = await loadPublicVideo(params.id, revalidate);
 
   if (!video) {
     return { title: 'Video', robots: { index: false, follow: false } };
@@ -83,7 +83,7 @@ export default async function WatchLayout({
   children: React.ReactNode;
   params: { id: string };
 }) {
-  const video = await loadPublicVideo(params.id);
+  const video = await loadPublicVideo(params.id, revalidate);
 
   // Strukturovaná data pro vyhledávače (schema.org/VideoObject). Jen u
   // veřejných videí; JSON.stringify sám escapuje uvozovky, "<" se navíc

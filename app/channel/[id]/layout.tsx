@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { supabaseServer } from '@/lib/supabaseServer';
+import { supabaseServerCached } from '@/lib/supabaseServer';
 import { SITE_URL, shorten } from '@/lib/linkPreview';
 
 export const revalidate = 300;
@@ -14,7 +14,8 @@ type ProfileRow = {
 
 async function loadProfile(id: string): Promise<ProfileRow | null> {
   try {
-    const { data } = await supabaseServer
+    // Metadata kanálu smí být až 5 minut stará (revalidate výše) - API cesty čtou vždy čerstvě.
+    const { data } = await supabaseServerCached(300)
       .from('profiles')
       .select('username, display_name, avatar_url, banner_url, bio')
       .eq('id', id)

@@ -1,4 +1,4 @@
-import { supabaseServer } from '@/lib/supabaseServer';
+import { supabaseServerCached } from '@/lib/supabaseServer';
 import { SITE_URL, shorten, videoThumbnail } from '@/lib/linkPreview';
 import { embedUrl, escapeXml, watchUrl } from '@/lib/embed';
 
@@ -16,7 +16,7 @@ import { embedUrl, escapeXml, watchUrl } from '@/lib/embed';
 export const revalidate = 3600;
 
 export async function GET() {
-  const { data } = await supabaseServer
+  const { data } = await supabaseServerCached(3600)
     .from('videos')
     .select('id, title, description, thumbnail_url, cloudflare_video_id, duration_seconds, views, created_at, made_for_kids, hashtags, owner_id, profiles!videos_owner_id_fkey(username, display_name)')
     .eq('status', 'ready')

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { supabaseServer } from '@/lib/supabaseServer';
+import { supabaseServerCached } from '@/lib/supabaseServer';
 import { SITE_URL, shorten } from '@/lib/linkPreview';
 import { postImages } from '@/lib/posts';
 
@@ -11,7 +11,8 @@ export const revalidate = 300;
  */
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   if (!/^[0-9a-f-]{36}$/i.test(params.id)) return { title: 'Kine' };
-  const { data: post } = await supabaseServer
+  // Metadata postu smí být až 5 minut stará (revalidate výše) - API cesty čtou vždy čerstvě.
+  const { data: post } = await supabaseServerCached(300)
     .from('posts')
     .select('*, profiles!posts_owner_id_fkey(username, display_name, is_banned)')
     .eq('id', params.id)

@@ -12048,3 +12048,540 @@ button.secondary:hover:not(:disabled) {
 .admin-custom-chip .badge-pill {
   cursor: pointer;
 }
+
+/* =====================================================================
+   CHAT JAKO NA TWITCHI A KICKU: emoty, emoji, odpovědi, zmínky, odznaky,
+   barvy jmen, připnutá zpráva (components/LiveChat.tsx, ChatText.tsx,
+   ChatEmotePicker.tsx, ChatEmoteManager.tsx)
+   ===================================================================== */
+
+.chat-body {
+  overflow-wrap: anywhere;
+}
+
+.chat-emote {
+  display: inline-block;
+  height: 28px;
+  width: auto;
+  max-width: 84px;
+  margin: -4px 1px;
+  vertical-align: middle;
+  object-fit: contain;
+}
+
+/* Zpráva jen z emotů a emoji je větší. */
+.chat-jumbo {
+  font-size: 1.75em;
+  line-height: 1.25;
+}
+.chat-jumbo .chat-emote {
+  height: 42px;
+  max-width: 126px;
+  margin: 0 1px;
+}
+
+.chat-mention {
+  font-weight: 600;
+  padding: 0 3px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+.chat-mention.self {
+  background: color-mix(in srgb, var(--brand) 26%, transparent);
+  color: var(--text);
+}
+
+.chat-link {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+/* Jméno: barva ze zprávy (zvolená nebo podle účtu). Na světlém pozadí tmavší, ať je čitelné. */
+.chat-name {
+  font-weight: 700;
+}
+button.chat-name {
+  background: none;
+  padding: 0;
+  border: none;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+html[data-theme="light"] .chat-name,
+html[data-theme="light"] .live-chat-msg .live-chat-user {
+  filter: brightness(0.7) saturate(1.25);
+}
+
+.chat-badges {
+  display: inline-flex;
+  gap: 2px;
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+.chat-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  color: #fff;
+  background: #64748b;
+}
+.chat-badge-broadcaster { background: #e5262a; }
+.chat-badge-staff { background: #8b5cf6; }
+.chat-badge-moderator { background: #16a34a; }
+.chat-badge-verified { background: #2563eb; }
+.chat-badge-follower { background: #64748b; }
+.chat-badge-follower.tier-1 { background: #b87333; }
+.chat-badge-follower.tier-3 { background: #8e9aa6; }
+.chat-badge-follower.tier-6 { background: #d4a017; }
+.chat-badge-follower.tier-12 { background: #009e83; }
+.chat-badge-follower.tier-24 { background: #e0245e; }
+
+/* Odpověď: na co se odpovídá (kopie) nad zprávou. */
+.chat-reply-ref {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 1px;
+  font-size: var(--fs-2xs, 11px);
+  color: var(--text-faint);
+  min-width: 0;
+}
+.chat-reply-name {
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.chat-reply-snippet {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  opacity: 0.85;
+}
+
+.chat-first-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-2xs, 11px);
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(90deg, #8b5cf6, #ec4899);
+  vertical-align: 1px;
+}
+
+.live-chat-msg.mentioned {
+  margin: 0 -6px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+.live-chat-msg.first:not(.mentioned) {
+  margin: 0 -6px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  box-shadow: inset 3px 0 0 #a855f7;
+  background: color-mix(in srgb, #a855f7 8%, transparent);
+}
+.live-chat-msg.action .chat-body,
+.live-chat-overlay-msg.action .chat-body {
+  font-style: italic;
+}
+
+.live-chat-msg-actions {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+/* Připnutá zpráva nahoře. */
+.chat-pinned {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 10px 7px 14px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--brand) 9%, var(--panel));
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+.chat-pinned > .ui-icon {
+  color: var(--brand);
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+.chat-pinned-text {
+  flex: 1;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.chat-pinned-label {
+  display: block;
+  font-size: var(--fs-2xs, 11px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+.chat-pinned .live-chat-icon-btn {
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+/* Psaní: odpověď, našeptávač, výběr emotů nad polem. */
+.live-chat-compose {
+  position: relative;
+}
+.live-chat-form .chat-emote-toggle {
+  flex-shrink: 0;
+  width: 36px;
+  height: auto;
+  align-self: stretch;
+}
+.chat-replying {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 14px;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  background: var(--panel-raised);
+}
+.chat-replying-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  overflow: hidden;
+}
+.chat-replying .live-chat-icon-btn {
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+}
+
+.chat-suggest {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% + 4px);
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border-radius: var(--radius-md);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg, 0 18px 40px rgba(0, 0, 0, 0.45));
+}
+.chat-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  background: none;
+  background-image: none;
+  box-shadow: none;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  text-align: left;
+}
+.chat-suggest-item.active,
+.chat-suggest-item:hover {
+  background: var(--panel);
+}
+.chat-suggest-item img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+.chat-suggest-emoji {
+  width: 24px;
+  text-align: center;
+  font-size: 20px;
+  line-height: 1;
+}
+.chat-suggest-at {
+  width: 24px;
+  text-align: center;
+  font-weight: 700;
+  color: var(--text-faint);
+}
+
+.chat-picker {
+  position: absolute;
+  right: 10px;
+  bottom: calc(100% + 4px);
+  z-index: 30;
+  width: min(340px, calc(100% - 20px));
+  max-height: min(380px, 70vh);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-md);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg, 0 18px 40px rgba(0, 0, 0, 0.45));
+  overflow: hidden;
+}
+.chat-picker-search {
+  margin: 8px 8px 4px;
+  padding: 7px 10px;
+  font-size: var(--fs-sm);
+}
+.chat-picker-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px 6px 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--border);
+}
+.chat-picker-tabs::-webkit-scrollbar {
+  display: none;
+}
+.chat-picker-tab {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  background-image: none;
+  box-shadow: none;
+  color: var(--text-dim);
+}
+.chat-picker-tab img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+.chat-picker-tab-emoji {
+  font-size: 18px;
+  line-height: 1;
+}
+.chat-picker-tab.active,
+.chat-picker-tab:hover {
+  background: var(--panel);
+  color: var(--text);
+}
+.chat-picker-grid-wrap {
+  overflow-y: auto;
+  padding: 4px 8px 8px;
+}
+.chat-picker-heading {
+  margin: 4px 2px 6px;
+  font-size: var(--fs-2xs, 11px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.chat-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+  gap: 2px;
+}
+.chat-picker-grid.emotes {
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+}
+.chat-picker-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  background-image: none;
+  box-shadow: none;
+}
+.chat-picker-grid.emotes .chat-picker-item {
+  height: 46px;
+}
+.chat-picker-item:hover,
+.chat-picker-item:focus-visible {
+  background: var(--panel);
+}
+.chat-picker-item img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+.chat-picker-grid.emotes .chat-picker-item img {
+  width: 36px;
+  height: 36px;
+}
+.chat-picker-item.emoji {
+  font-size: 24px;
+  line-height: 1;
+}
+.chat-picker-empty {
+  margin: 14px 4px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+}
+
+/* Barva jména: kolečka v nabídce u ikonky palety. */
+.chat-color-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 26px);
+  gap: 6px;
+  padding: 4px 10px 6px;
+}
+.live-chat-tts-menu .chat-color-swatch {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+.live-chat-tts-menu .chat-color-swatch.active {
+  border-color: var(--text);
+}
+.live-chat-tts-menu .chat-color-swatch.active::before {
+  content: none;
+}
+
+.live-chat-info {
+  padding: 8px 14px;
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  border-top: 1px solid var(--border);
+  line-height: 1.45;
+}
+
+/* Emoty kanálu v nastavení chatu. */
+.chat-emote-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.chat-emote-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chat-emote-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  font-size: var(--fs-xs);
+}
+.chat-emote-chip img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+.chat-emote-chip button {
+  padding: 2px 6px;
+  font-size: var(--fs-2xs, 11px);
+  background: none;
+  background-image: none;
+  box-shadow: none;
+  color: var(--text-faint);
+}
+.chat-emote-chip button.danger {
+  color: #ff6b6b;
+  font-weight: 600;
+}
+.chat-emote-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.chat-emote-add input[type='text'] {
+  flex: 1;
+  min-width: 120px;
+  padding: 6px 10px;
+}
+.live-chat-panel-note.error {
+  color: #ff6b6b;
+}
+
+/* Překryv pro OBS: emoty a odznaky v řádku, jméno v barvě. */
+.live-chat-overlay-msg .chat-name {
+  margin-right: 6px;
+}
+.live-chat-overlay-msg .chat-emote {
+  height: 1.6em;
+  max-width: 4.8em;
+}
+.chat-emote-file {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  cursor: pointer;
+  overflow: hidden;
+}
+.chat-emote-file span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+.chat-emote-file img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+.chat-emote-file input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Divák čte starší zprávy (odroloval nahoru) a přišly nové: tlačítko dole uprostřed. */
+.live-chat-list > .chat-new-below {
+  position: sticky;
+  bottom: 4px;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: #fff;
+  background: var(--brand);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  z-index: 2;
+}
+
+/* Jméno jde kliknout - vloží @jméno do pole. */
+.live-chat-msg button.chat-name:hover {
+  text-decoration: underline;
+}

@@ -20,7 +20,7 @@ export const revalidate = 300;
 type Props = { params: { id: string }; searchParams: { t?: string } };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const video = await loadPublicVideo(params.id);
+  const video = await loadPublicVideo(params.id, revalidate);
   return {
     // absolute: bez šablony "| Kine" z kořenového layoutu (bylo by "Kine | Kine").
     title: { absolute: video ? `${video.title} · Kine` : 'Kine' },
@@ -31,7 +31,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function EmbedPage({ params, searchParams }: Props) {
-  const video = await loadPublicVideo(params.id);
+  const video = await loadPublicVideo(params.id, revalidate);
 
   if (!video || !video.cloudflare_video_id) {
     return (

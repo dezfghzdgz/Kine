@@ -94,5 +94,25 @@ test('nastavení z čehokoli: meze, duplicitní a prázdná slova pryč', () => 
   assert.equal(s.shield, true);
 });
 
+test('režim jen emoty: slova neprojdou, emoty a emoji ano, moderátor může cokoli', () => {
+  const s = { ...r.DEFAULT_CHAT_SETTINGS, emoteOnly: true };
+  assert.deepEqual(r.checkChatMessage(base({ settings: s, emoteOnlyMessage: false })), { code: 'emoteOnly' });
+  assert.equal(r.checkChatMessage(base({ settings: s, emoteOnlyMessage: true })), null);
+  assert.equal(r.checkChatMessage(base({ settings: s, emoteOnlyMessage: false, exempt: true })), null);
+  assert.equal(r.sanitizeChatSettings({ emote_only: true }).emoteOnly, true);
+  assert.equal(r.sanitizeChatSettings({ emote_only: 'ano' }).emoteOnly, false);
+  assert.equal(r.DEFAULT_CHAT_SETTINGS.emoteOnly, false);
+  // Štít jen emoty nemění (zapnutí štítu ho nevypne, ani nezapne).
+  assert.equal('emoteOnly' in r.SHIELD_SETTINGS, false);
+});
+
+test('připnutá zpráva: jen platná kopie projde', () => {
+  assert.equal(r.readPinned(null), null);
+  assert.equal(r.readPinned({ id: 'x', t: 'a' }), null);
+  assert.equal(r.readPinned({ id: 5, t: '' }), null);
+  const p = r.readPinned({ id: 5, uid: 'u1', u: 'daniel', t: 'Vítejte!', at: '2026-10-14T10:00:00Z' });
+  assert.deepEqual(p, { id: 5, uid: 'u1', u: 'daniel', t: 'Vítejte!', at: '2026-10-14T10:00:00Z' });
+});
+
 console.log(`\n${prosly} prošlo, ${padly} spadlo`);
 if (padly > 0) process.exit(1);

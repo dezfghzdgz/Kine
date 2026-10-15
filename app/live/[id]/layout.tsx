@@ -13,7 +13,7 @@ export const revalidate = 60;
  * vedle). Anglicky - odkaz uvidí lidé odkudkoli.
  */
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const preview = await loadLivePreview(params.id);
+  const preview = await loadLivePreview(params.id, revalidate);
   if (!preview) return { title: 'Live', robots: { index: false, follow: false } };
 
   const url = `${SITE_URL}/live/${params.id}`;

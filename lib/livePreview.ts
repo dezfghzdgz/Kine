@@ -1,4 +1,4 @@
-import { supabaseServer } from './supabaseServer';
+import { supabaseServer, supabaseServerCached } from './supabaseServer';
 import { liveHiddenNow } from './nudityRules';
 
 /**
@@ -24,17 +24,19 @@ export type LivePreview = {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function loadLivePreview(ownerId: string): Promise<LivePreview | null> {
+/** `revalidate`: stránka s ISR (layout přenosu, obrázek náhledu) smí odpověď podržet tolik vteřin; bez něj čerstvě. */
+export async function loadLivePreview(ownerId: string, revalidate?: number): Promise<LivePreview | null> {
   if (!UUID.test(ownerId)) return null;
+  const db = revalidate ? supabaseServerCached(revalidate) : supabaseServer;
   try {
     const [{ data: profile }, { data: stream }] = await Promise.all([
-      supabaseServer
+      db
         .from('profiles')
         .select('id, username, display_name, avatar_url, banner_url, is_banned, is_shadow_banned')
         .eq('id', ownerId)
         .maybeSingle(),
       // select('*'): sloupec kontroly obsahu (moderation_hidden_at) je jen s novou migrací.
-      supabaseServer.from('live_streams').select('*').eq('owner_id', ownerId).maybeSingle(),
+      db.from('live_streams').select('*').eq('owner_id', ownerId).maybeSingle(),
     ]);
     if (!profile || profile.is_banned || profile.is_shadow_banned) return null;
     return {

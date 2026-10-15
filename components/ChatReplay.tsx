@@ -4,8 +4,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 import { formatTipAmount } from '@/lib/liveTips';
+import { readChatMeta } from '@/lib/chatEmotes';
+import { useChatEmotes } from '@/lib/useChatEmotes';
 import ProfileImage from './ProfileImage';
 import UiIcon from './UiIcon';
+import { ChatBody, ChatName } from './ChatText';
 
 type ReplayMessage = {
   id: number;
@@ -15,6 +18,9 @@ type ReplayMessage = {
   kind?: string | null;
   tip_amount_cents?: number | null;
   tip_currency?: string | null;
+  /** Odznaky, barva jména, odpověď (migrace chat-emoty). */
+  meta?: unknown;
+  user_id?: string;
   profiles?: { username: string | null; avatar_url: string | null } | null;
   /** Vteřina videa, kdy zpráva padla. */
   at: number;
@@ -47,14 +53,15 @@ export default function ChatReplay({
   const [hidden, setHidden] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const startMs = new Date(startedAt).getTime();
+  const emotes = useChatEmotes(room);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const end = new Date(startMs + (durationSeconds && durationSeconds > 0 ? durationSeconds + 120 : 12 * 3600) * 1000).toISOString();
       const all: ReplayMessage[] = [];
-      // Se sloupci pro podpory; stará databáze bez nich -> obyčejný výběr.
-      let fields = 'id, body, created_at, kind, tip_amount_cents, tip_currency, profiles(username, avatar_url)';
+      // Se sloupci pro podpory a odznaky; stará databáze bez nich -> jednodušší výběr.
+      let fields = 'id, user_id, body, created_at, kind, tip_amount_cents, tip_currency, meta, profiles(username, avatar_url)';
       for (let from = 0; from < MAX_MESSAGES; from += PAGE) {
         const page = () =>
           supabase
@@ -66,8 +73,12 @@ export default function ChatReplay({
             .order('id', { ascending: true })
             .range(from, from + PAGE - 1);
         let { data, error } = await page();
+        if (error && from === 0 && /meta/i.test(error.message ?? '')) {
+          fields = 'id, user_id, body, created_at, kind, tip_amount_cents, tip_currency, profiles(username, avatar_url)';
+          ({ data, error } = await page());
+        }
         if (error && from === 0 && /kind|tip_amount|tip_currency|column/i.test(error.message ?? '')) {
-          fields = 'id, body, created_at, profiles(username, avatar_url)';
+          fields = 'id, user_id, body, created_at, profiles(username, avatar_url)';
           ({ data, error } = await page());
         }
         if (cancelled || error || !data) break;
@@ -125,15 +136,23 @@ export default function ChatReplay({
           {messages !== null && shown.length === 0 && <p className="live-chat-empty">{t('chatReplayEmpty')}</p>}
           {shown.map((m) => {
             const tip = m.kind === 'tip' && m.tip_amount_cents && m.tip_currency ? formatTipAmount(m.tip_amount_cents, m.tip_currency, lang) : null;
+            const meta = readChatMeta(m.meta);
             return (
-              <div key={m.id} className={`live-chat-msg ${tip ? 'tip' : ''}`} data-anim-scope>
+              <div key={m.id} className={`live-chat-msg ${tip ? 'tip' : ''} ${meta.me ? 'action' : ''}`} data-anim-scope>
                 <span className="live-chat-avatar" aria-hidden="true">
                   {m.profiles?.avatar_url ? <ProfileImage src={m.profiles.avatar_url} /> : null}
                 </span>
                 <span className="live-chat-text">
-                  <span className="live-chat-user">{m.profiles?.username ?? '—'}</span>
+                  {meta.r && (
+                    <span className="chat-reply-ref">
+                      <UiIcon name="reply" size={11} />
+                      <span className="chat-reply-name">@{meta.r.u || '—'}</span>
+                      <span className="chat-reply-snippet">{meta.r.t}</span>
+                    </span>
+                  )}
+                  <ChatName userId={m.user_id ?? String(m.id)} name={m.profiles?.username ?? '—'} meta={meta} />
                   {tip && <span className="live-chat-tip-amount">💛 {tip}</span>}
-                  {tip && m.body === '💛' ? null : m.body}
+                  {tip && m.body === '💛' ? null : <ChatBody body={m.body} emotes={emotes.map} />}
                 </span>
               </div>
             );

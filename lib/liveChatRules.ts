@@ -25,6 +25,8 @@ export type ChatSettings = {
   minAccountMinutes: number;
   /** Štít zapnutý (jen pro přehled - hodnoty výš už jsou nastavené). */
   shield: boolean;
+  /** Jen emoty a emoji (jako "emote-only" na Twitchi) - zprávy se slovy neprojdou. */
+  emoteOnly: boolean;
 };
 
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
@@ -35,10 +37,11 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   blockedTerms: [],
   minAccountMinutes: 0,
   shield: false,
+  emoteOnly: false,
 };
 
 /** Štít: co se zapne jedním klikem, když na chat přijde nájezd. */
-export const SHIELD_SETTINGS: Omit<ChatSettings, 'blockedTerms' | 'shield'> = {
+export const SHIELD_SETTINGS: Omit<ChatSettings, 'blockedTerms' | 'shield' | 'emoteOnly'> = {
   slowSeconds: 30,
   followersOnly: true,
   followMinutes: 10,
@@ -74,6 +77,24 @@ export function sanitizeChatSettings(raw: unknown): ChatSettings {
     blockedTerms: terms,
     minAccountMinutes: int(r.minAccountMinutes ?? r.min_account_minutes, 0, 43200),
     shield: r.shield === true,
+    emoteOnly: (r.emoteOnly ?? r.emote_only) === true,
+  };
+}
+
+/** Připnutá zpráva nahoře v chatu (kopie - po smazání původní zprávy zůstane). */
+export type ChatPinned = { id: number; uid: string; u: string; t: string; at: string };
+
+export function readPinned(raw: unknown): ChatPinned | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const id = Number(r.id);
+  if (!Number.isFinite(id) || typeof r.t !== 'string' || !r.t) return null;
+  return {
+    id,
+    uid: typeof r.uid === 'string' ? r.uid : '',
+    u: typeof r.u === 'string' ? r.u.slice(0, 40) : '',
+    t: r.t.slice(0, 300),
+    at: typeof r.at === 'string' ? r.at : new Date(0).toISOString(),
   };
 }
 
@@ -139,12 +160,13 @@ export type ChatRejection =
   | { code: 'followers'; minutes: number }
   | { code: 'newAccount'; minutes: number }
   | { code: 'links' }
-  | { code: 'blocked' };
+  | { code: 'blocked' }
+  | { code: 'emoteOnly' };
 
 /**
  * Smí tahle zpráva do chatu? null = ano. Kontroly v pořadí od nejlevnější
- * a nejdůležitější: zákaz, ztlumení, tempo, odběr, stáří účtu, odkazy,
- * zakázaná slova. Moderátoři (exempt) mají jen zákaz a ztlumení navíc - ty
+ * a nejdůležitější: zákaz, ztlumení, tempo, odběr, stáří účtu, jen emoty,
+ * odkazy, zakázaná slova. Moderátoři (exempt) mají jen zákaz a ztlumení navíc - ty
  * na ně nikdo dát nemůže, takže prakticky nic.
  */
 export function checkChatMessage(input: {
@@ -160,6 +182,8 @@ export function checkChatMessage(input: {
   accountCreatedAt: number | null;
   /** Zákaz / ztlumení: until null = napořád. */
   ban: { until: number | null } | null;
+  /** Je zpráva jen z emotů a emoji (lib/chatEmotes.ts - isEmoteOnlyMessage)? Pro režim "jen emoty". */
+  emoteOnlyMessage?: boolean;
 }): ChatRejection | null {
   const { settings: s, now } = input;
   if (input.ban) {
@@ -177,6 +201,7 @@ export function checkChatMessage(input: {
   if (s.minAccountMinutes > 0 && input.accountCreatedAt !== null && now - input.accountCreatedAt < s.minAccountMinutes * 60000) {
     return { code: 'newAccount', minutes: s.minAccountMinutes };
   }
+  if (s.emoteOnly && !input.emoteOnlyMessage) return { code: 'emoteOnly' };
   if (s.blockLinks && containsLink(input.text)) return { code: 'links' };
   if (matchBlockedTerm(input.text, s.blockedTerms)) return { code: 'blocked' };
   return null;

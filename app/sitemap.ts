@@ -1,5 +1,5 @@
 import { MetadataRoute } from 'next';
-import { supabaseServer } from '@/lib/supabaseServer';
+import { supabaseServerCached } from '@/lib/supabaseServer';
 import { SITE_URL } from '@/lib/linkPreview';
 
 // Tenhle soubor appka automaticky promění na /sitemap.xml - je to seznam
@@ -13,7 +13,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     lastModified: new Date(),
   }));
 
-  const { data: videos } = await supabaseServer
+  // Mapa webu se obnoví nejvýš jednou za hodinu (dřív jen při nasazení).
+  const { data: videos } = await supabaseServerCached(3600)
     .from('videos')
     .select('id, created_at')
     .eq('status', 'ready')
@@ -26,7 +27,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     lastModified: new Date(v.created_at),
   }));
 
-  const { data: channels } = await supabaseServer
+  const { data: channels } = await supabaseServerCached(3600)
     .from('profiles')
     .select('id, created_at')
     .limit(500);

@@ -16,7 +16,8 @@ export function supabaseAsUser(accessToken: string | null) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      global: { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} },
+      // cache: 'no-store' - jinak by si Next.js odpověď uložil do Data Cache napořád (lib/supabaseServer.ts).
+      global: { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}, fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }) },
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     }
   );

@@ -7,6 +7,8 @@ import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { CATEGORY_KEYS } from '@/lib/categories';
 import { channelRoom, liveElapsed } from '@/lib/liveChat';
 import LiveChat from '@/components/LiveChat';
+import ChatEmoteManager from '@/components/ChatEmoteManager';
+import { useChatEmotes } from '@/lib/useChatEmotes';
 import LiveTipsPanel from '@/components/LiveTipsPanel';
 import ComingSoon from '@/components/ComingSoon';
 import { PAYMENTS_ENABLED } from '@/lib/payments';
@@ -746,6 +748,8 @@ export default function LiveStudioPage() {
                   ))}
                 </div>
               )}
+              {/* Vlastní emoty kanálu (jdou i z nastavení chatu - ikonka posuvníků). */}
+              <StudioEmotes room={channelRoom(userId)} />
             </div>
           </div>
 
@@ -761,4 +765,10 @@ export default function LiveStudioPage() {
       )}
     </div>
   );
+}
+
+/** Emoty kanálu ve studiu (stejná správa jako v nastavení chatu). */
+function StudioEmotes({ room }: { room: string }) {
+  const emotes = useChatEmotes(room);
+  return <ChatEmoteManager room={room} emotes={emotes.channel} available={emotes.available} onChange={emotes.replace} />;
 }

@@ -68,6 +68,11 @@ async function classifyUrl(url: string): Promise<FrameScores | null> {
   } catch {
     return null;
   }
+  return classifyJpeg(bytes);
+}
+
+/** Ohodnotí obrázek JPEG (bajty). null = není to JPEG / nejde přečíst. */
+async function classifyJpeg(bytes: Uint8Array): Promise<FrameScores | null> {
   if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
   const { tf, model } = await loadModel();
   const jpeg = (await import('jpeg-js')).default;
@@ -389,6 +394,32 @@ export async function scanLiveThumbnail(ownerId: string, url: string): Promise<'
       user_id: ownerId,
       type: 'moderation_warning',
       message: '⚠️ Náhled přenosu se nepoužije - automatická kontrola v něm našla možnou nahotu. V řadě Živě se místo něj ukazuje snímek z vysílání; můžeš nahrát jiný.',
+      link: '/live',
+    });
+  }
+  return 'removed';
+}
+
+/**
+ * Emote kanálu (app/api/live/chat/emotes): prohlížeč k obrázku pošle i jeho
+ * první snímek jako JPEG (na šedém pozadí) - ten se ohodnotí. Nahota nebo
+ * porno = emote pryč (řádek i soubor) a tvůrce dostane oznámení.
+ */
+export async function scanChatEmote(channelId: string, emoteId: string, imagePath: string | null, jpeg: Uint8Array): Promise<'ok' | 'removed' | 'failed'> {
+  const f = await classifyJpeg(jpeg).catch(() => null);
+  if (!f) {
+    console.error('Kine: emote se nepodařilo zkontrolovat', channelId, emoteId);
+    return 'failed';
+  }
+  if (nudityVerdict([f]).action !== 'hold') return 'ok';
+  const { data } = await supabaseServer.from('channel_emotes').delete().eq('id', emoteId).eq('channel_id', channelId).select('code');
+  if (imagePath) await supabaseServer.storage.from('thumbnails').remove([imagePath]).then(() => undefined, () => undefined);
+  const code = (data as { code?: string }[] | null)?.[0]?.code;
+  if (code) {
+    await supabaseServer.from('notifications').insert({
+      user_id: channelId,
+      type: 'moderation_warning',
+      message: `⚠️ Emote ${code} jsme odebrali - automatická kontrola v něm našla možnou nahotu. Můžeš nahrát jiný.`,
       link: '/live',
     });
   }

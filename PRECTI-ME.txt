@@ -1,3 +1,83 @@
+KINE - Chat jako na Twitchi a Kicku (emoty, emoji, odpovědi, zmínky, odznaky, barvy
+jmen, připnutá zpráva, jen emoty, příkazy); appka 0.10.9: kamera v klipech, nahrávání
+během hraní, Oblíbené a Nahrát v liště přehrávače (dodávka kine-chat-2026-10-14)
+==========================================================================================
+
+Web + appka (Kine do PC / Kine Clipper 0.10.9).
+- Web: rozbal kine-web-chat.zip do kořene repa Kine a přepiš, nahraj na GitHub (přetažením)
+  a pusť node zkontroluj-soubory.mjs. ZIP obsahuje i opravu Živě z dodávky zive-5 (pokud
+  jsi ji ještě nenahrál, stačí nahrát tenhle). Pak Vercel -> Settings -> Data Cache ->
+  Purge Everything (úklid starých uložených odpovědí).
+- Migrace: Supabase -> SQL Editor -> spusť supabase-migration-chat-emoty.sql (jde pustit
+  opakovaně). Bez ní chat jede dál s emoji a emoty Kine, jen bez emotů kanálu, odznaků,
+  barev jmen, odpovědí, připnutí a režimu jen emoty (chat to sám pozná).
+- Appka: rozbal kine-desktop-0.10.9.zip do kořene repa kine-desktop, nahraj a pusť Vydání.
+- Na GitHubu webu pořád zůstává 7 starých souborů (přetažení nemaže) - smaž je ručně
+  (vypíše je node zkontroluj-soubory.mjs).
+
+CHAT (web, okno chatu v appce, překryv pro OBS, záznam chatu u videa)
+- Emoji: tlačítko se smajlíkem u pole - skupiny, hledání, naposledy použité. ":fire:" se
+  při odeslání změní na 🔥 (jde i česky: :srdce:, :ohen:, :smich:, :palec:...).
+- Emoty Kine: 26 vlastních obrázků (kineHype, kineLol, kineGG, kineW, kineL, kineF,
+  kineFire...), píšou se kódem jako na Twitchi nebo z výběru. Zpráva jen z emotů je větší.
+- Emoty kanálu: tvůrce si nahraje vlastní (až 50, PNG / GIF / WebP, i animované) ve
+  studiu Živě (Nástroje chatu) nebo v nastavení chatu (ikonka posuvníků). V jeho chatu je
+  pak může psát každý. Nahraný emote projde automatickou kontrolou nahoty jako náhledy.
+- Našeptávání: ":" + 2 písmena nabídne emoty a emoji, "@" jména lidí z chatu (Tab / Enter).
+- Odpověď na zprávu (šipka u zprávy) - nad zprávou je vidět, na co odpovídá. @zmínky
+  o tobě jsou zvýrazněné, odkazy jdou kliknout.
+- Odznaky před jménem: vysílá, moderátor, tým Kine, ověřený tvůrce, odběratel (barva podle
+  délky odběru: 1, 3, 6, 12, 24 měsíců) a "Poprvé v chatu" u první zprávy v kanálu.
+- Barva jména: ikonka palety v hlavičce chatu (nebo /color #rrggbb).
+- Připnutá zpráva: moderátor ji připne z nabídky u zprávy, všem se ukáže nahoře.
+- Režim jen emoty: v nastavení chatu (nebo /emoteonly).
+- Příkazy: /me, /color, pro moderátory /ban jméno, /unban, /timeout jméno 10m, /slow 30,
+  /followers 10m, /emoteonly, /unpin. /help je vypíše přímo v chatu.
+
+APPKA 0.10.9
+- Nahrát na Kine i během hraní: "Nahrát hned" u klipu (a v liště přehrávače) nahraje
+  hned, i když běží hra. Samo se během hry dál nenahrává (hra nepřichází o výkon).
+- V horní liště přehrávače u klipu: hvězdička (Oblíbené) a Nahrát na Kine.
+- Kamera v klipech: Záznam -> Kamera. Kamera se kreslí přímo do záznamu hry, do stejného
+  snímku - v klipu sedí přesně se hrou, nic se dodatečně neposouvá a klip se při uložení
+  znovu nekóduje. Výchozí vypnuto (kamera se pak vůbec nezapíná). Jde vybrat kamera, roh,
+  velikost, tvar a zrcadlo; poloha jde měnit i během hraní (hned, bez restartu). Když
+  kameru drží jiný program (Discord...), nahrává se dál bez ní a appka to každých 15 s
+  zkusí znovu. Kamera ve vysílání má dál svoje nastavení.
+
+==========================================================================================
+
+KINE - Živě: NALEZENÁ PŘÍČINA - server četl z databáze starou uloženou odpověď
+(Data Cache Next.js); teď čte vždy čerstvě (dodávka kine-zive-5-2026-10-14)
+==========================================================================================
+
+Jen web (appka beze změny).
+- Rozbal kine-web-zive-5.zip do kořene repa Kine a přepiš, nahraj na GitHub (přetažením)
+  a pusť node zkontroluj-soubory.mjs. Žádná migrace.
+- Nepovinné, ale doporučené: Vercel -> projekt -> Settings -> Data Cache -> Purge
+  Everything (smaže staré uložené odpovědi; nová verze je už nečte, je to jen úklid).
+- Na GitHubu webu pořád zůstává 7 starých souborů (přetažení nemaže) - smaž je ručně
+  (vypíše je node zkontroluj-soubory.mjs).
+
+CO SE DĚLO
+- Next.js 14 si odpovědi na fetch ukládá do své Data Cache. API cesty, které mají jen
+  GET (seznam Živě /api/live/now, stav kanálu /api/live/status, srovnání s Cloudflare,
+  odznaky...), bere jako "statické" - i s dynamic = 'force-dynamic'. Dotazy do Supabase
+  se tak uložily NAPOŘÁD a další požadavky dostávaly první odpověď po nasazení.
+- Seznam Živě: první dotaz po nasazení přišel, když nikdo nevysílal -> "Nobody's live"
+  napořád. Stav kanálu (jiný dotaz) se uložil během vysílání -> profil ukazoval "živě"
+  (a po konci vysílání nejspíš dál). Odtud "jednou je, jednou není", "číslo 1, seznam
+  prázdný", "po konci pořád živě" z minulých kol.
+- Diagnostika to ukázala: seznam prázdný, stav kanálu "živě ano", a dotaz s časem v adrese
+  (ten se nikdy neopakuje, takže šel do databáze) viděl přenos živý. Ověřeno pokusem
+  s next start a falešnou databází: druhý a třetí dotaz seznamu do databáze vůbec nedošel.
+- Oprava: lib/supabaseServer.ts - každé čtení s cache: 'no-store' (i lib/supabaseAsUser.ts).
+  Stránky, kde se uložení hodí (náhled odkazu a titulek videa / kanálu / postu / přenosu,
+  mapa webu), čtou přes supabaseServerCached(N) - nejvýš N vteřin staré (300 / 60 / 3600).
+- Totéž mohlo dělat i jinde (odznaky, statistiky...) - opraveno tím samým.
+
+==========================================================================================
+
 KINE - Živě: diagnostika ukáže i stav profilu a odkud odpověď přišla, přihlášený nikdy
 nedostane seznam z mezipaměti; appka 0.10.8: celé ovládání přehrávače v jedné liště
 u posuvníku, nastavení přeuspořádané (dodávka kine-zive-4-2026-10-14)
