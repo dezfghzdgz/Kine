@@ -1,3 +1,127 @@
+KINE - Před spuštěním pro veřejnost: Clipper jen zdarma (placené až se zapnutými
+platbami), server hlídá předplatné i verzi appky, limity nahrávání a úložiště, bezpečné
+mazání videí, Sparks dopředu; appka 0.11.0 (dodávka kine-zabezpeceni-2026-10-15)
+==========================================================================================
+
+Web + appka (Kine do PC / Kine Clipper 0.11.0). Na GitHubu zatím nejsou ani dvě předchozí
+dodávky (chat kine-chat, Živě zive-5) - tenhle ZIP je obsahuje taky, stačí nahrát jen ten.
+
+POSTUP (v tomhle pořadí)
+1. Web: rozbal kine-web-zabezpeceni.zip do kořene repa Kine a přepiš, nahraj na GitHub
+   (přetažením) a pusť node zkontroluj-soubory.mjs. Vercel nasadí sám.
+2. Migrace hned po nasazení webu: Supabase -> SQL Editor -> nejdřív
+   supabase-migration-chat-emoty.sql (z dodávky chatu, pokud ještě neběžela), pak
+   supabase-migration-zabezpeceni-a-limity.sql. Obě jdou pustit opakovaně. Druhá na konci
+   vypíše tabulku "co se dělo" - u všeho má být "hotovo" (nebo "přeskočeno", když nějaká
+   tabulka u tebe neexistuje). Bez ní web běží dál, jen zůstanou otevřené staré díry
+   v databázi a úložišti obrázků a nahrávání pojede bez lístků (rozpracovaná nahrávání
+   se do limitů nepočítají).
+   Po migraci zkus: registraci, úpravu profilu (profilovka, banner), nahrání videa
+   s vlastním náhledem, úpravu a smazání videa, fotku v příspěvku, obrázek v komentáři.
+3. Appka: rozbal kine-desktop-0.11.0.zip do kořene repa kine-desktop, nahraj a pusť
+   Vydání (na GitHubu je zatím 0.10.8 - ZIP obsahuje i všechno z 0.10.9: kamera v klipech,
+   nahrávání během hraní, Oblíbené a Nahrát v liště přehrávače).
+   Jakmile je 0.11.0 venku, starší appky už nenahrají video na Kine a nespustí
+   vysílání - dostanou "Aktualizuj appku" a aktualizace se jim nabídne sama. Dokud 0.11.0
+   nevydáš, nikoho to neblokuje (web to pozná podle latest.yml).
+4. Vercel -> Settings -> Environment Variables (nepovinné, doporučené):
+   CRON_SECRET = vlastní náhodný dlouhý text. Vercel ho při denním úklidu posílá sám; bez něj
+   jde důkladný úklid spustit zvenku nejvýš jednou za hodinu. Limity mají rozumné výchozí
+   hodnoty - kdyby je bylo potřeba změnit, seznam je v .env.example (UPLOAD_*,
+   UPLOADS_PAUSED, DOWNLOADS_PER_DAY, DESKTOP_MIN_VERSION, LIVE_MAX_HOURS,
+   LIVE_RECORDING_KEEP_DAYS). Po změně Redeploy.
+5. Cloudflare: token CLOUDFLARE_STREAM_API_TOKEN ať má jen oprávnění "Stream: Edit" pro
+   tvůj účet, nic dalšího (DNS, R2, Workers...). Když má víc, vytvoř nový a vyměň ho
+   ve Vercelu - kdyby někdy unikl, nikdo s ním nesáhne na nic jiného.
+6. Stripe (až zapneš placení): ve webhooku přidej událost charge.dispute.created.
+7. Na GitHubu webu pořád zůstává 7 starých souborů (přetažení nemaže) - smaž je ručně
+   (vypíše je node zkontroluj-soubory.mjs).
+
+CLIPPER JEN ZDARMA, PLACENÉ AŽ S PLATBAMI
+- Dřív měla appka placené věci odemčené v sobě a kdokoli si mohl nechat starou verzi.
+  Teď o všem placeném rozhoduje server Kine: appka se každou hodinu ptá a Klipy Plus má
+  jen ten, komu to server potvrdí. Dokud není placení zapnuté, nemá Plus nikdo (kromě
+  toho, komu ho dáš ručně v /admin/plus).
+- Konec předplatného hlídá i appka sama (datum konce) - ani bez internetu nejde Plus
+  používat po konci.
+- Každý dotaz appky nese její verzi. Starší než 0.11.0 nedostane nic placeného, nenahraje
+  na Kine a nespustí vysílání. Starší verze verzi neposílají - server je pozná i tak.
+- Zabalená appka mluví jen s oficiálním Kine (www.playkine.com), takže předplatné nejde
+  "zapnout" vlastním falešným serverem.
+
+PŘEDPLATNÉ - CO KDYŽ HO NĚKDO ZRUŠÍ NEBO NEZAPLATÍ
+- Server si stav vždycky znovu načte přímo ze Stripe (zprávy chodí i mimo pořadí).
+- Zrušené ke konci období: Plus do konce zaplaceného období, pak free.
+- Nezaplacená obnova: 3 dny strpění, pak free. Zrušené / nezaplacené po všech pokusech:
+  hned free.
+- Chargeback (vrácení peněz přes banku): předplatné se hned zruší, účet je free.
+- Dvě předplatná u jednoho účtu: starší se zruší, ať se neplatí dvakrát.
+
+NAHRÁVÁNÍ VIDEÍ - LIMITY A ÚLOŽIŠTĚ CLOUDFLARE
+- Dřív si každé nahrávání zarezervovalo u Cloudflare 6 hodin úložiště a uložit šlo
+  i cizí nebo vymyšlené video. Teď server vydá na každé video "lístek" (délka z prohlížeče
+  / appky), u Cloudflare rezervuje jen tu délku a video uloží jen s platným lístkem.
+- Výchozí limity (dají se změnit ve Vercelu): za 24 hodin 20 videí a 4 hodiny videa,
+  jedno video nejvýš 2 hodiny, kanál celkem 30 hodin, naráz nejvýš 2 rozpracovaná.
+  Nový účet (prvních 24 h) jen 3 videa po 15 minutách - zakládat účty na spam se nevyplatí.
+  Kine Plus 3x víc, tým Kine bez stropu úložiště.
+- Stránka nahrávání ukáže, kolik zbývá, a moc dlouhé video ohlásí hned po výběru souboru
+  (a dál nepustí) - ne až po vyplnění všeho.
+- Nouzová brzda: UPLOADS_PAUSED=1 ve Vercelu zastaví nahrávání všem (útok, plné úložiště).
+- Video, které Cloudflare nezpracuje, je "Zpracování selhalo" - dřív viselo napořád jako
+  "zpracovává se" a stránka se dokola ptala.
+- Stažení cizích videí do PC: nejvýš 30 různých za den (Cloudflare stahování účtuje).
+
+MAZÁNÍ VIDEÍ
+- Z Cloudflare maže jen server, a jen když na soubor už žádné video na Kine neukazuje.
+  Majitel maže hned (když Cloudflare zrovna neodpoví, zopakuje se to - dřív soubor zůstal
+  a platil se dál).
+- Moderátor: z Kine zmizí hned, soubor u Cloudflare se smaže až za 7 dní a nejvýš 60 cizích
+  videí za hodinu. Každé smazání je zapsané (deleted_videos_log: co, čí, kdo) - omyl nebo
+  ukradený účet moderátora jde ještě zachránit.
+- Smazání účtu smaže i jeho videa a vstup pro vysílání u Cloudflare.
+
+DATABÁZE A OBRÁZKY (migrace)
+- Profil: sám sobě nikdo nezapíše admina, ověření, plán, Stripe, odznaky ani zrušení banu;
+  moderátor u cizích profilů mění jen moderování. Délky textů mají strop.
+- Videa zakládá jen server (s lístkem) a maže jen server; majitel mění jen název, popis,
+  náhled, viditelnost, kapitoly, titulky a vypnutí komentářů.
+- Soukromé playlisty vidí jen majitel. Historii zhlédnutí zapisuje jen server.
+- Úložiště obrázků: jen obrázky (JPG, PNG, WebP, GIF, AVIF), jen do vlastní složky, strop
+  velikosti (5-10 MB) a počtu za den; náhled jen k vlastnímu videu a nejde potichu přepsat.
+- Obrázky od lidí (komentáře, příspěvky, profilovky) se ukazují jen z úložiště Kine,
+  Cloudflare a Giphy - cizí server by jinak viděl IP adresu každého diváka.
+
+VYSÍLÁNÍ
+- Zablokovaný účet: vstup u Cloudflare se vypne (ani OBS se nepřipojí), po odblokování zapne.
+- Přenos delší než 12 hodin se ukončí a vysílat jde zase za 15 minut (studio řekne proč
+  a do kdy) - nekonečný přenos 24/7 by zaplnil úložiště.
+- Nezveřejněné záznamy se mažou po 7 dnech (dřív 30). Zveřejnění záznamu hlídá úložiště kanálu.
+
+SPARKS RYCHLEJI
+- Když je hlavní stránka načtená, na pozadí se stáhne seznam Sparks a připraví první dva
+  (náhled a seznam kvalit). Klepnutí na Sparks v menu pak nečeká na databázi - stránka je
+  tam hned. Při šetření dat jen seznam a náhledy, žádné video.
+
+DROBNOSTI PŘED SPUŠTĚNÍM
+- Vlastní stránka "Stránka nenalezena" (404) a chybová stránka s "Zkusit znovu".
+- Registrace s potvrzením e-mailu funguje celá: po registraci "Zkontroluj e-mail", vybrané
+  jméno se nezapomene a profil vznikne po kliknutí na odkaz; nepotvrzený e-mail má při
+  přihlášení vlastní hlášku (nepočítá se jako špatné heslo). Náhradní jméno už nikdy není
+  kus e-mailu (bylo by veřejně vidět). Potvrzování e-mailu (Supabase -> Authentication ->
+  Sign In / Providers -> Email -> Confirm email) doporučuju zapnout až s vlastním SMTP
+  (Resend nebo Brevo, zdarma) - vestavěný e-mail Supabase pošle jen pár zpráv za hodinu.
+- HTTPS natvrdo (HSTS), vyhledávače nechodí do soukromých stránek, délka jména (60)
+  a popisu kanálu (2000) i v nastavení.
+
+APPKA 0.11.0
+- Verze v každém dotazu na Kine; "Aktualizuj appku" (O appce) a hned hledá aktualizaci.
+- Klipy Plus jen od serveru, konec předplatného hlídá i bez internetu, strop délky klipu.
+- Jen oficiální Kine; výpadek Kine při startu hráče neodhlásí; délka klipu se posílá při
+  nahrání (Kine rezervuje jen tolik místa); texty o záznamu vysílání (smaže se po pár dnech).
+
+==========================================================================================
+
 KINE - Chat jako na Twitchi a Kicku (emoty, emoji, odpovědi, zmínky, odznaky, barvy
 jmen, připnutá zpráva, jen emoty, příkazy); appka 0.10.9: kamera v klipech, nahrávání
 během hraní, Oblíbené a Nahrát v liště přehrávače (dodávka kine-chat-2026-10-14)

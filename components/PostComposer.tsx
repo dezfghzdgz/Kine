@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 import { authHeaders } from '@/lib/authHeaders';
+import { imageUploadExt, imageUploadProblem } from '@/lib/imageUpload';
 import UiIcon from './UiIcon';
 import {
   MAX_POLL_OPTIONS,
@@ -66,8 +67,13 @@ export default function PostComposer({
     if (!list) return;
     const next = [...files];
     for (const f of Array.from(list)) {
-      if (!f.type.startsWith('image/')) continue;
-      if (f.size > 10 * 1024 * 1024) {
+      // Úložiště pustí jen JPEG / PNG / WebP / GIF / AVIF do 10 MB (lib/imageUpload.ts).
+      const problem = imageUploadProblem(f, 'post');
+      if (problem === 'type') {
+        setError(t('imageUploadBadType'));
+        continue;
+      }
+      if (problem === 'size') {
         setError(t('postImageTooBig'));
         continue;
       }
@@ -110,7 +116,7 @@ export default function PostComposer({
     const imageUrls: string[] = [];
     if (type === 'photo') {
       for (const [i, file] of files.entries()) {
-        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+        const ext = imageUploadExt(file) ?? 'jpg';
         const path = `${userId}/${Date.now()}-${i}.${ext}`;
         const { error: uploadError } = await supabase.storage.from('post-images').upload(path, file);
         if (uploadError) {

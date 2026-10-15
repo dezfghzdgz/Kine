@@ -9,6 +9,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import UiIcon from '@/components/UiIcon';
 import { PlaylistIcon } from '@/components/ReactionIcons';
 import { DEFAULT_PLAYLIST_COLOR, hasChosenColor, playlistCover } from '@/lib/playlistCover';
+import { IMAGE_MAX_BYTES, imageUploadExt, imageUploadProblem } from '@/lib/imageUpload';
 
 const COLOR_PRESETS = ['#3a5a8a', '#8a3a3a', '#3a8a5a', '#8a7a3a', '#6a3a8a', '#3a3a40'];
 
@@ -94,9 +95,15 @@ function PlaylistsPageInner() {
       return;
     }
     setThumbError(null);
-    const ext = file.name.split('.').pop();
+    // Úložiště pustí jen obrázek do 5 MB k vlastnímu playlistu (lib/imageUpload.ts).
+    const problem = imageUploadProblem(file, 'playlistCover');
+    const ext = imageUploadExt(file);
+    if (problem || !ext) {
+      setThumbError(problem === 'size' ? t('imageUploadTooBig').replace('{mb}', String(IMAGE_MAX_BYTES.playlistCover / 1024 / 1024)) : t('imageUploadBadType'));
+      return;
+    }
     const path = `${userId}/${id}.${ext}`;
-    const { error } = await supabase.storage.from('playlist-covers').upload(path, file, { upsert: true });
+    const { error } = await supabase.storage.from('playlist-covers').upload(path, file, { upsert: true, contentType: file.type || undefined });
     if (error) {
       setThumbError(t('playlistThumbUploadFailed').replace('{error}', error.message));
       return;

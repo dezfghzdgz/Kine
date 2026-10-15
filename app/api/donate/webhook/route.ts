@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripeServer } from '@/lib/stripeServer';
-import { isPaidTier, tierFromStripePriceId, type PaidTier } from '@/lib/plus';
+import { tierFromStripePriceId } from '@/lib/plus';
+import { plusFromSubscription, subscriptionIdFromCharge } from '@/lib/plusBilling';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { recordLiveTip } from '@/lib/liveTipsServer';
 
@@ -13,9 +14,14 @@ import { recordLiveTip } from '@/lib/liveTipsServer';
 // a podpory ve vysílání. Ve Stripe (Developers -> Webhooks) adresa
 // https://<web>/api/donate/webhook a události checkout.session.completed,
 // checkout.session.async_payment_succeeded, customer.subscription.updated,
-// customer.subscription.deleted; podpisový klíč (whsec_…) do
-// STRIPE_WEBHOOK_SECRET. Když zápis do databáze selže, vrátí se 500 a Stripe
-// to zkusí znovu (všechny zápisy jde bezpečně opakovat).
+// customer.subscription.deleted a charge.dispute.created; podpisový klíč
+// (whsec_…) do STRIPE_WEBHOOK_SECRET. Když zápis do databáze selže, vrátí se
+// 500 a Stripe to zkusí znovu (všechny zápisy jde bezpečně opakovat).
+//
+// Kine Plus se vždycky počítá z AKTUÁLNÍHO stavu předplatného u Stripe
+// (stáhne se znovu), ne z obsahu události - Stripe události nedoručuje
+// v pořadí a starší "aktivní" by jinak mohla přepsat novější "zrušené".
+// Pravidla (do kdy platí, nezaplacená platba, zrušení) jsou v lib/plusBilling.ts.
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const signature = req.headers.get('stripe-signature');
@@ -67,25 +73,38 @@ export async function POST(req: NextRequest) {
     }
 
     if (session.mode === 'subscription' && session.metadata?.kind === 'kine-plus') {
-      // Koupené předplatné (app/api/plus/checkout): varianta je v metadatech
-      // (kine / clips / all). Konec období si přečteme z předplatného, ať
-      // po nezaplacení samo vyprší.
+      // Koupené předplatné (app/api/plus/checkout): stav a konec období přímo
+      // od Stripe. Když se to nepovede, 500 - Stripe událost pošle znovu
+      // (dřív se předplatné zapsalo bez konce a platilo by napořád).
       const userId = session.metadata?.userId;
       if (userId) {
-        let periodEnd: string | null = null;
-        let sub: any = null;
+        let sub: any;
         try {
           sub = await stripeServer.subscriptions.retrieve(session.subscription);
-          periodEnd = plusUntilFromSubscription(sub);
-        } catch {
-          // Bez konce období: předplatné platí, dokud webhook nepřijde s update.
+        } catch (e: any) {
+          return retryLater(`Stripe: ${e?.message ?? 'předplatné nejde načíst'}`);
         }
+        const state = plusFromSubscription(sub, { metadataTier: sub?.metadata?.tier ?? session.metadata?.tier, tierFromPrice: tierFromStripePriceId });
+
+        // Starší předplatné téhož účtu (koupil podruhé ve dvou oknech, nebo po
+        // nezaplacení znovu): zrušit, ať se neplatí dvakrát.
+        const { data: before } = await supabaseServer.from('profiles').select('plan_stripe_subscription_id').eq('id', userId).maybeSingle();
+        const previous = (before as { plan_stripe_subscription_id?: string | null } | null)?.plan_stripe_subscription_id;
+        if (previous && previous !== sub.id) {
+          try {
+            const old = await stripeServer.subscriptions.retrieve(previous);
+            if (['active', 'trialing', 'past_due', 'unpaid'].includes(String(old?.status))) await stripeServer.subscriptions.cancel(previous);
+          } catch {
+            // Staré předplatné už není - nic.
+          }
+        }
+
         const { error } = await supabaseServer
           .from('profiles')
           .update({
-            plan: planFromSubscription(sub, session.metadata?.tier),
-            plan_until: periodEnd,
-            plan_stripe_subscription_id: session.subscription,
+            plan: state.plan,
+            plan_until: state.planUntil,
+            plan_stripe_subscription_id: sub.id ?? session.subscription,
             plan_stripe_customer_id: session.customer,
           })
           .eq('id', userId);
@@ -113,14 +132,19 @@ export async function POST(req: NextRequest) {
   }
 
   if ((event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') && (event.data.object as any)?.metadata?.kind === 'kine-plus') {
-    // Předplatné Kine: aktivní/zkušební = varianta do konce období (+3 dny
-    // rezerva na opožděnou platbu), cokoliv jiného (zrušené, nezaplacené)
-    // = free. Změna varianty v portálu Stripe = jiná cena v položkách.
-    const sub = event.data.object as any;
-    const active = event.type !== 'customer.subscription.deleted' && (sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due');
+    // Předplatné Kine: aktuální stav od Stripe (události chodí i mimo pořadí).
+    // Zrušené / nezaplacené = free; pravidla v lib/plusBilling.ts.
+    let sub: any = event.data.object as any;
+    try {
+      sub = await stripeServer.subscriptions.retrieve(sub.id);
+    } catch (e: any) {
+      if (e?.statusCode === 404 || e?.code === 'resource_missing') sub = { ...sub, status: 'canceled' };
+      else return retryLater(`Stripe: ${e?.message ?? 'předplatné nejde načíst'}`);
+    }
+    const state = plusFromSubscription(sub, { metadataTier: sub?.metadata?.tier, tierFromPrice: tierFromStripePriceId });
     const { error } = await supabaseServer
       .from('profiles')
-      .update(active ? { plan: planFromSubscription(sub, sub.metadata?.tier), plan_until: plusUntilFromSubscription(sub) } : { plan: 'free', plan_until: null })
+      .update({ plan: state.plan, plan_until: state.planUntil })
       .eq('plan_stripe_subscription_id', sub.id);
     if (error) return retryLater(error.message);
   } else if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
@@ -147,26 +171,55 @@ export async function POST(req: NextRequest) {
     if (error) return retryLater(error.message);
   }
 
+  if (event.type === 'charge.dispute.created') {
+    // Sporná platba (chargeback): kdo si peníze nechává vrátit přes banku,
+    // předplatné dál mít nemá - zruší se hned (Kine Plus i předplatné kanálu).
+    const dispute = event.data.object as any;
+    const chargeId = typeof dispute?.charge === 'string' ? dispute.charge : dispute?.charge?.id;
+    if (chargeId) {
+      let charge: any = null;
+      try {
+        charge = await stripeServer.charges.retrieve(chargeId, { expand: ['invoice'] } as any);
+      } catch {
+        // Novější API Stripe fakturu u platby nemá - bez rozbalení.
+        try {
+          charge = await stripeServer.charges.retrieve(chargeId);
+        } catch (e: any) {
+          return retryLater(`Stripe: ${e?.message ?? 'platbu nejde načíst'}`);
+        }
+      }
+      let subscriptionId = subscriptionIdFromCharge(charge);
+      if (!subscriptionId && typeof charge?.invoice === 'string') {
+        try {
+          subscriptionId = subscriptionIdFromCharge({ invoice: await stripeServer.invoices.retrieve(charge.invoice) });
+        } catch {
+          // Faktura nejde načíst - zkusí se podle zákazníka.
+        }
+      }
+      if (!subscriptionId && typeof charge?.customer === 'string') {
+        const { data: owner } = await supabaseServer.from('profiles').select('plan_stripe_subscription_id').eq('plan_stripe_customer_id', charge.customer).maybeSingle();
+        subscriptionId = (owner as { plan_stripe_subscription_id?: string | null } | null)?.plan_stripe_subscription_id ?? null;
+      }
+      if (subscriptionId) {
+        try {
+          await stripeServer.subscriptions.cancel(subscriptionId);
+        } catch {
+          // Už zrušené - nevadí.
+        }
+        const plus = await supabaseServer.from('profiles').update({ plan: 'free', plan_until: null }).eq('plan_stripe_subscription_id', subscriptionId);
+        if (plus.error) return retryLater(plus.error.message);
+        await supabaseServer.from('channel_subscriptions').update({ status: 'canceled' }).eq('stripe_subscription_id', subscriptionId).then(
+          () => undefined,
+          () => undefined
+        );
+      }
+    }
+  }
+
   return NextResponse.json({ received: true });
 }
 
 /** Zápis do databáze selhal - 500, ať Stripe událost pošle znovu (dělá to až 3 dny). */
 function retryLater(message: string) {
   return NextResponse.json({ error: `Databáze: ${message}` }, { status: 500 });
-}
-
-/**
- * Varianta předplatného: podle ceny v předplatném (změna v portálu), jinak
- * podle metadat z nákupu; když nic nesedí, 'all' (starší jediná varianta).
- */
-function planFromSubscription(sub: any, metadataTier: unknown): PaidTier {
-  const priceId = sub?.items?.data?.[0]?.price?.id ?? sub?.plan?.id ?? null;
-  return tierFromStripePriceId(priceId) ?? (isPaidTier(metadataTier) ? metadataTier : 'all');
-}
-
-/** Konec zaplaceného období + 3 dny rezervy; bez období null (= bez konce). */
-function plusUntilFromSubscription(sub: any): string | null {
-  const end = sub?.current_period_end ?? sub?.items?.data?.[0]?.current_period_end;
-  if (!end) return null;
-  return new Date(end * 1000 + 3 * 24 * 60 * 60 * 1000).toISOString();
 }

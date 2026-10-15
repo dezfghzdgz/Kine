@@ -11,6 +11,8 @@ import { timeAgo } from '@/lib/timeAgo';
 import UiIcon from './UiIcon';
 import ProfileImage from './ProfileImage';
 import ConfirmDialog from './ConfirmDialog';
+import { IMAGE_MAX_BYTES, imageUploadExt, imageUploadProblem } from '@/lib/imageUpload';
+import { trustedImageUrl } from '@/lib/trustedMedia';
 
 function renderWithMentions(content: string) {
   return content.split(/(@[a-zA-Z0-9_]+)/g).map((part, i) =>
@@ -63,13 +65,24 @@ export default function PostComments({ postId, ownerId, onCommentAdded }: { post
     if (typeof imageFile === 'string') {
       imageUrl = imageFile;
     } else if (imageFile) {
-      const ext = imageFile.name.split('.').pop();
-      const path = `${authData.user.id}/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from('comment-images').upload(path, imageFile);
-      if (!error) {
-        const { data } = supabase.storage.from('comment-images').getPublicUrl(path);
-        imageUrl = data.publicUrl;
+      // Úložiště pustí jen JPEG / PNG / WebP / GIF / AVIF do 10 MB (lib/imageUpload.ts).
+      const problem = imageUploadProblem(imageFile, 'comment');
+      if (problem) {
+        setPosting(false);
+        setPostError(problem === 'size' ? t('imageUploadTooBig').replace('{mb}', String(IMAGE_MAX_BYTES.comment / 1024 / 1024)) : t('imageUploadBadType'));
+        return;
       }
+      const ext = imageUploadExt(imageFile) ?? 'jpg';
+      const path = `${authData.user.id}/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from('comment-images').upload(path, imageFile, { contentType: imageFile.type || undefined });
+      if (error) {
+        // Komentář bez obrázku by tvůrce nečekal - radši nic neodeslat a ukázat proč.
+        setPosting(false);
+        setPostError(error.message);
+        return;
+      }
+      const { data } = supabase.storage.from('comment-images').getPublicUrl(path);
+      imageUrl = data.publicUrl;
     }
 
     const { error: commentError } = await supabase.from('comments').insert({
@@ -135,7 +148,7 @@ export default function PostComments({ postId, ownerId, onCommentAdded }: { post
                 </span>
               </p>
               {c.content && <p className="comment-text">{renderWithMentions(c.content)}</p>}
-              {c.image_url && <img loading="lazy" decoding="async" src={c.image_url} alt="" className="comment-image" />}
+              {trustedImageUrl(c.image_url) && <img loading="lazy" decoding="async" src={trustedImageUrl(c.image_url)!} alt="" className="comment-image" />}
               {userId && (userId === c.user_id || userId === ownerId) && (
                 <div className="comment-actions">
                   <button type="button" className="comment-action" onClick={() => setConfirmDeleteId(c.id)} title={t('delete')} aria-label={t('delete')}>

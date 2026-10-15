@@ -485,7 +485,7 @@ export default function SettingsPage() {
             <PanelHeading icon="pencil" title={t('profileDataHeading')} />
             <div>
               <label className="settings-label">{t('displayNameLabel')}</label>
-              <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+              <input type="text" value={displayName} maxLength={60} onChange={(e) => setDisplayName(e.target.value)} />
             </div>
             <div>
               <label className="settings-label">{t('usernameLabel')}</label>
@@ -495,6 +495,7 @@ export default function SettingsPage() {
               <label className="settings-label">{t('channelDescriptionLabel')}</label>
               <textarea
                 value={bio}
+                maxLength={2000}
                 onChange={(e) => setBio(e.target.value)}
                 rows={2}
                 placeholder={t('aboutYouPlaceholder')}

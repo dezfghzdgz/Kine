@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { APPEARANCE_EVENT } from '@/lib/appearance';
 import { shouldAnimate, stillUrlFor, type AvatarAnimation } from '@/lib/animatedImage';
+import { trustedImageUrl } from '@/lib/trustedMedia';
+
+/** Průhledný bod místo obrázku z neznámého serveru (lib/trustedMedia.ts) - rozložení stránky zůstane. */
+const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 /** Nastavení animací z <html data-anim> (Nastavení -> Vzhled) a jestli si člověk přeje méně pohybu. */
 function readMotion(): { setting: AvatarAnimation; reduced: boolean } {
@@ -45,7 +49,9 @@ export default function ProfileImage({
   eager?: boolean;
 }) {
   const ref = useRef<HTMLImageElement>(null);
-  const still = stillUrlFor(src);
+  const trusted = trustedImageUrl(src);
+  src = trusted ?? BLANK;
+  const still = trusted ? stillUrlFor(src) : null;
   const [motion, setMotion] = useState<{ setting: AvatarAnimation; reduced: boolean }>({ setting: 'hover', reduced: false });
   const [hovered, setHovered] = useState(false);
   const [stillFailed, setStillFailed] = useState(false);

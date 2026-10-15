@@ -77,6 +77,8 @@ const nextConfig = {
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           // Povolí jen potřebné webové funkce (zakáže zbytečné API jako kamera bez přihlášení)
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          // Prohlížeč chodí na Kine jen přes HTTPS (i když někdo napíše http://) - rok.
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000' },
         ],
       },
       {

@@ -12585,3 +12585,22 @@ html[data-theme="light"] .live-chat-msg .live-chat-user {
 .live-chat-msg button.chat-name:hover {
   text-decoration: underline;
 }
+
+/* Limity nahrávání na stránce nahrávání (components/UploadQuota.tsx). */
+.upload-quota {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+.upload-quota p {
+  margin: 0;
+}
+.upload-quota .upload-quota-warn {
+  margin-bottom: 4px;
+  color: #ff6b6b;
+  font-weight: 600;
+}
+.upload-quota .upload-quota-note {
+  margin-top: 4px;
+}

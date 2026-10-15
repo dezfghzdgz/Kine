@@ -6,6 +6,8 @@ import { CATEGORY_KEYS } from '@/lib/categories';
 import { parseRecordingVisibility } from '@/lib/liveRecording';
 import { runInBackground } from '@/lib/background';
 import { liveHiddenNow } from '@/lib/nudityRules';
+import { liveMaxHours, recordingKeepDays, reenableIfCooledDown } from '@/lib/liveLimits';
+import { outdatedAppResponse } from '@/lib/desktopGate';
 
 export const dynamic = 'force-dynamic';
 // Na pozadí může běžet kontrola obsahu (lib/nudityScan.ts) - funkce smí doběhnout až minutu.
@@ -32,6 +34,9 @@ export async function GET(req: NextRequest) {
   if (isMissingTable(input.error) || isMissingTable(stream.error)) {
     return NextResponse.json({ configured: liveConfigured(), migrated: false, input: null, stream: null });
   }
+  // Přestávka po moc dlouhém přenosu skončila - vstup se zapne hned (lib/liveLimits.ts).
+  let disabled = input.data as { owner_id: string; cf_input_id: string | null; disabled_at?: string | null; disabled_reason?: string | null; disabled_until?: string | null } | null;
+  if (disabled?.disabled_at && (await reenableIfCooledDown(disabled))) disabled = null;
   return NextResponse.json({
     configured: liveConfigured(),
     migrated: true,
@@ -44,6 +49,12 @@ export async function GET(req: NextRequest) {
     // Co se záznamem po skončení (null = nechat ve studiu). Bez migrace sloupec chybí -> null.
     recordingVisibility: stream.data ? parseRecordingVisibility((stream.data as any).recording_visibility) : null,
     recordingAutoSupported: !!stream.data && Object.prototype.hasOwnProperty.call(stream.data, 'recording_visibility'),
+    // Kolik dní zůstane nezveřejněný záznam (lib/liveLimits.ts).
+    recordingKeepDays: recordingKeepDays(),
+    // Vstup vypnutý (zablokovaný účet / přenos delší než strop) - studio řekne proč a do kdy.
+    inputDisabled: disabled?.disabled_at
+      ? { reason: disabled.disabled_reason ?? null, until: disabled.disabled_until ?? null, maxHours: liveMaxHours() }
+      : null,
   });
 }
 
@@ -53,6 +64,13 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const action = String(body?.action ?? '');
+
+  // Zastaralá appka do PC nezačne vysílat ani si nezaloží klíč (lib/desktopGate.ts);
+  // běžící přenos ale dohlásí (ping / stopped) a název změní.
+  if (action === 'started' || action === 'create' || action === 'reset') {
+    const outdated = await outdatedAppResponse(req);
+    if (outdated) return outdated;
+  }
 
   // Appka (Kine Clipper) hlásí, že vysílá: hned se ukáže jako živé a dozví se, jestli ji Cloudflare vidí.
   if (action === 'started' || action === 'ping' || action === 'stopped') {
@@ -143,6 +161,11 @@ export async function POST(req: NextRequest) {
   if (action === 'reset' && input.data && Date.now() - new Date(input.data.created_at).getTime() < 60 * 1000) {
     return NextResponse.json({ error: 'Nový klíč jde vytvořit nejdřív za minutu.' }, { status: 429 });
   }
+  // Vstup vypnutý na přestávku (přenos delší než strop - lib/liveLimits.ts): nový klíč ji neobejde.
+  const disabledUntil = (input.data as any)?.disabled_until ? Date.parse((input.data as any).disabled_until) : NaN;
+  if (action === 'reset' && Number.isFinite(disabledUntil) && disabledUntil > Date.now()) {
+    return NextResponse.json({ error: 'Vysílání má teď krátkou přestávku (přenos běžel moc dlouho). Zkus to za pár minut.', code: 'cooldown' }, { status: 429 });
+  }
 
   let created;
   try {
@@ -152,20 +175,40 @@ export async function POST(req: NextRequest) {
   }
 
   const nowIso = new Date().toISOString();
-  const saveInput = await supabaseServer.from('live_inputs').upsert(
-    {
-      owner_id: user.id,
-      cf_input_id: created.uid,
-      rtmps_url: created.rtmpsUrl,
-      stream_key: created.streamKey,
-      srt_url: created.srtUrl,
-      created_at: nowIso,
-    },
-    { onConflict: 'owner_id' }
-  );
-  if (saveInput.error) {
+  const inputRow = {
+    owner_id: user.id,
+    cf_input_id: created.uid,
+    rtmps_url: created.rtmpsUrl,
+    stream_key: created.streamKey,
+    srt_url: created.srtUrl,
+    created_at: nowIso,
+  };
+  // Dvě žádosti naráz (dvojklik, dvě okna) nesmí založit dva vstupy - ten
+  // druhý by u Cloudflare zůstal bez majitele a šlo by do něj vysílat mimo Kine.
+  // Proto: nový vstup jen když žádný není (insert), výměna jen toho, který byl (update s podmínkou).
+  const saveInput = input.data
+    ? await supabaseServer.from('live_inputs').update(inputRow).eq('owner_id', user.id).eq('cf_input_id', input.data.cf_input_id).select('owner_id')
+    : await supabaseServer.from('live_inputs').insert(inputRow).select('owner_id');
+  const won = !saveInput.error && (saveInput.data ?? []).length > 0;
+  if (!won) {
     await deleteLiveInput(created.uid);
-    return NextResponse.json({ error: saveInput.error.message }, { status: 500 });
+    const lost = saveInput.error?.code === '23505' || (!saveInput.error && (saveInput.data ?? []).length === 0);
+    if (!lost) return NextResponse.json({ error: saveInput.error?.message ?? 'Klíč se nepodařilo uložit.' }, { status: 500 });
+    // Mezitím klíč založila jiná žádost - vrátí se ten.
+    const again = await loadSetup(user.id);
+    return NextResponse.json({
+      input: again.input.data
+        ? { rtmpsUrl: again.input.data.rtmps_url, streamKey: again.input.data.stream_key, srtUrl: again.input.data.srt_url, createdAt: again.input.data.created_at }
+        : null,
+      stream: again.stream.data ? await publicLive(again.stream.data as LiveStreamRow) : null,
+    });
+  }
+  if ((input.data as any)?.disabled_at) {
+    // Nový vstup u Cloudflare je zapnutý - starý záznam o vypnutí pryč.
+    await supabaseServer.from('live_inputs').update({ disabled_at: null, disabled_reason: null, disabled_until: null }).eq('owner_id', user.id).then(
+      () => undefined,
+      () => undefined
+    );
   }
   const saveStream = await supabaseServer
     .from('live_streams')

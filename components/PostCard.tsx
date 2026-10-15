@@ -13,6 +13,7 @@ import { ThumbsUpIcon, ThumbsDownIcon } from './ReactionIcons';
 import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { timeAgo } from '@/lib/timeAgo';
 import { pollState, postImages, type PollOption } from '@/lib/posts';
+import { trustedImageUrl } from '@/lib/trustedMedia';
 
 export type PostAuthor = {
   id: string;
@@ -91,7 +92,8 @@ export default function PostCard({
   const [video, setVideo] = useState<any | null>(null);
 
   const own = !!userId && userId === post.owner_id;
-  const images = postImages(post);
+  // Jen obrázky z úložiště Kine (lib/trustedMedia.ts) - adresa z cizího serveru by prozradila IP diváků.
+  const images = postImages(post).filter((u) => trustedImageUrl(u) !== null);
   const poll = pollState({ options, endsAt: post.poll_ends_at ?? null, voted: myVote !== null, own });
   const name = author ? author.display_name || author.username || '' : '';
 

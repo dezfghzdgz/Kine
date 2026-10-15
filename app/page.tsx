@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { prefetchSparks } from '@/lib/sparksPrefetch';
 import OnboardingChecklist from '@/components/OnboardingChecklist';
 import DesktopAppBanner from '@/components/DesktopAppBanner';
 import LoadFailed from '@/components/LoadFailed';
@@ -147,6 +149,29 @@ export default function HomePage() {
   const latestRef = useRef({ blocks, progressMap, hasMore, sparkNotice, hiddenCount });
   latestRef.current = { blocks, progressMap, hasMore, sparkNotice, hiddenCount };
   const scrollYRef = useRef(0);
+  const router = useRouter();
+
+  // Sparks dopředu (lib/sparksPrefetch.ts): až je feed načtený a prohlížeč volný,
+  // připraví se seznam a první dva Sparks - klepnutí na Sparks v menu pak nečeká.
+  const feedReady = !!blocks && blocks.length > 0;
+  useEffect(() => {
+    if (!feedReady) return;
+    let cancelled = false;
+    const run = () => {
+      if (cancelled) return;
+      router.prefetch('/sparks');
+      void prefetchSparks();
+    };
+    const w = window as typeof window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
+    const idle = typeof w.requestIdleCallback === 'function';
+    const handle = idle ? w.requestIdleCallback!(run, { timeout: 4000 }) : window.setTimeout(run, 1500);
+    return () => {
+      cancelled = true;
+      if (idle && w.cancelIdleCallback) w.cancelIdleCallback(handle);
+      else window.clearTimeout(handle);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedReady]);
 
   useEffect(() => {
     const onScroll = () => {

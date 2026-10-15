@@ -3,6 +3,7 @@
 import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { ensureOwnProfile } from '@/lib/ensureProfile';
 
 function MyChannelRedirectInner() {
   const router = useRouter();
@@ -18,20 +19,8 @@ function MyChannelRedirectInner() {
 
       // Pokud si profil ještě nikdy nevznikl (např. kvůli staršímu problému
       // s potvrzováním emailu), dotvoříme ho teď, ať kanál není "nenalezen".
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', authData.user.id)
-        .maybeSingle();
-
-      if (!existingProfile) {
-        const fallbackUsername = authData.user.email?.split('@')[0] ?? `user_${authData.user.id.slice(0, 6)}`;
-        await supabase.from('profiles').insert({
-          id: authData.user.id,
-          username: fallbackUsername,
-          display_name: fallbackUsername,
-        });
-      }
+      // Jméno z registrace, nikdy ne z e-mailu (lib/ensureProfile.ts).
+      await ensureOwnProfile(supabase, authData.user);
 
       // Parametry z adresy (např. ?tab=posts&compose=text z mobilního menu
       // "+") se musí přenést i na skutečnou adresu kanálu, jinak appka

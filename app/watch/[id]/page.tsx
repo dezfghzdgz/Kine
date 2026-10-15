@@ -1163,7 +1163,8 @@ function WatchPageInner() {
   useEffect(() => {
     // Procenta patří jednomu videu - po přechodu na jiné se nesmí ukazovat ta stará.
     setProcessingPercent(null);
-    if (!video || video.status === 'ready') return;
+    // Nepovedené zpracování ("failed") už hotové nebude - není se na co ptát.
+    if (!video || video.status === 'ready' || video.status === 'failed') return;
     let cancelled = false;
     const timer = setInterval(async () => {
       try {
@@ -1173,7 +1174,7 @@ function WatchPageInner() {
           body: JSON.stringify({ videoId: video.id }),
         });
         const body = await res.json().catch(() => ({}));
-        if (!cancelled && body?.status === 'ready') load();
+        if (!cancelled && (body?.status === 'ready' || body?.status === 'failed')) load();
         else if (!cancelled && typeof body?.percent === 'number') setProcessingPercent(body.percent);
       } catch {
         // Síť zrovna nešla - zkusí se to za chvíli znovu.
@@ -1217,6 +1218,7 @@ function WatchPageInner() {
       if (body.owner && body.video) return body.video;
       setNotFoundSignedIn(!!body.signedIn);
       if (body.visibility && body.visibility !== 'public') setNotFoundReason('private');
+      else if (body.status === 'failed') setNotFoundReason('unavailable');
       else if (body.status && body.status !== 'ready') setNotFoundReason('processing');
       else setNotFoundReason('unavailable');
       return null;
@@ -1970,7 +1972,11 @@ function WatchPageInner() {
             )}
           </div>
         )}
-        {video.status !== 'ready' && (
+        {video.status === 'failed' ? (
+          <p className="clip-origin" aria-live="polite">
+            {t('videoStatusFailed')}
+          </p>
+        ) : video.status !== 'ready' && (
           <p className="clip-origin" aria-live="polite">
             {t('processingVideoNote')}
             {processingPercent !== null ? ` ${processingPercent}%` : ''}

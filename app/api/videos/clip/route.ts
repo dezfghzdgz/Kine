@@ -28,6 +28,10 @@ export async function POST(req: NextRequest) {
   const videoId = typeof body?.videoId === 'string' ? body.videoId : null;
   if (!videoId) return NextResponse.json({ error: 'Chybí videoId.' }, { status: 400 });
 
+  // Zablokovaný účet klipy nevystřihuje (každý klip je nové video u Cloudflare).
+  const { data: me } = await supabaseServer.from('profiles').select('is_banned').eq('id', userId).maybeSingle();
+  if ((me as { is_banned?: boolean } | null)?.is_banned) return NextResponse.json({ error: 'Účet je zablokovaný.', code: 'banned' }, { status: 403 });
+
   // Vidí divák video? Stejná pravidla jako všude (RLS).
   const { data: video } = await supabaseAsUser(token)
     .from('videos')

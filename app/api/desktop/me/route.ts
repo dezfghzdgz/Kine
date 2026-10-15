@@ -3,6 +3,8 @@ import { PAYMENTS_ENABLED } from '@/lib/payments';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { allPriceLabels, anyTierAvailable, hasClipsPlus, hasKinePlus, normalizePlan, FREE_CLIP_MAX_SECONDS, PLUS_CLIP_MAX_SECONDS } from '@/lib/plus';
 import { sweepProcessing } from '@/lib/markVideoReady';
+import { outdatedAppResponse } from '@/lib/desktopGate';
+import { generatedUsername } from '@/lib/ensureProfile';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,8 +39,10 @@ export async function GET(req: NextRequest) {
     profile = full.data;
   }
 
-  const clipsPlus = hasClipsPlus(profile?.plan, profile?.plan_until);
-  const kinePlus = hasKinePlus(profile?.plan, profile?.plan_until);
+  // Zastaralá appka (lib/desktopGate.ts) nedostane nic placeného - jen základ, dokud se neaktualizuje.
+  const outdated = (await outdatedAppResponse(req)) !== null;
+  const clipsPlus = !outdated && hasClipsPlus(profile?.plan, profile?.plan_until);
+  const kinePlus = !outdated && hasKinePlus(profile?.plan, profile?.plan_until);
   // Placení zatím neběží (lib/payments.ts): nic se nedá koupit - appka místo odkazu ukáže "Připravujeme".
   const prices = PAYMENTS_ENABLED ? allPriceLabels() : { kine: null, clips: null, all: null };
   // Appka se ptá při startu a občas - dobrá chvíle dodělat videa, která
@@ -46,7 +50,8 @@ export async function GET(req: NextRequest) {
   await sweepProcessing();
   return NextResponse.json({
     id: userData.user.id,
-    username: profile?.username ?? userData.user.email?.split('@')[0] ?? 'kine',
+    // Bez profilu náhradní jméno z id - nikdy kus e-mailu (lib/ensureProfile.ts).
+    username: profile?.username ?? generatedUsername(userData.user.id),
     displayName: profile?.display_name ?? null,
     brandColor: typeof profile?.brand_color === 'string' ? profile.brand_color : null,
     plan: clipsPlus || kinePlus ? normalizePlan(profile?.plan) : 'free',
@@ -59,5 +64,7 @@ export async function GET(req: NextRequest) {
     prices,
     /** Starší appky: cena "Plus" = varianta s klipy. */
     plusPriceLabel: prices.clips ?? prices.all,
-  });
+    /** Appka je moc stará - má se aktualizovat (nahrávat a vysílat nepůjde). */
+    updateRequired: outdated,
+  }, { headers: { 'Cache-Control': 'no-store' } });
 }

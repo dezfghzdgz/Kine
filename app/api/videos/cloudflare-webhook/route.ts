@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { supabaseServer } from '@/lib/supabaseServer';
-import { markVideoReady } from '@/lib/markVideoReady';
+import { markVideoFailed, markVideoReady } from '@/lib/markVideoReady';
+import { markTicketFailed } from '@/lib/uploadTickets';
+import { isCloudflareUid } from '@/lib/cloudflareVideos';
 
 // Na pozadí může běžet kontrola obsahu (lib/nudityScan.ts) - funkce smí doběhnout až minutu.
 export const maxDuration = 60;
@@ -101,7 +103,16 @@ export async function POST(req: NextRequest) {
   }
 
   const cloudflareId = data?.uid;
-  if (!cloudflareId) return NextResponse.json({ ok: true });
+  if (!isCloudflareUid(cloudflareId)) return NextResponse.json({ ok: true });
+
+  // Zpracování selhalo (třeba delší video, než se při nahrání ohlásilo): video
+  // se označí jako nepovedené, ať nevisí napořád jako "zpracovává se".
+  if (data?.status?.state === 'error') {
+    const { data: failed } = await supabaseServer.from('videos').select('id').eq('cloudflare_video_id', cloudflareId).maybeSingle();
+    if (failed) await markVideoFailed(failed.id, cloudflareId, String(data.status?.errorReasonCode ?? data.status?.errReasonCode ?? 'error'));
+    else await markTicketFailed(cloudflareId);
+    return NextResponse.json({ ok: true });
+  }
 
   // Cloudflare hlásí i mezistavy - zajímá nás jen "hotovo".
   if (!data.readyToStream && data?.status?.state !== 'ready') {

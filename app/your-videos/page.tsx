@@ -82,7 +82,8 @@ function YourVideosPageInner() {
    * obnovovat ručně. Teď se to opakuje samo, dokud je co dodělávat.
    */
   async function doptejSeNaZpracovavana(list: any[], ownerId: string) {
-    const zpracovavana = list.filter((v: any) => v.status !== 'ready');
+    // Jen ta, co se ještě zpracovávají - nepovedené ("failed") už hotová nebudou.
+    const zpracovavana = list.filter((v: any) => v.status === 'processing');
     if (zpracovavana.length === 0) return;
 
     await Promise.all(
@@ -107,7 +108,7 @@ function YourVideosPageInner() {
   // Dokud se něco zpracovává, ptá se stránka sama dokola - jinak by
   // tvůrce musel obnovovat, dokud to Cloudflare nedodělá.
   useEffect(() => {
-    const zpracovavana = videos.filter((v: any) => v.status !== 'ready');
+    const zpracovavana = videos.filter((v: any) => v.status === 'processing');
     if (zpracovavana.length === 0) return;
 
     const timer = setInterval(async () => {
@@ -172,7 +173,7 @@ function YourVideosPageInner() {
                 </div>
                 <p className="video-card-title">{video.title}</p>
                 <p className="video-card-meta">
-                  {video.status === 'ready' ? `${video.views} ${t('views')}` : 'Zpracovává se…'}
+                  {video.status === 'ready' ? `${video.views} ${t('views')}` : video.status === 'failed' ? t('videoStatusFailed') : t('videoStatusProcessing')}
                 </p>
               </Link>
               <div style={{ display: 'flex', gap: 6, marginTop: 8, width: '100%' }}>

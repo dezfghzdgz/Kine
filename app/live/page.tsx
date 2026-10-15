@@ -42,6 +42,10 @@ type Setup = {
   recordingAutoSupported?: boolean;
   /** Běžící přenos skrytý kontrolou obsahu - čeká na moderátora (app/api/live/me). */
   moderation?: { hidden: boolean };
+  /** Kolik dní zůstane nezveřejněný záznam (lib/liveLimits.ts; starší Kine nic - pak 30). */
+  recordingKeepDays?: number;
+  /** Vstup pro vysílání vypnutý: zablokovaný účet, nebo moc dlouhý přenos (do kdy). */
+  inputDisabled?: { reason: 'ban' | 'too-long' | string | null; until: string | null; maxHours?: number } | null;
 };
 
 type Moderator = { userId: string; username: string | null };
@@ -428,6 +432,18 @@ export default function LiveStudioPage() {
                   <span>{t('liveHeldOwner')}</span>
                 </div>
               )}
+              {setup.inputDisabled && (
+                <div className="moderation-hold-note" role="status" style={{ marginTop: 12, marginBottom: 0 }}>
+                  <UiIcon name="warning" size={18} />
+                  <span>
+                    {setup.inputDisabled.reason === 'ban'
+                      ? t('liveInputDisabledBan')
+                      : t('liveInputDisabledLong')
+                          .replace('{hours}', String(setup.inputDisabled.maxHours ?? 12))
+                          .replace('{time}', setup.inputDisabled.until ? new Date(setup.inputDisabled.until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '…')}
+                  </span>
+                </div>
+              )}
               {stream?.live && stream.playerUrl && (
                 <div className="player-wrap" style={{ aspectRatio: '16/9', marginTop: 12 }}>
                   <iframe
@@ -574,7 +590,7 @@ export default function LiveStudioPage() {
             </div>
 
             <div className="panel">
-              <PanelHeading icon="film" title={t('liveRecordingsHeading')} help={t('liveRecordingsNote')} />
+              <PanelHeading icon="film" title={t('liveRecordingsHeading')} help={t('liveRecordingsNote').replace('{days}', String(setup.recordingKeepDays ?? 30))} />
               {/* Jako YouTube: záznam se po skončení může zveřejnit sám - a na rozdíl od Twitche nikdy nezmizí. */}
               <label className="live-field" style={{ marginBottom: 10 }}>
                 <span>{t('liveAfterStreamLabel')}</span>

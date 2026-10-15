@@ -5,6 +5,8 @@ import { protectionConfigured, shouldBeProtected, syncVideoProtection } from './
 import { createStreamToken, DOWNLOAD_TOKEN_TTL_S, signingKeyFromEnv, swapPlaybackId } from './streamToken';
 import { channelRoom } from './liveChat';
 import { defaultRecordingTitle, parseRecordingVisibility, pickRecording, recordingsInWindow, type RecordingVisibility } from './liveRecordingRules';
+import { limitsForProfile, uploadProfile, uploadUsage } from './uploadTickets';
+import { formatDuration } from './uploadLimits';
 
 export { defaultRecordingTitle, parseRecordingVisibility, pickRecording, RECORDING_VISIBILITIES, type RecordingVisibility } from './liveRecordingRules';
 
@@ -66,6 +68,20 @@ export async function publishRecording(
   const { data: stream } = await supabaseServer.from('live_streams').select('*').eq('owner_id', ownerId).maybeSingle();
   // Běžící vysílání se zveřejnit nedá; po jeho konci ano, i když Cloudflare záznam ještě uzavírá.
   if (rec.state === 'live-inprogress' && stream?.is_live) return { ok: false, status: 409, error: 'Vysílání ještě běží.' };
+
+  // Zveřejněný záznam zůstane napořád - počítá se do úložiště kanálu (lib/uploadLimits.ts).
+  const profile = await uploadProfile(ownerId);
+  const limits = limitsForProfile(profile, null);
+  if (limits.storageSeconds > 0) {
+    const { usage } = await uploadUsage(ownerId);
+    if (usage.storedSeconds + (rec.duration ?? 0) > limits.storageSeconds) {
+      return {
+        ok: false,
+        status: 507,
+        error: `Úložiště kanálu je plné (${formatDuration(usage.storedSeconds)} z ${formatDuration(limits.storageSeconds)}). Záznam si můžeš stáhnout do PC, nebo smaž starší videa a zveřejni ho potom.`,
+      };
+    }
+  }
 
   const title = (options.title ?? '').trim().slice(0, 150) || (stream?.title ?? '').trim().slice(0, 150) || defaultRecordingTitle(rec.created);
   const description = (options.description ?? stream?.description ?? '').trim().slice(0, 5000);

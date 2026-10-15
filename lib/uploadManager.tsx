@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { supabase } from './supabaseClient';
 import { uploadResumable } from './tusUpload';
 import { uploadEtaSeconds } from './uploadEta';
+import { imageUploadExt, thumbnailPath } from './imageUpload';
 
 /**
  * Nahrávání, které přežije odchod ze stránky.
@@ -113,17 +114,19 @@ const StateContext = createContext<UploadState>(EMPTY);
 const CommandsContext = createContext<UploadCommands>({ start: () => {}, startMany: () => {}, dismiss: () => {} });
 
 /**
- * Rozměry videa ze souboru - jen v prohlížeči, přes skrytý <video>.
+ * Rozměry a délka videa ze souboru - jen v prohlížeči, přes skrytý <video>.
  * Když se to do pár vteřin nepovede (exotický formát), vrátí null a
- * rozměry doplní Cloudflare po zpracování (lib/markVideoReady.ts).
+ * rozměry doplní Cloudflare po zpracování (lib/markVideoReady.ts). Délka
+ * jde serveru: podle ní si u Cloudflare zarezervuje místo a ohlídá limity
+ * (lib/uploadLimits.ts) - bez ní se počítá se stropem délky videa.
  */
-function readDimensions(file: File): Promise<{ width: number; height: number } | null> {
+function readVideoMeta(file: File): Promise<{ width: number | null; height: number | null; duration: number | null } | null> {
   return new Promise((resolve) => {
     if (typeof document === 'undefined') return resolve(null);
     const video = document.createElement('video');
     const url = URL.createObjectURL(file);
     let done = false;
-    const finish = (value: { width: number; height: number } | null) => {
+    const finish = (value: { width: number | null; height: number | null; duration: number | null } | null) => {
       if (done) return;
       done = true;
       URL.revokeObjectURL(url);
@@ -135,7 +138,8 @@ function readDimensions(file: File): Promise<{ width: number; height: number } |
     video.muted = true;
     video.onloadedmetadata = () => {
       clearTimeout(timer);
-      finish(video.videoWidth && video.videoHeight ? { width: video.videoWidth, height: video.videoHeight } : null);
+      const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
+      finish({ width: video.videoWidth || null, height: video.videoHeight || null, duration });
     };
     video.onerror = () => {
       clearTimeout(timer);
@@ -173,8 +177,8 @@ function rozvrhDotazu(): number[] {
   return kroky;
 }
 
-/** Čeká, až Cloudflare video zpracuje. Vrací, jestli se to stihlo. */
-async function waitUntilReady(videoId: string, token: string | undefined, onPercent?: (percent: number) => void): Promise<boolean> {
+/** Čeká, až Cloudflare video zpracuje: 'ready', 'failed' (Cloudflare ho odmítl), nebo 'timeout'. */
+async function waitUntilReady(videoId: string, token: string | undefined, onPercent?: (percent: number) => void): Promise<'ready' | 'failed' | 'timeout'> {
   for (const pauza of rozvrhDotazu()) {
     try {
       const res = await fetch('/api/videos/status', {
@@ -183,7 +187,8 @@ async function waitUntilReady(videoId: string, token: string | undefined, onPerc
         body: JSON.stringify({ videoId }),
       });
       const data = await res.json();
-      if (data.status === 'ready') return true;
+      if (data.status === 'ready') return 'ready';
+      if (data.status === 'failed') return 'failed';
       if (typeof data.percent === 'number') onPercent?.(data.percent);
     } catch {
       // Výpadek při dotazu na stav není důvod hlásit chybu - video už je
@@ -191,7 +196,7 @@ async function waitUntilReady(videoId: string, token: string | undefined, onPerc
     }
     await new Promise((resolve) => setTimeout(resolve, pauza));
   }
-  return false;
+  return 'timeout';
 }
 
 export function UploadProvider({ children }: { children: React.ReactNode }) {
@@ -289,13 +294,11 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
   async function run(job: UploadJob) {
     try {
-      // Hromadný výběr rozměry nezná (soubory se nikde nepřehrávají) -
-      // dopočítají se tady, ať Sparks poznají svislé video hned.
-      if (job.width == null || job.height == null) {
-        const dims = await readDimensions(job.file);
-        if (dims) {
-          job = { ...job, width: dims.width, height: dims.height };
-        }
+      // Rozměry (hromadný výběr je nezná - soubory se nikde nepřehrávají; ať
+      // Sparks poznají svislé video hned) a délka (server podle ní hlídá limity).
+      const meta = await readVideoMeta(job.file);
+      if ((job.width == null || job.height == null) && meta?.width && meta?.height) {
+        job = { ...job, width: meta.width, height: meta.height };
       }
 
       const { data: sessionData } = await supabase.auth.getSession();
@@ -304,7 +307,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       const urlRes = await fetch('/api/videos/create-upload-url', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileSize: job.file.size }),
+        body: JSON.stringify({ fileSize: job.file.size, durationSeconds: meta?.duration ?? null }),
       });
       const urlData = await urlRes.json();
       if (!urlRes.ok) throw new Error(urlData.error || 'Nepodařilo se připravit upload.');
@@ -357,14 +360,15 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       const newVideoId = confirmData.video.id;
       uprav({ videoId: newVideoId });
 
-      if (job.thumbnailFile) {
+      // Vlastní náhled (typ a velikost ohlídala stránka nahrávání; úložiště pustí jen obrázek k vlastnímu videu).
+      const thumbExt = job.thumbnailFile ? imageUploadExt(job.thumbnailFile) : null;
+      if (job.thumbnailFile && thumbExt) {
         const userId = sessionData.session?.user.id;
         if (userId) {
-          const ext = job.thumbnailFile.name.split('.').pop();
-          const path = `${userId}/${newVideoId}.${ext}`;
+          const path = thumbnailPath(userId, newVideoId, thumbExt);
           const { error: thumbError } = await supabase.storage
             .from('thumbnails')
-            .upload(path, job.thumbnailFile, { upsert: true });
+            .upload(path, job.thumbnailFile, { upsert: false, contentType: job.thumbnailFile.type || undefined });
           if (!thumbError) {
             const { data: publicUrlData } = supabase.storage.from('thumbnails').getPublicUrl(path);
             await supabase
@@ -419,7 +423,12 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       uprav({ phase: 'processing' });
       // Ve frontě se na zpracování nečeká - další soubor má jít nahoru
       // hned. Zpracování hlídá webhook / doptávání v Moje videa.
-      if (queueRef.current.length === 0) await waitUntilReady(newVideoId, token, (p) => uprav({ processingPercent: p }));
+      if (queueRef.current.length === 0) {
+        const processed = await waitUntilReady(newVideoId, token, (p) => uprav({ processingPercent: p }));
+        if (processed === 'failed') {
+          throw new Error('Cloudflare video nezpracoval - soubor je poškozený, nebo je video delší, než kolik ukázal prohlížeč. Zkus ho prosím nahrát znovu (třeba v MP4).');
+        }
+      }
 
       finishJob('done', {
         failedInvites: failed.length > 0 ? { videoId: newVideoId, names: failed } : null,

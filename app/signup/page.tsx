@@ -34,6 +34,8 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   /** Je jméno volné? null = nevíme (prázdné, neplatné, ještě se ptáme). */
   const [nameFree, setNameFree] = useState<boolean | null>(null);
+  /** Supabase chce potvrdit e-mail (Confirm email) - kam odešel odkaz. */
+  const [confirmSentTo, setConfirmSentTo] = useState<string | null>(null);
 
   // Volné jméno se ověří hned při psaní (s malou prodlevou), ne až po odeslání.
   useEffect(() => {
@@ -83,6 +85,9 @@ export default function SignupPage() {
     const { data, error: signupError } = await supabase.auth.signUp({
       email,
       password,
+      // Vybrané jméno zůstane u účtu - se zapnutým potvrzením e-mailu profil
+      // vznikne až po kliknutí na odkaz (lib/ensureProfile.ts).
+      options: { data: { username: username.trim() } },
     });
 
     if (signupError) {
@@ -118,9 +123,10 @@ export default function SignupPage() {
       return;
     }
 
-    setToast({ message: t('signupSuccess'), type: 'success' });
+    // Bez přihlášení = Supabase chce nejdřív potvrdit e-mail. Profil vznikne po kliknutí
+    // na odkaz (lib/ensureProfile.ts) - tady jen srozumitelně říct, co dál.
     setLoading(false);
-    setTimeout(() => router.push('/login?justSignedUp=1'), 900);
+    setConfirmSentTo(email.trim());
   }
 
   return (
@@ -146,6 +152,15 @@ export default function SignupPage() {
           </ul>
         </aside>
 
+        {confirmSentTo ? (
+          <div className="signup-form" role="status">
+            <h1>{t('signupCheckEmailTitle')}</h1>
+            <p className="signup-hint" style={{ fontSize: 15, lineHeight: 1.6 }}>{t('signupCheckEmailText').replace('{email}', confirmSentTo)}</p>
+            <p className="signup-login">
+              <Link href="/login">{t('loginLink')}</Link>
+            </p>
+          </div>
+        ) : (
         <form className="signup-form" onSubmit={handleSignup}>
           <h1>{t('createAccount')}</h1>
           <div>
@@ -212,6 +227,7 @@ export default function SignupPage() {
             {t('haveAccount')} <Link href="/login">{t('loginLink')}</Link>
           </p>
         </form>
+        )}
       </div>
     </>
   );

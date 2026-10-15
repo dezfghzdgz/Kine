@@ -8,6 +8,7 @@ import Toast, { ToastType } from '@/components/Toast';
 import { useLanguage } from '@/lib/i18n';
 import { autoCaptionLanguage, chaptersFromDescription, parseSubtitles, sanitizeCaptions, sanitizeChapters, toSrt } from '@/lib/captions';
 import ProfileImage from '@/components/ProfileImage';
+import { IMAGE_MAX_BYTES, imageUploadExt, imageUploadProblem, ownStoragePath, thumbnailPath } from '@/lib/imageUpload';
 
 // Na jednom videu se můžou podílet nejvýš 4 tvůrci - ten, kdo ho nahrál,
 // a k tomu tři spolutvůrci. Všichni čtyři se pak ukazují pod videem.
@@ -310,13 +311,22 @@ export default function EditVideoPage() {
     if (!authData.user) return;
 
     let newThumbnailUrl = thumbnailUrl;
+    // Starý vlastní náhled (soubor ve vlastní složce) - po uložení nového se smaže, ať nezabírá místo.
+    const previousThumbPath = newThumbnailFile ? ownStoragePath(thumbnailUrl, 'thumbnails', authData.user.id) : null;
 
     if (newThumbnailFile) {
-      const ext = newThumbnailFile.name.split('.').pop();
-      const path = `${authData.user.id}/${videoId}.${ext}`;
+      const ext = imageUploadExt(newThumbnailFile);
+      const problem = imageUploadProblem(newThumbnailFile, 'thumbnail');
+      if (!ext || problem) {
+        setToast({ message: problem === 'size' ? t('imageUploadTooBig').replace('{mb}', String(IMAGE_MAX_BYTES.thumbnail / 1024 / 1024)) : t('imageUploadBadType'), type: 'error' });
+        setSaving(false);
+        return;
+      }
+      // Každý nový náhled = nový soubor (přepsat starý nejde - lib/imageUpload.ts).
+      const path = thumbnailPath(authData.user.id, videoId, ext);
       const { error: uploadError } = await supabase.storage
         .from('thumbnails')
-        .upload(path, newThumbnailFile, { upsert: true });
+        .upload(path, newThumbnailFile, { upsert: false, contentType: newThumbnailFile.type || undefined });
 
       if (uploadError) {
         setToast({ message: t('thumbnailUploadFailedNote').replace('{message}', uploadError.message), type: 'error' });
@@ -346,6 +356,13 @@ export default function EditVideoPage() {
     if (error) {
       setToast({ message: t('saveFailedNote').replace('{message}', error.message), type: 'error' });
       return;
+    }
+
+    if (previousThumbPath && newThumbnailUrl && !newThumbnailUrl.includes(previousThumbPath)) {
+      await supabase.storage.from('thumbnails').remove([previousThumbPath]).then(
+        () => undefined,
+        () => undefined
+      );
     }
 
     // Soukromé video a video pro odběratele dostanou podepsané adresy,
@@ -388,7 +405,21 @@ export default function EditVideoPage() {
         {thumbnailUrl && (
           <img loading="lazy" decoding="async" src={thumbnailUrl} alt={t('thumbnailImageLabel')} style={{ width: '100%', borderRadius: 8, marginBottom: 10 }} />
         )}
-        <input type="file" accept="image/*" onChange={(e) => setNewThumbnailFile(e.target.files?.[0] ?? null)} />
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+          onChange={(e) => {
+            const f = e.target.files?.[0] ?? null;
+            const problem = f ? imageUploadProblem(f, 'thumbnail') : null;
+            if (f && problem) {
+              setToast({ message: problem === 'size' ? t('imageUploadTooBig').replace('{mb}', String(IMAGE_MAX_BYTES.thumbnail / 1024 / 1024)) : t('imageUploadBadType'), type: 'error' });
+              e.target.value = '';
+              setNewThumbnailFile(null);
+              return;
+            }
+            setNewThumbnailFile(f);
+          }}
+        />
       </div>
 
       <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

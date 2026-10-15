@@ -19,9 +19,7 @@ import { isTvMode } from '@/lib/tvMode';
 import { SPARK_WARM_FALLBACK_MS, sparkSlot, type SparkEngine } from '@/lib/sparksPlayback';
 import { playbackMode } from '@/lib/netQuality';
 import ProfileImage from '@/components/ProfileImage';
-
-const SPARK_FIELDS =
-  'id, title, description, cloudflare_video_id, thumbnail_url, duration_seconds, width, height, created_at, profiles!videos_owner_id_fkey(id, username, display_name, avatar_url, verification_tier)';
+import { SPARK_FIELDS, fetchSparkList, takePrefetchedSparks } from '@/lib/sparksPrefetch';
 
 /** Kód zákazníka Cloudflare z minula - spojení se serverem videí se naváže, ještě než přijde seznam Sparks. */
 const STREAM_CODE_KEY = 'kine-stream-code';
@@ -143,25 +141,18 @@ function SparksPageInner() {
     setLoadFailed(false);
 
     const nowIso = new Date().toISOString();
-    const { data, error } = await supabase
-      .from('videos')
-      .select(SPARK_FIELDS)
-      .eq('status', 'ready')
-      .eq('visibility', 'public')
-      // Sparks hrají samy - premiéra se tu objeví až ve chvíli, kdy začne.
-      .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso}`)
-      .order('created_at', { ascending: false })
-      .limit(80);
+    // Seznam připravený z hlavní stránky (lib/sparksPrefetch.ts) - bez čekání na databázi.
+    const list = takePrefetchedSparks() ?? (await fetchSparkList());
 
     // Chyba se dřív zahazovala a z prázdného výsledku vyšlo "Zatím tu
     // nejsou žádné Sparks" i při vypadlém spojení.
-    if (error) {
+    if (!list) {
       setLoadFailed(true);
       setLoading(false);
       return;
     }
 
-    const sparks: any[] = (data ?? []).filter(isSpark);
+    const sparks: any[] = [...list];
 
     // Odkaz na konkrétní Spark (?start=), který už není mezi nejnovějšími: přidá se na začátek -
     // jinak by se místo něj pustilo úplně jiné video.

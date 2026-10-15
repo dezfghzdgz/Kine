@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabaseServer';
 import { isMissingTable, userFromRequest } from '@/lib/apiUser';
 import { listInputVideos } from '@/lib/liveStream';
 import { parseRecordingVisibility, publishRecording } from '@/lib/liveRecording';
+import { outdatedAppResponse } from '@/lib/desktopGate';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +11,8 @@ export const dynamic = 'force-dynamic';
  * Záznamy živých vysílání (Cloudflare je nahrává samo). Tvůrce vidí svoje
  * a jedním klikem z nich udělá normální video na Kine, stáhne si je do PC
  * (MP4), nebo je zahodí (lib/liveRecording.ts). Nezveřejněný záznam se nikde
- * neukazuje a Cloudflare ho po 30 dnech smaže; zveřejněné zůstávají.
+ * neukazuje a po pár dnech se smaže (lib/liveLimits.ts - LIVE_RECORDING_KEEP_DAYS);
+ * zveřejněné zůstávají.
  */
 async function myInput(ownerId: string) {
   const { data, error } = await supabaseServer.from('live_inputs').select('cf_input_id').eq('owner_id', ownerId).maybeSingle();
@@ -47,6 +49,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const user = await userFromRequest(req);
   if (!user) return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });
+  // Zastaralá appka do PC záznam nezveřejní (lib/desktopGate.ts) - stáhnout a zahodit jde dál.
+  const outdated = await outdatedAppResponse(req);
+  if (outdated) return outdated;
   const body = await req.json().catch(() => ({}));
   // "latest" = nejnovější záznam (appka Kine po skončení vysílání neví jeho id).
   const uid = String(body?.videoUid ?? '').trim() || 'latest';

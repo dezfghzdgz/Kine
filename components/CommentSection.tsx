@@ -20,6 +20,8 @@ import { timeAgo } from '@/lib/timeAgo';
 import UiIcon from './UiIcon';
 import ProfileImage from './ProfileImage';
 import { ThumbsDownIcon, ThumbsUpIcon } from './ReactionIcons';
+import { IMAGE_MAX_BYTES, imageUploadExt, imageUploadProblem } from '@/lib/imageUpload';
+import { trustedImageUrl } from '@/lib/trustedMedia';
 
 /** Kolik komentářů se ukáže naráz (další po kliknutí). */
 const COMMENTS_PAGE = 20;
@@ -240,9 +242,16 @@ export default function CommentSection({
     if (typeof imageFile === 'string') {
       imageUrl = imageFile;
     } else if (imageFile) {
-      const ext = imageFile.name.split('.').pop();
+      // Úložiště pustí jen JPEG / PNG / WebP / GIF / AVIF do 10 MB (lib/imageUpload.ts).
+      const problem = imageUploadProblem(imageFile, 'comment');
+      if (problem) {
+        setPosting(false);
+        setPostError(problem === 'size' ? t('imageUploadTooBig').replace('{mb}', String(IMAGE_MAX_BYTES.comment / 1024 / 1024)) : t('imageUploadBadType'));
+        return;
+      }
+      const ext = imageUploadExt(imageFile) ?? 'jpg';
       const path = `${authData.user.id}/${Date.now()}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from('comment-images').upload(path, imageFile);
+      const { error: uploadError } = await supabase.storage.from('comment-images').upload(path, imageFile, { contentType: imageFile.type || undefined });
 
       // Neúspěšný upload se dřív jen přeskočil: komentář odešel bez
       // obrázku, pole se vyprázdnila a nikdo se nedozvěděl, že se obrázek
@@ -413,7 +422,7 @@ export default function CommentSection({
             )}
           </p>
           <p className="comment-text">{renderCommentContent(c.content, onSeek)}</p>
-          {c.image_url && <img loading="lazy" decoding="async" src={c.image_url} alt="" className="comment-image" />}
+          {trustedImageUrl(c.image_url) && <img loading="lazy" decoding="async" src={trustedImageUrl(c.image_url)!} alt="" className="comment-image" />}
           <div className="comment-actions">
             <button
               type="button"

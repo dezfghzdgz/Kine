@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { SITE_URL } from '@/lib/linkPreview';
+import { enforcedDesktopMinVersion } from '@/lib/desktopGate';
 
 /**
  * Konfigurace pro appku Kine do PC (kine-desktop).
@@ -24,8 +25,10 @@ export async function GET() {
       supabaseUrl,
       supabaseAnonKey,
       siteUrl: SITE_URL,
-      // Kdyby bylo někdy potřeba staré verze appky odstavit.
-      minDesktopVersion: '0.1.0',
+      // Nejstarší verze appky, která smí na Kine nahrávat a vysílat (lib/desktopGate.ts) -
+      // jen když je požadovaná verze už vydaná. Appka od 0.11.0 podle toho sama
+      // řekne "aktualizuj" (starší verze hodnotu ignorují, odmítne je server).
+      minDesktopVersion: (await enforcedDesktopMinVersion()) ?? '0.1.0',
     },
     {
       headers: { 'Access-Control-Allow-Origin': '*' },

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
@@ -15,6 +15,7 @@ import { useUserRole } from '@/lib/useUserRole';
 import { isInDesktopApp } from '@/lib/desktopRelease';
 import { useLiveCount } from '@/lib/useLiveCount';
 import { PAYMENTS_ENABLED } from '@/lib/payments';
+import { ensureOwnProfile } from '@/lib/ensureProfile';
 import {
   FireIcon, SparkleIcon, DiceIcon,
   CarIcon, PlaneIcon, FilmIcon, GamepadIcon, MusicIcon, ComedyIcon, BlogIcon,
@@ -77,8 +78,12 @@ function loggedInLinksGroup2(t: (key: any) => string) {
   ];
 }
 
+// Profil se dotváří nejvýš jednou naráz (menu se načítá při každé navigaci i změně přihlášení).
+let ensuringProfile: Promise<boolean> | null = null;
+
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { t } = useLanguage();
   const { isModerator, isAdmin } = useUserRole();
   const [exploreOpen, setExploreOpen] = useState(false);
@@ -126,15 +131,28 @@ export default function Sidebar() {
       setLoading(false);
       return;
     }
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('username, avatar_url, rating_mode')
       .eq('id', authData.user.id)
       .single();
 
+    // Přihlášený bez profilu (registrace s potvrzením e-mailu - odkaz z e-mailu vede
+    // rovnou sem, ne přes přihlášení): profil se dotvoří a jde se do průvodce.
+    // PGRST116 = žádný řádek (výpadek sítě má jiný kód - tam se nic nezakládá).
+    if (!profile && profileError?.code === 'PGRST116') {
+      ensuringProfile ??= ensureOwnProfile(supabase, authData.user).finally(() => {
+        ensuringProfile = null;
+      });
+      if (await ensuringProfile) {
+        router.push('/welcome');
+        return;
+      }
+    }
+
     setUser({
       id: authData.user.id,
-      username: profile?.username ?? authData.user.email ?? 'uživatel',
+      username: profile?.username ?? 'uživatel',
       avatar_url: profile?.avatar_url ?? null,
     });
     setRatingMode((profile?.rating_mode as 'stars' | 'like_dislike') ?? 'like_dislike');

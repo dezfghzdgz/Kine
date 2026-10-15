@@ -9,6 +9,8 @@ import { useLanguage } from '@/lib/i18n';
 import { CATEGORY_KEYS } from '@/lib/categories';
 import { useUploadCommands, useUploadState } from '@/lib/uploadManager';
 import ProfileImage from '@/components/ProfileImage';
+import UploadQuota from '@/components/UploadQuota';
+import { IMAGE_MAX_BYTES, imageUploadProblem } from '@/lib/imageUpload';
 
 const LANGUAGE_OPTIONS = [
   { code: 'cs', key: 'langOptCzech' },
@@ -48,6 +50,10 @@ export default function UploadPage() {
   const [bulkSent, setBulkSent] = useState(0);
   const [videoWidth, setVideoWidth] = useState<number | null>(null);
   const [videoHeight, setVideoHeight] = useState<number | null>(null);
+  const [videoDuration, setVideoDuration] = useState<number | null>(null);
+  // Moc dlouhé video (podle limitů účtu - components/UploadQuota.tsx): dál to nepustí,
+  // server by ho stejně odmítl až po vyplnění všeho.
+  const [tooLongMessage, setTooLongMessage] = useState<string | null>(null);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -155,6 +161,10 @@ export default function UploadPage() {
     e.preventDefault();
     if (!file || !title.trim()) {
       setError('Vyber video a vyplň alespoň název.');
+      return;
+    }
+    if (tooLongMessage) {
+      setError(tooLongMessage);
       return;
     }
     setError(null);
@@ -311,6 +321,7 @@ export default function UploadPage() {
             <FieldHint text={t('bulkFilesHint')} />
           </p>
           <input type="file" accept="video/*" multiple onChange={(e) => pickBulkFiles(e.target.files)} />
+          <UploadQuota />
           {bulkFiles.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
               {bulkFiles.map((item, i) => (
@@ -428,6 +439,7 @@ export default function UploadPage() {
             onChange={(e) => {
               const f = e.target.files?.[0] ?? null;
               setFile(f);
+              setVideoDuration(null);
               setPreviewUrl(f ? URL.createObjectURL(f) : null);
             }}
             required={!file}
@@ -437,6 +449,7 @@ export default function UploadPage() {
               ✓ {file.name}
             </p>
           )}
+          <UploadQuota durationSeconds={file ? videoDuration : null} onTooLong={setTooLongMessage} />
 
           {previewUrl && (
             <video
@@ -446,6 +459,7 @@ export default function UploadPage() {
                 const v = e.currentTarget;
                 setVideoWidth(v.videoWidth);
                 setVideoHeight(v.videoHeight);
+                setVideoDuration(Number.isFinite(v.duration) && v.duration > 0 ? v.duration : null);
               }}
               style={{ width: '100%', borderRadius: 8, background: '#000', maxHeight: 260, marginTop: 12 }}
             />
@@ -463,6 +477,15 @@ export default function UploadPage() {
             onChange={(e) => {
               const f = e.target.files?.[0] ?? null;
               if (!f) { setThumbnailFile(null); return; }
+              // Úložiště pustí jen obrázky do 10 MB (lib/imageUpload.ts) - hláška hned, ne až po nahrání videa.
+              const problem = imageUploadProblem(f, 'thumbnail');
+              if (problem) {
+                setError(problem === 'type' ? t('imageUploadBadType') : t('imageUploadTooBig').replace('{mb}', String(IMAGE_MAX_BYTES.thumbnail / 1024 / 1024)));
+                e.target.value = '';
+                setThumbnailFile(null);
+                return;
+              }
+              setError(null);
 
               const img = new window.Image();
               img.onload = () => {

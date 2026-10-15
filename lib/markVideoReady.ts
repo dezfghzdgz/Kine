@@ -2,6 +2,8 @@ import { supabaseServer } from './supabaseServer';
 import { shouldBeProtected, syncVideoProtection } from './streamProtection';
 import { requestAutoCaptions, sweepCaptions } from './autoCaptions';
 import { runInBackground } from './background';
+import { isCloudflareUid, processCloudflareCleanup, streamApiUrl } from './cloudflareVideos';
+import { expireTickets, markTicketFailed } from './uploadTickets';
 
 /**
  * "Video je zpracované" - jedno místo pro obě cesty, kterými se to appka
@@ -25,7 +27,7 @@ import { runInBackground } from './background';
  *      webhook nebyl nastavený nebo se zpráva ztratila).
  */
 
-export type ReadyResult = 'ready' | 'processing' | 'not-found';
+export type ReadyResult = 'ready' | 'processing' | 'failed' | 'not-found';
 
 /**
  * Zapíše, že je video hotové, a rozešle oznámení odběratelům.
@@ -176,31 +178,83 @@ export function processingPercent(cf: { status?: { pctComplete?: unknown; state?
   return Math.max(0, Math.min(99, Math.floor(n)));
 }
 
+/**
+ * Jedno video se u Cloudflare neptá častěji než jednou za CF_CHECK_EVERY_MS
+ * (na instanci). Dotaz na stav jde poslat bez přihlášení - bez tohohle by
+ * šlo dokola posílat stav zpracovávaného videa a vyčerpat limit API
+ * Cloudflare (1200 dotazů za 5 minut na celý účet), takže by pak nešlo
+ * nahrávat ani mazat.
+ */
+const CF_CHECK_EVERY_MS = 4000;
+const lastCfCheck = new Map<string, { at: number; percent: number | null }>();
+
+/**
+ * Cloudflare video nezpracoval (delší než ohlášená délka, poškozený soubor)
+ * nebo ho u sebe už nemá: video se označí jako nepovedené ('failed') -
+ * nikde se neukazuje, tvůrce ho vidí v Moje videa a může ho smazat. Rezerva
+ * u Cloudflare se uvolní sama, chybné video se do úložiště nepočítá.
+ */
+export async function markVideoFailed(videoId: string, cloudflareVideoId: string | null, reason: string | null): Promise<void> {
+  await supabaseServer.from('videos').update({ status: 'failed' }).eq('id', videoId).neq('status', 'ready');
+  if (cloudflareVideoId) await markTicketFailed(cloudflareVideoId);
+  console.warn('Kine: video se u Cloudflare nezpracovalo', videoId, reason ?? '');
+}
+
 export async function refreshFromCloudflare(videoId: string, progress?: { percent: number | null }): Promise<ReadyResult> {
   const { data: video } = await supabaseServer
     .from('videos')
     .select('id, cloudflare_video_id, status')
     .eq('id', videoId)
-    .single();
+    .maybeSingle();
 
   if (!video) return 'not-found';
   if (video.status === 'ready') return 'ready';
+  if (video.status === 'failed') return 'failed';
+
+  const last = lastCfCheck.get(videoId);
+  if (last && Date.now() - last.at < CF_CHECK_EVERY_MS) {
+    if (progress) progress.percent = last.percent;
+    return 'processing';
+  }
+  if (lastCfCheck.size > 2000) lastCfCheck.clear();
 
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const apiToken = process.env.CLOUDFLARE_STREAM_API_TOKEN;
+  if (!accountId || !apiToken || !isCloudflareUid(video.cloudflare_video_id)) return 'processing';
 
-  const cfRes = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/${video.cloudflare_video_id}`,
-    { headers: { Authorization: `Bearer ${apiToken}` } }
-  );
+  let cfRes: Response;
+  try {
+    cfRes = await fetch(streamApiUrl(accountId, `/${encodeURIComponent(video.cloudflare_video_id)}`), {
+      headers: { Authorization: `Bearer ${apiToken}` },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    return 'processing';
+  }
   const cfData = await cfRes.json().catch(() => ({ success: false }));
+
+  // Cloudflare video nemá (smazané, nedokončené nahrání po vypršení) - na Kine by viselo napořád.
+  if (cfRes.status === 404) {
+    lastCfCheck.delete(videoId);
+    await markVideoFailed(videoId, video.cloudflare_video_id, 'u Cloudflare není');
+    return 'failed';
+  }
+  if (cfData?.success && cfData.result?.status?.state === 'error') {
+    lastCfCheck.delete(videoId);
+    await markVideoFailed(videoId, video.cloudflare_video_id, String(cfData.result.status?.errorReasonCode ?? cfData.result.status?.errReasonCode ?? 'error'));
+    return 'failed';
+  }
 
   if (!cfData.success || !cfData.result?.readyToStream) {
     // Jak daleko Cloudflare je - u dlouhého videa ať tvůrce vidí, že se to hýbe.
-    if (progress) progress.percent = processingPercent(cfData.result);
+    const percent = processingPercent(cfData.result);
+    lastCfCheck.set(videoId, { at: Date.now(), percent });
+    if (progress) progress.percent = percent;
     return 'processing';
   }
 
+  lastCfCheck.delete(videoId);
   await markVideoReady(videoId, cfData.result);
   return 'ready';
 }
@@ -246,7 +300,7 @@ export async function sweepProcessing(options: { max?: number; force?: boolean }
       const { data } = await supabaseServer
         .from('videos')
         .select('id')
-        .neq('status', 'ready')
+        .eq('status', 'processing')
         .gte('created_at', weekAgo)
         .lte('created_at', minuteAgo)
         .order('created_at', { ascending: true })
@@ -263,6 +317,11 @@ export async function sweepProcessing(options: { max?: number; force?: boolean }
       // a převzetí hotových automatických titulků.
       await sweepScheduled().catch(() => 0);
       await sweepCaptions().catch(() => 0);
+      // Nedokončená nahrávání (lístek vypršel) a smazání u Cloudflare, která minule nevyšla.
+      await expireTickets(options.force ? 20 : 3).catch(() => 0);
+      await processCloudflareCleanup(options.force ? 20 : 3).catch(() => 0);
+      // Vysílání: zablokované účty a nekonečné přenosy (lib/liveLimits.ts - sám si hlídá, jak často).
+      await import('./liveLimits').then((m) => m.enforceLiveLimits({ force: options.force })).catch(() => undefined);
       // A na pozadí kontrola obsahu jednoho dvou starších videí (nejvýš jednou za 5 min).
       runInBackground(
         import('./nudityScan').then(({ sweepNudity }) => sweepNudity({ max: 2 })),

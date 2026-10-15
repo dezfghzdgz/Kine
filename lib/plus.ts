@@ -4,7 +4,8 @@
  *
  * Tři placené varianty, každá vlastní cena u Stripe:
  *  - 'kine'  Kine Plus:  web jako YouTube Premium - odznak PLUS u jména,
- *            3× vyšší denní limit nahrávání.
+ *            3× víc nahrávání (délka videa, počet a minuty za den, úložiště -
+ *            lib/uploadLimits.ts).
  *  - 'clips' Klipy Plus: appka do PC nahrává klipy automaticky (po hře,
  *            nikdy během ní), klipy až 5 minut.
  *  - 'all'   Kine Plus + Klipy: obojí.
@@ -19,7 +20,7 @@ export const PAID_TIERS: PaidTier[] = ['kine', 'clips', 'all'];
 
 export const FREE_CLIP_MAX_SECONDS = 60;
 export const PLUS_CLIP_MAX_SECONDS = 300;
-/** Kine Plus: kolikrát vyšší denní limit nahrávání než základ (UPLOAD_DAILY_LIMIT). */
+/** Kine Plus: kolikrát víc nahrávání než základ (lib/uploadLimits.ts - PLUS_UPLOAD_MULTIPLIER). */
 export const KINE_PLUS_UPLOAD_MULTIPLIER = 3;
 
 export function normalizePlan(value: unknown): Plan {

@@ -14,8 +14,9 @@ process.env.STRIPE_PLUS_CLIPS_PRICE_ID = 'price_clips';
 process.env.STRIPE_PLUS_PRICE_ID = 'price_all_legacy';
 process.env.NEXT_PUBLIC_PLUS_CLIPS_PRICE_LABEL = '79 Kč / měsíc';
 
-const kam = prelozit('lib/plus.ts', 'lib/desktopRelease.ts');
+const kam = prelozit('lib/plus.ts', 'lib/desktopRelease.ts', 'lib/plusBilling.ts');
 const plus = await import(join(kam, 'plus.js'));
+const billing = await import(join(kam, 'plusBilling.js'));
 const release = await import(join(kam, 'desktopRelease.js'));
 // Druhý otisk modulu s nastaveným úložištěm (adresa se čte při načtení).
 process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_BASE = 'https://pub-x.r2.dev/';
@@ -83,6 +84,38 @@ test('proužek "Kine do PC" se po zavření vrátí za týden', () => {
   assert.equal(release.desktopBannerDismissed('1', now), true, 'starší "1" se bere jako zavřené teď');
   assert.equal(release.desktopBannerDismissed('nesmysl', now), true);
   assert.equal(release.DESKTOP_BANNER_SHOW_AGAIN_MS, 7 * den);
+});
+
+test('Stripe: do kdy platí předplatné (aktivní, zrušené, nezaplacené)', () => {
+  const now = Date.parse('2026-10-15T12:00:00Z');
+  const s = (d) => Math.floor(Date.parse(d) / 1000);
+  const tierFromPrice = (id) => plus.tierFromStripePriceId(id);
+  const base = { items: { data: [{ price: { id: 'price_clips' }, current_period_start: s('2026-10-01T00:00:00Z'), current_period_end: s('2026-11-01T00:00:00Z') }] } };
+  const r = (sub, meta) => billing.plusFromSubscription(sub, { metadataTier: meta, tierFromPrice, now });
+  const aktivni = r({ ...base, status: 'active' });
+  assert.equal(aktivni.plan, 'clips');
+  assert.equal(aktivni.planUntil, '2026-11-04T00:00:00.000Z', 'konec období + 3 dny rezervy');
+  const zrusene = r({ ...base, status: 'active', cancel_at_period_end: true });
+  assert.equal(zrusene.planUntil, '2026-11-01T00:00:00.000Z', 'zrušené ke konci období - bez rezervy');
+  const obnoveni = { items: { data: [{ price: { id: 'price_clips' }, current_period_start: s('2026-10-14T00:00:00Z'), current_period_end: s('2026-11-14T00:00:00Z') }] } };
+  const nezaplacene = r({ ...obnoveni, status: 'past_due' }, 'all');
+  assert.equal(nezaplacene.planUntil, '2026-10-17T00:00:00.000Z', 'nezaplacené obnovení: 3 dny od začátku období, ne celý měsíc');
+  assert.deepEqual(r({ ...base, status: 'past_due', items: { data: [{ price: { id: 'price_clips' }, current_period_start: s('2026-09-01T00:00:00Z'), current_period_end: s('2026-10-01T00:00:00Z') }] } }), { plan: 'free', planUntil: null }, 'rezerva vypršela');
+  for (const status of ['canceled', 'unpaid', 'incomplete', 'incomplete_expired', 'paused']) assert.deepEqual(r({ ...base, status }), { plan: 'free', planUntil: null }, status);
+  assert.equal(r({ status: 'active', items: { data: [{ price: { id: 'price_neznama' } }] } }, 'kine').plan, 'kine', 'cena neznámá -> metadata');
+  const bezObdobi = r({ status: 'active' });
+  assert.equal(bezObdobi.plan, 'all');
+  assert.ok(bezObdobi.planUntil && Date.parse(bezObdobi.planUntil) - now <= 35 * 24 * 3600 * 1000, 'bez období nejvýš 35 dní, nikdy napořád');
+  assert.equal(r({ ...base, status: 'trialing', current_period_end: s('2026-10-20T00:00:00Z') }).planUntil, '2026-10-23T00:00:00.000Z', 'období u předplatného má přednost');
+  assert.equal(r({ ...base, status: 'active', cancel_at: s('2026-10-20T00:00:00Z') }).planUntil, '2026-10-20T00:00:00.000Z');
+});
+
+test('Stripe: předplatné ze sporné platby', () => {
+  assert.equal(billing.subscriptionIdFromCharge({ invoice: { subscription: 'sub_1' } }), 'sub_1');
+  assert.equal(billing.subscriptionIdFromCharge({ invoice: { subscription: { id: 'sub_2' } } }), 'sub_2');
+  assert.equal(billing.subscriptionIdFromCharge({ invoice: { parent: { subscription_details: { subscription: 'sub_3' } } } }), 'sub_3');
+  assert.equal(billing.subscriptionIdFromCharge({ invoice: 'in_1' }), null);
+  assert.equal(billing.subscriptionIdFromCharge({}), null);
 });
 
 console.log(`\n${prosly} prošlo, ${padly} padlo`);

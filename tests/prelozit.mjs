@@ -22,23 +22,24 @@ export function prelozit(...relativniCesty) {
   const korenRepa = fileURLToPath(new URL('..', import.meta.url));
   const kam = mkdtempSync(join(tmpdir(), 'kine-test-'));
 
-  try {
-    execFileSync(
-      TSC,
-      [
-        ...relativniCesty,
-        '--ignoreConfig',
-        '--outDir', kam,
-        '--target', 'es2022',
-        '--module', 'esnext',
-        '--moduleResolution', 'bundler',
-        '--skipLibCheck',
-      ],
-      { cwd: korenRepa, stdio: 'pipe' }
-    );
-  } catch {
-    // Překladač si stěžuje na typy z Reactu, které tu nejsou nainstalované.
-    // JavaScript i tak vygeneruje a o ten nám jde.
+  const prepinace = [
+    '--outDir', kam,
+    '--target', 'es2022',
+    '--module', 'esnext',
+    '--moduleResolution', 'bundler',
+    '--skipLibCheck',
+  ];
+  const prelozeno = () => readdirSync(kam).some((s) => s.endsWith('.js'));
+  // TypeScript 6 chce --ignoreConfig (jinak odmítne soubory z příkazové řádky
+  // vedle tsconfig.json), starší verze ten přepínač neznají - pak bez něj.
+  for (const navic of [['--ignoreConfig'], []]) {
+    try {
+      execFileSync(TSC, [...relativniCesty, ...navic, ...prepinace], { cwd: korenRepa, stdio: 'pipe' });
+    } catch {
+      // Překladač si stěžuje na typy z Reactu, které tu nejsou nainstalované.
+      // JavaScript i tak vygeneruje a o ten nám jde.
+    }
+    if (prelozeno()) break;
   }
 
   // Překladač nechá "import './x'" bez přípony (tak to chce Next), ale Node

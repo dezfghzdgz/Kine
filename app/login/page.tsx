@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
+import { ensureOwnProfile } from '@/lib/ensureProfile';
 import Toast, { ToastType } from '@/components/Toast';
 import { useLanguage } from '@/lib/i18n';
 
@@ -59,6 +60,14 @@ export default function LoginPage() {
         password,
       });
 
+      // Účet s nepotvrzeným e-mailem (Supabase -> Confirm email): heslo je dobře,
+      // jen chybí kliknutí na odkaz - nepočítá se jako špatný pokus.
+      if (loginError && ((loginError as { code?: string }).code === 'email_not_confirmed' || /email not confirmed/i.test(loginError.message ?? ''))) {
+        setError(t('loginEmailNotConfirmed'));
+        setLoading(false);
+        return;
+      }
+
       if (loginError) {
         const failData = await callLockoutApi('record-failure');
 
@@ -96,18 +105,8 @@ export default function LoginPage() {
         const account: any = Array.isArray(accountRows) ? accountRows[0] : accountRows;
 
         if (!existingProfile) {
-          const fallbackUsername = data.user.email?.split('@')[0] ?? `user_${data.user.id.slice(0, 6)}`;
-          await supabase.from('profiles').insert({
-            id: data.user.id,
-            username: fallbackUsername,
-            display_name: fallbackUsername,
-          });
-          await supabase.from('playlists').insert({
-            owner_id: data.user.id,
-            title: 'Sledovat později',
-            color: '#3a5a8a',
-            is_system: true,
-          });
+          // Profil při registraci nevznikl (potvrzení e-mailu) - jméno z registrace, ne z e-mailu (lib/ensureProfile.ts).
+          await ensureOwnProfile(supabase, data.user);
           redirectTo = '/welcome';
         } else if (!account?.agreed_to_rules || !existingProfile.rating_mode || !existingProfile.content_preference) {
           // Průvodce vítáním začne u prvního nevyplněného kroku (lib/welcome.ts).

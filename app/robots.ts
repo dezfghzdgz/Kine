@@ -12,7 +12,8 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       // /embed se neindexuje sám (má noindex), ale procházet se smí - vede
       // z něj odkaz na stránku videa.
-      disallow: ['/settings', '/admin', '/api/'],
+      // Soukromé stránky (jen po přihlášení) - vyhledávač by na nich našel jen "přihlas se".
+      disallow: ['/settings', '/admin', '/api/', '/upload', '/your-videos', '/reports', '/connect', '/welcome', '/history', '/liked', '/watch-later', '/downloaded', '/channel-stats'],
     },
     // Druhá sitemap říká, že stránky videí jsou videa (app/video-sitemap.xml/route.ts).
     sitemap: [`${baseUrl}/sitemap.xml`, `${baseUrl}/video-sitemap.xml`],
