@@ -1,5 +1,5 @@
 {
-  "dodavka": "kine-klipy-2026-10-15",
+  "dodavka": "kine-klipper-0.12-2026-10-17",
   "soubory": {
     ".env.example": "d675c34e199c0017",
     ".github/workflows/zaloha-databaze.yml": "4543c1c8ed69fb42",
@@ -8,7 +8,7 @@
     "JEDEN-SOUBOR-PRO-JISTOTU-3.sql": "2dfe3cc24dd96e0f",
     "JEDEN-SOUBOR-PRO-JISTOTU.sql": "d8d293b89ddf3be5",
     "NASAZENI-NAVOD.md": "00f730625d4e06d5",
-    "PRECTI-ME.txt": "91ea7820795d7b52",
+    "PRECTI-ME.txt": "889f6e842d564f8f",
     "README.md": "0dc66372183514e2",
     "app/about/layout.tsx": "4aa21a82da49f811",
     "app/about/page.tsx": "2e0736a5b2f65a70",

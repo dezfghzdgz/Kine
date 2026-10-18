@@ -1,3 +1,133 @@
+KINE Clipper 0.12.0: překryvy v úpravách klipu (text, vlastní obrázky, GIFy), kamera
+podle sebe (posuvník velikosti, přetažení kamkoli) a kamera zvlášť (posouvat i po
+uložení klipu), aktualizace samy do 14 dní, ke stažení jen poslední verze; odpovědi:
+zdroják / "zašifrování", podpis od Microsoftu, mobil / macOS / Linux
+(dodávka kine-klipper-0.12-2026-10-17)
+==========================================================================================
+
+Jen appka (Kine do PC / Kine Clipper 0.12.0). Web se tentokrát nemění - ve webovém ZIPu je
+jen tenhle soubor a stav-souboru.json. Předchozí dodávku (0.11.1, klipy) už máš na GitHubu
+v obou repech, ZIPy obsahují jen to, co je nové.
+
+POSTUP
+1. Appka: rozbal kine-desktop-0.12.0.zip do kořene repa kine-desktop a přepiš, nahraj na
+   GitHub (přetažením).
+2. DŮLEŽITÉ - workflow: změnil se .github/workflows/release.yml (zmenšené sestavení +
+   mazání starších vydání). Přetažením se .github nenahraje, tak ho vlož ručně: na GitHubu
+   otevři .github/workflows/release.yml -> tužka (Edit) -> smaž obsah a vlož obsah souboru
+   release.yml z téhle dodávky (leží vedle ZIPu) -> Commit. Bez toho se vydá stará cesta
+   (funguje, jen bez zmenšení a bez mazání starých verzí).
+3. Pusť Vydání (Actions -> Vydání). Vznikne 0.12.0; po nahrání se starší vydání na GitHubu
+   smažou (ke stažení zůstane jen 0.12.0, značky verzí zůstávají).
+4. Web: rozbal kine-web-precti-me.zip do kořene repa Kine (jen PRECTI-ME.txt a
+   stav-souboru.json), nahraj, pusť node zkontroluj-soubory.mjs. Žádná migrace. Kontrola
+   pořád hlásí 7 zbytků ze starších balíčků (tests/username.test.mjs,
+   supabase-migration-zarizeni-chyby-jmena.sql, app/tests/playerStart.test.mjs,
+   kine-web-live.patch, CTI-ME.txt, app/admin/live/page.tsx, app/api/admin/live/route.ts) -
+   smaž je na GitHubu ručně (nebo lokálně node zkontroluj-soubory.mjs --uklid), nic nedělají.
+5. Až budeš chtít, aby staré appky bez reklam přestaly fungovat: Vercel -> Settings ->
+   Environment Variables -> DESKTOP_MIN_VERSION = verze, od které jsou reklamy (třeba
+   0.13.0) -> Redeploy. Starší appky dostanou od Kine 426 a nainstalují novou hned (viz
+   níž "Aktualizace samy").
+
+ZDROJÁK, "ZAŠIFROVÁNÍ" A PROČ NÁM NIKDO NEVYPNE REKLAMU ANI NEZAPNE PREMIUM
+- Appka je Electron = JavaScript, který počítač hráče musí umět spustit, takže ho nejde
+  opravdu zašifrovat tak, aby ho nikdo nikdy nepřečetl (to neumí ani Discord nebo Spotify,
+  které jsou postavené stejně). Co jde a co jsme udělali:
+  * Vydání se teď staví zmenšené (esbuild minify): bez komentářů, zkrácené názvy, jeden
+    soubor - číst se to dá, ale je to práce. Instalátor je i o kus menší.
+  * Hlavní pojistka není v appce, ale na serveru: co kdo smí (Klipy Plus, délka klipu,
+    limity nahrávání, později reklamy) rozhoduje Kine (web) a appka to jen ukazuje.
+    I kdyby si někdo appku upravil, aby mu psala "Plus", server mu delší klip nevezme,
+    nahrávání nad limit odmítne a verzi starší než DESKTOP_MIN_VERSION nepustí vůbec (426).
+  * Až přijdou reklamy, platí totéž: pravidla reklam ať posílá server (co, kdy, komu),
+    a to, co má reklama přinést (třeba zdarma vs. Plus bez reklam), ať rozhoduje server
+    podle účtu - pak upravená appka bez reklam hráči nic navíc nedá a Kine ji navíc
+    může vyřadit zvednutím DESKTOP_MIN_VERSION. Honit "nesmazatelnou" reklamu v samotném
+    kódu appky nemá smysl - vždycky to je jen zdržení, ne ochrana.
+- Web: kód serveru (API, platby, limity) nikdy neopustí Vercel - prohlížeč dostane jen
+  stránky a jejich skripty, které Next.js zmenšuje sám. Stripe klíče zůstávají jen ve
+  Vercelu (repo je veřejné - viz minulé dodávky).
+
+AKTUALIZACE SAMY (nejpozději 14 dní po vydání)
+- Obecné -> "Aktualizace samy" (výchozí zapnuto): když je stažená novější verze, appka ji
+  nainstaluje sama nejpozději 14 dní od chvíle, kdy ji poprvé uviděla - a jen v klidu:
+  žádná hra, nahrávání, vysílání ani ukládání, zavřené nastavení. Zkouší to každou
+  půlhodinu a po konci hry. Instalace je ta samá viditelná jako při kliknutí na
+  Aktualizovat (okno instalátoru, appka se pak spustí sama) - žádná tichá instalace při
+  vypínání (ta nám jednou appku smazala, zůstává vypnutá).
+- Když Kine verzi odmítne (426 - zastaralá, tj. zvedneš DESKTOP_MIN_VERSION), instaluje se
+  hned, jakmile je stažená; mezitím appka hlásí "aktualizuj" jako dřív. V O appce je u
+  stažené verze napsáno, do kdy se nainstaluje sama.
+- Hráč si to může vypnout - pak jen upozornění jako dřív. Ale co smí, hlídá server, takže
+  verze "bez reklam" mu nedá nic navíc a od zvednutí DESKTOP_MIN_VERSION nenahraje ani
+  nevysílá.
+- Starší verze ke stažení: po každém vydání se na GitHubu smažou starší vydání (ke stažení
+  jen poslední; značky zůstávají, kód se nemaže). Aktualizace berou appky z Cloudflare R2
+  ("latest") - tam je jen poslední vždycky. Kdo už má starý instalátor stažený v počítači,
+  ten ho nainstalovat může - proto je pojistka ta serverová verze výš.
+
+ÚPRAVY KLIPU: PŘEKRYVY
+- V úpravách (nůžky) je nový rámeček Překryvy: Text, Obrázek, GIF. Až 8 najednou, každý
+  jde tažením posunout kamkoli, rohem zvětšit, a buď je vidět celou dobu, nebo jen "od -
+  do" (tlačítka Od teď / Do teď podle polohy přehrávání). Text má styly jako dřív (písmo
+  Inter, obrys...). Obrázek: PNG, JPG, WebP, BMP, GIF do 60 MB (GIF běží ve smyčce).
+- Náhled v přehrávači ukazuje přesně to, co se zapeče (stejné polohy jako ve výsledku,
+  i u formátu na výšku). Panel úprav je přeskládaný: rámeček Výstup (formát, výřez,
+  rychlost) a rámeček Překryvy.
+
+KAMERA V KLIPECH PODLE SEBE
+- Záznam -> Kamera: velikost je posuvník 8-60 % šířky obrazu (místo tří velikostí) a
+  kameru v náhledu přetáhneš myší kamkoli (rohy zůstávají jako rychlá volba, "Zpátky do
+  rohu" vrátí roh). Stejná poloha a velikost platí pro nahrávání, náhled i přehrávač.
+- Nový vypínač "Nahrávat kameru zvlášť (posouvat i po uložení klipu)":
+  * Vypnuto (výchozí): jako dřív - kamera je v obraze hned při nahrávání, přesně sedí,
+    nic se nepřekódovává.
+  * Zapnuto: kamera se nahrává jako vlastní soubor vedle klipu ("<klip>.camera.webm").
+    V přehrávači je přes obraz a jde ji KDYKOLI přetáhnout jinam nebo rohem zvětšit -
+    i u klipu z minulého týdne; poloha se uloží ke klipu. Do videa se zapeče až tam, kde
+    musí být jeden soubor: nahrání na Kine, Discord, sestřih, GIF a úprava klipu (nový i
+    přepsaný klip má kameru v obraze a soubor kamery už nemá). Zapečení = překódování,
+    u pětiminutového klipu zhruba minutu, u hodinové nahrávky klidně 10-20 minut
+    (nahrávání na Kine se o to zdrží - hlásí "ve frontě"). Kopie se pamatuje, dokud kameru
+    zase neposuneš. Koš bere soubor kamery s klipem.
+  * Přepnutí vypínače rozjede snímání znovu (jiné nahrávací stopy) - jako změna kvality.
+- Kamera zvlášť drží čas s obrazem stejně jako mikrofon (podle hodin počítače, i když
+  kamera naběhne později než obraz).
+
+PODPIS OD MICROSOFTU (Azure Trusted Signing) - NA JEDNU VERZI, NEBO NAPOŘÁD?
+- Napořád, dokud platíš předplatné. Podpis se nedělá "na verzi", ale na každý soubor:
+  Vydání podepíše každou novou verzi znovu (automaticky ve workflow), pořád stejnou
+  identitou vydavatele. Důvěra Windows (SmartScreen) se váže na vydavatele, takže ji
+  nové verze dědí - čím déle vydáváš pod stejným podpisem, tím méně varování.
+- Trusted Signing vydává krátkodobé certifikáty (mění se samy, o nic se nestaráš); podpisy
+  mají časové razítko, takže už vydané instalátory zůstanou platné, i kdybys předplatné
+  jednou zrušil - jen nové verze by pak byly nepodepsané. (Kdyby to byl Certum: certifikát
+  platí 1-3 roky a podepisuje všechny verze v té době; po vypršení se obnoví.)
+
+MOBIL, macOS, LINUX - NÁVRH (soubor navrh-mobil-mac-linux.md vedle ZIPu)
+- macOS a Linux: appka je Electron, takže okno, knihovna, úpravy, nahrávání i kamera jdou
+  převzít beze změny; práce je ve "spodku" (zvuk hry, poznání hry, zkratky, podpis).
+  Linux je nejlevnější (1-2 týdny, bez podpisu, zvuk hry přes PipeWire), macOS 2-3 týdny
+  + Apple účet 99 USD/rok (bez něj se appka ani neotevře) a vlastní pomocník na zvuk hry.
+- Mobil: musí být nová appka (Electron na mobilu neběží). Android umí nahrávat obrazovku
+  na pozadí, plovoucí tlačítko Klip, přední i zadní kameru, ukládání do Galerie - první
+  verze 6-10 týdnů. iOS jen přes rozšíření "Nahrávání obrazovky" (bez tlačítka přes hru,
+  bez kamery přes hru) - 8-12 týdnů. Nejrychlejší krok pro mobil (dny): nahrávat
+  systémový záznam obrazovky a zkrátit + nahrát přes web v mobilu.
+- Doporučené pořadí: web "zkrátit z telefonu" -> Linux -> Android -> macOS -> iOS.
+
+ZKONTROLOVÁNO
+- Appka: build + 206 testů (nové: překryvy a kamera s opravdovým ffmpeg, vlastní poloha
+  a šířka kamery, koš se souborem kamery, nastavení, 14 dní u aktualizací); e2e včetně
+  nového scénáře kamery zvlášť (soubor vedle klipu, zapečení vpravo dole / po přesunu
+  vlevo nahoře, úprava klipu, přehrávač s tažením, koš) a překryvů v editoru; zmenšené
+  vydání (KINE_RELEASE=1) prošlo celým e2e. ZIPy prohledané na klíče a e-maily.
+- Na Windows po vydání zkontroluj ručně (sandbox je Linux): Záznam -> Kamera -> posuvník
+  a přetažení v náhledu; zapnout "Nahrávat kameru zvlášť", uložit klip, v přehrávači
+  kameru přetáhnout, nahrát na Kine a podívat se, že je kamera na novém místě; úpravy ->
+  Překryvy -> GIF.
+
 KINE Clipper 0.11.1: tlačítka Zrušit a Znovu u nahrávání, klipy už nečekají za dlouhým
 videem; Kine: klipy (do 5 minut) mají vlastní limit 10 (dodávka kine-klipy-2026-10-15)
 ==========================================================================================
