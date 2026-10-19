@@ -1,7 +1,8 @@
 /**
  * Test odkazů ke stažení appky do PC podle systému (lib/desktopRelease.ts):
  * Windows / macOS / Linux (AppImage, deb), názvy souborů jako píše
- * electron-builder v repu kine-desktop, rozpoznání systému z User-Agentu.
+ * electron-builder v repu kine-desktop, rozpoznání systému z User-Agentu;
+ * Kine Clipper pro Android (APK z repa kine-mobile, latest.json).
  *
  * Spustit:  node tests/desktopRelease.test.mjs
  */
@@ -48,6 +49,28 @@ test('systém z User-Agentu: Mac, Linux, jinak Windows; iPhone / Android nejsou 
   assert.equal(R.detectDesktopOs('Mozilla/5.0 (Linux; Android 14; Pixel 8)'), 'windows');
   assert.equal(R.detectDesktopOs(''), 'windows');
   assert.ok(R.isDesktopOs('linux-deb') && !R.isDesktopOs('ios'));
+});
+
+test('Android (0118): APK z plovoucího vydání android-latest v repu kine-mobile; R2 jen když je NEXT_PUBLIC_ANDROID_DOWNLOAD_BASE', () => {
+  // NEXT_PUBLIC_DESKTOP_DOWNLOAD_BASE je nastavené, ale pro Android se schválně nebere (repo kine-mobile nemusí do R2 nahrávat).
+  assert.equal(R.androidDownloadUrl(), 'https://github.com/dezfghzdgz/kine-mobile/releases/download/android-latest/Kine-Clipper.apk');
+  assert.equal(R.androidDownloadBase(), 'https://github.com/dezfghzdgz/kine-mobile/releases/download/android-latest');
+  assert.equal(R.ANDROID_APK_NAME, 'Kine-Clipper.apk');
+});
+
+test('Android: systém z User-Agentu (telefon s Androidem předvybere záložku Android, iPhone zůstává u PC)', () => {
+  assert.equal(R.detectDownloadOs('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/130 Mobile'), 'android');
+  assert.equal(R.detectDownloadOs('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130'), 'linux');
+  assert.equal(R.detectDownloadOs('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'), 'windows');
+  assert.equal(R.detectDownloadOs('Mozilla/5.0 (Windows NT 10.0; Win64; x64)'), 'windows');
+});
+
+test('Android: latest.json od build.yml (verze, datum, velikost); rozbité nebo prázdné = null', () => {
+  const r = R.parseAndroidLatest('{ "version": "0.1.0", "versionCode": 1, "publishedAt": "2026-10-19T10:00:00Z", "sizeBytes": 2345678, "file": "Kine-Clipper.apk", "signed": false }');
+  assert.deepEqual(r, { version: '0.1.0', publishedAt: '2026-10-19T10:00:00Z', sizeBytes: 2345678 });
+  assert.equal(R.parseAndroidLatest('{ "version": "" }'), null);
+  assert.equal(R.parseAndroidLatest('not json'), null);
+  assert.deepEqual(R.parseAndroidLatest('{ "version": "0.2.0", "sizeBytes": "x" }'), { version: '0.2.0', publishedAt: null, sizeBytes: null });
 });
 
 console.log(`\n${prosly} prošlo, ${padly} padlo`);

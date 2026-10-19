@@ -457,9 +457,9 @@ export default function Sidebar() {
               {t('donateSidebarLabel')}
             </Link>
           )}
-          {/* Appka do PC dává smysl jen na počítači - na telefonu se schová (CSS).
-              Uvnitř appky (režim "Kine + klipy") místo toho odkaz na klipy v ní
-              (kine://…, appka si ho převezme). */}
+          {/* Appky ke stažení: do PC i Kine Clipper pro Android (od 0118 i na telefonu -
+              stránka /download předvybere Android). Uvnitř appky (režim "Kine + klipy")
+              místo toho odkaz na klipy v ní (kine://…, appka si ho převezme). */}
           {inDesktopApp ? (
             <a href="kine://open?tab=clips" className="sidebar-link" onClick={closeMobileNav}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -469,7 +469,7 @@ export default function Sidebar() {
               {t('desktopClipsLink')}
             </a>
           ) : (
-            <Link href="/download" className="sidebar-link sidebar-desktop-only" onClick={closeMobileNav}>
+            <Link href="/download" className="sidebar-link" onClick={closeMobileNav}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <rect x="2" y="3" width="20" height="14" rx="2" />
                 <path d="M8 21h8M12 17v4" />

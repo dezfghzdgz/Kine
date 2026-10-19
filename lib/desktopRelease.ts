@@ -70,6 +70,73 @@ export function desktopDownloads(): Record<DesktopVariant, Record<DesktopOs, str
 }
 
 /**
+ * Kine Clipper pro Android (repo kine-mobile): APK mimo Google Play. Workflow
+ * build.yml ho při každém pushi na main nahraje do „plovoucího“ vydání
+ * `android-latest` na GitHubu (soubor Kine-Clipper.apk + latest.json s verzí)
+ * a - když jsou v tom repu klíče k R2 - i do našeho úložiště do složky android/.
+ *
+ * NEXT_PUBLIC_MOBILE_REPO            "vlastnik/kine-mobile" na GitHubu (výchozí zdroj)
+ * NEXT_PUBLIC_ANDROID_DOWNLOAD_BASE  složka s APK a latest.json v našem úložišti, např.
+ *                                    https://pub-xxxx.r2.dev/android - jen když build.yml
+ *                                    v kine-mobile do R2 opravdu nahrává (jinak by odkaz mířil
+ *                                    do prázdna; proto se nebere DESKTOP_DOWNLOAD_BASE automaticky)
+ * NEXT_PUBLIC_ANDROID_DOWNLOAD_URL   přebije všechno - přímá adresa APK (latest.json se hledá vedle)
+ */
+export const MOBILE_REPO = process.env.NEXT_PUBLIC_MOBILE_REPO || 'dezfghzdgz/kine-mobile';
+export const ANDROID_APK_NAME = 'Kine-Clipper.apk';
+export const ANDROID_RELEASE_TAG = 'android-latest';
+
+/** Složka, ve které leží APK i latest.json (bez lomítka na konci). */
+export function androidDownloadBase(): string {
+  if (process.env.NEXT_PUBLIC_ANDROID_DOWNLOAD_URL) return process.env.NEXT_PUBLIC_ANDROID_DOWNLOAD_URL.replace(/\/[^/]*$/, '');
+  const base = (process.env.NEXT_PUBLIC_ANDROID_DOWNLOAD_BASE || '').replace(/\/+$/, '');
+  if (base) return base;
+  return `https://github.com/${MOBILE_REPO}/releases/download/${ANDROID_RELEASE_TAG}`;
+}
+
+export function androidDownloadUrl(): string {
+  if (process.env.NEXT_PUBLIC_ANDROID_DOWNLOAD_URL) return process.env.NEXT_PUBLIC_ANDROID_DOWNLOAD_URL;
+  return `${androidDownloadBase()}/${ANDROID_APK_NAME}`;
+}
+
+/** Systém podle User-Agentu včetně telefonu (stránka /download předvybere záložku Android). */
+export function detectDownloadOs(userAgent: string): DesktopOs | 'android' {
+  if (/Android/i.test(userAgent || '')) return 'android';
+  return detectDesktopOs(userAgent);
+}
+
+/**
+ * Verze APK z latest.json vedle něj (píše ho build.yml v kine-mobile):
+ *   { "version": "0.1.0", "versionCode": 1, "publishedAt": "2026-10-19T10:00:00Z", "sizeBytes": 2345678, "file": "Kine-Clipper.apk" }
+ * Null, když soubor ještě není (první sestavení neproběhlo) nebo nejde přečíst.
+ */
+export async function fetchAndroidRelease(): Promise<DesktopRelease | null> {
+  try {
+    const res = await fetch(`${androidDownloadBase()}/latest.json`, { next: { revalidate: 3600 }, headers: { 'User-Agent': 'kine-web' } });
+    if (!res.ok) return null;
+    return parseAndroidLatest(await res.text());
+  } catch {
+    return null;
+  }
+}
+
+export function parseAndroidLatest(text: string): DesktopRelease | null {
+  try {
+    const data = JSON.parse(text);
+    const version = typeof data?.version === 'string' && data.version.trim() ? data.version.trim() : null;
+    if (!version) return null;
+    const size = Number(data.sizeBytes);
+    return {
+      version,
+      publishedAt: typeof data.publishedAt === 'string' ? data.publishedAt : null,
+      sizeBytes: Number.isFinite(size) && size > 0 ? size : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Starší rozložení úložiště (do appky 0.4.0): instalátory v kořeni, ne ve
  * složkách full/ a clipper/. Bere se, když nová složka ještě neexistuje
  * (web nasazený dřív než první vydání 0.5.0). Null bez úložiště.

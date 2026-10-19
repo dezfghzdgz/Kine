@@ -1765,7 +1765,18 @@ export const cs = {
   downloadRequirementsLinux: 'Linux 64-bit (Ubuntu 22.04+, Fedora, Mint, Steam Deck v režimu plochy). Zdarma.',
   downloadMacUnsigned: 'Verze pro Mac zatím nemá podpis Apple, takže ji macOS při prvním otevření zastaví. Otevři Nastavení systému → Soukromí a zabezpečení, dole klikni na „Přesto otevřít“ a potvrď. Pak povol appce Záznam obrazovky (tamtéž) a spusť ji znovu - jinak jsou klipy černé. Aktualizace zatím stahuješ ručně odsud.',
   downloadLinuxNote: 'AppImage: po stažení povol spuštění (pravé tlačítko → Vlastnosti → Spustitelný, nebo chmod +x) a otevři - aktualizuje se pak sám. Balíček .deb nainstaluješ dvojklikem; aktualizace stáhneš odsud. Zvuk hry se bere ze vstupu „Monitor of …“ (PipeWire / PulseAudio), na Waylandu se systém jednou zeptá, kterou obrazovku nahrávat.',
-
+  downloadAndroidTitle: 'Kine Clipper pro Android',
+  downloadAndroidText: 'Klipy z her na telefonu: nahrává obrazovku i kameru, klip uložíš klepnutím na bublinu a pošleš na Kine.',
+  downloadAndroidButton: 'Stáhnout APK',
+  downloadAndroidFeature1: 'Nahrává obrazovku telefonu (hru) a k tomu kameru v rohu - kulatou, nebo hranatou',
+  downloadAndroidFeature2: 'Posledních 15–120 sekund uložíš jedním klepnutím na plovoucí bublinu',
+  downloadAndroidFeature3: 'Klipy se nahrají na Kine - přihlásíš se přes web, stejný účet jako tady',
+  downloadRequirementsAndroid: 'Android 10 a novější. Zdarma.',
+  downloadAndroidBadge: 'Testovací verze',
+  downloadAndroidNote: 'Appka zatím není v Google Play - instaluje se ze souboru APK. Po stažení ho otevři; když se Android zeptá, povol instalaci z tohoto zdroje (prohlížeče). Při prvním spuštění appka požádá o nahrávání obrazovky, mikrofon, kameru a „zobrazit přes jiné aplikace“ (bublina). Aktualizace zatím stahuješ odsud. Verze pro iPhone se připravuje.',
+  downloadAndroidStep1: 'Stáhni APK a otevři ho. Když se Android zeptá, povol instalaci z tohoto zdroje.',
+  downloadAndroidStep2: 'V appce se přihlas (otevře se web Kine, potvrdíš a vrátí tě zpátky) a zapni bublinu. Vyber délku klipu, kameru a její roh.',
+  downloadAndroidStep3: 'Klepni na Start, potvrď nahrávání obrazovky a hraj. Klepnutí na bublinu uloží posledních pár desítek sekund; klipy se pak nahrají na Kine.',
 } as const;
 
 export type DictKey = keyof typeof cs;

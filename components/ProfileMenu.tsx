@@ -119,7 +119,7 @@ export default function ProfileMenu({
             <ItemLabel icon="chart">{t('channelStats')}</ItemLabel>
           </Link>
 
-          <Link href="/download" className="profile-dropdown-item sidebar-desktop-only" onClick={() => setOpen(false)}>
+          <Link href="/download" className="profile-dropdown-item" onClick={() => setOpen(false)}>
             <ItemLabel icon="desktop">{t('desktopAppLink')}</ItemLabel>
           </Link>
 
@@ -153,7 +153,7 @@ export default function ProfileMenu({
             </button>
             {langMenuOpen && (
               <div
-                className="profile-dropdown"
+                className="profile-dropdown profile-dropdown-lang"
                 style={{ position: 'absolute', top: 0, left: 'calc(100% + 8px)', bottom: 'auto', width: 170, maxHeight: 260, overflowY: 'auto' }}
               >
                 {(Object.keys(LANG_NAMES) as Lang[]).map((code) => (

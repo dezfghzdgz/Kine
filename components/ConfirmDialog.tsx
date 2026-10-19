@@ -18,6 +18,7 @@ export default function ConfirmDialog({
   const { t } = useLanguage();
   return (
     <div
+      className="confirm-dialog-backdrop"
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, animation: 'modal-backdrop-fade-in 0.15s ease' }}
       onClick={onCancel}
     >

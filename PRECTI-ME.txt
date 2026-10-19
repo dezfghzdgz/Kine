@@ -1,3 +1,103 @@
+KINE 0.13.1 + web: Clipper - hlavička přehrávače jeden řádek, úpravy s ovládáním POD
+videem a jednou časovou osou, kolečko myši v editoru; web na telefonu (menu, nabídka
+účtu, formulář nahrání, kanál); Kine Clipper pro Android ke stažení na /download
+(dodávka kine-0.13.1-mobil-web-2026-10-19)
+==========================================================================================
+
+Tři malé balíčky: appka 0.13.1 (kine-desktop, jen 2 soubory + README/package.json), web
+(Kine) a kine-mobile (workflow + README). Obojí navazuje na to, co už na GitHubu je
+(0.13.0 a web z 18. 10. tam jsou - viděl jsem to).
+
+POSTUP
+1. Appka: rozbal kine-desktop-0.13.1.zip do kořene repa kine-desktop, nahraj (přetažením),
+   pusť Vydání -> vyjde 0.13.1 pro Windows, Linux i macOS (workflow se nemění). Lidem s
+   0.13.0 se aktualizace nabídne sama (Windows / AppImage), ostatní ji stáhnou z webu.
+2. Web: rozbal kine-web-0.13.1.zip do kořene repa Kine, nahraj. Žádná migrace, žádná nová
+   proměnná (Android se stahuje z GitHubu repa kine-mobile; R2 pro Android je volitelné -
+   viz .env.example NEXT_PUBLIC_ANDROID_DOWNLOAD_BASE). Pořád tam je 7 zbytků ze
+   starších balíčků ke smazání (node zkontroluj-soubory.mjs je vypíše, nebo
+   node zkontroluj-soubory.mjs --uklid je smaže): tests/username.test.mjs,
+   supabase-migration-zarizeni-chyby-jmena.sql, app/tests/playerStart.test.mjs,
+   kine-web-live.patch, CTI-ME.txt, app/admin/live/page.tsx, app/api/admin/live/route.ts.
+3. kine-mobile: na GitHubu otevři .github/workflows/build.yml -> tužka -> smaž obsah ->
+   vlož build.yml (vedle ZIPu) -> Commit. Pak ještě přepiš README.md (z kine-mobile-0118.zip,
+   přetažením). Commit workflow spustí sestavení a to poprvé vytvoří "plovoucí" vydání
+   android-latest se souborem Kine-Clipper.apk - od té chvíle funguje tlačítko
+   "Stáhnout APK" na playkine.com/download (záložka Android). Do té doby web napíše
+   "První verze se právě staví".
+
+KINE CLIPPER / KINE DO PC 0.13.1 (podle tvých tří obrázků)
+- "Řádek nahoře je moc tlustý": byla to hlavička přehrávače - tlačítka "Nahrát na Kine" a
+  "Otevřít v přehrávači systému" se v užším okně (nebo s větším písmem) lámala do dvou
+  řádků a hlavička měla 100 px. Teď je vždycky jeden řádek: tlačítka se nelámou, zkracuje
+  se název klipu; v hodně úzkém okně zůstanou u tlačítek jen ikony (popis v bublině).
+- "Dvě časové osy nad sebou": příčina byla, že se při dlouhém panelu úprav (formát,
+  rychlost, překryvy s GIFy, kamera…) smrskla scéna s videem na 200 px - video z ní
+  přečuhovalo přes hlavičku i přes osu s úchyty a ovládání (play, čas, zvuk) plavalo
+  uprostřed obrazu. Scéna se už nesmrskne. A v úpravách je ovládání POD videem (ne přes
+  obraz), bez vlastního posuvníku - časová osa je jen jedna, ta s oranžovými úchyty;
+  klik nebo tažení po ní posune přehrávání. Mimo úpravy a přes celou obrazovku je
+  ovládání jako dřív (přes obraz, schovává se). Na malém okně je video v úpravách nižší,
+  ať se pod něj vejde víc.
+- "Jsem zamčený dole, kolečko nejede nahoru": okno přehrávače mělo overflow: hidden -
+  kolečkem se rolovat nedalo, ale zaostření pole (hledání GIFů, text překryvu) ho posunulo
+  a zpátky už to nešlo. Teď roluje jen panel úprav (kolečkem i posuvníkem, nahoru i dolů),
+  video s ovládáním zůstává na místě a okno samo se nikdy neposune (overflow: clip).
+- Testy: 208 jednotkových, e2e Kine do PC i Clipper prošly včetně dvou nových kontrol
+  (rozložení úprav: hlavička do 60 px, video celé ve scéně, ovládání pod videem, posuvník
+  schovaný, osa pod ovládáním; skutečné kolečko myši nad panelem dolů a zpátky nahoru).
+
+WEB NA TELEFONU (tvoje 4 obrázky; PC verze beze změny - všechno jen v pravidlech pro
+šířku do 768 px)
+- Boční menu (☰): prosvítalo skrz něj hledání (horní lišta měla vyšší z-index než menu)
+  i spodní lišta, a bylo úzké (180 px). Teď je menu nad vším, 300 px široké, s větším
+  písmem a plnějším pozadím (text stránky skrz něj neprosvítá).
+- Nabídka účtu z menu (Settings, Dark, Language…): "text přes text" měl jednu příčinu -
+  rozostřené sklo (backdrop-filter) na menu dělá z menu "containing block" pro position:
+  fixed, takže se nabídka místo přes obrazovku mačkala do 156 px uvnitř menu (přepínač
+  přes "Dark", "English" přes "Language", nabídka uprostřed místo dole). Sklo je teď na
+  pseudo-prvku vedle, menu samo žádný filtr nemá -> nabídka je spodní list přes celou
+  šířku, neprůhledný, nad menu; jazyk se rozbalí uvnitř listu (ne doprava mimo obraz);
+  potvrzení odhlášení je taky nad menu (dřív by zůstalo schované za ním). Stejnou chybu
+  měl i výběr barvy loga v menu - opraveno tím samým.
+- Nahrání videa: pole na celou šířku karty, popisek nad polem (dřív "Video title" vlevo
+  a pole vedle, Description pod polem), výběr souboru se už nepřelévá přes okraj karty
+  ("Vybrat soubor - není vybrán žádný soubor" bylo širší než obrazovka).
+- Kanál: menší tlačítka (odběr, zvoneček, Block / Shadow ban / Suspend payouts) - vejdou
+  se do jedné až dvou řad místo tří.
+- Ověřeno v Chromiu s telefonním rozlišením 390x844 (přihlášený, admin) i na PC 1280 px:
+  PC obrazovka beze změny.
+
+KINE CLIPPER PRO ANDROID KE STAŽENÍ (web)
+- /download má čtvrtou záložku "Android" (na telefonu s Androidem předvybraná, odkaz na
+  stránku je teď v menu i na telefonu): karta "Kine Clipper pro Android" s odznakem
+  Testovací verze, tlačítko "Stáhnout APK" -> /download/android -> přesměruje na
+  https://github.com/dezfghzdgz/kine-mobile/releases/download/android-latest/Kine-Clipper.apk.
+  Pod kartou upozornění (není v Google Play, povolit instalaci z tohoto zdroje, jaká
+  oprávnění si appka řekne, iPhone se připravuje) a tři kroky "Jak to funguje" pro
+  telefon. Verze / datum / velikost se čtou z latest.json vedle APK (/api/desktop/latest
+  -> android.release). 12 nových textů v 8 jazycích.
+- kine-mobile build.yml: při každém pushi na main (a ručním spuštění) obnoví vydání
+  android-latest (Kine-Clipper.apk = podepsané APK, když máš klíč v secrets, jinak
+  testovací sestavení pod stejným názvem; Kine-Clipper-debug.apk; latest.json). Značka
+  v* udělá navíc pojmenované vydání jako dřív. Když do repa kine-mobile přidáš stejné
+  R2 proměnné jako má kine-desktop (DESKTOP_DOWNLOAD_BASE + R2_*), nahraje APK i do
+  úložiště do složky android/ - pak na Vercelu NEXT_PUBLIC_ANDROID_DOWNLOAD_BASE.
+- Co jsem neověřil: zda ti první sestavení Androidu na GitHubu po opravě workflow prošlo
+  (do Actions nevidím). Kdyby ne, pošli screenshot chyby.
+
+CO ZŮSTÁVÁ Z MINULA
+- Vydání 0.13.0 proběhlo (značky v0.12.0 i v0.13.0 jsou na GitHubu) - jestli mac/linux
+  joby doběhly, vidíš ve Vydání; kdyby něco spadlo, pošli log.
+- 7 zbytků na webu ke smazání (viz bod 2). V kine-desktop jsou taky 4 staré soubory navíc
+  (kine-desktop-live.patch, src/renderer/liveDialog.ts, src/shared/accelerator.ts,
+  src/shared/i18n.ts) - sestavení si je při stavbě samo odklidí (scripts/build.mjs to
+  vypíše jako "úklid"), takže nevadí; smazat je můžeš kdykoli.
+- kine-mobile: .gitignore se přetažením asi nenahrál (skryté soubory) - je v
+  kine-mobile-0118.zip, nahraj ho s README (není nutný, jen ať se do repa nikdy nedostanou
+  sestavené soubory).
+
+
 KINE Clipper 0.13.0: verze pro Linux a macOS, Kine Clipper pro Android (nový repo
 kine-mobile - obrazovka + kamera + bublina + nahrání na Kine), GIFy z Kine v editoru
 klipu, stahování podle systému na webu, kolo optimalizace a zabezpečení

@@ -5760,6 +5760,139 @@ input:focus, textarea:focus, select:focus {
     backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
   }
+
+  /* ---------- Boční panel na telefonu (menu ☰) ----------
+     1) Sklo (rozostření) nesmí být na panelu samotném: backdrop-filter dělá z prvku
+        "containing block" pro position: fixed, takže nabídka účtu a výběr barvy
+        uvnitř se místo přes celou obrazovku mačkaly do 180 px panelu (text přes
+        text, přepínač přes popisek, nabídka uprostřed panelu). Sklo je proto na
+        ::before pevně přes celou výšku; panel sám je průhledný.
+     2) Panel a jeho stín musí být NAD horní lištou (ta má z-index 500 kvůli
+        rozšířenému hledání) i nad spodní lištou - dřív prosvítalo hledání i
+        tlačítka skrz menu.
+     3) Širší (300 px / 84 %), větší písmo - 180 px bylo na prst i na čtení málo. */
+  .mobile-drawer-backdrop {
+    z-index: 560;
+  }
+  .mobile-drawer-backdrop .mobile-drawer-side {
+    --mobile-drawer-w: min(300px, 84vw);
+    width: var(--mobile-drawer-w);
+    z-index: 570;
+    padding: 16px 12px calc(16px + env(safe-area-inset-bottom, 0px));
+    background: transparent;
+    box-shadow: none;
+    border-right: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .mobile-drawer-backdrop .mobile-drawer-side::before {
+    content: '';
+    position: fixed;
+    z-index: -1;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: var(--mobile-drawer-w);
+    /* Plnější než ostatní sklo, ať skrz menu neprosvítá text stránky. */
+    background-color: var(--panel);
+    background-color: color-mix(in srgb, var(--panel) 93%, transparent);
+    background-image: var(--glass-sheen);
+    border-right: 1px solid var(--border);
+    box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  }
+  .mobile-drawer-backdrop .mobile-drawer-side .sidebar-link {
+    font-size: 14px;
+    padding: 10px 12px;
+  }
+  .mobile-drawer-backdrop .mobile-drawer-side .sidebar-logo-row {
+    padding: 2px 6px 6px;
+  }
+
+  /* Nabídka účtu (ProfileMenu) otevřená z panelu: spodní list přes celou šířku,
+     neprůhledný, nad panelem; výběr jazyka se rozbalí uvnitř (ne doprava mimo obraz). */
+  .mobile-drawer-side .profile-dropdown {
+    position: fixed !important;
+    left: 12px !important;
+    right: 12px !important;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+    top: auto !important;
+    width: auto !important;
+    max-height: min(78vh, calc(100dvh - 24px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    z-index: 580 !important;
+    background-color: var(--panel-raised);
+    background-image: var(--glass-sheen);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 0 0 1px var(--glass-line), 0 18px 48px rgba(0, 0, 0, 0.55);
+  }
+  .mobile-drawer-side .profile-dropdown .profile-dropdown-name {
+    max-width: none;
+  }
+  .mobile-drawer-side .profile-dropdown .theme-slider-label {
+    flex: 1;
+    min-width: 0;
+  }
+  .mobile-drawer-side .profile-dropdown .theme-slider-track {
+    flex: none;
+    margin-left: 12px;
+  }
+  .mobile-drawer-side .profile-dropdown .profile-dropdown-value {
+    flex: none;
+    margin-left: 12px;
+    white-space: nowrap;
+  }
+  .mobile-drawer-side .profile-dropdown .pdi-label {
+    min-width: 0;
+  }
+  .mobile-drawer-side .profile-dropdown-lang {
+    position: static !important;
+    width: auto !important;
+    max-height: none !important;
+    margin: 2px 0 6px;
+    padding: 4px;
+    bottom: auto !important;
+    box-shadow: inset 0 0 0 1px var(--glass-line);
+    background-color: var(--panel);
+    background-image: none;
+  }
+  .mobile-drawer-side .brand-color-picker {
+    z-index: 580 !important;
+  }
+  /* Potvrzení odhlášení z nabídky v panelu: nad panelem (jinak zůstane schované za ním). */
+  .mobile-drawer-side .confirm-dialog-backdrop {
+    z-index: 590 !important;
+  }
+
+  /* ---------- Formuláře na telefonu (nahrání videa, přihlášení...) ----------
+     Pole na celou šířku karty a popisek nad polem; výběr souboru se nepřelévá přes
+     okraj karty ("Vybrat soubor - není vybrán žádný soubor" bylo širší než obrazovka). */
+  .form-container .panel label:not([style*="display"]) {
+    display: block;
+    margin-bottom: 6px;
+  }
+  .form-container input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  .form-container textarea,
+  .form-container select {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .form-container input[type="file"] {
+    display: block;
+    padding: 10px;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .form-container textarea {
+    resize: vertical;
+  }
 }
 
 /* Mini přehrávač: sklo jen na okraji (rám), obraz zůstává. */
@@ -6028,6 +6161,8 @@ input:focus, textarea:focus, select:focus {
 .dl-os-btn { font-size: 14px; padding: 8px 16px; }
 .dl-os-format { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); margin-left: 4px; }
 .dl-os-format input { width: 15px; height: 15px; margin: 0; accent-color: var(--brand); }
+/* Android: jedna karta (Kine Clipper jako APK), ne dvě vedle sebe. */
+.dl-apps-one { grid-template-columns: minmax(0, 520px); }
 
 /* ---- Předplatné /plus: nabídka pro zákazníka (app/plus/page.tsx) ---- */
 .plus-hero { text-align: center; margin: 6px auto 26px; max-width: 640px; }
@@ -10437,6 +10572,11 @@ html[data-calm="1"] *:not([class*="spin"])::after {
     width: 100%;
     justify-content: flex-start;
     padding-top: 2px;
+  }
+  /* Na telefonu menší tlačítka (odběr, zvoneček, moderace) - vejdou se do jedné až dvou řad. */
+  .channel-actions button {
+    padding: 9px 12px;
+    font-size: 13px;
   }
 }
 
