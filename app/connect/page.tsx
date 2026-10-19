@@ -21,14 +21,16 @@ function ConnectInner() {
   const params = useSearchParams();
   const port = Number(params.get('port'));
   const state = params.get('state') ?? '';
-  const valid = Number.isInteger(port) && port >= 1024 && port <= 65535 && /^[0-9a-f]{16,64}$/i.test(state);
+  // Mobilní appka (Android): žádný server na 127.0.0.1 - token jde rovnou odkazem kine://link (appka ho má zaregistrovaný).
+  const mobile = params.get('app') === 'mobile';
+  const valid = (mobile || (Number.isInteger(port) && port >= 1024 && port <= 65535)) && /^[0-9a-f]{16,64}$/i.test(state);
 
   const [session, setSession] = useState<{ token: string; username: string } | null | undefined>(undefined);
   const [phase, setPhase] = useState<'idle' | 'working' | 'done' | 'fallback' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [deepLink, setDeepLink] = useState<string | null>(null);
 
-  const nextUrl = useMemo(() => `/login?next=${encodeURIComponent(`/connect?port=${port}&state=${state}`)}`, [port, state]);
+  const nextUrl = useMemo(() => `/login?next=${encodeURIComponent(mobile ? `/connect?app=mobile&state=${state}` : `/connect?port=${port}&state=${state}`)}`, [port, state, mobile]);
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
@@ -53,6 +55,12 @@ function ConnectInner() {
       const tokenHash: string = body.token_hash;
       const link = `kine://link?th=${encodeURIComponent(tokenHash)}&state=${encodeURIComponent(state)}`;
       setDeepLink(link);
+      if (mobile) {
+        // Telefon: rovnou do appky odkazem (a tlačítko, kdyby prohlížeč odkaz sám neotevřel).
+        setPhase('fallback');
+        window.location.href = link;
+        return;
+      }
 
       // Nejdřív rovnou appce na 127.0.0.1 - bez dalšího klikání.
       try {

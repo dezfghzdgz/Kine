@@ -28,6 +28,13 @@ test('hlavička X-Kine-App (appka od 0.11.0)', () => {
   assert.equal(D.kineAppFrom(h({ 'x-kine-app': 'nesmysl' , 'user-agent': 'Mozilla/5.0' })), null, 'neplatná hlavička z prohlížeče = prohlížeč');
 });
 
+test('mobilní appka (android/…) má vlastní minimum ANDROID_MIN_VERSION', () => {
+  assert.deepEqual(D.kineAppFrom(h({ 'x-kine-app': 'android/0.1.0', 'user-agent': 'Dalvik/2.1.0 (Linux; U; Android 14)' })), { variant: 'android', version: '0.1.0', legacy: false });
+  assert.equal(D.androidMinVersion({}), null, 'bez proměnné se mobil nehlídá');
+  assert.equal(D.androidMinVersion({ ANDROID_MIN_VERSION: '0.2.0' }), '0.2.0');
+  assert.equal(D.androidMinVersion({ ANDROID_MIN_VERSION: 'nesmysl' }), null);
+});
+
 test('stará appka bez hlavičky (Node.js) vs. prohlížeč', () => {
   assert.deepEqual(D.kineAppFrom(h({ 'user-agent': 'node' })), { variant: null, version: null, legacy: true });
   assert.deepEqual(D.kineAppFrom(h({ 'user-agent': 'undici' })), { variant: null, version: null, legacy: true });

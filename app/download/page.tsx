@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
-import { DESKTOP_APP_NAMES, isInDesktopApp } from '@/lib/desktopRelease';
+import { DESKTOP_APP_NAMES, DESKTOP_FILES, detectDesktopOs, isInDesktopApp, type DesktopOs } from '@/lib/desktopRelease';
 
 /**
  * Stránka ke stažení appek do PC.
@@ -50,9 +50,14 @@ export default function DownloadPage() {
   const [release, setRelease] = useState<Release | undefined>(undefined);
   const [clipperRelease, setClipperRelease] = useState<Release | undefined>(undefined);
   const [inApp, setInApp] = useState(false);
+  // Systém: předvybraný podle prohlížeče, přepínatelný (Windows / macOS / Linux).
+  const [os, setOs] = useState<'windows' | 'mac' | 'linux'>('windows');
+  const [linuxDeb, setLinuxDeb] = useState(false);
 
   useEffect(() => {
     setInApp(isInDesktopApp());
+    const detected = detectDesktopOs(navigator.userAgent);
+    setOs(detected === 'linux-deb' ? 'linux' : detected);
     fetch('/api/desktop/latest')
       .then((r) => r.json())
       .then((body) => {
@@ -76,6 +81,16 @@ export default function DownloadPage() {
           .filter(Boolean)
           .join(' · ')
       : null;
+
+  /** Odkaz ke stažení pro vybraný systém (přesměrování na soubor v úložišti). */
+  const downloadHref = (variant: 'full' | 'clipper') => {
+    const q = variant === 'clipper' ? 'variant=clipper' : '';
+    const path = os === 'mac' ? '/download/mac' : os === 'linux' ? '/download/linux' : '/download/windows';
+    const params = [q, os === 'linux' && linuxDeb ? 'format=deb' : ''].filter(Boolean).join('&');
+    return params ? `${path}?${params}` : path;
+  };
+  const fileOs: DesktopOs = os === 'linux' && linuxDeb ? 'linux-deb' : os;
+  const requirements = os === 'mac' ? t('downloadRequirementsMac') : os === 'linux' ? t('downloadRequirementsLinux') : t('downloadRequirements');
 
   const app = (variant: 'full' | 'clipper') => {
     const clipper = variant === 'clipper';
@@ -101,11 +116,11 @@ export default function DownloadPage() {
             </li>
           ))}
         </ul>
-        <a href={clipper ? '/download/windows?variant=clipper' : '/download/windows'} className={`reaction-btn dl-button ${clipper ? '' : 'active'}`}>
+        <a href={downloadHref(variant)} className={`reaction-btn dl-button ${clipper ? '' : 'active'}`}>
           {clipper ? t('downloadClipperButton') : t('downloadFullButton')}
         </a>
         <p className="dl-meta">
-          {DESKTOP_APP_NAMES[variant]}.exe · {t('downloadRequirements')}
+          {DESKTOP_FILES[variant][fileOs]} · {requirements}
           {line ? ` · ${line}` : ''}
         </p>
       </div>
@@ -125,6 +140,19 @@ export default function DownloadPage() {
         </div>
       ) : (
         <>
+          {/* Systém: Windows / macOS / Linux (AppImage nebo deb) - stejná appka, jiný soubor. */}
+          <div className="dl-os" role="tablist" aria-label={t('downloadOsTitle')}>
+            {(['windows', 'mac', 'linux'] as const).map((o) => (
+              <button key={o} type="button" role="tab" aria-selected={os === o} className={`reaction-btn dl-os-btn ${os === o ? 'active' : ''}`} onClick={() => setOs(o)}>
+                {o === 'windows' ? 'Windows' : o === 'mac' ? 'macOS' : 'Linux'}
+              </button>
+            ))}
+            {os === 'linux' && (
+              <label className="dl-os-format">
+                <input type="checkbox" checked={linuxDeb} onChange={(e) => setLinuxDeb(e.target.checked)} /> {t('downloadLinuxDeb')}
+              </label>
+            )}
+          </div>
           <p className="panel-heading" style={{ marginBottom: 10 }}>{t('downloadChooseTitle')}</p>
           <div className="dl-apps">
             {app('full')}
@@ -138,9 +166,9 @@ export default function DownloadPage() {
               <path d="M12 9v4M12 16.5v.5" />
             </svg>
             <span>
-              {t('downloadUnsigned')}
+              {os === 'mac' ? t('downloadMacUnsigned') : os === 'linux' ? t('downloadLinuxNote') : t('downloadUnsigned')}
               {/* Windows 11 Inteligentní řízení aplikací (Smart App Control): nepodepsaný instalátor zablokuje celý nebo jeho část. */}
-              <span className="dl-note-sac">{t('downloadSmartAppControl')}</span>
+              {os === 'windows' && <span className="dl-note-sac">{t('downloadSmartAppControl')}</span>}
             </span>
           </div>
         </>

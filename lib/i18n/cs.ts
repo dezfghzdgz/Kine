@@ -1759,6 +1759,13 @@ export const cs = {
   signupCheckEmailTitle: 'Zkontroluj e-mail',
   signupCheckEmailText: 'Na {email} jsme poslali odkaz pro potvrzení účtu. Klikni na něj - pak tě Kine rovnou přihlásí. Nic nepřišlo? Mrkni do spamu.',
   loginEmailNotConfirmed: 'E-mail ještě není potvrzený - klikni na odkaz, který ti přišel po registraci (mrkni i do spamu).',
+  downloadOsTitle: 'Systém',
+  downloadLinuxDeb: 'balíček .deb místo AppImage (Ubuntu, Mint, Debian)',
+  downloadRequirementsMac: 'macOS 12 a novější, Intel i Apple Silicon. Zdarma.',
+  downloadRequirementsLinux: 'Linux 64-bit (Ubuntu 22.04+, Fedora, Mint, Steam Deck v režimu plochy). Zdarma.',
+  downloadMacUnsigned: 'Verze pro Mac zatím nemá podpis Apple, takže ji macOS při prvním otevření zastaví. Otevři Nastavení systému → Soukromí a zabezpečení, dole klikni na „Přesto otevřít“ a potvrď. Pak povol appce Záznam obrazovky (tamtéž) a spusť ji znovu - jinak jsou klipy černé. Aktualizace zatím stahuješ ručně odsud.',
+  downloadLinuxNote: 'AppImage: po stažení povol spuštění (pravé tlačítko → Vlastnosti → Spustitelný, nebo chmod +x) a otevři - aktualizuje se pak sám. Balíček .deb nainstaluješ dvojklikem; aktualizace stáhneš odsud. Zvuk hry se bere ze vstupu „Monitor of …“ (PipeWire / PulseAudio), na Waylandu se systém jednou zeptá, kterou obrazovku nahrávat.',
+
 } as const;
 
 export type DictKey = keyof typeof cs;

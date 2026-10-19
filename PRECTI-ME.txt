@@ -1,3 +1,109 @@
+KINE Clipper 0.13.0: verze pro Linux a macOS, Kine Clipper pro Android (nový repo
+kine-mobile - obrazovka + kamera + bublina + nahrání na Kine), GIFy z Kine v editoru
+klipu, stahování podle systému na webu, kolo optimalizace a zabezpečení
+(dodávka kine-klipper-0.13-2026-10-18)
+==========================================================================================
+
+Tři věci: appka do PC 0.13.0 (kine-desktop), web (Kine) a NOVÝ repo kine-mobile (Android).
+Předchozí dodávku 0.12.0 jsi možná ještě nenahrál - nevadí, ZIP appky obsahuje všechno,
+co se liší od GitHubu (0.12.0 i 0.13.0 dohromady).
+
+POSTUP
+1. Appka do PC: rozbal kine-desktop-0.13.0.zip do kořene repa kine-desktop a přepiš,
+   nahraj (přetažením).
+2. Workflow: .github/workflows/release.yml vlož ručně (soubor release.yml vedle ZIPu):
+   na GitHubu otevři .github/workflows/release.yml -> tužka -> smaž obsah -> vlož -> Commit.
+   Je to tvoje verze z GitHubu + zmenšené sestavení + mazání starých vydání (0.12.0) + dva
+   nové joby "linux" a "mac" (0.13.0). Bez toho Vydání vydá jen Windows.
+3. Pusť Vydání. Windows jako dřív; pak doběhnou joby Linux (AppImage + deb) a macOS
+   (dmg + zip) - všechno do stejného vydání na GitHubu a do R2 (full/, clipper/).
+   macOS job běží na macOS runneru GitHubu (zdarma v limitu Actions, počítá se 10x).
+4. Web: rozbal kine-web-0.13.zip do kořene repa Kine, nahraj, pusť
+   node zkontroluj-soubory.mjs. Žádná migrace. Ve Vercelu přidej proměnnou GIPHY_API_KEY
+   (stejná hodnota jako NEXT_PUBLIC_GIPHY_API_KEY - bez ní se vezme ta veřejná, takže to
+   funguje i bez přidání). Těch 7 zbytků ze starších balíčků pořád čeká na smazání
+   (zkontroluj-soubory to vypíše).
+5. Android: na GitHubu založ nový repo "kine-mobile" (veřejný nebo soukromý, prázdný, bez
+   README), rozbal kine-mobile-0.1.0.zip a nahraj obsah přetažením (složky app, build.gradle.kts,
+   settings.gradle.kts, gradle.properties, README.md, .gitignore). Pak ručně přidej
+   .github/workflows/build.yml (soubor build.yml vedle ZIPu: Add file -> Create new file ->
+   název ".github/workflows/build.yml" -> vložit -> Commit). Actions pak postaví testovací
+   APK (Artifacts -> Kine-Clipper-debug-apk). Stáhni do telefonu, nainstaluj (povolit
+   neznámé zdroje), přihlas se přes Kine. Podrobný postup a co dělat, když je kamera na
+   boku, je v README repa.
+
+LINUX A macOS (appka do PC)
+- Stejná appka, stejný kód. Linux: Kine-Linux.AppImage (jeden soubor, aktualizuje se
+  sám) a Kine-Linux.deb (Ubuntu / Mint / Debian); Kine Clipper má Kine-Clipper-Linux.*.
+  macOS: Kine-Mac.dmg (Intel i Apple Silicon v jednom), Kine-Clipper-Mac.dmg.
+- Web /download má přepínač Windows / macOS / Linux (předvybere podle prohlížeče) a
+  odkazy /download/mac, /download/linux (?format=deb). Appky si verzi zjišťují z
+  /api/desktop/latest, které teď vrací odkazy pro všechny systémy.
+- macOS je BEZ podpisu Apple (Developer účet 99 USD/rok zatím nemáš): při prvním otevření
+  macOS appku zastaví -> Nastavení systému -> Soukromí a zabezpečení -> dole "Přesto
+  otevřít". Pak musí hráč povolit Záznam obrazovky (appka to po startu hlídá a otevře
+  nastavení systému sama). Aktualizace na macOS ručně - appka řekne, že je nová verze, a
+  nabídne stažení z Kine (electron-updater nepodepsanou appku nevymění). Až bude Apple
+  účet, stačí podpis + notarizace ve workflow a aktualizace pojedou samy.
+- Zvuk hry: Windows má loopback; Linux ho má jako vstup "Monitor of …" (PipeWire /
+  PulseAudio) - appka si ho vezme sama; macOS žádný loopback nemá - hráč si nainstaluje
+  zdarma BlackHole a appka ho pak bere jako zvuk hry. V obou případech nastavení přesně
+  řekne, co udělat, když to chybí.
+- Linux s Waylandem: systém se jednou zeptá, kterou obrazovku nahrávat (PipeWire portál).
+  Hry přes Steam / Proton appka pozná (Steam i procesy *.exe).
+- Otestováno tady: Linux AppImage se sestavil (160 MB) a zabalená appka prošla celým
+  e2e testem (klipy, přehrávač, úpravy, živě…). macOS sestavení se otestuje až ve
+  Vydání na GitHubu - do verze 0.13.0 jsem ho z Linuxu spustit nemohl; kdyby mac job
+  spadl, pošli mi log z Actions.
+
+ANDROID: KINE CLIPPER PRO TELEFON (repo kine-mobile, verze 0.1.0 - první testovací)
+- Měl jsi pravdu: na Androidu jde nahrávat obrazovku jiné appky na pozadí a k tomu kameru
+  i mikrofon. Appka drží posledních N sekund (15-120 s) obrazovky se zvukem hry a
+  mikrofonem, kamera (přední / zadní, velikost, roh, kruh / obdélník, zrcadlo) je
+  v obraze jako na PC, plovoucí bublina přes hru = Klip (nebo tlačítko v oznámení).
+  Klip jde do Galerie (Movies/Kine) a do appky; Nahrát -> na Kine pod tvým účtem
+  (stejné API, stejné limity jako appka do PC; viditelnost výchozí Soukromé, dá se
+  změnit). Přihlášení: tlačítko otevře Kine v prohlížeči, jedno klepnutí, hotovo.
+- Bez knihoven (jen co má Android v sobě), APK staví GitHub Actions. Lokálně jsem
+  zkontroloval, že se celý kód přeloží proti Androidu 14 - spustit ho tady nejde (žádný
+  telefon ani emulátor), takže první verze je opravdu testovací: čekám chyby typu
+  "kamera je na boku" (na to je v nastavení Otočení kamery) nebo divný zvuk na
+  konkrétním telefonu. Pošli deník (tlačítko Poslat deník dole v appce) a opravím.
+- Co zatím neumí: otočení telefonu během nahrávání (nahrává v orientaci, ve které se
+  spustilo - spouštěj až v hře na šířku), úpravy klipu v telefonu (zkrácení, text,
+  překryvy - zatím jen PC / web), Google Play (na něj je potřeba podepsané APK - návod
+  na klíč v README; 25 USD jednorázově).
+- iPhone: zatím ne. Nahrávání jiné appky jde jen přes systémové Nahrávání obrazovky s
+  rozšířením (jiný projekt, Mac + Apple účet), bez kamery přes hru - viz minulý návrh.
+- Web k tomu: /connect?app=mobile (přihlášení přes odkaz kine://link), hlavička
+  X-Kine-App: android/<verze>; starou verzi telefonu můžeš zablokovat proměnnou
+  ANDROID_MIN_VERSION ve Vercelu (bez ní se mobil nehlídá).
+
+GIFY V EDITORU KLIPU (appka do PC)
+- Tlačítko GIF v Překryvech teď hledá GIFy ze stejného zdroje jako Kine (Giphy) - přes
+  server Kine (/api/gifs/search, jen pro přihlášené, 60 hledání za minutu, klíč Giphy
+  zůstává na serveru). Výběr GIF stáhne do appky a položí do klipu; "Vlastní soubor"
+  zůstává. Je tam "Powered by GIPHY" (Giphy to vyžaduje).
+- "Od kdy do kdy": to už má 0.12.0 - u každého překryvu je "Celou dobu" nebo od - do s
+  tlačítky Od teď / Do teď podle polohy přehrávání. Ty jsi zatím viděl 0.11.x, kde byl
+  text celou dobu; po vydání 0.12/0.13 to uvidíš.
+
+OPTIMALIZACE A ZABEZPEČENÍ (tohle kolo)
+- GIFy: klíč Giphy jen na serveru, jen přihlášení, limit; appka GIF bere jen z giphy.com,
+  do 15 MB, kontroluje, že je to opravdu GIF, a nechává si posledních 40.
+- Android: účet a nahrávání jen na oficiální Kine (jako appka do PC), tokeny v soukromém
+  úložišti appky, hlavička s verzí + ANDROID_MIN_VERSION.
+- Appka do PC: kopie klipu s kamerou zvlášť (překódování při nahrání) běží s nižší
+  prioritou, ať hra ani přehrávání neseká; kopie se pamatuje, dokud se kamera neposune.
+- Web: stahování podle systému jen na náš R2 / GitHub (žádná adresa od uživatele),
+  /api/desktop/latest a výsledky Giphy se cachují (méně dotazů).
+
+ZKONTROLOVÁNO
+- Appka: build + 208 testů; e2e všech 4 variant na 0.13.0 (viz zpráva), zabalená Linux
+  appka (AppImage) prošla celým e2e; simulace nahrání ZIPu na čistý GitHub (build + testy).
+- Web: tsc, build, testy (padá jen tests/username.test.mjs - zbytek ke smazání).
+- Android: překlad všech souborů proti Androidu 14 (kotlinc + android.jar).
+
 KINE Clipper 0.12.0: překryvy v úpravách klipu (text, vlastní obrázky, GIFy), kamera
 podle sebe (posuvník velikosti, přetažení kamkoli) a kamera zvlášť (posouvat i po
 uložení klipu), aktualizace samy do 14 dní, ke stažení jen poslední verze; odpovědi:

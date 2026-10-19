@@ -1753,4 +1753,10 @@ export const sk: Record<DictKey, string> = {
   signupCheckEmailTitle: 'Skontroluj e-mail',
   signupCheckEmailText: 'Na {email} sme poslali odkaz na potvrdenie účtu. Klikni naň - potom ťa Kine rovno prihlási. Nič neprišlo? Pozri sa do spamu.',
   loginEmailNotConfirmed: 'E-mail ešte nie je potvrdený - klikni na odkaz, ktorý ti prišiel po registrácii (pozri sa aj do spamu).',
+  downloadOsTitle: 'Systém',
+  downloadLinuxDeb: 'balík .deb namiesto AppImage (Ubuntu, Mint, Debian)',
+  downloadRequirementsMac: 'macOS 12 a novší, Intel aj Apple Silicon. Zadarmo.',
+  downloadRequirementsLinux: 'Linux 64-bit (Ubuntu 22.04+, Fedora, Mint, Steam Deck v režime plochy). Zadarmo.',
+  downloadMacUnsigned: 'Verzia pre Mac zatiaľ nemá podpis Apple, takže ju macOS pri prvom otvorení zastaví. Otvor Nastavenia systému → Súkromie a bezpečnosť, dole klikni na „Aj tak otvoriť“ a potvrď. Potom povoľ appke Záznam obrazovky (tamtiež) a spusti ju znova - inak sú klipy čierne. Aktualizácie zatiaľ sťahuješ ručne odtiaľto.',
+  downloadLinuxNote: 'AppImage: po stiahnutí povoľ spustenie (pravé tlačidlo → Vlastnosti → Spustiteľný, alebo chmod +x) a otvor - potom sa aktualizuje sám. Balík .deb nainštaluješ dvojklikom; aktualizácie stiahneš odtiaľto. Zvuk hry sa berie zo vstupu „Monitor of …“ (PipeWire / PulseAudio), na Waylande sa systém raz opýta, ktorú obrazovku nahrávať.',
 };

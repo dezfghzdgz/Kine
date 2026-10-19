@@ -1753,4 +1753,10 @@ export const pl: Record<DictKey, string> = {
   signupCheckEmailTitle: 'Sprawdź e-mail',
   signupCheckEmailText: 'Wysłaliśmy link potwierdzający na {email}. Kliknij go, a Kine od razu cię zaloguje. Nic nie przyszło? Sprawdź folder spam.',
   loginEmailNotConfirmed: 'E-mail nie jest jeszcze potwierdzony - kliknij link, który przyszedł po rejestracji (sprawdź też spam).',
+  downloadOsTitle: 'System',
+  downloadLinuxDeb: 'pakiet .deb zamiast AppImage (Ubuntu, Mint, Debian)',
+  downloadRequirementsMac: 'macOS 12 lub nowszy, Intel i Apple Silicon. Za darmo.',
+  downloadRequirementsLinux: 'Linux 64-bit (Ubuntu 22.04+, Fedora, Mint, Steam Deck w trybie pulpitu). Za darmo.',
+  downloadMacUnsigned: 'Wersja na Maca nie ma jeszcze podpisu Apple, więc macOS zatrzyma ją przy pierwszym otwarciu. Otwórz Ustawienia systemowe → Prywatność i ochrona, na dole kliknij „Otwórz mimo to” i potwierdź. Potem zezwól aplikacji na nagrywanie ekranu (w tym samym miejscu) i uruchom ją ponownie - inaczej klipy będą czarne. Aktualizacje na razie pobierasz ręcznie stąd.',
+  downloadLinuxNote: 'AppImage: po pobraniu zezwól na uruchamianie (prawy przycisk → Właściwości → Wykonywalny albo chmod +x) i otwórz - potem aktualizuje się sam. Pakiet .deb instalujesz dwuklikiem; aktualizacje pobierasz stąd. Dźwięk gry pochodzi z wejścia „Monitor of …” (PipeWire / PulseAudio); na Waylandzie system raz zapyta, który ekran nagrywać.',
 };

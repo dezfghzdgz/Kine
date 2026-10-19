@@ -22,6 +22,9 @@ export const DESKTOP_REPO = process.env.NEXT_PUBLIC_DESKTOP_REPO || 'dezfghzdgz/
 export const DESKTOP_DOWNLOAD_BASE = (process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_BASE || '').replace(/\/+$/, '');
 
 export type DesktopVariant = 'full' | 'clipper';
+/** Systémy, pro které se appka staví (release.yml v repu kine-desktop): Windows (exe), macOS (dmg), Linux (AppImage, deb). */
+export type DesktopOs = 'windows' | 'mac' | 'linux' | 'linux-deb';
+export const DESKTOP_OSES: DesktopOs[] = ['windows', 'mac', 'linux', 'linux-deb'];
 
 export const DESKTOP_INSTALLER_NAMES: Record<DesktopVariant, string> = {
   full: 'Kine-Setup.exe',
@@ -29,17 +32,41 @@ export const DESKTOP_INSTALLER_NAMES: Record<DesktopVariant, string> = {
 };
 export const DESKTOP_INSTALLER_NAME = DESKTOP_INSTALLER_NAMES.full;
 
+/** Soubory podle systému - stejné názvy píše electron-builder (scripts/publish-config.mjs v kine-desktop). */
+export const DESKTOP_FILES: Record<DesktopVariant, Record<DesktopOs, string>> = {
+  full: { windows: 'Kine-Setup.exe', mac: 'Kine-Mac.dmg', linux: 'Kine-Linux.AppImage', 'linux-deb': 'Kine-Linux.deb' },
+  clipper: { windows: 'Kine-Clipper-Setup.exe', mac: 'Kine-Clipper-Mac.dmg', linux: 'Kine-Clipper-Linux.AppImage', 'linux-deb': 'Kine-Clipper-Linux.deb' },
+};
+
 /** Názvy appek, jak se ukazují lidem (nelokalizované - takhle se jmenují i po instalaci). */
 export const DESKTOP_APP_NAMES: Record<DesktopVariant, string> = { full: 'Kine', clipper: 'Kine Clipper' };
 
-export function desktopDownloadUrl(variant: DesktopVariant = 'full'): string {
-  const file = DESKTOP_INSTALLER_NAMES[variant];
+export function isDesktopOs(value: unknown): value is DesktopOs {
+  return typeof value === 'string' && (DESKTOP_OSES as string[]).includes(value);
+}
+
+/** Systém podle User-Agentu prohlížeče (stránka ke stažení předvybere ten správný). */
+export function detectDesktopOs(userAgent: string): DesktopOs {
+  const ua = userAgent || '';
+  if (/Macintosh|Mac OS X/i.test(ua) && !/iPhone|iPad/i.test(ua)) return 'mac';
+  if (/Linux|X11/i.test(ua) && !/Android/i.test(ua)) return 'linux';
+  return 'windows';
+}
+
+export function desktopDownloadUrl(variant: DesktopVariant = 'full', os: DesktopOs = 'windows'): string {
+  const file = DESKTOP_FILES[variant][os] ?? DESKTOP_INSTALLER_NAMES[variant];
   if (process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL) {
-    // Ruční adresa míří na jeden soubor - druhý leží vedle něj.
+    // Ruční adresa míří na jeden soubor - ostatní leží vedle něj.
     return process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL.replace(/[^/]+$/, file);
   }
   if (DESKTOP_DOWNLOAD_BASE) return `${DESKTOP_DOWNLOAD_BASE}/${variant}/${file}`;
   return `https://github.com/${DESKTOP_REPO}/releases/latest/download/${file}`;
+}
+
+/** Odkazy ke stažení pro obě appky a všechny systémy (pro /api/desktop/latest a appku). */
+export function desktopDownloads(): Record<DesktopVariant, Record<DesktopOs, string>> {
+  const forVariant = (variant: DesktopVariant) => Object.fromEntries(DESKTOP_OSES.map((os) => [os, desktopDownloadUrl(variant, os)])) as Record<DesktopOs, string>;
+  return { full: forVariant('full'), clipper: forVariant('clipper') };
 }
 
 /**

@@ -1753,4 +1753,10 @@ export const en: Record<DictKey, string> = {
   signupCheckEmailTitle: 'Check your email',
   signupCheckEmailText: 'We sent a confirmation link to {email}. Click it and Kine will sign you in. Nothing there? Check your spam folder.',
   loginEmailNotConfirmed: 'Your email isn\'t confirmed yet - click the link we sent you after signing up (check spam too).',
+  downloadOsTitle: 'System',
+  downloadLinuxDeb: '.deb package instead of AppImage (Ubuntu, Mint, Debian)',
+  downloadRequirementsMac: 'macOS 12 or newer, Intel and Apple Silicon. Free.',
+  downloadRequirementsLinux: 'Linux 64-bit (Ubuntu 22.04+, Fedora, Mint, Steam Deck in desktop mode). Free.',
+  downloadMacUnsigned: 'The Mac version is not signed by Apple yet, so macOS stops it the first time you open it. Open System Settings → Privacy & Security, click “Open Anyway” at the bottom and confirm. Then allow Screen Recording for the app (same place) and start it again - otherwise clips are black. Updates are downloaded manually from here for now.',
+  downloadLinuxNote: 'AppImage: after downloading, allow it to run (right click → Properties → Executable, or chmod +x) and open it - it then updates itself. The .deb package installs with a double click; updates are downloaded from here. Game audio comes from the “Monitor of …” input (PipeWire / PulseAudio); on Wayland the system asks once which screen to record.',
 };

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchLatestRelease } from './desktopRelease';
-import { compareVersions, desktopMinVersion, isOutdatedApp, kineAppFrom, OUTDATED_APP_MESSAGE } from './desktopClient';
+import { androidMinVersion, compareVersions, desktopMinVersion, isOutdatedApp, kineAppFrom, OUTDATED_APP_MESSAGE } from './desktopClient';
 
 /**
  * Zastaralá appka do PC nesmí nahrávat ani vysílat (lib/desktopClient.ts).
@@ -38,6 +38,12 @@ export async function enforcedDesktopMinVersion(): Promise<string | null> {
 export async function outdatedAppResponse(req: Request): Promise<NextResponse | null> {
   const app = kineAppFrom(req.headers);
   if (!app) return null;
+  if (app.variant === 'android') {
+    // Mobilní appka má vlastní minimum (ANDROID_MIN_VERSION) a žádná "vydaná verze" se nezjišťuje (APK staví GitHub).
+    const minMobile = androidMinVersion(process.env);
+    if (!minMobile || !app.version || compareVersions(app.version, minMobile) >= 0) return null;
+    return NextResponse.json({ error: OUTDATED_APP_MESSAGE, code: 'update-required', minVersion: minMobile }, { status: 426, headers: { 'Cache-Control': 'no-store' } });
+  }
   const min = desktopMinVersion(process.env);
   if (!min) return null;
   // Aktuální appka nemusí čekat na zjišťování vydané verze.

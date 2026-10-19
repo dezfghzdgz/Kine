@@ -1753,4 +1753,10 @@ export const de: Record<DictKey, string> = {
   signupCheckEmailTitle: 'Prüfe deine E-Mails',
   signupCheckEmailText: 'Wir haben einen Bestätigungslink an {email} geschickt. Klick darauf - dann meldet dich Kine direkt an. Nichts angekommen? Schau im Spam-Ordner nach.',
   loginEmailNotConfirmed: 'Deine E-Mail ist noch nicht bestätigt - klick auf den Link, den wir dir nach der Registrierung geschickt haben (schau auch im Spam nach).',
+  downloadOsTitle: 'System',
+  downloadLinuxDeb: '.deb-Paket statt AppImage (Ubuntu, Mint, Debian)',
+  downloadRequirementsMac: 'macOS 12 oder neuer, Intel und Apple Silicon. Kostenlos.',
+  downloadRequirementsLinux: 'Linux 64-Bit (Ubuntu 22.04+, Fedora, Mint, Steam Deck im Desktop-Modus). Kostenlos.',
+  downloadMacUnsigned: 'Die Mac-Version ist noch nicht von Apple signiert, deshalb stoppt macOS sie beim ersten Öffnen. Öffne Systemeinstellungen → Datenschutz & Sicherheit, klicke unten auf „Dennoch öffnen“ und bestätige. Erlaube der App dann die Bildschirmaufnahme (an derselben Stelle) und starte sie neu - sonst sind die Clips schwarz. Updates lädst du vorerst manuell hier herunter.',
+  downloadLinuxNote: 'AppImage: nach dem Download ausführbar machen (Rechtsklick → Eigenschaften → Ausführbar, oder chmod +x) und öffnen - danach aktualisiert es sich selbst. Das .deb-Paket wird per Doppelklick installiert; Updates lädst du hier herunter. Der Spielton kommt vom Eingang „Monitor of …“ (PipeWire / PulseAudio); unter Wayland fragt das System einmal, welcher Bildschirm aufgenommen werden soll.',
 };

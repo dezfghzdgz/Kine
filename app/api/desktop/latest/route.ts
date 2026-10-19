@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchLatestRelease, desktopDownloadUrl, DESKTOP_DOWNLOAD_BASE } from '@/lib/desktopRelease';
+import { fetchLatestRelease, desktopDownloadUrl, desktopDownloads, DESKTOP_DOWNLOAD_BASE } from '@/lib/desktopRelease';
 
 /** Verze a datum nejnovějších appek do PC (Kine, Kine Clipper) - pro stránku /download. */
 export const revalidate = 3600;
@@ -14,6 +14,8 @@ export async function GET() {
     clipperUrl: '/download/windows?variant=clipper',
     directUrl: desktopDownloadUrl('full'),
     clipperDirectUrl: desktopDownloadUrl('clipper'),
+    /** Odkazy podle systému: downloads.full.mac, downloads.clipper.linux (AppImage), downloads.full['linux-deb']… */
+    downloads: desktopDownloads(),
     /** Odkud se stahuje: naše úložiště, nebo záložně GitHub. */
     source: DESKTOP_DOWNLOAD_BASE ? 'store' : 'github',
   });

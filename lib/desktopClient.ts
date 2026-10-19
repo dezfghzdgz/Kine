@@ -21,7 +21,8 @@
 export const DEFAULT_DESKTOP_MIN_VERSION = '0.11.0';
 
 export type KineAppInfo = {
-  variant: 'full' | 'clipper' | null;
+  /** full / clipper = appka do PC (Windows, macOS, Linux); android = mobilní Kine Clipper (repo kine-mobile). */
+  variant: 'full' | 'clipper' | 'android' | null;
   version: string | null;
   /** Stará appka bez hlavičky (verze neznámá - před 0.11.0). */
   legacy: boolean;
@@ -29,13 +30,13 @@ export type KineAppInfo = {
 
 type HeaderSource = { get(name: string): string | null };
 
-const APP_HEADER = /^(full|clipper)\/(\d{1,4}\.\d{1,4}\.\d{1,4})$/i;
+const APP_HEADER = /^(full|clipper|android)\/(\d{1,4}\.\d{1,4}\.\d{1,4})$/i;
 
-/** Appka do PC, nebo null (prohlížeč, cokoli jiného). */
+/** Appka do PC nebo do telefonu, nebo null (prohlížeč, cokoli jiného). */
 export function kineAppFrom(headers: HeaderSource): KineAppInfo | null {
   const raw = (headers.get('x-kine-app') ?? '').trim();
   const m = APP_HEADER.exec(raw);
-  if (m) return { variant: m[1].toLowerCase() as 'full' | 'clipper', version: m[2], legacy: false };
+  if (m) return { variant: m[1].toLowerCase() as 'full' | 'clipper' | 'android', version: m[2], legacy: false };
   const ua = (headers.get('user-agent') ?? '').trim();
   const browserish = /Mozilla\//.test(ua) || !!headers.get('sec-fetch-site');
   if (!browserish && /^(node|undici)\b/i.test(ua)) return { variant: null, version: null, legacy: true };
@@ -54,12 +55,18 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-/** Nejstarší povolená verze appky (null = nehlídá se). */
+/** Nejstarší povolená verze appky do PC (null = nehlídá se). */
 export function desktopMinVersion(env: Record<string, string | undefined> = {}): string | null {
   const raw = (env.DESKTOP_MIN_VERSION ?? '').trim();
   if (/^(off|0|none|false)$/i.test(raw)) return null;
   if (/^\d+\.\d+\.\d+$/.test(raw)) return raw;
   return DEFAULT_DESKTOP_MIN_VERSION;
+}
+
+/** Nejstarší povolená verze mobilní appky (ANDROID_MIN_VERSION ve Vercelu); bez ní se mobil nehlídá. */
+export function androidMinVersion(env: Record<string, string | undefined> = {}): string | null {
+  const raw = (env.ANDROID_MIN_VERSION ?? '').trim();
+  return /^\d+\.\d+\.\d+$/.test(raw) ? raw : null;
 }
 
 /**

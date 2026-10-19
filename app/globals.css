@@ -6023,6 +6023,11 @@ input:focus, textarea:focus, select:focus {
 }
 .dl-note svg { flex: none; margin-top: 2px; color: var(--text-faint); }
 .dl-note-sac { display: block; margin-top: 8px; }
+/* Přepínač systému (Windows / macOS / Linux) nad kartami. */
+.dl-os { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 14px; }
+.dl-os-btn { font-size: 14px; padding: 8px 16px; }
+.dl-os-format { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); margin-left: 4px; }
+.dl-os-format input { width: 15px; height: 15px; margin: 0; accent-color: var(--brand); }
 
 /* ---- Předplatné /plus: nabídka pro zákazníka (app/plus/page.tsx) ---- */
 .plus-hero { text-align: center; margin: 6px auto 26px; max-width: 640px; }
