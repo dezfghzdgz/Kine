@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import KineLoader from '@/components/KineLoader';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { authHeaders, cacheableUrl } from '@/lib/authHeaders';
@@ -245,7 +246,7 @@ export default function LivePage() {
       <div className="live-layout">
         <div className="live-main">
           <div className="player-wrap live-player live-connecting" style={{ aspectRatio: '16/9' }} role="status">
-            <span className="player-loading-spinner" aria-hidden="true" />
+            <KineLoader />
             <p>{t('liveConnecting')}</p>
           </div>
           <h1 className="video-title" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>

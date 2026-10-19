@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
+import FieldHint from '@/components/FieldHint';
 import { ANDROID_APK_NAME, DESKTOP_APP_NAMES, DESKTOP_FILES, detectDownloadOs, isInDesktopApp, type DesktopOs } from '@/lib/desktopRelease';
 
 /**
@@ -45,6 +46,30 @@ function AppIcon({ clipper, phone = false }: { clipper: boolean; phone?: boolean
   );
 }
 
+/**
+ * Dlouhá poznámka heslovitě: první věta hned, zbytek po kliknutí „Zobrazit více“ (bez
+ * stěny textu na stránce; rozdělení podle první tečky funguje ve všech jazycích).
+ */
+function ShortNote({ text, more, less }: { text: string; more: string; less: string }) {
+  const [open, setOpen] = useState(false);
+  const cut = text.search(/[.!?](\s|$)/);
+  const lead = cut >= 0 && cut + 1 < text.length - 20 ? text.slice(0, cut + 1) : text;
+  const rest = lead.length < text.length ? text.slice(cut + 1).trim() : '';
+  return (
+    <span>
+      {lead}
+      {rest && (
+        <>
+          {open ? ` ${rest}` : null}{' '}
+          <button type="button" className="dl-more" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+            {open ? less : more}
+          </button>
+        </>
+      )}
+    </span>
+  );
+}
+
 function Check() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -61,12 +86,14 @@ export default function DownloadPage() {
   // Systém: předvybraný podle prohlížeče, přepínatelný (Windows / macOS / Linux).
   const [os, setOs] = useState<'windows' | 'mac' | 'linux' | 'android'>('windows');
   const [linuxDeb, setLinuxDeb] = useState(false);
+  // Mac: Apple Silicon (výchozí - prohlížeč čip neprozradí) nebo Intel.
+  const [macIntel, setMacIntel] = useState(false);
   const [androidRelease, setAndroidRelease] = useState<Release | undefined>(undefined);
 
   useEffect(() => {
     setInApp(isInDesktopApp());
     const detected = detectDownloadOs(navigator.userAgent);
-    setOs(detected === 'linux-deb' ? 'linux' : detected);
+    setOs(detected === 'linux-deb' ? 'linux' : detected === 'mac-intel' ? 'mac' : detected);
     fetch('/api/desktop/latest')
       .then((r) => r.json())
       .then((body) => {
@@ -97,10 +124,10 @@ export default function DownloadPage() {
   const downloadHref = (variant: 'full' | 'clipper') => {
     const q = variant === 'clipper' ? 'variant=clipper' : '';
     const path = os === 'mac' ? '/download/mac' : os === 'linux' ? '/download/linux' : '/download/windows';
-    const params = [q, os === 'linux' && linuxDeb ? 'format=deb' : ''].filter(Boolean).join('&');
+    const params = [q, os === 'linux' && linuxDeb ? 'format=deb' : '', os === 'mac' && macIntel ? 'chip=intel' : ''].filter(Boolean).join('&');
     return params ? `${path}?${params}` : path;
   };
-  const fileOs: DesktopOs = os === 'linux' && linuxDeb ? 'linux-deb' : os === 'android' ? 'windows' : os;
+  const fileOs: DesktopOs = os === 'linux' && linuxDeb ? 'linux-deb' : os === 'mac' && macIntel ? 'mac-intel' : os === 'android' ? 'windows' : os;
   const requirements = os === 'mac' ? t('downloadRequirementsMac') : os === 'linux' ? t('downloadRequirementsLinux') : t('downloadRequirements');
 
   /** Kine Clipper pro Android: jedna karta, APK mimo Google Play (repo kine-mobile, /download/android). */
@@ -196,6 +223,13 @@ export default function DownloadPage() {
                 <input type="checkbox" checked={linuxDeb} onChange={(e) => setLinuxDeb(e.target.checked)} /> {t('downloadLinuxDeb')}
               </label>
             )}
+            {os === 'mac' && (
+              <span className="dl-os-format dl-os-chip" role="radiogroup" aria-label={t('downloadMacChip')}>
+                <label><input type="radio" name="mac-chip" checked={!macIntel} onChange={() => setMacIntel(false)} /> {t('downloadMacAppleSilicon')}</label>
+                <label><input type="radio" name="mac-chip" checked={macIntel} onChange={() => setMacIntel(true)} /> {t('downloadMacIntel')}</label>
+                <FieldHint text={t('downloadMacChipHint')} />
+              </span>
+            )}
           </div>
           {os === 'android' ? (
             <>
@@ -219,9 +253,13 @@ export default function DownloadPage() {
               <path d="M12 9v4M12 16.5v.5" />
             </svg>
             <span>
-              {os === 'android' ? t('downloadAndroidNote') : os === 'mac' ? t('downloadMacUnsigned') : os === 'linux' ? t('downloadLinuxNote') : t('downloadUnsigned')}
+              <ShortNote text={os === 'android' ? t('downloadAndroidNote') : os === 'mac' ? t('downloadMacUnsigned') : os === 'linux' ? t('downloadLinuxNote') : t('downloadUnsigned')} more={t('showMoreLabel')} less={t('showLessLabel')} />
               {/* Windows 11 Inteligentní řízení aplikací (Smart App Control): nepodepsaný instalátor zablokuje celý nebo jeho část. */}
-              {os === 'windows' && <span className="dl-note-sac">{t('downloadSmartAppControl')}</span>}
+              {os === 'windows' && (
+                <span className="dl-note-sac">
+                  <ShortNote text={t('downloadSmartAppControl')} more={t('showMoreLabel')} less={t('showLessLabel')} />
+                </span>
+              )}
             </span>
           </div>
         </>
@@ -236,17 +274,18 @@ export default function DownloadPage() {
         </ol>
       </div>
 
-      <div className="panel" style={{ marginTop: 14 }}>
-        <p className="panel-heading">{t('downloadFreePlusTitle')}</p>
+      {/* Vysvětlivky sbalené: nadpis vidět, text až po kliknutí (méně textu na stránce). */}
+      <details className="panel dl-faq" style={{ marginTop: 14 }}>
+        <summary className="panel-heading">{t('downloadFreePlusTitle')}</summary>
         <p style={{ margin: '8px 0 0', color: 'var(--text-dim)', lineHeight: 1.7 }}>
           {t('downloadFreePlusText')} <Link href="/plus">{t('downloadFreePlusLink')}</Link>
         </p>
-      </div>
+      </details>
 
-      <div className="panel" style={{ marginTop: 14 }}>
-        <p className="panel-heading">{t('downloadWhyTitle')}</p>
+      <details className="panel dl-faq" style={{ marginTop: 14 }}>
+        <summary className="panel-heading">{t('downloadWhyTitle')}</summary>
         <p style={{ margin: '8px 0 0', color: 'var(--text-dim)', lineHeight: 1.7 }}>{t('downloadWhyText')}</p>
-      </div>
+      </details>
     </div>
   );
 }

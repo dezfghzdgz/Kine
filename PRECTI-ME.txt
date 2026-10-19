@@ -1,3 +1,122 @@
+KINE 0.13.2 + web + Android 0.2.0: macOS se zase staví (zvlášť Intel a Apple Silicon),
+pojistky Electronu, plynulejší Clipper; web na telefonu (menu + nabídky), nabídka ⋮ přehrávače,
+tvůrce + diskuse v jedné kartě, vlastní animace načítání, titulky S/M/L, malé přenosy v Živě,
+druhý pohled kontroly nahoty, méně textu na /download; Android: tlačítko, které v klipu není
+vidět (jen hra na Androidu 14+, nenápadná bublina, zatřesení), 720p výchozí
+(dodávka kine-0.13.2-mobil-2026-10-19)
+==========================================================================================
+
+POSTUP
+1. Appka: rozbal kine-desktop-0.13.2.zip do kořene repa kine-desktop, nahraj. Workflow
+   .github/workflows/release.yml se MĚNÍ (mac job) - na GitHubu ho otevři -> tužka -> smaž
+   obsah -> vlož release.yml (vedle ZIPu) -> Commit. Pak pusť Vydání: Windows, Linux i macOS
+   (Kine-Mac-x64.dmg + Kine-Mac-arm64.dmg, stejně Clipper).
+2. Web: rozbal kine-web-0.13.2.zip do kořene repa Kine, nahraj. Žádná migrace ani proměnná.
+   Smaž 7 zbytků (node zkontroluj-soubory.mjs --uklid) a navíc components/SearchBar.tsx
+   (nepoužívaný soubor - kód navíc). zkontroluj-soubory ho taky vypíše.
+3. kine-mobile: rozbal kine-mobile-0.2.0.zip (app/, README.md, .gitignore) do kořene repa a
+   nahraj; build.yml se nemění. Actions postaví 0.2.0 a obnoví android-latest - web pak
+   nabízí novou verzi sám. (Vidím, že android-latest už existuje - první sestavení prošlo,
+   tlačítko „Stáhnout APK“ na webu funguje.)
+
+macOS (proč padalo a co se změnilo)
+- Universal (Intel + Apple Silicon v jednom) sestavení padalo kvůli ffmpeg: balíček
+  ffmpeg-static stáhne při npm ci jen binárku pro procesor runneru (Apple Silicon) a
+  @electron/universal odmítne spojit dvě stejné; Intel Mac by navíc dostal špatnou. Teď se
+  staví zvlášť x64 a arm64, workflow stáhne ffmpeg pro obě architektury (ze stejného vydání,
+  jaké používá ffmpeg-static) a electron-builder ho přibalí podle architektury; krok
+  „Kontrola souborů“ ověří, že v každé appce je správná binárka. Appka při kontrole
+  aktualizace posílá mac / mac-intel.
+- Web /download: u macOS přepínač „Apple Silicon (M1–M4)“ / „Intel“ s otazníčkem, jak čip
+  poznat (prohlížeč to neprozradí). /download/mac?chip=intel.
+- Mac sestavení pořád nemůžu spustit tady (Linux) - kdyby mac job spadl znovu, pošli log
+  z Actions (krok, ve kterém to spadlo, a posledních ~40 řádků).
+
+„ZAŠIFROVAT ZDROJÁK“ - co jde a co ne (upřímně)
+- Repa Kine, kine-desktop i kine-mobile jsou na GitHubu VEŘEJNÁ - kdokoli si zdroják stáhne
+  bez ohledu na jakékoli šifrování v appce. Jediná opravdová ochrana zdrojáku je PŘEPNOUT
+  REPA NA SOUKROMÁ (Settings -> General -> Danger Zone -> Change visibility -> Private).
+  Vercel i GitHub Actions fungují dál (soukromá repa mají 2000 minut Actions měsíčně
+  zdarma, macOS se počítá 10x).
+  POZOR: u soukromého repa přestanou fungovat veřejné odkazy na GitHub Releases
+  (Kine-Setup.exe, Kine-Clipper.apk…) - lidi by nestáhli nic. Před přepnutím kine-desktop a
+  kine-mobile na soukromé proto musí stahování jet z R2 (Cloudflare): v obou repech
+  proměnná DESKTOP_DOWNLOAD_BASE + secrets R2_ACCOUNT_ID / R2_BUCKET / R2_ACCESS_KEY_ID /
+  R2_SECRET_ACCESS_KEY, na Vercelu NEXT_PUBLIC_DESKTOP_DOWNLOAD_BASE a
+  NEXT_PUBLIC_ANDROID_DOWNLOAD_BASE=<base>/android. Repo webu Kine můžeš přepnout na
+  soukromé hned - z něj se nic nestahuje.
+- Web: do prohlížeče jde jen zmenšený kód bez zdrojových map (schválně napsáno v
+  next.config.js), serverový kód a klíče do prohlížeče nikdy nejdou. Víc u webu udělat nejde
+  (a není třeba).
+- Appka do PC: kód zmenšený (minify, od 0.12.0), zabalený v app.asar a nově s pojistkami
+  Electronu (fuses): appku nejde spustit jako holý Node, nejde do ní připojit ladicí program,
+  nečte NODE_OPTIONS, kód se bere jen z app.asar a jeho neporušenost se při startu ověřuje
+  (Windows, macOS). JavaScript v Electronu „zašifrovat“ opravdu nejde (každý nástroj na to
+  jde obejít) - proto se o premium rozhoduje na serveru (nároky z účtu, od 0.11), v appce
+  není co „odemknout“. Ověřeno: zabalená Linux appka s pojistkami prošla celým e2e; Windows
+  sestavení (Kine.exe) jsem tady spustil přes Wine - nastartuje normálně, a když se v app.asar
+  změní jediný znak, Electron ho odmítne („Integrity check failed“) a appka se nespustí.
+- Android: ostré sestavení (s klíčem) je zmenšené a zamotané (R8: isMinifyEnabled +
+  shrinkResources). Bez klíče v secrets kine-mobile je Kine-Clipper.apk testovací (debug)
+  sestavení = čitelné. Klíč uděláš jednou (2 příkazy v README repa: keytool + base64 do
+  KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) - pak jde na web podepsaný
+  release.
+
+CLIPPER / KINE DO PC 0.13.2
+- Plynulost: každý kus nahrávání (tus) dřív znamenal zápis celého seznamu klipů na disk a
+  překreslení celého okna - u stovky klipů to trhalo, hlavně s otevřeným přehrávačem. Teď
+  se procenta nahrávání zapisují a hlásí nejvýš jednou za 600 ms, okno při nich vymění jen
+  dotčenou kartu (ne všechno), průběh stahování aktualizace překresluje nejvýš 2x za sekundu
+  a karty mimo obrazovku se nekreslí (content-visibility).
+- Pojistky Electronu - viz výš. Testy 208, e2e (holý Electron i zabalená appka) prošly.
+
+WEB
+- Telefon: boční panel je neprůhledný a NAD horní i spodní lištou; roluje jen vnitřek, oznámení
+  a účet jsou v patičce mimo rolování (Safari na iPhonu mačká position: fixed uvnitř rolujícího
+  prvku - proto se nabídka účtu a oznámení kreslily přes položky panelu). Nabídka účtu i
+  oznámení = spodní list přes celou šířku, neprůhledný. Po kliknutí na cokoli (Settings,
+  oznámení, odkaz) panel zaleze - i při každé změně stránky.
+- Nabídka ⋮ přehrávače: jednotné řádky s ikonou, popiskem a hodnotou vpravo (dřív každý
+  řádek jinak - „pilulky“ ze sklo-stylu tlačítek). Podnabídky (kvalita, rychlost, časovač)
+  s šipkou zpět a čipy. Nově „Velikost titulků“ S/M/L (pamatuje se), titulky jsou přes celou
+  obrazovku větší (dřív 20 px i na televizi).
+- Stránka videa: „Tvůrce“ a „Komentáře“ jsou JEDNA karta: nahoře tvůrce (avatar, jméno,
+  hodnocení nebo odkaz „Zobrazit kanál ›“), pod ním záložky Popis / Komentáře / Přepis /
+  Technické (menší, smí se zalomit - v úzkém sloupci se „Technické“ uřezávalo).
+- Načítání: místo obecného kolečka značka Kine (trojúhelník v barvě appky, „dýchá“) s obíhajícím
+  obloukem - video, živě i Sparks (tam až po 350 ms, ať při okamžitém startu nic neblikne).
+  Přehrávač si první kus videa stáhne hned po manifestu (startFragPrefetch). Karty videí mimo
+  obrazovku se nekreslí (plynulejší rolování dlouhých seznamů).
+- Živě: čtvrté řazení „Malé přenosy (do 10 diváků)“ - šance pro začínající (podle průzkumu
+  největší bolest Twitche); pořadí se každou minutu promíchá.
+- Kontrola nahoty: když první průchod skončí „ke kontrole“, vezmou se další snímky kolem
+  podezřelých míst (±2 s, ±5 s, nejvýš 8) a rozhodne se znovu - méně falešných poplachů i
+  méně propadlých (test refineTimes).
+- Méně textu (heslovitě, „?“): /download - dlouhé poznámky jen první věta + „Zobrazit více“,
+  vysvětlivky „Zdarma a předplatné“ a „Proč ne rovnou do cloudu“ sbalené; hromadné nahrání,
+  studio Živě (vytvoření klíče) a adresa překryvu podpor - vysvětlení za otazníčkem místo
+  odstavce. Ostatní delší texty už za otazníčkem jsou (prošel jsem všechny nad 160 znaků).
+- Kód navíc: smazán nepoužívaný components/SearchBar.tsx a CSS starých koleček načítání.
+  V překladech je ~50 textů, na které kód neodkazuje přímo - část se ale skládá za běhu
+  (plusFaq1Q…), tak zůstávají.
+
+ANDROID 0.2.0 (kine-mobile)
+- Tlačítko, které v klipu není vidět - tři cesty: (1) Android 14+: v okně systému zvol
+  „Jedna aplikace“ - nahrává se jen hra, bublina ani oznámení v záznamu nejsou (kameru
+  skládá appka sama, zůstává); (2) nenápadná bublina (výchozí): malá tečka, po 1,5 s klidu
+  zprůhlední na čtvrtinu, po dotyku se rozsvítí - v klipu sotva vidět, prst ji trefí
+  (plocha 56 dp); (3) zatřesení = klip (nastavení): dvě rázná trhnutí během 0,7 s, nic na
+  obrazovce. Tažení bubliny po obrazovce funguje jako dřív.
+- Nenáročnost: výchozí 720p / 30 fps / 5 Mb/s (1080p a 60 fps jdou zapnout), kamera nejvýš
+  480p (v obraze je malá), skládání jen při změně obrazu, hardwarové kodéry.
+- Ověřeno překladem kotlinc proti API 34 (MediaProjectionConfig je API 34). Na telefonu jsem
+  to spustit nemohl - vyzkoušej hlavně „Jedna aplikace“ a zatřesení.
+
+CO ZŮSTÁVÁ Z MINULA
+- 7 zbytků na webu (+ SearchBar.tsx) ke smazání; 4 staré soubory v kine-desktop (sestavení
+  si je samo odklidí).
+
+
 KINE 0.13.1 + web: Clipper - hlavička přehrávače jeden řádek, úpravy s ovládáním POD
 videem a jednou časovou osou, kolečko myši v editoru; web na telefonu (menu, nabídka
 účtu, formulář nahrání, kanál); Kine Clipper pro Android ke stažení na /download

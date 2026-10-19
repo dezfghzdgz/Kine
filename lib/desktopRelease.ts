@@ -22,9 +22,12 @@ export const DESKTOP_REPO = process.env.NEXT_PUBLIC_DESKTOP_REPO || 'dezfghzdgz/
 export const DESKTOP_DOWNLOAD_BASE = (process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_BASE || '').replace(/\/+$/, '');
 
 export type DesktopVariant = 'full' | 'clipper';
-/** Systémy, pro které se appka staví (release.yml v repu kine-desktop): Windows (exe), macOS (dmg), Linux (AppImage, deb). */
-export type DesktopOs = 'windows' | 'mac' | 'linux' | 'linux-deb';
-export const DESKTOP_OSES: DesktopOs[] = ['windows', 'mac', 'linux', 'linux-deb'];
+/**
+ * Systémy, pro které se appka staví (release.yml v repu kine-desktop): Windows (exe), macOS (dmg - zvlášť
+ * Apple Silicon `mac` a Intel `mac-intel`, od appky 0.13.2; univerzální sestavení padalo), Linux (AppImage, deb).
+ */
+export type DesktopOs = 'windows' | 'mac' | 'mac-intel' | 'linux' | 'linux-deb';
+export const DESKTOP_OSES: DesktopOs[] = ['windows', 'mac', 'mac-intel', 'linux', 'linux-deb'];
 
 export const DESKTOP_INSTALLER_NAMES: Record<DesktopVariant, string> = {
   full: 'Kine-Setup.exe',
@@ -34,8 +37,8 @@ export const DESKTOP_INSTALLER_NAME = DESKTOP_INSTALLER_NAMES.full;
 
 /** Soubory podle systému - stejné názvy píše electron-builder (scripts/publish-config.mjs v kine-desktop). */
 export const DESKTOP_FILES: Record<DesktopVariant, Record<DesktopOs, string>> = {
-  full: { windows: 'Kine-Setup.exe', mac: 'Kine-Mac.dmg', linux: 'Kine-Linux.AppImage', 'linux-deb': 'Kine-Linux.deb' },
-  clipper: { windows: 'Kine-Clipper-Setup.exe', mac: 'Kine-Clipper-Mac.dmg', linux: 'Kine-Clipper-Linux.AppImage', 'linux-deb': 'Kine-Clipper-Linux.deb' },
+  full: { windows: 'Kine-Setup.exe', mac: 'Kine-Mac-arm64.dmg', 'mac-intel': 'Kine-Mac-x64.dmg', linux: 'Kine-Linux.AppImage', 'linux-deb': 'Kine-Linux.deb' },
+  clipper: { windows: 'Kine-Clipper-Setup.exe', mac: 'Kine-Clipper-Mac-arm64.dmg', 'mac-intel': 'Kine-Clipper-Mac-x64.dmg', linux: 'Kine-Clipper-Linux.AppImage', 'linux-deb': 'Kine-Clipper-Linux.deb' },
 };
 
 /** Názvy appek, jak se ukazují lidem (nelokalizované - takhle se jmenují i po instalaci). */

@@ -10,8 +10,10 @@ import { announceLiveCount } from '@/lib/useLiveCount';
 import { categoryLabel, isCategoryKey } from '@/lib/categories';
 import { LiveCard, recentLiveList, rememberLiveList, type LiveItem } from '@/components/LiveNowRow';
 
-type Sort = 'foryou' | 'viewers' | 'newest';
-const SORTS: Sort[] = ['foryou', 'viewers', 'newest'];
+type Sort = 'foryou' | 'viewers' | 'newest' | 'small';
+const SORTS: Sort[] = ['foryou', 'viewers', 'newest', 'small'];
+/** „Malé přenosy“: do tolika diváků (seznam řazený podle diváků by je nechal věčně dole). */
+const SMALL_MAX_VIEWERS = 10;
 
 /** Stránka Živě: všechny přenosy, které teď běží - kategorie, řazení, diváci. */
 export default function StreamsPage() {
@@ -128,7 +130,7 @@ function StreamsInner() {
   const [now, setNow] = useState(() => Date.now());
   const [sort, setSort] = useState<Sort>(() => {
     const s = params.get('sort');
-    return s === 'viewers' || s === 'newest' ? s : 'foryou';
+    return s === 'viewers' || s === 'newest' || s === 'small' ? s : 'foryou';
   });
   const [category, setCategory] = useState<string | null>(() => {
     const c = params.get('category');
@@ -260,9 +262,14 @@ function StreamsInner() {
         .sort((a, b) => (b.s.viewers ?? -1) - (a.s.viewers ?? -1) || a.i - b.i)
         .map(({ s }) => s);
     }
-    if (sort === 'newest') {
-      const at = (s: LiveItem) => (s.startedAt ? new Date(s.startedAt).getTime() || 0 : 0);
-      return [...list].sort((a, b) => at(b) - at(a));
+    const at = (s: LiveItem) => (s.startedAt ? new Date(s.startedAt).getTime() || 0 : 0);
+    if (sort === 'newest') return [...list].sort((a, b) => at(b) - at(a));
+    // Malé přenosy (do 10 diváků): šance pro začínající - jinak zůstanou pod velkými pořád.
+    // Pořadí se každou minutu promíchá, ať není navrchu věčně ten samý.
+    if (sort === 'small') {
+      const seed = Math.floor(Date.now() / 60000);
+      const key = (s: LiveItem) => { let h = seed; for (const ch of s.ownerId) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
+      return list.filter((s) => (s.viewers ?? 0) <= SMALL_MAX_VIEWERS).sort((a, b) => key(a) - key(b));
     }
     return list;
   }, [streams, category, sort]);
@@ -271,6 +278,7 @@ function StreamsInner() {
     foryou: t('streamsSortForYou'),
     viewers: t('streamsSortViewers'),
     newest: t('streamsSortNewest'),
+    small: t('streamsSortSmall'),
   };
   const total = streams?.length ?? 0;
 

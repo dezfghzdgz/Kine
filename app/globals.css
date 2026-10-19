@@ -506,6 +506,9 @@ select:focus-visible {
 .video-card {
   display: block;
   animation: content-fade-in 0.28s ease both;
+  /* Karty pod okrajem obrazovky prohlížeč nekreslí (dlouhé seznamy = plynulé rolování). */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 280px;
 }
 
 /* Karty vykreslené sdílenou komponentou (mají nabídku ⋮) nesmí mít po
@@ -977,6 +980,189 @@ button:disabled {
   font-size: 12px;
   color: var(--text-faint);
   margin-top: 2px;
+}
+
+/* Tvůrce + diskuse v jedné kartě (app/watch/[id]/page.tsx -> CommentSection header):
+   řádek tvůrce nahoře, pod ním tenká linka a záložky. */
+.discussion-head {
+  display: flex;
+  align-items: center;
+  margin: -4px 0 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.discussion-head .creator-row {
+  flex: 1;
+  min-width: 0;
+}
+.discussion-head .creator-row > div {
+  flex: 1;
+  min-width: 0;
+}
+.discussion-head .creator-avatar {
+  display: block;
+  width: 44px;
+  height: 44px;
+}
+.discussion-head .creator-name {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.creator-star {
+  display: inline-flex;
+  color: var(--warn, #f5b942);
+}
+.creator-open-link {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+  color: var(--text-faint);
+  text-decoration: none;
+  transition: color var(--dur-1) var(--ease);
+}
+.creator-open-link:hover {
+  color: var(--text);
+}
+/* Záložky v kartě: menší a smí se zalomit - v postranním sloupci (340 px) se "Technické"
+   dřív uřízlo. Podtržení vybrané záložky sedí na její spodek. */
+.discussion-panel .tab-row {
+  margin-top: 0;
+  flex-wrap: wrap;
+  overflow: visible;
+  gap: 2px 0;
+}
+.discussion-panel .tab-btn {
+  padding: 7px 10px;
+  margin: 0 2px 4px 0;
+  font-size: 13px;
+}
+.discussion-panel .tab-btn.active::after {
+  left: 10px;
+  right: 10px;
+  bottom: -4px;
+}
+
+/* Nabídka ⋮ přehrávače (components/ChapterTimeline.tsx): všechny řádky stejné - ikona,
+   popisek, vpravo hodnota (a šipka u podnabídky). Žádné "pilulky" - obecné sklo pro
+   <button> (stín, pozadí) se tu vypíná. */
+.player-menu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: 0;
+  width: 248px;
+  max-width: calc(100vw - 24px);
+  padding: 6px;
+  border-radius: 12px;
+  color: #fff;
+  background: rgba(14, 14, 18, 0.96);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 14px 40px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 30;
+}
+.player-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.player-menu-row,
+.player-menu-back {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease);
+}
+.player-menu-row:hover,
+.player-menu-row:focus-visible,
+.player-menu-back:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #fff;
+}
+.player-menu-row:active,
+.player-menu-back:active,
+.player-menu-chip:active {
+  transform: none;
+}
+.player-menu-row .ui-icon {
+  flex: none;
+  opacity: 0.85;
+}
+.player-menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.player-menu-value {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.62);
+}
+.player-menu-row[aria-checked="true"] .player-menu-value {
+  color: #fff;
+}
+.player-menu-back {
+  font-weight: 600;
+  margin-bottom: 4px;
+  border-radius: 8px 8px 0 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+.player-menu-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 6px 4px;
+}
+.player-menu-chip {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+.player-menu-chip:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+.player-menu-chip.active {
+  background: #fff !important;
+  color: #0a0a0b;
 }
 
 .toggle-row {
@@ -2189,29 +2375,15 @@ html[data-theme="gray"] {
   background: #000;
 }
 
-/* Načítání - ukáže se až po chvilce, ať při okamžitém rozjezdu nic neblikne. */
-.spark-spinner {
+/* Načítání Sparku (components/KineLoader.tsx, značka Kine): uprostřed videa; ukáže se až
+   po chvilce (kine-loader-delayed), ať při okamžitém rozjezdu nic neblikne. */
+.spark-loader {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 44px;
-  height: 44px;
-  margin: -22px 0 0 -22px;
-  border-radius: 50%;
-  border: 3px solid rgba(255, 255, 255, 0.25);
-  border-top-color: #fff;
-  opacity: 0;
+  margin: -20px 0 0 -20px;
   pointer-events: none;
   z-index: 3;
-  animation: spark-spin 0.8s linear infinite, spark-spinner-in 0.2s ease 0.35s forwards;
-}
-
-@keyframes spark-spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes spark-spinner-in {
-  to { opacity: 1; }
 }
 
 /* Prohlížeč nepustil zvuk bez klepnutí - video hraje potichu a nabídne zvuk. */
@@ -2452,14 +2624,16 @@ html[data-theme="gray"] {
     z-index: 320 !important;
   }
 
+  /* Výběr barvy loga v panelu: pod logem (panel je 300 px, 190 px výběr se vejde); ne fixed -
+     uvnitř rolujícího vnitřku by ho Safari mačkalo. */
   .mobile-drawer-side .brand-color-picker {
-    position: fixed !important;
-    left: 12px !important;
-    right: 12px !important;
-    bottom: 12px !important;
-    top: auto !important;
-    width: auto !important;
-    z-index: 320 !important;
+    position: absolute !important;
+    left: 0 !important;
+    right: auto !important;
+    top: calc(100% + 8px) !important;
+    bottom: auto !important;
+    width: 190px !important;
+    z-index: 20 !important;
   }
 
   .spark-nav-arrows {
@@ -4650,26 +4824,71 @@ body.has-music-bar .content-area-fullbleed {
   pointer-events: none;
 }
 
-.player-loading-spinner {
-  width: 46px;
-  height: 46px;
+
+/* ---------- Titulky přes video (components/CaptionsOverlay.tsx) ----------
+   Tři velikosti (S/M/L z nabídky ⋮), přes celou obrazovku větší - dřív 20 px i na televizi. */
+.player-captions {
+  position: absolute; left: 8%; right: 8%; bottom: 64px; z-index: 4;
+  text-align: center; pointer-events: none;
+}
+.player-captions span {
+  display: inline; background: rgba(0, 0, 0, 0.75); color: #fff; font-weight: 500;
+  font-size: clamp(13px, 1.6vw, 20px); padding: 4px 10px; border-radius: 4px;
+  box-decoration-break: clone; -webkit-box-decoration-break: clone; white-space: pre-line; line-height: 1.45;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.player-captions-s span { font-size: clamp(11px, 1.25vw, 16px); }
+.player-captions-l span { font-size: clamp(16px, 2.2vw, 28px); }
+.player-wrap:fullscreen .player-captions span, body.player-css-fullscreen .player-captions span, .player-wrap-maximized .player-captions span { font-size: clamp(18px, 2.4vw, 40px); }
+.player-wrap:fullscreen .player-captions-s span, body.player-css-fullscreen .player-captions-s span, .player-wrap-maximized .player-captions-s span { font-size: clamp(14px, 1.8vw, 30px); }
+.player-wrap:fullscreen .player-captions-l span, body.player-css-fullscreen .player-captions-l span, .player-wrap-maximized .player-captions-l span { font-size: clamp(22px, 3.2vw, 54px); }
+@media (max-width: 640px) {
+  .player-captions { left: 4%; right: 4%; bottom: 52px; }
+}
+
+/* ---------- Načítání po našem (components/KineLoader.tsx) ----------
+   Značka Kine (trojúhelník) v barvě appky, která dýchá, a tenký oblouk, co kolem ní
+   obíhá. Místo obecného kolečka na stránce videa, v živém vysílání i ve Sparks. */
+.kine-loader {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  color: var(--brand);
+  filter: drop-shadow(0 0 12px rgba(var(--brand-rgb), 0.45)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+}
+.kine-loader-sm { width: 40px; height: 40px; }
+.kine-loader-lg { width: 72px; height: 72px; }
+.kine-loader-ring {
+  position: absolute;
+  inset: 0;
   border-radius: 50%;
-  border: 4px solid rgba(255, 255, 255, 0.25);
-  border-top-color: #fff;
-  box-shadow: 0 0 24px rgba(0, 0, 0, 0.35);
-  animation: player-loading-spin 0.9s linear infinite;
+  border: 3px solid rgba(255, 255, 255, 0.14);
+  border-top-color: var(--brand);
+  animation: kine-loader-spin 0.9s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
 }
-
-@keyframes player-loading-spin {
-  to {
-    transform: rotate(360deg);
-  }
+.kine-loader-sm .kine-loader-ring { border-width: 2.5px; }
+.kine-loader-mark {
+  width: 42%;
+  height: 42%;
+  margin-left: 6%;
+  animation: kine-loader-breathe 1.4s ease-in-out infinite;
 }
-
+/* Ukáže se až po chvilce - při okamžitém rozjezdu nic neblikne. */
+.kine-loader-delayed {
+  opacity: 0;
+  animation: kine-loader-in 0.25s ease 0.35s forwards;
+}
+@keyframes kine-loader-spin { to { transform: rotate(360deg); } }
+@keyframes kine-loader-breathe {
+  0%, 100% { transform: scale(0.88); opacity: 0.8; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+@keyframes kine-loader-in { to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
-  .player-loading-spinner {
-    animation-duration: 2.4s;
-  }
+  .kine-loader-ring { animation-duration: 2.4s; }
+  .kine-loader-mark { animation: none; }
 }
 
 .player-tap-to-play {
@@ -5762,15 +5981,16 @@ input:focus, textarea:focus, select:focus {
   }
 
   /* ---------- Boční panel na telefonu (menu ☰) ----------
-     1) Sklo (rozostření) nesmí být na panelu samotném: backdrop-filter dělá z prvku
-        "containing block" pro position: fixed, takže nabídka účtu a výběr barvy
-        uvnitř se místo přes celou obrazovku mačkaly do 180 px panelu (text přes
-        text, přepínač přes popisek, nabídka uprostřed panelu). Sklo je proto na
-        ::before pevně přes celou výšku; panel sám je průhledný.
-     2) Panel a jeho stín musí být NAD horní lištou (ta má z-index 500 kvůli
+     1) Panel je NEPRŮHLEDNÝ a bez rozostření: backdrop-filter dělá z prvku "containing
+        block" pro position: fixed (nabídka účtu se mačkala do panelu) a skrz sklo
+        prosvítal text stránky. Rozostřené sklo zůstává na ostatních plochách.
+     2) Roluje jen vnitřek (.mobile-drawer-scroll); oznámení a účet jsou v patičce mimo
+        rolování - Safari na iPhonu mačká position: fixed uvnitř rolujícího prvku do něj
+        (components/Sidebar.tsx).
+     3) Panel a jeho stín musí být NAD horní lištou (ta má z-index 500 kvůli
         rozšířenému hledání) i nad spodní lištou - dřív prosvítalo hledání i
         tlačítka skrz menu.
-     3) Širší (300 px / 84 %), větší písmo - 180 px bylo na prst i na čtení málo. */
+     4) Širší (300 px / 84 %), větší písmo - 180 px bylo na prst i na čtení málo. */
   .mobile-drawer-backdrop {
     z-index: 560;
   }
@@ -5778,29 +5998,32 @@ input:focus, textarea:focus, select:focus {
     --mobile-drawer-w: min(300px, 84vw);
     width: var(--mobile-drawer-w);
     z-index: 570;
-    padding: 16px 12px calc(16px + env(safe-area-inset-bottom, 0px));
-    background: transparent;
-    box-shadow: none;
-    border-right: none;
+    padding: 0;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    background-image: var(--glass-sheen);
+    box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+    border-right: 1px solid var(--border);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
-  .mobile-drawer-backdrop .mobile-drawer-side::before {
-    content: '';
-    position: fixed;
-    z-index: -1;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: var(--mobile-drawer-w);
-    /* Plnější než ostatní sklo, ať skrz menu neprosvítá text stránky. */
-    background-color: var(--panel);
-    background-color: color-mix(in srgb, var(--panel) 93%, transparent);
-    background-image: var(--glass-sheen);
-    border-right: 1px solid var(--border);
-    box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  .mobile-drawer-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
+    padding: 16px 12px 10px;
+  }
+  .mobile-drawer-foot {
+    flex: none;
+    padding: 6px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border);
+    background: var(--panel);
   }
   .mobile-drawer-backdrop .mobile-drawer-side .sidebar-link {
     font-size: 14px;
@@ -5858,9 +6081,6 @@ input:focus, textarea:focus, select:focus {
     box-shadow: inset 0 0 0 1px var(--glass-line);
     background-color: var(--panel);
     background-image: none;
-  }
-  .mobile-drawer-side .brand-color-picker {
-    z-index: 580 !important;
   }
   /* Potvrzení odhlášení z nabídky v panelu: nad panelem (jinak zůstane schované za ním). */
   .mobile-drawer-side .confirm-dialog-backdrop {
@@ -6161,6 +6381,15 @@ input:focus, textarea:focus, select:focus {
 .dl-os-btn { font-size: 14px; padding: 8px 16px; }
 .dl-os-format { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); margin-left: 4px; }
 .dl-os-format input { width: 15px; height: 15px; margin: 0; accent-color: var(--brand); }
+.dl-os-chip { gap: 12px; flex-wrap: wrap; }
+.dl-os-chip label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+/* Poznámky heslovitě: první věta + „Zobrazit více“; sbalené vysvětlivky (details). */
+.dl-more { display: inline; padding: 0; min-height: 0; border: 0; background: none !important; box-shadow: none !important; color: var(--text); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.dl-more:hover { color: var(--brand); }
+.dl-faq summary { cursor: pointer; margin: 0; list-style: none; display: flex; align-items: center; gap: 8px; }
+.dl-faq summary::-webkit-details-marker { display: none; }
+.dl-faq summary::before { content: ''; width: 7px; height: 7px; border-right: 2px solid var(--text-faint); border-bottom: 2px solid var(--text-faint); transform: rotate(-45deg); transition: transform var(--dur-1) var(--ease); flex: none; }
+.dl-faq[open] summary::before { transform: rotate(45deg); }
 /* Android: jedna karta (Kine Clipper jako APK), ne dvě vedle sebe. */
 .dl-apps-one { grid-template-columns: minmax(0, 520px); }
 

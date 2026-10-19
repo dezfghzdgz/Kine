@@ -90,6 +90,11 @@ export default function Sidebar() {
   const { open: mobileNavOpen, close: closeMobileNav } = useMobileNav();
   // Kolik kanálů teď vysílá (odkaz Živě v menu).
   const liveCount = useLiveCount();
+  // Po přechodu na jinou stránku (odkaz v nabídce účtu, v oznámeních…) panel vždycky zaleze.
+  useEffect(() => {
+    closeMobileNav();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   // Rozbalený Explore na nižším okně: menu roluje, tak ať je seznam hned vidět.
   useEffect(() => {
@@ -370,11 +375,15 @@ export default function Sidebar() {
       </div>
     )}
 
-    {/* Mobilní zásuvka - vidět jen po kliknutí na "⋮" v horní liště (viz TopBar).
-        Obsahuje stejné odkazy, ve stejném pořadí, jako běžné menu, jen užší. */}
+    {/* Mobilní zásuvka - vidět jen po kliknutí na "☰" v horní liště (viz TopBar).
+        Obsahuje stejné odkazy, ve stejném pořadí, jako běžné menu. Roluje jen vnitřek
+        (.mobile-drawer-scroll); oznámení a účet jsou v patičce MIMO rolování - Safari na
+        iPhonu totiž position: fixed uvnitř rolujícího prvku mačká do něj (nabídka účtu a
+        oznámení se pak kreslily přes položky panelu). */}
     {mobileNavOpen && (
       <div className="mobile-drawer-backdrop" onClick={closeMobileNav}>
         <div className="mobile-drawer mobile-drawer-side" onClick={(e) => e.stopPropagation()}>
+         <div className="mobile-drawer-scroll">
           <div className="sidebar-logo-row">
             <BrandLogo className="sidebar-logo" onNavigate={closeMobileNav} />
           </div>
@@ -503,20 +512,22 @@ export default function Sidebar() {
           )}
           {isAdmin && (
             <Link href="/admin/plus" className="sidebar-link" onClick={closeMobileNav}>
-              ✦ {t('adminPlusLabel')}
+              <UiIcon name="sparkle" size={20} />
+              {t('adminPlusLabel')}
             </Link>
           )}
           <Link href="/about" className="sidebar-link" onClick={closeMobileNav}>
             <AboutIcon />
             {t('aboutLink')}
           </Link>
+         </div>
 
           {!loading && (
-            <div style={{ marginTop: 'auto' }}>
-              {user && <NotificationBell />}
+            <div className="mobile-drawer-foot">
+              {user && <NotificationBell onNavigate={closeMobileNav} />}
               {user ? (
                 <div className="mobile-drawer-profile">
-                  <ProfileMenu username={user.username} avatarUrl={user.avatar_url} />
+                  <ProfileMenu username={user.username} avatarUrl={user.avatar_url} onNavigate={closeMobileNav} />
                 </div>
               ) : (
                 <Link href="/login" className="sidebar-link" onClick={closeMobileNav}>

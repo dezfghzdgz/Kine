@@ -8,6 +8,28 @@ import { AUTO_HIDE_MS, clampSeek, decideTap, formatTime, tapSide, type Tap, type
 import { OPEN_SHORTCUTS_EVENT } from './KeyboardShortcuts';
 import { qualityLabel, type QualityLevel } from '@/lib/vodPlayerCore';
 import { pipActive, pipSupported, togglePictureInPicture, watchPictureInPicture } from '@/lib/pictureInPicture';
+import UiIcon, { type UiIconName } from './UiIcon';
+import { readCaptionSize, saveCaptionSize, type CaptionSize } from './CaptionsOverlay';
+
+/**
+ * Řádek nabídky ⋮ přehrávače: ikona, popisek, vpravo hodnota (a šipka, když se otevře
+ * podnabídka). Všechny řádky stejné - dřív měl každý jiný vzhled (sklo z obecného
+ * pravidla pro <button> prosakovalo jen do některých).
+ */
+function MenuRow({ icon, label, value, chevron, className, onClick }: { icon: UiIconName; label: string; value?: string; chevron?: boolean; className?: string; onClick?: () => void }) {
+  return (
+    <button type="button" role="menuitem" className={`player-menu-row${className ? ` ${className}` : ''}`} onClick={onClick}>
+      <UiIcon name={icon} size={17} />
+      <span className="player-menu-label">{label}</span>
+      {(value || chevron) && (
+        <span className="player-menu-value">
+          {value}
+          {chevron && <UiIcon name="chevronRight" size={14} />}
+        </span>
+      )}
+    </button>
+  );
+}
 
 type Chapter = { time: number; title: string };
 
@@ -104,7 +126,10 @@ export default function ChapterTimeline({
   const [ripple, setRipple] = useState<{ side: TapSide; label: string; nonce: number } | null>(null);
   const lastTapRef = useRef<Tap | null>(null);
   const surfaceDownRef = useRef<number | null>(null);
-  const [settingsView, setSettingsView] = useState<'main' | 'speed' | 'sleep' | 'quality'>('main');
+  const [settingsView, setSettingsView] = useState<'main' | 'speed' | 'sleep' | 'quality' | 'captions'>('main');
+  // Velikost titulků (S/M/L) - pamatuje se v prohlížeči (components/CaptionsOverlay.tsx).
+  const [captionSize, setCaptionSize] = useState<CaptionSize>('m');
+  useEffect(() => setCaptionSize(readCaptionSize()), []);
   const [sleepMinutes, setSleepMinutes] = useState<number | null>(null);
   const sleepTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -432,7 +457,8 @@ export default function ChapterTimeline({
         ref={wrapRef}
         onMouseMove={(e) => { e.stopPropagation(); showControlsTemporarily(); }}
         style={{
-          position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 5,
+          // S otevřenou nabídkou ⋮ nad tlačítkem „Přehrát“ uprostřed (z-index 7) - jinak ho překrývalo.
+          position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: settingsOpen ? 8 : 5,
           background: 'linear-gradient(to top, rgba(0,0,0,0.75), rgba(0,0,0,0))',
           // Na iPhonu v celé obrazovce sedí dole ukazatel domů a po stranách
           // výřez - lišta se jim vyhne. Bez viewport-fit=cover v layoutu jsou
@@ -616,170 +642,92 @@ export default function ChapterTimeline({
             )}
 
             {settingsOpen && !compact && (
-              <div
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  position: 'absolute', bottom: 'calc(100% + 10px)', right: 0, width: 200,
-                  background: 'rgba(20,20,22,0.95)', borderRadius: 8, padding: 10,
-                  border: '1px solid rgba(255,255,255,0.15)',
-                }}
-              >
+              <div className="player-menu" role="menu" onClick={(e) => e.stopPropagation()}>
                 {settingsView === 'main' && (
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div className="player-menu-list">
                     {hasCaptions && (
-                      <button
-                        onClick={onToggleCaptions}
-                        style={{
-                          display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
-                          color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
-                        }}
-                      >
-                        <span>{t('captionsMenuLabel')}</span>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>{captionsEnabled ? t('onLabel') : t('offLabel')}</span>
-                      </button>
+                      <MenuRow icon="quote" label={t('captionsMenuLabel')} value={captionsEnabled ? t('onLabel') : t('offLabel')} onClick={onToggleCaptions} />
                     )}
-                    <button
-                      onClick={() => setSettingsView('sleep')}
-                      style={{
-                        display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
-                        color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
-                      }}
-                    >
-                      <span>{t('sleepTimerMenuLabel')}</span>
-                      <span style={{ color: 'rgba(255,255,255,0.6)' }}>{sleepMinutes ? `${sleepMinutes} ${t('minutesShortLabel')}` : t('offLabel')}</span>
-                    </button>
+                    {hasCaptions && captionsEnabled && (
+                      <MenuRow icon="quote" label={t('captionSizeLabel')} value={t(captionSize === 's' ? 'captionSizeSmall' : captionSize === 'l' ? 'captionSizeLarge' : 'captionSizeMedium')} chevron onClick={() => setSettingsView('captions')} />
+                    )}
+                    <MenuRow icon="timer" label={t('sleepTimerMenuLabel')} value={sleepMinutes ? `${sleepMinutes} ${t('minutesShortLabel')}` : t('offLabel')} chevron onClick={() => setSettingsView('sleep')} />
                     {qualities.length <= 1 && dataSaver && (
-                      <button
+                      <MenuRow
                         className="player-quality-btn"
+                        icon="quality"
+                        label={t('playerQualityMenu')}
+                        value={dataSaver.light ? t('playbackLightOn') : t('playbackLightOff')}
                         onClick={() => {
                           dataSaver.onToggle();
                           setSettingsOpen(false);
                           setSettingsView('main');
                         }}
-                        style={{
-                          display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
-                          color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
-                        }}
-                      >
-                        <span>{t('playerQualityMenu')}</span>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>{dataSaver.light ? t('playbackLightOn') : t('playbackLightOff')}</span>
-                      </button>
+                      />
                     )}
                     {qualities.length > 1 && onQuality && (
-                      <button
+                      <MenuRow
                         className="player-quality-btn"
+                        icon="quality"
+                        label={t('playerQualityMenu')}
+                        value={quality >= 0 ? qualityLabel(qualities.find((q) => q.index === quality)?.height) : `${t('playerQualityAuto')}${playingHeight ? ` (${qualityLabel(playingHeight)})` : ''}`}
+                        chevron
                         onClick={() => setSettingsView('quality')}
-                        style={{
-                          display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
-                          color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
-                        }}
-                      >
-                        <span>{t('playerQualityMenu')}</span>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>
-                          {quality >= 0
-                            ? qualityLabel(qualities.find((q) => q.index === quality)?.height)
-                            : `${t('playerQualityAuto')}${playingHeight ? ` (${qualityLabel(playingHeight)})` : ''}`}
-                        </span>
-                      </button>
+                      />
                     )}
-                    <button
-                      onClick={() => setSettingsView('speed')}
-                      style={{
-                        display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
-                        color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
-                      }}
-                    >
-                      <span>{t('playbackSpeedLabel')}</span>
-                      <span style={{ color: 'rgba(255,255,255,0.6)' }}>{speed}x</span>
-                    </button>
-                    {onToggleLoop && (
-                      <button
-                        onClick={onToggleLoop}
-                        style={{
-                          display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
-                          color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
-                        }}
-                      >
-                        <span>{t('playerLoopLabel')}</span>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>{loop ? t('onLabel') : t('offLabel')}</span>
-                      </button>
-                    )}
-                    {onToggleAutoplay && (
-                      <button
-                        onClick={onToggleAutoplay}
-                        style={{
-                          display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
-                          color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
-                        }}
-                      >
-                        <span>{t('playerAutoplayLabel')}</span>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>{autoplay ? t('onLabel') : t('offLabel')}</span>
-                      </button>
-                    )}
+                    <MenuRow icon="gauge" label={t('playbackSpeedLabel')} value={`${speed}x`} chevron onClick={() => setSettingsView('speed')} />
+                    {onToggleLoop && <MenuRow icon="refresh" label={t('playerLoopLabel')} value={loop ? t('onLabel') : t('offLabel')} onClick={onToggleLoop} />}
+                    {onToggleAutoplay && <MenuRow icon="play" label={t('playerAutoplayLabel')} value={autoplay ? t('onLabel') : t('offLabel')} onClick={onToggleAutoplay} />}
                     {onToggleStats && (
-                      <button
+                      <MenuRow
                         className="player-stats-btn"
+                        icon="chart"
+                        label={t('playerStatsMenu')}
                         onClick={() => {
                           setSettingsOpen(false);
                           setSettingsView('main');
                           onToggleStats();
                         }}
-                        style={{
-                          display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
-                          color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
-                        }}
-                      >
-                        <span>{t('playerStatsMenu')}</span>
-                      </button>
+                      />
                     )}
                     {/* Přehled zkratek (components/KeyboardShortcuts.tsx) - pro
                         toho, kdo "?" nezná. Na dotyku klávesnice není. */}
                     {!touchUi && (
-                      <button
+                      <MenuRow
+                        icon="keyboard"
+                        label={t('shortcutsTitle')}
+                        value="?"
                         onClick={() => {
                           setSettingsOpen(false);
                           window.dispatchEvent(new CustomEvent(OPEN_SHORTCUTS_EVENT));
                         }}
-                        style={{
-                          display: 'flex', justifyContent: 'space-between', background: 'none', border: 'none',
-                          color: '#fff', padding: '7px 4px', cursor: 'pointer', fontSize: 12.5,
-                        }}
-                      >
-                        <span>{t('shortcutsTitle')}</span>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>?</span>
-                      </button>
+                      />
                     )}
                   </div>
                 )}
 
                 {settingsView === 'quality' && (
                   <div>
-                    <button
-                      onClick={() => setSettingsView('main')}
-                      style={{ background: 'none', border: 'none', color: '#fff', padding: '4px 4px 8px', cursor: 'pointer', fontSize: 12, textAlign: 'left', width: '100%' }}
-                    >
-                      {t('backButton')}
+                    <button type="button" className="player-menu-back" onClick={() => setSettingsView('main')}>
+                      <UiIcon name="chevronLeft" size={16} />
+                      {t('playerQualityMenu')}
                     </button>
-                    <div role="radiogroup" aria-label={t('playerQualityMenu')} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <div role="radiogroup" aria-label={t('playerQualityMenu')} className="player-menu-list">
                       {[{ index: -1, label: t('playerQualityAuto') }, ...qualities.map((q) => ({ index: q.index, label: qualityLabel(q.height) }))].map((option) => (
                         <button
                           key={option.index}
+                          type="button"
                           role="radio"
                           aria-checked={quality === option.index}
-                          className="player-quality-option"
+                          className="player-menu-row player-quality-option"
                           onClick={() => {
                             onQuality?.(option.index);
                             setSettingsOpen(false);
                             setSettingsView('main');
                           }}
-                          style={{
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            background: quality === option.index ? 'rgba(255,255,255,0.14)' : 'none',
-                            border: 'none', borderRadius: 6, color: '#fff', padding: '6px 6px', cursor: 'pointer', fontSize: 12.5,
-                          }}
                         >
-                          <span>{option.label}</span>
-                          {quality === option.index && <span aria-hidden="true">✓</span>}
+                          <span className="player-menu-label">{option.label}</span>
+                          {quality === option.index && <span className="player-menu-value"><UiIcon name="check" size={15} /></span>}
                         </button>
                       ))}
                     </div>
@@ -788,24 +736,30 @@ export default function ChapterTimeline({
 
                 {settingsView === 'speed' && (
                   <div>
-                    <button
-                      onClick={() => setSettingsView('main')}
-                      style={{ background: 'none', border: 'none', color: '#fff', padding: '4px 4px 8px', cursor: 'pointer', fontSize: 12, textAlign: 'left', width: '100%' }}
-                    >
-                      {t('backButton')}
+                    <button type="button" className="player-menu-back" onClick={() => setSettingsView('main')}>
+                      <UiIcon name="chevronLeft" size={16} />
+                      {t('playbackSpeedLabel')}
                     </button>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    <div className="player-menu-chips" role="radiogroup" aria-label={t('playbackSpeedLabel')}>
                       {[0.25, 0.5, 1, 1.5, 2, 3, 5].map((rate) => (
-                        <button
-                          key={rate}
-                          onClick={() => handleSpeedChange(rate)}
-                          style={{
-                            background: speed === rate ? '#fff' : 'rgba(255,255,255,0.12)',
-                            color: speed === rate ? '#0a0a0b' : '#fff',
-                            border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer',
-                          }}
-                        >
+                        <button key={rate} type="button" role="radio" aria-checked={speed === rate} className={`player-menu-chip${speed === rate ? ' active' : ''}`} onClick={() => handleSpeedChange(rate)}>
                           {rate}x
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {settingsView === 'captions' && (
+                  <div>
+                    <button type="button" className="player-menu-back" onClick={() => setSettingsView('main')}>
+                      <UiIcon name="chevronLeft" size={16} />
+                      {t('captionSizeLabel')}
+                    </button>
+                    <div className="player-menu-chips" role="radiogroup" aria-label={t('captionSizeLabel')}>
+                      {(['s', 'm', 'l'] as const).map((size) => (
+                        <button key={size} type="button" role="radio" aria-checked={captionSize === size} className={`player-menu-chip${captionSize === size ? ' active' : ''}`} onClick={() => { setCaptionSize(size); saveCaptionSize(size); }}>
+                          {t(size === 's' ? 'captionSizeSmall' : size === 'l' ? 'captionSizeLarge' : 'captionSizeMedium')}
                         </button>
                       ))}
                     </div>
@@ -814,23 +768,13 @@ export default function ChapterTimeline({
 
                 {settingsView === 'sleep' && (
                   <div>
-                    <button
-                      onClick={() => setSettingsView('main')}
-                      style={{ background: 'none', border: 'none', color: '#fff', padding: '4px 4px 8px', cursor: 'pointer', fontSize: 12, textAlign: 'left', width: '100%' }}
-                    >
-                      {t('backButton')}
+                    <button type="button" className="player-menu-back" onClick={() => setSettingsView('main')}>
+                      <UiIcon name="chevronLeft" size={16} />
+                      {t('sleepTimerMenuLabel')}
                     </button>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    <div className="player-menu-chips" role="radiogroup" aria-label={t('sleepTimerMenuLabel')}>
                       {[null, 15, 30, 60].map((m) => (
-                        <button
-                          key={m ?? 'off'}
-                          onClick={() => handleSleepTimer(m)}
-                          style={{
-                            background: sleepMinutes === m ? '#fff' : 'rgba(255,255,255,0.12)',
-                            color: sleepMinutes === m ? '#0a0a0b' : '#fff',
-                            border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer',
-                          }}
-                        >
+                        <button key={m ?? 'off'} type="button" role="radio" aria-checked={sleepMinutes === m} className={`player-menu-chip${sleepMinutes === m ? ' active' : ''}`} onClick={() => handleSleepTimer(m)}>
                           {m ? `${m} ${t('minutesShortLabel')}` : t('offLabel')}
                         </button>
                       ))}

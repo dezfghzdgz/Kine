@@ -147,7 +147,7 @@ const NAV_SHORTCUT_OPTIONS = [
   { key: 'watchlater', href: '/watch-later', labelKey: 'watchLater' },
 ];
 
-export default function NotificationBell({ mobileTrigger = false }: { mobileTrigger?: boolean }) {
+export default function NotificationBell({ mobileTrigger = false, onNavigate }: { mobileTrigger?: boolean; onNavigate?: () => void }) {
   const { t, lang } = useLanguage();
   const router = useRouter();
   const [snapshot, setSnapshot] = useState<NotificationSnapshot>(notificationSnapshot);
@@ -186,6 +186,7 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
 
     const option = NAV_SHORTCUT_OPTIONS.find((o) => o.key === chosenIcon);
     if (option?.href) {
+      onNavigate?.();
       router.push(option.href);
       return;
     }
@@ -218,7 +219,10 @@ export default function NotificationBell({ mobileTrigger = false }: { mobileTrig
     setOpen(false);
     // Jen stránka Kine - starší záznam s odkazem ven ("//nekde.jinde") se neotevře.
     const link = safeInternalLink(n.link);
-    if (link) router.push(link);
+    if (link) {
+      onNavigate?.();
+      router.push(link);
+    }
   }
 
   async function deleteNotification(e: React.MouseEvent, id: string) {

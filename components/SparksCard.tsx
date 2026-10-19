@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import KineLoader from './KineLoader';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Script from 'next/script';
@@ -693,7 +694,7 @@ export default function SparksCard({
         ) : (
           <div style={{ width: '100%', height: '100%', background: '#0a0a0b' }} />
         )}
-        {native && active && buffering && !needsTap && !userPaused && <span className="spark-spinner" role="status" aria-label={t('loading')} />}
+        {native && active && buffering && !needsTap && !userPaused && <KineLoader size="sm" delayed label={t('loading')} className="spark-loader" />}
         {showPlayIcon && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ fontSize: 44, color: '#fff' }}>▶</span>

@@ -15,6 +15,7 @@ import { PAYMENTS_ENABLED } from '@/lib/payments';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import Toast, { ToastType } from '@/components/Toast';
 import { PanelHeading, WithHelp } from '@/components/HelpTip';
+import FieldHint from '@/components/FieldHint';
 import UiIcon from '@/components/UiIcon';
 import { liveThumbnailJpeg } from '@/lib/liveThumbnail';
 
@@ -400,10 +401,13 @@ export default function LiveStudioPage() {
 
       {setup.migrated && setup.configured && !input && (
         <div className="panel live-intro">
-          <p style={{ color: 'var(--text-dim)', marginTop: 0 }}>{t('liveStudioIntro')}</p>
-          <button type="button" onClick={() => createKey('create')} disabled={busy}>
-            {busy ? t('liveCreating') : t('liveCreateKeyButton')}
-          </button>
+          {/* Co studio umí: za otazníčkem vedle tlačítka (heslovitě), ne odstavec. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <button type="button" onClick={() => createKey('create')} disabled={busy}>
+              {busy ? t('liveCreating') : t('liveCreateKeyButton')}
+            </button>
+            <FieldHint text={t('liveStudioIntro')} />
+          </div>
         </div>
       )}
 

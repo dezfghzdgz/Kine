@@ -157,5 +157,22 @@ test('přenos: podezřelé snímky z minulého přenosu se do nového nepočíta
   assert.deepEqual(R.liveStrikesSince('nesmysl', null), []);
 });
 
+test('druhý pohled (0119): další snímky ±2 s a ±5 s kolem podezřelých míst, bez opakování a mimo video ne', () => {
+  const scored = [
+    { t: 10, f: clean },
+    { t: 60, f: frame({ porn: 0.55 }) },
+    { t: 120, f: clean },
+    { t: null, f: clean },
+  ];
+  assert.deepEqual(R.refineTimes(scored, 150), [55, 58, 62, 65]);
+  assert.deepEqual(R.refineTimes([{ t: 1, f: frame({ sexy: 0.85 }) }], 4), [3], 'začátek videa: záporné časy a časy za koncem se vynechají');
+  assert.deepEqual(R.refineTimes([{ t: 10, f: clean }], 100), [], 'nic podezřelého = žádný druhý pohled');
+  // Nejvýš 8 dalších časů, nejdřív ±2 s u všech podezřelých, pak ±5 s.
+  const many = [20, 40, 60, 80, 100].map((t) => ({ t, f: frame({ porn: 0.6 }) }));
+  const extra = R.refineTimes(many, 200);
+  assert.equal(extra.length, 8);
+  assert.ok(extra.includes(22) && extra.includes(102) && extra.includes(18) && !extra.includes(98), 'nejdřív +2 s u všech, pak -2 s, dokud je místo');
+});
+
 console.log(`\n${prosly} prošlo, ${padly} spadlo`);
 if (padly) process.exit(1);

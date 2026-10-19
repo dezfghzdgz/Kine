@@ -1771,4 +1771,13 @@ export const de: Record<DictKey, string> = {
   downloadAndroidStep1: 'Lade die APK herunter und öffne sie. Wenn Android fragt, erlaube Installationen aus dieser Quelle.',
   downloadAndroidStep2: 'Melde dich in der App an (sie öffnet die Kine-Website, du bestätigst und kommst zurück) und schalte die Blase ein. Wähle Cliplänge, Kamera und ihre Ecke.',
   downloadAndroidStep3: 'Tippe auf Start, bestätige die Bildschirmaufnahme und spiel. Ein Tipp auf die Blase speichert die letzten paar Dutzend Sekunden; die Clips werden dann zu Kine hochgeladen.',
+  downloadMacChip: 'Chip',
+  downloadMacAppleSilicon: 'Apple Silicon (M1–M4)',
+  downloadMacIntel: 'Intel',
+  downloadMacChipHint: 'Nicht sicher, welchen Chip du hast? Apple-Menü  → Über diesen Mac: „Chip Apple M…“ = Apple Silicon, „Prozessor Intel…“ = Intel. Fast jeder Mac seit Ende 2020 ist Apple Silicon.',
+  streamsSortSmall: 'Kleine Streams (unter 10 Zuschauern)',
+  captionSizeLabel: 'Untertitelgröße',
+  captionSizeSmall: 'Klein',
+  captionSizeMedium: 'Mittel',
+  captionSizeLarge: 'Groß',
 };

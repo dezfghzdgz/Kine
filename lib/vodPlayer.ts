@@ -272,6 +272,9 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
         // První kus podle odhadu připojení (malý), pak hls.js kvalitu sám zvedne.
         startLevel: -1,
         testBandwidth: false,
+        // První kus videa se stahuje hned po manifestu, ne až po stisku přehrát - start je o jeden
+        // dotaz na server rychlejší (jeden kus dat navíc, když člověk nakonec nepustí).
+        startFragPrefetch: true,
         // Lehký režim začíná ještě níž (lib/netQuality.ts); počítač s dobrým připojením rovnou
         // v plné kvalitě, telefon s malým prvním kusem (lib/vodPlayerCore.ts - startEstimateFor).
         abrEwmaDefaultEstimate:

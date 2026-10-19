@@ -1771,4 +1771,13 @@ export const en: Record<DictKey, string> = {
   downloadAndroidStep1: 'Download the APK and open it. If Android asks, allow installs from this source.',
   downloadAndroidStep2: 'Sign in inside the app (it opens the Kine website, you confirm and it brings you back) and turn on the bubble. Pick the clip length, the camera and its corner.',
   downloadAndroidStep3: 'Tap Start, confirm screen recording and play. Tapping the bubble saves the last few dozen seconds; the clips then upload to Kine.',
+  downloadMacChip: 'Chip',
+  downloadMacAppleSilicon: 'Apple Silicon (M1–M4)',
+  downloadMacIntel: 'Intel',
+  downloadMacChipHint: 'Not sure which chip you have? Apple menu  → About This Mac: “Chip Apple M…” = Apple Silicon, “Processor Intel…” = Intel. Almost every Mac since late 2020 is Apple Silicon.',
+  streamsSortSmall: 'Small streams (under 10 viewers)',
+  captionSizeLabel: 'Caption size',
+  captionSizeSmall: 'Small',
+  captionSizeMedium: 'Medium',
+  captionSizeLarge: 'Large',
 };

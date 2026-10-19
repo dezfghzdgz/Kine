@@ -83,6 +83,33 @@ export function scanTimes(durationSeconds: number): number[] {
   return [...times].sort((a, b) => a - b);
 }
 
+/**
+ * Druhý pohled (0119): když první průchod skončí „ke kontrole“ (slabší signál), vezmou
+ * se další snímky kolem podezřelých míst (±2 s a ±5 s), ať se rozhodne z víc obrázků -
+ * jeden zmatený snímek (plavky, zápas) tak nepošle video zbytečně moderátorovi a naopak
+ * porno jen v jednom místě videa se zachytí. Nejvýš `max` dalších časů, bez už použitých.
+ */
+export function refineTimes(scored: { t: number | null; f: FrameScores }[], durationSeconds: number, max = 8): number[] {
+  const d = Number.isFinite(durationSeconds) ? Math.max(0, Math.floor(durationSeconds)) : 0;
+  const used = new Set(scored.map((s) => s.t).filter((t): t is number => t !== null));
+  const R = NUDITY_RULES;
+  const suspects = scored
+    .filter((s) => s.t !== null && (pornScore(s.f) >= R.reviewPorn || clamp01(s.f.sexy) >= R.reviewNudity))
+    .map((s) => ({ t: s.t as number, score: Math.max(pornScore(s.f), clamp01(s.f.sexy)) }))
+    .sort((a, b) => b.score - a.score);
+  const out: number[] = [];
+  for (const offset of [2, -2, 5, -5]) {
+    for (const s of suspects) {
+      const t = s.t + offset;
+      if (t < 0 || t > d || used.has(t)) continue;
+      used.add(t);
+      out.push(t);
+      if (out.length >= max) return out.sort((a, b) => a - b);
+    }
+  }
+  return out.sort((a, b) => a - b);
+}
+
 // ---- živé vysílání ----------------------------------------------------------------
 
 /** Snímek z přenosu: 'severe' skryje hned, 'explicit' a 'suspect' se sčítají. */

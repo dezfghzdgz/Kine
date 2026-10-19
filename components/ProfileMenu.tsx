@@ -36,9 +36,12 @@ const LANG_NAMES: Record<Lang, string> = {
 export default function ProfileMenu({
   username,
   avatarUrl,
+  onNavigate,
 }: {
   username: string;
   avatarUrl: string | null;
+  /** Po výběru položky (odkaz, odhlášení): v mobilním panelu ho zavře, ať „lišta zaleze“. */
+  onNavigate?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
@@ -78,6 +81,12 @@ export default function ProfileMenu({
     saveTheme(next);
   }
 
+  /** Odkaz z nabídky: zavřít nabídku i mobilní panel. */
+  function go() {
+    setOpen(false);
+    onNavigate?.();
+  }
+
   async function handleSignOut() {
     await supabase.auth.signOut();
     setConfirmSignOut(false);
@@ -103,7 +112,7 @@ export default function ProfileMenu({
             </span>
             <div>
               <p className="profile-dropdown-name">{username}</p>
-              <Link href="/channel/me" className="profile-dropdown-link" onClick={() => setOpen(false)}>
+              <Link href="/channel/me" className="profile-dropdown-link" onClick={go}>
                 {t('viewChannel')}
               </Link>
             </div>
@@ -111,19 +120,19 @@ export default function ProfileMenu({
 
           <div className="profile-dropdown-divider" />
 
-          <Link href="/settings" className="profile-dropdown-item" onClick={() => setOpen(false)}>
+          <Link href="/settings" className="profile-dropdown-item" onClick={go}>
             <ItemLabel icon="sliders">{t('settings')}</ItemLabel>
           </Link>
 
-          <Link href="/channel-stats" className="profile-dropdown-item" onClick={() => setOpen(false)}>
+          <Link href="/channel-stats" className="profile-dropdown-item" onClick={go}>
             <ItemLabel icon="chart">{t('channelStats')}</ItemLabel>
           </Link>
 
-          <Link href="/download" className="profile-dropdown-item" onClick={() => setOpen(false)}>
+          <Link href="/download" className="profile-dropdown-item" onClick={go}>
             <ItemLabel icon="desktop">{t('desktopAppLink')}</ItemLabel>
           </Link>
 
-          <Link href="/plus" className="profile-dropdown-item" onClick={() => setOpen(false)}>
+          <Link href="/plus" className="profile-dropdown-item" onClick={go}>
             <ItemLabel icon="sparkle">{t('plusPageTitle')}</ItemLabel>
           </Link>
 
@@ -135,7 +144,7 @@ export default function ProfileMenu({
             </span>
             <ThemeSlider theme={theme} onChange={applyTheme} />
           </div>
-          <Link href="/settings#appearance" className="profile-dropdown-item" onClick={() => { setOpen(false); goToSettingsSection('appearance'); }}>
+          <Link href="/settings#appearance" className="profile-dropdown-item" onClick={() => { go(); goToSettingsSection('appearance'); }}>
             <ItemLabel icon="palette">{t('appearanceCustomize')}</ItemLabel>
           </Link>
 

@@ -1771,4 +1771,13 @@ export const fr: Record<DictKey, string> = {
   downloadAndroidStep1: 'Télécharge l’APK et ouvre-le. Si Android le demande, autorise l’installation depuis cette source.',
   downloadAndroidStep2: 'Connecte-toi dans l’application (elle ouvre le site Kine, tu confirmes et elle te ramène) et active la bulle. Choisis la durée du clip, la caméra et son coin.',
   downloadAndroidStep3: 'Touche Démarrer, confirme l’enregistrement de l’écran et joue. Un toucher sur la bulle sauvegarde les dernières dizaines de secondes ; les clips sont ensuite envoyés sur Kine.',
+  downloadMacChip: 'Puce',
+  downloadMacAppleSilicon: 'Apple Silicon (M1–M4)',
+  downloadMacIntel: 'Intel',
+  downloadMacChipHint: 'Tu ne sais pas quelle puce tu as ? Menu Pomme  → À propos de ce Mac : « Puce Apple M… » = Apple Silicon, « Processeur Intel… » = Intel. Presque tous les Mac depuis fin 2020 sont Apple Silicon.',
+  streamsSortSmall: 'Petits streams (moins de 10 spectateurs)',
+  captionSizeLabel: 'Taille des sous-titres',
+  captionSizeSmall: 'Petit',
+  captionSizeMedium: 'Moyen',
+  captionSizeLarge: 'Grand',
 };

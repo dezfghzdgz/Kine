@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { formatTipAmount } from '@/lib/liveTips';
 import { PanelHeading } from './HelpTip';
+import FieldHint from './FieldHint';
 
 type TipsInfo = {
   available: boolean;
@@ -113,13 +114,15 @@ export default function LiveTipsPanel({ token, userId, onCopy }: { token: string
           )}
 
           <div className="live-key-row" style={{ marginTop: 12 }}>
-            <span className="live-key-label">{t('tipsOverlayTts')}</span>
+            <span className="live-key-label">
+              {t('tipsOverlayTts')}
+              <FieldHint text={t('tipsOverlayTtsHint')} />
+            </span>
             <code className="live-key-value">{overlayUrl}</code>
             <button type="button" className="live-small-btn" onClick={() => onCopy(overlayUrl)}>
               {t('liveCopy')}
             </button>
           </div>
-          <p className="live-hint">{t('tipsOverlayTtsHint')}</p>
         </>
       )}
     </div>

@@ -1771,4 +1771,13 @@ export const sk: Record<DictKey, string> = {
   downloadAndroidStep1: 'Stiahni APK a otvor ho. Keď sa Android opýta, povoľ inštaláciu z tohto zdroja.',
   downloadAndroidStep2: 'V appke sa prihlás (otvorí sa web Kine, potvrdíš a vráti ťa späť) a zapni bublinu. Vyber dĺžku klipu, kameru a jej roh.',
   downloadAndroidStep3: 'Klepni na Štart, potvrď nahrávanie obrazovky a hraj. Klepnutie na bublinu uloží posledných pár desiatok sekúnd; klipy sa potom nahrajú na Kine.',
+  downloadMacChip: 'Čip',
+  downloadMacAppleSilicon: 'Apple Silicon (M1–M4)',
+  downloadMacIntel: 'Intel',
+  downloadMacChipHint: 'Nevieš, aký čip máš? Menu  → O tomto Macu: „Čip Apple M…“ = Apple Silicon, „Procesor Intel…“ = Intel. Macy od konca roku 2020 sú skoro všetky Apple Silicon.',
+  streamsSortSmall: 'Malé prenosy (do 10 divákov)',
+  captionSizeLabel: 'Veľkosť titulkov',
+  captionSizeSmall: 'Malé',
+  captionSizeMedium: 'Stredné',
+  captionSizeLarge: 'Veľké',
 };

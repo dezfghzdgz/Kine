@@ -11,6 +11,7 @@ import {
   liveSnapshotLevel,
   liveStrikesSince,
   nudityVerdict,
+  refineTimes,
   pornScore,
   scanTimes,
   type FrameScores,
@@ -139,6 +140,14 @@ export async function scanVideo(videoId: string): Promise<ScanResult> {
   if (scored.length === 0) return { outcome: 'failed' };
 
   let verdict = nudityVerdict(scored.map((s) => s.f), { artistic: !!video.artistic });
+  // Slabší signál: druhý pohled kolem podezřelých míst (lib/nudityRules.ts refineTimes), pak znovu.
+  if (verdict.action === 'review') {
+    for (const t of refineTimes(scored, Number(video.duration_seconds) || 0)) {
+      const f = await classifyUrl(frameUrl(id, t)).catch(() => null);
+      if (f) scored.push({ t, f });
+    }
+    verdict = nudityVerdict(scored.map((s) => s.f), { artistic: !!video.artistic });
+  }
   // Moderátor už video jednou pustil (a teď se kontroluje znovu - třeba kvůli novému
   // náhledu): neskrývat znovu automaticky, jen poslat ke kontrole.
   if (verdict.action === 'hold') {

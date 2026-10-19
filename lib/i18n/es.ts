@@ -1771,4 +1771,13 @@ export const es: Record<DictKey, string> = {
   downloadAndroidStep1: 'Descarga el APK y ábrelo. Si Android pregunta, permite instalar desde esta fuente.',
   downloadAndroidStep2: 'Inicia sesión en la aplicación (abre la web de Kine, confirmas y vuelves) y activa la burbuja. Elige la duración del clip, la cámara y su esquina.',
   downloadAndroidStep3: 'Toca Iniciar, confirma la grabación de pantalla y juega. Un toque en la burbuja guarda las últimas decenas de segundos; después los clips se suben a Kine.',
+  downloadMacChip: 'Chip',
+  downloadMacAppleSilicon: 'Apple Silicon (M1–M4)',
+  downloadMacIntel: 'Intel',
+  downloadMacChipHint: '¿No sabes qué chip tienes? Menú Apple  → Acerca de este Mac: «Chip Apple M…» = Apple Silicon, «Procesador Intel…» = Intel. Casi todos los Mac desde finales de 2020 son Apple Silicon.',
+  streamsSortSmall: 'Directos pequeños (menos de 10 espectadores)',
+  captionSizeLabel: 'Tamaño de subtítulos',
+  captionSizeSmall: 'Pequeño',
+  captionSizeMedium: 'Mediano',
+  captionSizeLarge: 'Grande',
 };

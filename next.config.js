@@ -16,6 +16,10 @@ function canonicalSite() {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Do prohlížeče jde jen zmenšený kód bez zdrojových map (výchozí Next, tady napsáno
+  // schválně, ať to nikdo omylem nezapne) a bez hlavičky "X-Powered-By".
+  productionBrowserSourceMaps: false,
+  poweredByHeader: false,
   async redirects() {
     const site = canonicalSite();
     let host = '';

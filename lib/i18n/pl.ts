@@ -1771,4 +1771,13 @@ export const pl: Record<DictKey, string> = {
   downloadAndroidStep1: 'Pobierz APK i otwórz go. Jeśli Android zapyta, zezwól na instalację z tego źródła.',
   downloadAndroidStep2: 'Zaloguj się w aplikacji (otworzy stronę Kine, potwierdzasz i wracasz) i włącz bąbelek. Wybierz długość klipu, kamerę i jej róg.',
   downloadAndroidStep3: 'Dotknij Start, potwierdź nagrywanie ekranu i graj. Dotknięcie bąbelka zapisuje ostatnie kilkadziesiąt sekund; potem klipy wgrywają się na Kine.',
+  downloadMacChip: 'Procesor',
+  downloadMacAppleSilicon: 'Apple Silicon (M1–M4)',
+  downloadMacIntel: 'Intel',
+  downloadMacChipHint: 'Nie wiesz, jaki masz procesor? Menu Apple  → Ten Mac: „Czip Apple M…” = Apple Silicon, „Procesor Intel…” = Intel. Prawie każdy Mac od końca 2020 to Apple Silicon.',
+  streamsSortSmall: 'Małe transmisje (do 10 widzów)',
+  captionSizeLabel: 'Rozmiar napisów',
+  captionSizeSmall: 'Małe',
+  captionSizeMedium: 'Średnie',
+  captionSizeLarge: 'Duże',
 };

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
@@ -104,7 +104,7 @@ function applyReaction(c: Comment, next: 'like' | 'dislike' | null): Comment {
 }
 
 export default function CommentSection({
-  videoId, description, video, ownerId, onSeek, captions, getCurrentTime,
+  videoId, description, video, ownerId, onSeek, captions, getCurrentTime, header,
 }: {
   videoId: string;
   description?: string | null;
@@ -115,6 +115,8 @@ export default function CommentSection({
   captions?: Caption[] | null;
   /** Kde video právě je (zvýraznění řádku v přepisu). */
   getCurrentTime?: () => number;
+  /** Hlavička karty (tvůrce videa): tvůrce a komentáře jsou v jedné kartě, ne ve dvou nalepených na sobě. */
+  header?: ReactNode;
 }) {
   const router = useRouter();
   const { t, lang } = useLanguage();
@@ -493,8 +495,8 @@ export default function CommentSection({
   }
 
   return (
-    <div className="panel">
-      <p className="panel-heading">{t('comments')}</p>
+    <div className={`panel${header ? ' discussion-panel' : ''}`}>
+      {header ? <div className="discussion-head">{header}</div> : <p className="panel-heading">{t('comments')}</p>}
 
       <div className="tab-row">
         {TABS.filter((tab) => tab !== 'Prepis' || (captions?.length ?? 0) > 0).map((tab) => (

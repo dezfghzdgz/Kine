@@ -25,19 +25,22 @@ function test(nazev, fn) {
 
 test('soubory podle systému - stejné názvy jako electron-builder (publish-config.mjs)', () => {
   assert.equal(R.DESKTOP_FILES.full.windows, 'Kine-Setup.exe');
-  assert.equal(R.DESKTOP_FILES.full.mac, 'Kine-Mac.dmg');
+  assert.equal(R.DESKTOP_FILES.full.mac, 'Kine-Mac-arm64.dmg', 'Mac = Apple Silicon (výchozí)');
+  assert.equal(R.DESKTOP_FILES.full['mac-intel'], 'Kine-Mac-x64.dmg');
   assert.equal(R.DESKTOP_FILES.full.linux, 'Kine-Linux.AppImage');
   assert.equal(R.DESKTOP_FILES.full['linux-deb'], 'Kine-Linux.deb');
-  assert.equal(R.DESKTOP_FILES.clipper.mac, 'Kine-Clipper-Mac.dmg');
+  assert.equal(R.DESKTOP_FILES.clipper.mac, 'Kine-Clipper-Mac-arm64.dmg');
+  assert.equal(R.DESKTOP_FILES.clipper['mac-intel'], 'Kine-Clipper-Mac-x64.dmg');
   assert.equal(R.DESKTOP_FILES.clipper.linux, 'Kine-Clipper-Linux.AppImage');
 });
 
 test('odkazy: úložiště (R2) ve složce appky, bez lomítka navíc', () => {
   assert.equal(R.desktopDownloadUrl('full'), 'https://stahnout.example/full/Kine-Setup.exe', 'výchozí = Windows jako dřív');
-  assert.equal(R.desktopDownloadUrl('clipper', 'mac'), 'https://stahnout.example/clipper/Kine-Clipper-Mac.dmg');
+  assert.equal(R.desktopDownloadUrl('clipper', 'mac'), 'https://stahnout.example/clipper/Kine-Clipper-Mac-arm64.dmg');
+  assert.equal(R.desktopDownloadUrl('full', 'mac-intel'), 'https://stahnout.example/full/Kine-Mac-x64.dmg');
   assert.equal(R.desktopDownloadUrl('full', 'linux-deb'), 'https://stahnout.example/full/Kine-Linux.deb');
   const all = R.desktopDownloads();
-  assert.deepEqual(Object.keys(all.full).sort(), ['linux', 'linux-deb', 'mac', 'windows']);
+  assert.deepEqual(Object.keys(all.full).sort(), ['linux', 'linux-deb', 'mac', 'mac-intel', 'windows']);
   assert.equal(all.clipper.linux, 'https://stahnout.example/clipper/Kine-Clipper-Linux.AppImage');
 });
 

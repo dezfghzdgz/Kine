@@ -1771,4 +1771,13 @@ export const uk: Record<DictKey, string> = {
   downloadAndroidStep1: 'Завантаж APK і відкрий його. Якщо Android запитає, дозволь встановлення з цього джерела.',
   downloadAndroidStep2: 'Увійди в застосунку (відкриється сайт Kine, підтверджуєш і повертаєшся) та ввімкни бульбашку. Вибери довжину кліпу, камеру та її кут.',
   downloadAndroidStep3: 'Торкнись Старт, підтвердь запис екрана та грай. Дотик до бульбашки зберігає останні кілька десятків секунд; далі кліпи завантажуються на Kine.',
+  downloadMacChip: 'Чип',
+  downloadMacAppleSilicon: 'Apple Silicon (M1–M4)',
+  downloadMacIntel: 'Intel',
+  downloadMacChipHint: 'Не знаєш, який у тебе чип? Меню Apple  → Про цей Mac: «Чип Apple M…» = Apple Silicon, «Процесор Intel…» = Intel. Майже всі Mac з кінця 2020 року - Apple Silicon.',
+  streamsSortSmall: 'Малі трансляції (до 10 глядачів)',
+  captionSizeLabel: 'Розмір субтитрів',
+  captionSizeSmall: 'Малі',
+  captionSizeMedium: 'Середні',
+  captionSizeLarge: 'Великі',
 };

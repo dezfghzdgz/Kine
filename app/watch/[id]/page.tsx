@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabaseClient';
 import VideoReactions from '@/components/VideoReactions';
 import CommentSection from '@/components/CommentSection';
 import UiIcon from '@/components/UiIcon';
+import KineLoader from '@/components/KineLoader';
 import AddToPlaylist from '@/components/AddToPlaylist';
 import SubscribeButton from '@/components/SubscribeButton';
 import DownloadButton from '@/components/DownloadButton';
@@ -1683,8 +1684,8 @@ function WatchPageInner() {
                       />
                     )}
                     {!playbackStarted && !needsPlayTap && video.status === 'ready' && (
-                      <div className="player-loading" role="status" aria-label={t('loading')}>
-                        <span className="player-loading-spinner" aria-hidden="true" />
+                      <div className="player-loading">
+                        <KineLoader label={t('loading')} />
                       </div>
                     )}
                     {/* Záchranná brzda. Přehrávač jede bez vlastního
@@ -2177,28 +2178,39 @@ function WatchPageInner() {
         )}
         <p className="section-title">{t('interactionPanelTitle')}</p>
 
-        <div className="panel">
-          <p className="panel-heading">{t('creatorProfileHeading')}</p>
-          <div className="creator-row">
-            <div className="creator-avatar" style={{ overflow: 'hidden' }}>
-              {video.profiles?.avatar_url ? (
-                <ProfileImage src={video.profiles.avatar_url} alt={creatorName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : null}
-            </div>
-            <div>
-              <Link href={`/channel/${video.profiles?.id}`} className="creator-name" style={{ display: 'block' }}>
-                {creatorName}
-                <VerifiedBadge tier={video.profiles?.verification_tier} />
-                {trustRating !== null && trustRating >= 90 && <span title={t('highRatingTitle').replace('{rating}', String(trustRating))} style={{ marginLeft: 5, fontSize: 13 }}>⭐</span>}
-              </Link>
-              {trustRating !== null && (
-                <p className="creator-trust">{t('creatorRatingLabel').replace('{rating}', String(trustRating))}</p>
-              )}
-            </div>
-          </div>
-        </div>
-
+        {/* Tvůrce a diskuse v JEDNÉ kartě: nahoře tvůrce (odkaz na kanál), pod ním záložky
+            Popis / Komentáře / Přepis / Technické. Dřív dvě karty nalepené na sobě. */}
         <CommentSection
+          header={
+            <div className="creator-row">
+              <Link href={`/channel/${video.profiles?.id}`} className="creator-avatar" style={{ overflow: 'hidden' }} aria-label={creatorName}>
+                {video.profiles?.avatar_url ? (
+                  <ProfileImage src={video.profiles.avatar_url} alt={creatorName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : null}
+              </Link>
+              <div style={{ minWidth: 0 }}>
+                <Link href={`/channel/${video.profiles?.id}`} className="creator-name" style={{ display: 'block' }}>
+                  {creatorName}
+                  <VerifiedBadge tier={video.profiles?.verification_tier} />
+                  {trustRating !== null && trustRating >= 90 && (
+                    <span className="creator-star" title={t('highRatingTitle').replace('{rating}', String(trustRating))}>
+                      <UiIcon name="starFilled" size={14} />
+                    </span>
+                  )}
+                </Link>
+                {/* Pod jménem hodnocení (když je), jinak odkaz na kanál - žádné zvláštní tlačítko,
+                    karta je i na úzkém sloupci jeden řádek. */}
+                {trustRating !== null ? (
+                  <p className="creator-trust">{t('creatorRatingLabel').replace('{rating}', String(trustRating))}</p>
+                ) : (
+                  <Link href={`/channel/${video.profiles?.id}`} className="creator-trust creator-open-link">
+                    {t('viewChannel')}
+                    <UiIcon name="chevronRight" size={12} />
+                  </Link>
+                )}
+              </div>
+            </div>
+          }
           videoId={video.id}
           description={video.description}
           ownerId={video.profiles?.id}

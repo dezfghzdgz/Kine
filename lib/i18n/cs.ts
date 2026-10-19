@@ -1777,6 +1777,15 @@ export const cs = {
   downloadAndroidStep1: 'Stáhni APK a otevři ho. Když se Android zeptá, povol instalaci z tohoto zdroje.',
   downloadAndroidStep2: 'V appce se přihlas (otevře se web Kine, potvrdíš a vrátí tě zpátky) a zapni bublinu. Vyber délku klipu, kameru a její roh.',
   downloadAndroidStep3: 'Klepni na Start, potvrď nahrávání obrazovky a hraj. Klepnutí na bublinu uloží posledních pár desítek sekund; klipy se pak nahrají na Kine.',
+  downloadMacChip: 'Čip',
+  downloadMacAppleSilicon: 'Apple Silicon (M1–M4)',
+  downloadMacIntel: 'Intel',
+  downloadMacChipHint: 'Nevíš, jaký čip máš? Menu  → O tomto Macu: „Čip Apple M…“ = Apple Silicon, „Procesor Intel…“ = Intel. Macy od konce roku 2020 jsou skoro všechny Apple Silicon.',
+  streamsSortSmall: 'Malé přenosy (do 10 diváků)',
+  captionSizeLabel: 'Velikost titulků',
+  captionSizeSmall: 'Malé',
+  captionSizeMedium: 'Střední',
+  captionSizeLarge: 'Velké',
 } as const;
 
 export type DictKey = keyof typeof cs;

@@ -299,8 +299,11 @@ export default function UploadPage() {
   if (step === 1 && bulkMode) {
     return (
       <form className="form-container" style={{ maxWidth: 560 }} onSubmit={handleBulkSubmit}>
-        <h1>{t('bulkUploadTitle')}</h1>
-        <p style={{ color: 'var(--text-dim)', fontSize: 14, lineHeight: 1.6, marginTop: -6 }}>{t('bulkUploadIntro')}</p>
+        {/* Vysvětlení za otazníčkem (heslovitě), ne odstavec pod nadpisem. */}
+        <h1>
+          {t('bulkUploadTitle')}
+          <FieldHint text={t('bulkUploadIntro')} />
+        </h1>
         <button type="button" className="reaction-btn" onClick={() => { setBulkMode(false); setError(null); }} style={{ alignSelf: 'flex-start' }}>
           ← {t('bulkBackToSingle')}
         </button>
