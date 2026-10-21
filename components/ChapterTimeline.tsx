@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { SpeakerIcon, MaximizeIcon, MinimizeIcon } from './ReactionIcons';
 import { useLanguage } from '@/lib/i18n';
 import { PlayIcon, PauseIcon } from './MusicIcons';
-import { AUTO_HIDE_MS, clampSeek, decideTap, formatTime, tapSide, type Tap, type TapSide } from '@/lib/playerControls';
+import { autoHideDelay, clampSeek, decideTap, formatTime, tapSide, type Tap, type TapSide } from '@/lib/playerControls';
 import { OPEN_SHORTCUTS_EVENT } from './KeyboardShortcuts';
 import { qualityLabel, type QualityLevel } from '@/lib/vodPlayerCore';
 import { pipActive, pipSupported, togglePictureInPicture, watchPictureInPicture } from '@/lib/pictureInPicture';
@@ -78,6 +78,7 @@ export default function ChapterTimeline({
   onQuality,
   dataSaver,
   onToggleStats,
+  hideCenterToggle = false,
 }: {
   chapters: Chapter[];
   duration: number;
@@ -115,6 +116,8 @@ export default function ChapterTimeline({
   dataSaver?: { light: boolean; onToggle: () => void };
   /** Statistiky přehrávání (components/PlaybackStats.tsx). */
   onToggleStats?: () => void;
+  /** Stránka ukazuje vlastní tlačítko „Přehrát“ (zákaz přehrání bez klepnutí) - velké tlačítko uprostřed schovat, ať nejsou dvě. */
+  hideCenterToggle?: boolean;
 }) {
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(true);
@@ -243,8 +246,11 @@ export default function ChapterTimeline({
         player.currentTime = ratio * totalRef.current;
         player.play();
       }
+      const wasDragging = draggingRef.current !== null;
       draggingRef.current = null;
       setIsDragging(false);
+      // Po puštění posuvníku se ovládání zase schová (během tažení zůstává).
+      if (wasDragging) showControlsTemporarily();
     }
 
     window.addEventListener('mousemove', handleMove);
@@ -259,15 +265,62 @@ export default function ChapterTimeline({
     };
   }, [player]);
 
-  function showControlsTemporarily() {
-    setControlsVisible(true);
+  // Aktuální přehrávač a otevřená nabídka pro odpočty, které žijí mimo vykreslení.
+  const playerLiveRef = useRef<any>(player);
+  playerLiveRef.current = player;
+  const settingsOpenRef = useRef(false);
+  settingsOpenRef.current = settingsOpen;
+  const touchUiRef = useRef(false);
+  touchUiRef.current = touchUi;
+
+  /** Schovat ovládání za `ms` - jen když video hraje, nic se netáhne a nabídka ⋮ je zavřená. */
+  function scheduleHide(ms: number) {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     hideTimerRef.current = setTimeout(() => {
       // Na celou obrazovku se ovládání schovává úplně stejně jako v okně -
       // dřív tam zůstávalo natrvalo viset přes video.
-      if (player && !player.paused) setControlsVisible(false);
-    }, AUTO_HIDE_MS);
+      const p = playerLiveRef.current;
+      if (p && !p.paused && !draggingRef.current && !settingsOpenRef.current) setControlsVisible(false);
+    }, ms);
   }
+
+  function showControlsTemporarily(reason?: 'touch' | 'mouse') {
+    setControlsVisible(true);
+    scheduleHide(autoHideDelay(reason ?? (touchUiRef.current ? 'touch' : 'mouse')));
+  }
+
+  // Video se rozjelo -> ovládání pryč skoro hned; zastavilo se -> ovládání zůstane vidět.
+  // Podle událostí přehrávače (ne podle čtení stavu každých 400 ms - to by schovávání zpozdilo).
+  useEffect(() => {
+    if (!player) return;
+    const onPlay = () => setPaused(false);
+    // Schovat až když obraz opravdu běží (playing) - při pomalém rozjezdu by lišta zmizela
+    // ještě nad náhledem a kolečkem.
+    const onPlaying = () => {
+      setPaused(false);
+      scheduleHide(autoHideDelay('play'));
+    };
+    const onPause = () => {
+      setPaused(true);
+      setControlsVisible(true);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
+    player.addEventListener?.('play', onPlay);
+    player.addEventListener?.('playing', onPlaying);
+    player.addEventListener?.('pause', onPause);
+    return () => {
+      player.removeEventListener?.('play', onPlay);
+      player.removeEventListener?.('playing', onPlaying);
+      player.removeEventListener?.('pause', onPause);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [player]);
+
+  // Zavřená nabídka ⋮ - ovládání se zase může schovat.
+  useEffect(() => {
+    if (!settingsOpen && controlsVisible) scheduleHide(autoHideDelay(touchUiRef.current ? 'touch' : 'mouse'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsOpen]);
 
   useEffect(() => {
     return () => {
@@ -350,7 +403,7 @@ export default function ChapterTimeline({
     const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
 
     if (!isTouch) {
-      showControlsTemporarily();
+      showControlsTemporarily('mouse');
       togglePlay();
       return;
     }
@@ -373,7 +426,7 @@ export default function ChapterTimeline({
         label: decision.seekBy > 0 ? `+${decision.seekBy} s` : `${decision.seekBy} s`,
         nonce: now,
       });
-      showControlsTemporarily();
+      showControlsTemporarily('touch');
       return;
     }
 
@@ -381,7 +434,7 @@ export default function ChapterTimeline({
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
       setControlsVisible(false);
     } else {
-      showControlsTemporarily();
+      showControlsTemporarily('touch');
     }
   }
 
@@ -389,7 +442,9 @@ export default function ChapterTimeline({
   // stejné, roste jen plocha, na kterou se dá trefit.
   const hit = touchUi ? 44 : 36;
   const iconBtn: React.CSSProperties = {
-    background: 'none', border: 'none', color: '#fff', padding: 0, cursor: 'pointer',
+    // boxShadow: tlačítka bez třídy mají z globals.css skleněný rámeček - na liště přes video
+    // dělal kolem každé ikony krabičku.
+    background: 'none', border: 'none', boxShadow: 'none', color: '#fff', padding: 0, cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     minWidth: hit, minHeight: hit, borderRadius: 8, fontSize: 16,
     WebkitTapHighlightColor: 'transparent',
@@ -422,7 +477,9 @@ export default function ChapterTimeline({
           prstu. Pointer události místo onClick proto, že jen ony říkají,
           čím se klepnulo. */}
       <div
-        onMouseMove={showControlsTemporarily}
+        // Jen skutečná myš: telefon po klepnutí posílá i náhradní „pohyb myši“ - ten by
+        // ovládání držel déle, než má (1,5 s místo 1 s).
+        onPointerMove={(e) => { if (e.pointerType === 'mouse') showControlsTemporarily('mouse'); }}
         onPointerDown={(e) => { if (e.button === 0) surfaceDownRef.current = e.pointerId; }}
         onPointerUp={handleSurfaceTap}
         style={{
@@ -445,9 +502,9 @@ export default function ChapterTimeline({
       {touchUi && (
         <button
           type="button"
-          className={`player-center-toggle ${controlsVisible ? '' : 'player-center-toggle-hidden'}`}
+          className={`player-center-toggle ${controlsVisible && !hideCenterToggle ? '' : 'player-center-toggle-hidden'}`}
           aria-label={paused ? t('playerPlay') : t('playerPause')}
-          onClick={(e) => { e.stopPropagation(); togglePlay(); showControlsTemporarily(); }}
+          onClick={(e) => { e.stopPropagation(); togglePlay(); showControlsTemporarily('touch'); }}
         >
           {paused ? <PlayIcon size={34} /> : <PauseIcon size={34} />}
         </button>
@@ -455,7 +512,9 @@ export default function ChapterTimeline({
 
       <div
         ref={wrapRef}
-        onMouseMove={(e) => { e.stopPropagation(); showControlsTemporarily(); }}
+        onPointerMove={(e) => { e.stopPropagation(); if (e.pointerType === 'mouse') showControlsTemporarily('mouse'); }}
+        // Prst na liště (posuvník, tlačítka) - odpočet schování začne znovu.
+        onPointerDown={(e) => { if (e.pointerType !== 'mouse') showControlsTemporarily('touch'); }}
         style={{
           // S otevřenou nabídkou ⋮ nad tlačítkem „Přehrát“ uprostřed (z-index 7) - jinak ho překrývalo.
           position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: settingsOpen ? 8 : 5,

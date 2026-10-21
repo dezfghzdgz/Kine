@@ -206,10 +206,13 @@ export default function LivePlayer({ url, title }: { url: string; title: string 
         </button>
       )}
       {needsTap && (
-        <button type="button" className="player-tap-to-play" onClick={tapToPlay}>
-          <span className="player-tap-to-play-icon" aria-hidden="true" />
-          {t('tapToPlay')}
-        </button>
+        // Vrstva přes celé video drží tlačítko uprostřed (globals.css .player-tap-layer).
+        <div className="player-tap-layer">
+          <button type="button" className="player-tap-to-play" onClick={tapToPlay}>
+            <span className="player-tap-to-play-icon" aria-hidden="true" />
+            {t('tapToPlay')}
+          </button>
+        </div>
       )}
       {recovering && (
         <div className="live-recovering" role="status">

@@ -3,6 +3,8 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { useSearchParams } from 'next/navigation';
+import { filterBySearch } from '@/lib/searchScope';
+import ScopedSearchEmpty from '@/components/ScopedSearchEmpty';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -14,6 +16,8 @@ function YourVideosPageInner() {
   const { t } = useLanguage();
   const searchParams = useSearchParams();
   const query = searchParams.get('q')?.toLowerCase() ?? '';
+  // Hledání v knihovně (pole nahoře) - lib/searchScope.ts; původní text pro hlášku „nic tu není“.
+  const rawQuery = searchParams.get('q') ?? '';
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -146,7 +150,7 @@ function YourVideosPageInner() {
 
   if (loading) return <p style={{ color: 'var(--text-faint)' }}>{t('loading')}</p>;
 
-  const filtered = query ? videos.filter((v) => v.title.toLowerCase().includes(query)) : videos;
+  const filtered = filterBySearch(videos, query);
 
   if (videos.length === 0) {
     return (
@@ -160,6 +164,7 @@ function YourVideosPageInner() {
   return (
     <div>
       <p className="section-title">{t('yourVideosTitle')}</p>
+      {query && filtered.length === 0 && <ScopedSearchEmpty query={rawQuery} />}
       {buildVideoBlocks(filtered).map((block, bi) => (
         <VideoBlockRow key={bi} type={block.type} style={{ marginBottom: 20 }}>
           {block.items.map((video: any) => (

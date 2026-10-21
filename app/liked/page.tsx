@@ -2,6 +2,8 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { filterBySearch } from '@/lib/searchScope';
+import ScopedSearchEmpty from '@/components/ScopedSearchEmpty';
 import { supabase } from '@/lib/supabaseClient';
 import { fetchAllRows, fetchByIds } from '@/lib/loadAll';
 import Link from 'next/link';
@@ -13,6 +15,8 @@ function LikedPageInner() {
   const { t } = useLanguage();
   const searchParams = useSearchParams();
   const query = searchParams.get('q')?.toLowerCase() ?? '';
+  // Hledání v knihovně (pole nahoře) - lib/searchScope.ts; původní text pro hlášku „nic tu není“.
+  const rawQuery = searchParams.get('q') ?? '';
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   // Dotaz může spadnout (vypadlá síť, propadlé přihlášení). Bez tohohle
@@ -97,7 +101,7 @@ function LikedPageInner() {
   if (loadFailed) return <LoadFailed onRetry={startLoad} />;
   if (loading) return <p style={{ color: 'var(--text-faint)' }}>{t('loading')}</p>;
 
-  const filtered = query ? videos.filter((v) => v.title.toLowerCase().includes(query)) : videos;
+  const filtered = filterBySearch(videos, query);
   const pageTitle = ratingMode === 'stars' ? 'Ohodnocená videa' : 'Líbí se mi';
 
   if (videos.length === 0) {
@@ -116,6 +120,7 @@ function LikedPageInner() {
   return (
     <div>
       <p className="section-title">{pageTitle}</p>
+      {query && filtered.length === 0 && <ScopedSearchEmpty query={rawQuery} />}
       <div className="video-grid">
         {filtered.map((video: any) => (
           <Link href={`/watch/${video.id}`} key={video.id} className="video-card">

@@ -3,6 +3,8 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { useSearchParams } from 'next/navigation';
+import { filterBySearch } from '@/lib/searchScope';
+import ScopedSearchEmpty from '@/components/ScopedSearchEmpty';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { fetchAllRows, fetchByIds } from '@/lib/loadAll';
@@ -22,6 +24,8 @@ function DownloadedPageInner() {
   const { t } = useLanguage();
   const searchParams = useSearchParams();
   const query = searchParams.get('q')?.toLowerCase() ?? '';
+  // Hledání v knihovně (pole nahoře) - lib/searchScope.ts; původní text pro hlášku „nic tu není“.
+  const rawQuery = searchParams.get('q') ?? '';
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   // Dotaz může spadnout (vypadlá síť, propadlé přihlášení). Bez tohohle
@@ -93,7 +97,7 @@ function DownloadedPageInner() {
 
   const shown = useMemo(() => {
     const base = filter === 'music' ? musicVideos : filter === 'video' ? otherVideos : videos;
-    return query ? base.filter((v) => v.title.toLowerCase().includes(query)) : base;
+    return filterBySearch(base, query);
   }, [filter, videos, musicVideos, otherVideos, query]);
 
   /**
@@ -170,7 +174,9 @@ function DownloadedPageInner() {
         )}
       </div>
 
-      {shown.length === 0 ? (
+      {shown.length === 0 && query ? (
+        <ScopedSearchEmpty query={rawQuery} />
+      ) : shown.length === 0 ? (
         <p style={{ color: 'var(--text-faint)', fontSize: 13, padding: '24px 0' }}>
           {t('downloadedNothingHere')}
         </p>

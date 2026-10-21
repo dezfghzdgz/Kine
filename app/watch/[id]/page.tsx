@@ -57,6 +57,8 @@ import AmbientCanvas from '@/components/AmbientCanvas';
 import { useAppearance } from '@/lib/useAppearance';
 import { attachVod, canPlayVodNatively, mediaPlayer, reportSlowVideo, type VodHandle } from '@/lib/vodPlayer';
 import type { PlaybackMode } from '@/lib/netQuality';
+import { rankUpNext, seenLocally, unseenFirst } from '@/lib/upNext';
+import { filterHidden, loadHiddenContent, NOTHING_HIDDEN, type HiddenContent } from '@/lib/hiddenContent';
 import { chooseEngine, shouldReportSlowStart, statsReport, vodVerdict, type QualityLevel } from '@/lib/vodPlayerCore';
 import { customerCodeFromUrl, manifestUrl } from '@/lib/streamSource';
 import { preloadHls, supportsNativeHls } from '@/lib/hlsAttach';
@@ -92,6 +94,8 @@ function WatchPageInner() {
   const videoId = params.id as string;
   const [video, setVideo] = useState<any>(null);
   const [otherVideos, setOtherVideos] = useState<any[]>([]);
+  // Po konci videa jen nezhlédnutá videa, příbuzná napřed (lib/upNext.ts).
+  const [upNextPool, setUpNextPool] = useState<any[]>([]);
   const [showUpNext, setShowUpNext] = useState(false);
   const [upNextCountdown, setUpNextCountdown] = useState(8);
   const [trustRating, setTrustRating] = useState<number | null>(null);
@@ -175,6 +179,20 @@ function WatchPageInner() {
   const [quality, setQuality] = useState(-1);
   // Šetření dat zapnuté/vypnuté přímo v přehrávači (Safari - kvalitu jinak volí sám); null = podle připojení.
   const [forcedMode, setForcedMode] = useState<PlaybackMode | null>(null);
+  // Samo přepnuté na plnou kvalitu (Safari, signál se zlepšil) - jen pro tohle video, další
+  // video zase podle připojení. Přepnutí napojí přehrávač znovu (reattach).
+  const upgradedForRef = useRef<string | null>(null);
+  const [reattach, setReattach] = useState(0);
+  // Přepnutí na plnou kvalitu za běhu (Safari, signál se zlepšil): do rozjezdu nového zdroje
+  // zůstane vidět poslední snímek - ne černá plocha ani náhled.
+  const [freezeFrame, setFreezeFrame] = useState(false);
+  const freezeCanvasRef = useRef<HTMLCanvasElement>(null);
+  // Přepnutí kvality napojí přehrávač znovu - ztlumení, hlasitost a rychlost musí zůstat.
+  const keepAudioRef = useRef<{ muted: boolean; volume: number; rate: number } | null>(null);
+  function rememberAudio() {
+    const el = videoElRef.current;
+    if (el) keepAudioRef.current = { muted: el.muted, volume: el.volume, rate: el.playbackRate };
+  }
   const [playingMode, setPlayingMode] = useState<PlaybackMode>('full');
   const [playingHeight, setPlayingHeight] = useState<number | null>(null);
   // Statistiky přehrávání (⋮ -> Statistiky, nebo ?stats=1).
@@ -836,8 +854,21 @@ function WatchPageInner() {
    */
   function attachPlayer(player: any, seekTo: number | null) {
     playerRef.current = player;
-    player.muted = false;
-    player.volume = 1;
+    const keep = keepAudioRef.current;
+    keepAudioRef.current = null;
+    if (keep) {
+      // Stejné video, jen jiná kvalita: jak to divák měl (ztlumené zůstane ztlumené).
+      player.muted = keep.muted;
+      player.volume = keep.volume;
+      const el = videoElRef.current;
+      if (el && keep.rate !== 1) {
+        el.defaultPlaybackRate = keep.rate;
+        el.playbackRate = keep.rate;
+      }
+    } else {
+      player.muted = false;
+      player.volume = 1;
+    }
     setPlayerReady(true);
     setPlayerGen((g) => g + 1);
     // Na televizi je po otevření vybraný přehrávač: OK hraje, šipky
@@ -975,7 +1006,27 @@ function WatchPageInner() {
         const attached: VodHandle = attachVod(el, manifestUrl(current.playback_id ?? current.cloudflare_video_id, customerCodeFromUrl(current.thumbnail_url)), {
           // Začátek (pokračování, ?t=) načte přehrávač rovnou - žádné přetáčení potom.
           startAt: start?.seconds ?? null,
-          ...(forcedMode ? { mode: forcedMode } : {}),
+          ...(forcedMode ? { mode: forcedMode } : upgradedForRef.current === current.id ? { mode: 'full' as PlaybackMode } : {}),
+          // Safari v lehkém režimu: signál se ukázal dobrý -> plná kvalita od místa, kde video je.
+          // Poslední snímek zůstane vidět, než se nový zdroj rozjede (žádné černé bliknutí).
+          onUpgrade: (at) => {
+            const canvas = freezeCanvasRef.current;
+            if (canvas && el.videoWidth > 0) {
+              try {
+                canvas.width = el.videoWidth;
+                canvas.height = el.videoHeight;
+                canvas.getContext('2d')?.drawImage(el, 0, 0, canvas.width, canvas.height);
+                setFreezeFrame(true);
+                setTimeout(() => setFreezeFrame(false), 10000);
+              } catch {
+                // bez zmrazeného snímku - jen krátce náhled
+              }
+            }
+            if (at > 1) startAtRef.current = { seconds: Math.floor(at), resumed: false };
+            rememberAudio();
+            upgradedForRef.current = current.id;
+            setReattach((n) => n + 1);
+          },
           onFatal: (why, at) => {
             console.warn('Kine: vlastní přehrávač nejde, hraje přehrávač Cloudflare', why);
             // Cloudflare naváže tam, kde vlastní přehrávač skončil.
@@ -991,7 +1042,8 @@ function WatchPageInner() {
         handle = attached;
         vodRef.current = attached;
         setPlayingMode(attached.stats.mode);
-        attachPlayer(mediaPlayer(el, () => setNeedsPlayTap(true)), null);
+        // Zákaz přehrání bez klepnutí: tlačítko „Přehrát“ jen když video opravdu stojí.
+        attachPlayer(mediaPlayer(el, () => { if (el.paused) setNeedsPlayTap(true); }), null);
         return true;
       };
       const waiting = tryAttach()
@@ -1023,7 +1075,7 @@ function WatchPageInner() {
       playbackCleanupRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [video?.id, mode, engine, forcedMode]);
+  }, [video?.id, mode, engine, forcedMode, reattach]);
 
   // Tlačítka na klávesnici a sluchátkách, zamčená obrazovka a oznámení ovládají
   // video (vlastní přehrávač je ve stejném dokumentu jako hudba - lib/musicPlayer.tsx).
@@ -1087,7 +1139,7 @@ function WatchPageInner() {
   const upNextQueue = [
     ...(queueNext ? [queueNext] : []),
     ...(playlistNext ? [playlistNext] : []),
-    ...otherVideos,
+    ...upNextPool,
   ].slice(0, 2);
 
   function nextHref(id: string) {
@@ -1116,7 +1168,10 @@ function WatchPageInner() {
     if (!playerReady || !playerRef.current || playbackStarted) return;
     const player = playerRef.current;
     let firstTime: number | null = null;
-    const started = () => setPlaybackStarted(true);
+    const started = () => {
+      setPlaybackStarted(true);
+      setFreezeFrame(false);
+    };
     const onTime = () => {
       const now = Number(player.currentTime) || 0;
       if (firstTime === null) firstTime = now;
@@ -1131,6 +1186,24 @@ function WatchPageInner() {
       clearTimeout(fallback);
     };
   }, [playerReady, playbackStarted, playerGen]);
+
+  // Tlačítko „Přehrát“ zmizí, jakmile video hraje - ať ho spustilo cokoliv (tlačítko
+  // uprostřed, klávesa, sluchátka). Dřív zůstávalo viset přes běžící video.
+  useEffect(() => {
+    if (!playerReady || !playerRef.current) return;
+    const player = playerRef.current;
+    const hide = () => setNeedsPlayTap(false);
+    player.addEventListener?.('play', hide);
+    player.addEventListener?.('playing', hide);
+    return () => {
+      player.removeEventListener?.('play', hide);
+      player.removeEventListener?.('playing', hide);
+    };
+  }, [playerReady, playerGen]);
+
+  useEffect(() => {
+    setFreezeFrame(false);
+  }, [video?.id]);
 
   useEffect(() => {
     if (!playerReady || !playerRef.current) return;
@@ -1282,7 +1355,7 @@ function WatchPageInner() {
     document.title = `${data.title} - Kine`;
 
     // Appka teď tyhle tři nezávislé věci natahuje souběžně, ne jednu po druhé.
-    const [{ data: collabData }, { data: others }, watchLaterResult] = await Promise.all([
+    const [{ data: collabData }, { data: others }, watchLaterResult, seenAndHidden] = await Promise.all([
       supabase
         .from('video_collaborators')
         .select('profiles(id, username, avatar_url)')
@@ -1295,7 +1368,7 @@ function WatchPageInner() {
         .eq('visibility', 'public')
         .neq('id', videoId)
         .order('created_at', { ascending: false })
-        .limit(48),
+        .limit(96),
       (async () => {
         const { data: authData } = await supabase.auth.getUser();
         if (!authData.user) return { inWatchLater: false };
@@ -1314,14 +1387,28 @@ function WatchPageInner() {
           .maybeSingle();
         return { inWatchLater: !!wl };
       })(),
+      // Co už divák viděl (po konci se nabízí jen nové) a co si schoval („Nezajímá mě“).
+      (async (): Promise<{ seen: string[]; hidden: HiddenContent }> => {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const uid = sessionData.session?.user?.id;
+        if (!uid) return { seen: [], hidden: NOTHING_HIDDEN };
+        const [{ data: history }, hidden] = await Promise.all([
+          supabase.from('watch_history').select('video_id').eq('user_id', uid).order('watched_at', { ascending: false }).limit(1000),
+          loadHiddenContent(uid).catch(() => NOTHING_HIDDEN),
+        ]);
+        return { seen: (history ?? []).map((h: any) => h.video_id), hidden };
+      })().catch(() => ({ seen: [] as string[], hidden: NOTHING_HIDDEN })),
     ]);
 
     setCollaborators((collabData ?? []).map((c: any) => c.profiles).filter(Boolean));
     setInWatchLater(watchLaterResult.inWatchLater);
 
     const currentIsSpark = isSpark(data);
-    const matchingFormat = (others ?? []).filter((v: any) => isSpark(v) === currentIsSpark);
-    setOtherVideos(matchingFormat.slice(0, 24));
+    const seen = new Set<string>([...seenAndHidden.seen, ...seenLocally()]);
+    const matchingFormat = filterHidden(others ?? [], seenAndHidden.hidden).filter((v: any) => isSpark(v) === currentIsSpark);
+    // Vedle videa nezhlédnutá napřed; po konci videa jen nezhlédnutá (lib/upNext.ts).
+    setOtherVideos(unseenFirst(matchingFormat, seen).slice(0, 24));
+    setUpNextPool(rankUpNext(matchingFormat, data, seen).slice(0, 12));
 
     // Klipy z tohoto videa a původ, když je tohle samo klip. Bez migrace
     // (supabase-migration-klipy.sql) sloupec chybí a dotaz vrátí chybu -
@@ -1654,6 +1741,8 @@ function WatchPageInner() {
                         tabIndex={-1}
                       />
                     )}
+                    {/* Poslední snímek při přepnutí na plnou kvalitu (vlastní přehrávač, Safari). */}
+                    <canvas ref={freezeCanvasRef} className="player-freeze" aria-hidden="true" style={{ display: freezeFrame ? 'block' : 'none' }} />
                     {statsOpen && (
                       <PlaybackStats
                         stats={engine === 'native' ? vodRef.current?.stats ?? null : null}
@@ -1673,7 +1762,7 @@ function WatchPageInner() {
                       </div>
                     )}
                     {/* Než se obraz rozjede: náhled videa (ne černá plocha) a kolečko. */}
-                    {!playbackStarted && video.thumbnail_url && (
+                    {!playbackStarted && !freezeFrame && video.thumbnail_url && (
                       <div
                         className="player-poster"
                         style={{
@@ -1683,7 +1772,7 @@ function WatchPageInner() {
                         }}
                       />
                     )}
-                    {!playbackStarted && !needsPlayTap && video.status === 'ready' && (
+                    {!playbackStarted && !needsPlayTap && !freezeFrame && video.status === 'ready' && (
                       <div className="player-loading">
                         <KineLoader label={t('loading')} />
                       </div>
@@ -1692,17 +1781,21 @@ function WatchPageInner() {
                         ovládání, takže když se sám nerozjede, nedalo se
                         s ním do teď udělat vůbec nic. */}
                     {needsPlayTap && (
-                      <button
-                        type="button"
-                        className="player-tap-to-play"
-                        onClick={() => {
-                          setNeedsPlayTap(false);
-                          playerRef.current?.play?.();
-                        }}
-                      >
-                        <span className="player-tap-to-play-icon" aria-hidden="true" />
-                        {t('tapToPlay')}
-                      </button>
+                      // Vrstva přes celé video drží tlačítko přesně uprostřed - i když se při
+                      // stisku zmenší (dřív ho stisk na iPhonu posunul mimo střed).
+                      <div className="player-tap-layer">
+                        <button
+                          type="button"
+                          className="player-tap-to-play"
+                          onClick={() => {
+                            setNeedsPlayTap(false);
+                            playerRef.current?.play?.();
+                          }}
+                        >
+                          <span className="player-tap-to-play-icon" aria-hidden="true" />
+                          {t('tapToPlay')}
+                        </button>
+                      </div>
                     )}
                     {video.is_ai_generated && showAiBadge && (
                       <div
@@ -1745,6 +1838,7 @@ function WatchPageInner() {
                                   // Přepnutí zdroje: přehrávač naváže tam, kde video právě je.
                                   const at = videoElRef.current?.currentTime ?? 0;
                                   if (at > 1) startAtRef.current = { seconds: Math.floor(at), resumed: false };
+                                  rememberAudio();
                                   setForcedMode(playingMode === 'light' ? 'full' : 'light');
                                 },
                               }
@@ -1755,35 +1849,37 @@ function WatchPageInner() {
                           setQuality(index);
                         }}
                         onToggleStats={() => setStatsOpen((v) => !v)}
+                        hideCenterToggle={needsPlayTap}
                       />
                     )}
                     {playerReady && captions.length > 0 && captionsEnabled && (
                       <CaptionsOverlay captions={captions} player={playerRef.current} />
                     )}
                     {showUpNext && upNextQueue[0] && (
-                      <div className="player-upnext" style={{ position: 'absolute', inset: 0, background: 'rgba(10,10,11,0.92)', zIndex: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-                        <div style={{ textAlign: 'center', maxWidth: 820, width: '100%' }}>
-                          <p style={{ color: 'var(--text-faint)', fontSize: 12, marginBottom: 14 }}>
+                      // Po konci: jen nezhlédnutá videa (lib/upNext.ts). Na telefonu se dvě karty
+                      // vejdou vedle sebe do videa (dřív se zalomily pod sebe a ořízly).
+                      <div className="player-upnext">
+                        <div className="player-upnext-inner">
+                          <p className="player-upnext-note">
                             {autoplay ? t('nextVideoInSecondsNote').replace('{seconds}', String(upNextCountdown)) : t('nextVideoPickNote')}
                           </p>
-                          <div style={{ display: 'flex', gap: 20, justifyContent: 'center', flexWrap: 'wrap' }}>
-                            {upNextQueue.slice(0, 2).map((v: any) => (
-                              <div
+                          <div className={`player-upnext-grid ${upNextQueue.length < 2 ? 'player-upnext-grid-single' : ''}`}>
+                            {upNextQueue.slice(0, 2).map((v: any, i: number) => (
+                              <button
                                 key={v.id}
-                                className="player-upnext-card"
+                                type="button"
+                                className={`player-upnext-card ${i === 0 && autoplay ? 'player-upnext-card-next' : ''}`}
                                 onClick={() => router.push(nextHref(v.id))}
-                                style={{ cursor: 'pointer', width: 'clamp(200px, 38vw, 340px)' }}
                               >
-                                <div style={{ borderRadius: 8, overflow: 'hidden', marginBottom: 8, aspectRatio: '16 / 9', position: 'relative' }}>
-                                  {v.thumbnail_url && (
-                                    <Image src={v.thumbnail_url} alt={v.title} fill style={{ objectFit: 'cover' }} />
-                                  )}
-                                </div>
-                                <p style={{ color: '#fff', fontSize: 13, fontWeight: 600, margin: 0 }}>{v.title}</p>
-                              </div>
+                                <span className="player-upnext-thumb">
+                                  {v.thumbnail_url && <Image src={v.thumbnail_url} alt="" fill sizes="(max-width: 700px) 45vw, 340px" style={{ objectFit: 'cover' }} />}
+                                  {v.duration_seconds ? <span className="player-upnext-duration">{formatDuration(v.duration_seconds)}</span> : null}
+                                </span>
+                                <span className="player-upnext-title">{v.title}</span>
+                              </button>
                             ))}
                           </div>
-                          <button onClick={() => setShowUpNext(false)} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', marginTop: 18 }}>
+                          <button type="button" className="player-upnext-cancel" onClick={() => setShowUpNext(false)}>
                             {t('cancel')}
                           </button>
                         </div>

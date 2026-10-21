@@ -1786,6 +1786,18 @@ export const cs = {
   captionSizeSmall: 'Malé',
   captionSizeMedium: 'Střední',
   captionSizeLarge: 'Velké',
+  searchInPlaylist: 'Hledat v playlistu…',
+  searchInLiked: 'Hledat v lajkovaných…',
+  searchInHistory: 'Hledat ve zhlédnutých…',
+  searchInWatchLater: 'Hledat v seznamu Sledovat později…',
+  searchInPlaylists: 'Hledat v playlistech…',
+  searchInSubscriptions: 'Hledat v odběrech…',
+  searchInYourVideos: 'Hledat ve vašich videích…',
+  searchInDownloads: 'Hledat ve staženích…',
+  searchInActivity: 'Hledat ve vaší aktivitě…',
+  clearSearch: 'Smazat hledání',
+  searchAllKineShort: 'Celé Kine',
+  scopedSearchEmpty: 'Pro „{query}“ tu nic není.',
 } as const;
 
 export type DictKey = keyof typeof cs;

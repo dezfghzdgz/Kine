@@ -2,9 +2,12 @@
 
 import { useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { rememberSeen } from '@/lib/upNext';
 
 export default function WatchHistoryTracker({ videoId }: { videoId: string }) {
   useEffect(() => {
+    // Zhlédnuté video si pamatuje i prohlížeč (i bez přihlášení) - po konci videa se nabízí jen nová (lib/upNext.ts).
+    rememberSeen(videoId);
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) return;
       const { error } = await supabase.from('watch_history').upsert(

@@ -3,6 +3,8 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { useSearchParams } from 'next/navigation';
+import { filterBySearch } from '@/lib/searchScope';
+import ScopedSearchEmpty from '@/components/ScopedSearchEmpty';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -17,6 +19,8 @@ function PlaylistsPageInner() {
   const { t } = useLanguage();
   const searchParams = useSearchParams();
   const query = searchParams.get('q')?.toLowerCase() ?? '';
+  // Hledání v knihovně (pole nahoře) - lib/searchScope.ts; původní text pro hlášku „nic tu není“.
+  const rawQuery = searchParams.get('q') ?? '';
   const [userId, setUserId] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
   const [playlists, setPlaylists] = useState<any[]>([]);
@@ -138,8 +142,7 @@ function PlaylistsPageInner() {
     );
   }
 
-  const filtered = (query ? playlists.filter((p) => p.title.toLowerCase().includes(query)) : playlists)
-    .filter((p) => !p.is_system);
+  const filtered = filterBySearch(playlists, query).filter((p) => !p.is_system);
 
   return (
     <div>
@@ -155,7 +158,9 @@ function PlaylistsPageInner() {
       </div>
       {thumbError && <p className="error-text" style={{ marginBottom: 16 }}>{thumbError}</p>}
 
-      {filtered.length === 0 ? (
+      {filtered.length === 0 && query ? (
+        <ScopedSearchEmpty query={rawQuery} />
+      ) : filtered.length === 0 ? (
         <div className="playlists-empty">
           <span className="playlists-empty-icon" aria-hidden="true">
             <PlaylistIcon size={26} />

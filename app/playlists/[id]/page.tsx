@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
@@ -10,12 +10,18 @@ import UiIcon from '@/components/UiIcon';
 import { PlaylistIcon } from '@/components/ReactionIcons';
 import { formatDuration } from '@/lib/homeRecommendation';
 import { hasChosenColor } from '@/lib/playlistCover';
+import { matchesSearch, searchWords } from '@/lib/searchScope';
+import ScopedSearchEmpty from '@/components/ScopedSearchEmpty';
 
-export default function PlaylistDetailPage() {
+function PlaylistDetailInner() {
   const { t } = useLanguage();
   const params = useParams();
   const router = useRouter();
   const playlistId = params.id as string;
+  // Hledání v playlistu (pole nahoře, lib/searchScope.ts): jen videa z tohohle playlistu.
+  const searchParams = useSearchParams();
+  const query = searchParams.get('q') ?? '';
+  const searching = searchWords(query).length > 0;
 
   const [playlist, setPlaylist] = useState<any>(null);
   const [videos, setVideos] = useState<any[]>([]);
@@ -233,16 +239,19 @@ export default function PlaylistDetailPage() {
           {savingOrder && <span className="playlist-saving">{t('playlistSavingOrder')}</span>}
         </div>
 
-        {isOwner && videos.length > 1 && <p className="playlist-reorder-hint">{t('playlistReorderHint')}</p>}
+        {isOwner && videos.length > 1 && !searching && <p className="playlist-reorder-hint">{t('playlistReorderHint')}</p>}
+        {searching && !videos.some((v) => matchesSearch(v, query)) && <ScopedSearchEmpty query={query} />}
 
         {/* Přehazování videí: šipky fungují všude včetně mobilu, tažení za
             úchyt je rychlejší na počítači. Tahat jde jen za úchyt, ať se
             omylem nespustí video při snaze video přesunout. */}
         <div className="playlist-rows">
-          {videos.map((v, i) => (
+          {/* Při hledání jen odpovídající videa; čísla a přehrávání podle místa v playlistu.
+              Přesouvání jen bez hledání (v půlce seznamu by nedávalo smysl). */}
+          {videos.map((v, i) => ({ v, i })).filter(({ v }) => !searching || matchesSearch(v, query)).map(({ v, i }) => (
             <div
               key={v.id}
-              draggable={isOwner}
+              draggable={isOwner && !searching}
               onDragStart={(e) => {
                 setDragIndex(i);
                 e.dataTransfer.effectAllowed = 'move';
@@ -276,7 +285,7 @@ export default function PlaylistDetailPage() {
               }}
               className={`playlist-row ${dragIndex === i ? 'dragging' : ''} ${dropIndex === i && dragIndex !== i ? 'drop-target' : ''}`}
             >
-              {isOwner && (
+              {isOwner && !searching && (
                 <span className="playlist-row-handle" title={t('playlistDragHandle')} onClick={(e) => e.stopPropagation()} aria-hidden="true">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                     <circle cx="9" cy="6" r="1.6" />
@@ -301,12 +310,16 @@ export default function PlaylistDetailPage() {
               </div>
               {isOwner && (
                 <span className="playlist-row-actions" onClick={(e) => e.stopPropagation()}>
-                  <button type="button" className="icon-btn" disabled={i === 0} onClick={() => moveVideo(i, i - 1)} title={t('playlistMoveUp')} aria-label={t('playlistMoveUp')}>
-                    <UiIcon name="chevronDown" size={15} className="flip-y" />
-                  </button>
-                  <button type="button" className="icon-btn" disabled={i === videos.length - 1} onClick={() => moveVideo(i, i + 1)} title={t('playlistMoveDown')} aria-label={t('playlistMoveDown')}>
-                    <UiIcon name="chevronDown" size={15} />
-                  </button>
+                  {!searching && (
+                    <>
+                      <button type="button" className="icon-btn" disabled={i === 0} onClick={() => moveVideo(i, i - 1)} title={t('playlistMoveUp')} aria-label={t('playlistMoveUp')}>
+                        <UiIcon name="chevronDown" size={15} className="flip-y" />
+                      </button>
+                      <button type="button" className="icon-btn" disabled={i === videos.length - 1} onClick={() => moveVideo(i, i + 1)} title={t('playlistMoveDown')} aria-label={t('playlistMoveDown')}>
+                        <UiIcon name="chevronDown" size={15} />
+                      </button>
+                    </>
+                  )}
                   <button type="button" className="icon-btn" onClick={() => removeVideo(v.id)} title={t('playlistRemoveVideo')} aria-label={t('playlistRemoveVideo')}>
                     <UiIcon name="close" size={15} />
                   </button>
@@ -316,7 +329,8 @@ export default function PlaylistDetailPage() {
           ))}
         </div>
 
-        {recommended.length > 0 && (
+        {/* Při hledání v playlistu jen výsledky - doporučení by jen překážela. */}
+        {recommended.length > 0 && !searching && (
           <>
             <p className="panel-heading" style={{ marginTop: 26 }}>{t('recommendedNext')}</p>
             <div className="playlist-rows">
@@ -339,5 +353,13 @@ export default function PlaylistDetailPage() {
         )}
       </section>
     </div>
+  );
+}
+
+export default function PlaylistDetailPage() {
+  return (
+    <Suspense fallback={null}>
+      <PlaylistDetailInner />
+    </Suspense>
   );
 }

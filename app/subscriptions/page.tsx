@@ -4,6 +4,8 @@ import { Suspense, useEffect, useState } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { useWatchProgress } from '@/lib/useWatchProgress';
 import { useSearchParams } from 'next/navigation';
+import { filterBySearch } from '@/lib/searchScope';
+import ScopedSearchEmpty from '@/components/ScopedSearchEmpty';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
@@ -17,6 +19,8 @@ function SubscriptionsPageInner() {
   const { t } = useLanguage();
   const searchParams = useSearchParams();
   const query = searchParams.get('q')?.toLowerCase() ?? '';
+  // Hledání v knihovně (pole nahoře) - lib/searchScope.ts; původní text pro hlášku „nic tu není“.
+  const rawQuery = searchParams.get('q') ?? '';
   const [channels, setChannels] = useState<any[]>([]);
   const [videos, setVideos] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
@@ -94,7 +98,9 @@ function SubscriptionsPageInner() {
     );
   }
 
-  const filteredVideos = query ? videos.filter((v) => v.title.toLowerCase().includes(query)) : videos;
+  const filteredVideos = filterBySearch(videos, query);
+  // Hledání v odběrech: i kanály nahoře podle jména.
+  const shownChannels = filterBySearch(channels, query);
 
   const feedItems = query
     ? filteredVideos.map((v) => ({ kind: 'video' as const, item: v, created_at: v.created_at }))
@@ -107,8 +113,9 @@ function SubscriptionsPageInner() {
     <div>
       <p className="section-title">{t('subscriptionsTitle')}</p>
 
+      {query && filteredVideos.length === 0 && shownChannels.length === 0 && <ScopedSearchEmpty query={rawQuery} />}
       <div style={{ display: 'flex', gap: 20, overflowX: 'auto', paddingBottom: 20, marginBottom: 28 }}>
-        {channels.map((c: any) => (
+        {shownChannels.map((c: any) => (
           <Link
             key={c.id}
             href={`/channel/${c.id}`}

@@ -42,29 +42,49 @@ export const DESKTOP_DEFAULT_START_BPS = 5_000_000;
 /** Nejvýš tak vysoko se na počítači začíná (strop pro zapamatovaný odhad). */
 export const DESKTOP_MAX_START_BPS = 15_000_000;
 
+/** Telefon a tablet: nejvýš tak vysoko se začíná (~1080p na malé obrazovce stačí). */
+export const MOBILE_MAX_START_BPS = 8_000_000;
+/** Telefon bez paměti a bez údaje o připojení: kolem 480p - rozjede se i na datech, pak vyskočí. */
+export const MOBILE_DEFAULT_START_BPS = 1_500_000;
+/** Zapamatovaný odhad připojení platí na telefonu jen chvíli (doma wifi, venku data). */
+export const MOBILE_MEMORY_MS = 30 * 60 * 1000;
+
 /**
- * Odhad, se kterým přehrávač začíná, podle zařízení. Telefon a tablet jako dřív
- * (první kus malý - rozjede se rychle i na datech). Počítač a televize mají
- * skoro vždycky wifi nebo kabel: tam se začíná rovnou v kvalitě, na kterou
- * připojení stačí (zapamatovaný odhad, jinak co řekne prohlížeč, jinak ~1080p) -
- * dřív i na rychlé wifi běžely první vteřiny rozmazaně ("komprese na začátku").
- * Když je připojení pomalé, hls.js po prvním kusu kvalitu sníží a příště se
- * začne podle zapamatovaného (nízkého) odhadu. `small` = náhled po najetí
- * myší - ten se dál začíná malý.
+ * Odhad, se kterým přehrávač začíná, podle zařízení.
+ *
+ * Počítač a televize: rovnou v kvalitě, na kterou připojení stačí
+ * (zapamatovaný odhad, jinak co řekne prohlížeč, jinak ~1080p).
+ * Telefon a tablet: stejně tak, jen opatrněji - zapamatovaný odhad jen
+ * z posledních 30 minut, 70 % a strop ~1080p. Dřív telefon začínal vždycky
+ * malým kusem (~360p) i na rychlém připojení - začátek každého videa byl
+ * rozmazaný. Nižší kvalita na začátku je teď jen tam, kde je připojení
+ * opravdu slabé (nízký odhad) nebo o něm nic nevíme (~480p).
+ * Když je připojení pomalé, hls.js po prvním kusu kvalitu sníží.
+ * `small` = náhled po najetí myší - ten se dál začíná malý.
  */
 export function startEstimateFor(opts: {
   remembered: number | null | undefined;
+  /** Stáří zapamatovaného odhadu (ms); null = nevíme (staré uložení) - telefon ho pak nebere. */
+  rememberedAgeMs?: number | null;
   device: 'phone' | 'tablet' | 'desktop' | 'tv';
   /** navigator.connection.downlink (Mb/s, Chrome ho ořízne na 10); null = nevíme. */
   downlinkMbps?: number | null;
   small?: boolean;
 }): number {
-  if (opts.small || opts.device === 'phone' || opts.device === 'tablet') return startEstimate(opts.remembered);
-  const clamp = (bps: number) => Math.round(Math.max(MIN_START_BPS, Math.min(DESKTOP_MAX_START_BPS, bps)));
+  if (opts.small) return startEstimate(opts.remembered);
   const remembered = opts.remembered;
-  if (remembered && Number.isFinite(remembered) && remembered > 0) return clamp(remembered * 0.8);
   const down = opts.downlinkMbps;
-  if (typeof down === 'number' && Number.isFinite(down) && down > 0) return clamp(down * 1_000_000 * 0.8);
+  const known = (v: number | null | undefined): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
+  if (opts.device === 'phone' || opts.device === 'tablet') {
+    const clampMobile = (bps: number) => Math.round(Math.max(MIN_START_BPS, Math.min(MOBILE_MAX_START_BPS, bps)));
+    const age = opts.rememberedAgeMs;
+    if (known(remembered) && typeof age === 'number' && age >= 0 && age < MOBILE_MEMORY_MS) return clampMobile(remembered * 0.7);
+    if (known(down)) return clampMobile(down * 1_000_000 * 0.7);
+    return MOBILE_DEFAULT_START_BPS;
+  }
+  const clamp = (bps: number) => Math.round(Math.max(MIN_START_BPS, Math.min(DESKTOP_MAX_START_BPS, bps)));
+  if (known(remembered)) return clamp(remembered * 0.8);
+  if (known(down)) return clamp(down * 1_000_000 * 0.8);
   return DESKTOP_DEFAULT_START_BPS;
 }
 

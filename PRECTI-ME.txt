@@ -1,3 +1,63 @@
+KINE web + Android Clipper 0.4.0: plná kvalita videa při dobrém signálu, ovládání přehrávače
+mizí rychleji, tlačítko Přehrát uprostřed a jen když video stojí, na konci videa jen nová
+videa (vejdou se na mobil), hledání v playlistu / lajkovaných / historii jen v nich;
+Android Clipper méně hřeje na starších telefonech
+(dodávka kine-0121-2026-10-21)
+==========================================================================================
+
+POSTUP
+1. Web: rozbal kine-web-0121.zip do kořene repa Kine, nahraj. Žádná migrace ani proměnná.
+2. kine-mobile: rozbal kine-mobile-0.4.0.zip do kořene repa, nahraj (build.yml se nemění).
+   Actions postaví 0.4.0 a obnoví android-latest - web nabídne novou verzi sám.
+
+WEB
+- Kvalita videa: výchozí je vždycky plná (i na mobilu). Nižší („komprese“) jen když se
+  video v plné kvalitě zasekávalo (2× a víc) nebo se 2× po sobě rozjíždělo přes 5 s, nebo
+  když si člověk zapne Šetřit data / prohlížeč hlásí šetření dat. Po 10 minutách bez potíží
+  zase plná. Dřív se z nižší kvality na iPhonu skoro nedalo dostat (proto pořád rozmazané).
+- iPhone: když video hraje v nižší kvalitě a signál se zlepší (plynule, staženo hodně
+  dopředu), přepne se samo na plnou - poslední snímek zůstane vidět, žádné černé bliknutí;
+  ztlumení, hlasitost a rychlost zůstanou. Jen pro to video, další zase podle signálu.
+- Android/PC (hls.js): telefon začíná v kvalitě, na kterou stačí připojení (ne vždy ~360p),
+  na hustém displeji ostřejší (do 3× rozlišení okna).
+- Ovládání: po spuštění zmizí za 0,5 s, po klepnutí do videa za 1 s, myš za 1,5 s; zastavené
+  video ho nechá vidět. Kolem tlačítek na liště už nejsou rámečky.
+- Tlačítko „Přehrát“ (iPhone nedovolí pustit video se zvukem samo): přesně uprostřed, zmizí,
+  jakmile video hraje (dřív viselo přes běžící video a bylo mimo střed), a vedle něj už není
+  druhé velké tlačítko. Totéž u Živě.
+- Konec videa: nabízí jen videa, která jsi ještě neviděl (historie na účtu + paměť
+  prohlížeče, i bez přihlášení), příbuzná napřed (kategorie, tvůrce), bez „Nezajímá mě“.
+  Dvě karty vedle sebe, vejdou se do videa i na mobilu. Když už není nic nového, nic se
+  nenabídne. V seznamu vedle videa jsou nezhlédnutá napřed.
+- Hledání v knihovně: v playlistu, Líbí se mi, historii, Sledovat později, playlistech,
+  odběrech, tvých videích, staženích a aktivitě hledá pole nahoře jen tam (text v poli to
+  říká, výsledky hned při psaní). Tlačítko „Celé Kine“ v poli hledá všude. Bez diakritiky
+  a velkých písmen, i podle tvůrce a hashtagů. V playlistu se při hledání schová přesouvání
+  a doporučení.
+
+ANDROID CLIPPER 0.4.0
+- Starší telefon (Android 11 a starší, nebo „4 GB“ bez výkonnostní třídy) dostane v Auto
+  540p místo 720p.
+- Nový přepínač Šetrný režim (méně hřeje): 480p, 24 fps, nižší datový tok, kamera 15 fps.
+  Na slabém telefonu zapnutý sám.
+- Hlídání teploty: systém + teplota baterie každých 20 s. Teplý (40 °C) = nižší datový tok,
+  horký (43 °C) = menší obraz, 24 fps, kamera pauza, velmi horký (46 °C) = ještě menší.
+  V appce je pak vidět „Telefon je teplý - nižší kvalita“.
+- Kodér jede tempem snímků, ne naplno.
+- Kamarád: v Nastavení -> Klip zapnout Šetrný režim, pokud to pořád hřeje.
+
+OVĚŘENO
+- web: tsc, 55 testů, sestavení; telefon (390 px) i PC v prohlížeči s testovacím videem:
+  tlačítko Přehrát uprostřed, ovládání mizí do 1 s, konec videa jen nezhlédnutá a vejde se,
+  hledání v lajkovaných / historii / playlistu - 20/20 kontrol OK
+- Android: překlad Kotlinu proti Android 34, výpočty teploty a kvality (28 kontrol)
+- iPhone (Safari) ani skutečný Android tady spustit nemůžu - přepnutí na plnou kvalitu
+  za běhu je ověřené jen čtením kódu a nezávislou kontrolou.
+
+==========================================================================================
+PŘEDCHOZÍ DODÁVKA
+==========================================================================================
+
 KINE 0.13.2 + web + Android 0.2.0: macOS se zase staví (zvlášť Intel a Apple Silicon),
 pojistky Electronu, plynulejší Clipper; web na telefonu (menu + nabídky), nabídka ⋮ přehrávače,
 tvůrce + diskuse v jedné kartě, vlastní animace načítání, titulky S/M/L, malé přenosy v Živě,

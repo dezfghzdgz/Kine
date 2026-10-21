@@ -4,6 +4,8 @@ import { Suspense, useEffect, useState } from 'react';
 import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { useWatchProgress } from '@/lib/useWatchProgress';
 import { useSearchParams } from 'next/navigation';
+import { filterBySearch } from '@/lib/searchScope';
+import ScopedSearchEmpty from '@/components/ScopedSearchEmpty';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
@@ -19,6 +21,8 @@ function ActivityPageInner() {
   const { t, lang } = useLanguage();
   const searchParams = useSearchParams();
   const query = searchParams.get('q')?.toLowerCase() ?? '';
+  // Hledání v knihovně (pole nahoře) - lib/searchScope.ts; původní text pro hlášku „nic tu není“.
+  const rawQuery = searchParams.get('q') ?? '';
   const [ratingMode, setRatingMode] = useState<'stars' | 'like_dislike'>('like_dislike');
   const [tab, setTab] = useState<Tab>('liked');
   const [videosByScore, setVideosByScore] = useState<Record<number, any[]>>({});
@@ -138,7 +142,7 @@ function ActivityPageInner() {
     : tab === 'disliked' ? videosByScore[1] ?? []
     : videosByScore[Number(tab.replace('star', ''))] ?? [];
 
-  const byQuery = query ? activeList.filter((v) => v.title.toLowerCase().includes(query)) : activeList;
+  const byQuery = filterBySearch(activeList, query);
 
   // Kolik videí padlo na který den - podle toho se v kalendáři zvýrazní dny,
   // ve kterých je vůbec co hledat. Počítá se až z výsledků hledání, ne ze
@@ -268,7 +272,9 @@ function ActivityPageInner() {
         </>
       )}
 
-      {filtered.length === 0 ? (
+      {filtered.length === 0 && query ? (
+        <ScopedSearchEmpty query={rawQuery} />
+      ) : filtered.length === 0 ? (
         <p style={{ color: 'var(--text-faint)' }}>
           {tab === 'history'
             ? selectedDay

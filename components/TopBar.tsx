@@ -7,8 +7,7 @@ import { useLanguage } from '@/lib/i18n';
 import { OPEN_SEARCH_EVENT } from './KeyboardShortcuts';
 import { CATEGORY_KEYS } from '@/lib/categories';
 import { DEFAULT_FILTERS, OPEN_SEARCH_FILTERS_EVENT, parseSearchFilters, searchHref, type SearchFilters } from '@/lib/searchFilters';
-
-const SCOPED_PATHS = ['/activity', '/downloaded', '/your-videos', '/playlists', '/subscriptions', '/watch-later'];
+import { SCOPE_PLACEHOLDER, searchScopeFor, withQuery } from '@/lib/searchScope';
 
 /**
  * Co už platí v adrese (/search?q=...&type=...&minRating=80): pole i panel
@@ -40,7 +39,11 @@ export default function TopBar() {
   const [filters, setFilters] = useState<SearchFilters>(DEFAULT_FILTERS);
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const scoped = SCOPED_PATHS.includes(pathname);
+  // Knihovna (playlist, lajkovaná, historie...): hledá se jen v ní - lib/searchScope.ts.
+  const scope = searchScopeFor(pathname);
+  const scoped = scope !== null;
+  const placeholder = scope ? t(SCOPE_PLACEHOLDER[scope] as any) : t('search');
+  const liveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeCount =
     (highRatingOnly ? 1 : 0) +
     (filters.type !== 'all' ? 1 : 0) +
@@ -80,6 +83,56 @@ export default function TopBar() {
     setTimeout(() => inputRef.current?.focus(), 0);
   }
 
+  /**
+   * Hledání v knihovně: seznam na stránce se vyfiltruje hned při psaní. Adresa
+   * (?q=) se mění bez načítání stránky - stránka ji čte přes useSearchParams.
+   */
+  function applyScoped(value: string) {
+    if (typeof window === 'undefined') return;
+    const next = withQuery(window.location.pathname, window.location.search, value);
+    if (next !== window.location.pathname + window.location.search) window.history.replaceState(null, '', next);
+  }
+
+  function changeQuery(value: string) {
+    setQuery(value);
+    if (!scoped) return;
+    if (liveTimerRef.current) clearTimeout(liveTimerRef.current);
+    liveTimerRef.current = setTimeout(() => applyScoped(value), 150);
+  }
+
+  function clearQuery() {
+    changeQuery('');
+    if (scoped) applyScoped('');
+    inputRef.current?.focus();
+  }
+
+  /** Z knihovny na celé Kine (tlačítko v poli). */
+  function searchEverywhere() {
+    const q = query.trim();
+    if (!q) return;
+    // Rozběhnutý zápis ?q= by jinak mohl zrušit přechod na výsledky.
+    if (liveTimerRef.current) clearTimeout(liveTimerRef.current);
+    router.push(searchHref(q, filters, {}, highRatingOnly ? '80' : null));
+    setAdvancedOpen(false);
+  }
+
+  // Jiná stránka: hledaný text z její adresy (knihovna, výsledky hledání), jinak prázdné pole.
+  useEffect(() => {
+    if (liveTimerRef.current) clearTimeout(liveTimerRef.current);
+    if (searchScopeFor(pathname) || pathname === '/search') {
+      setQuery(readSearchUrl().query);
+    } else {
+      setQuery('');
+      setActive(false);
+      setAdvancedOpen(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  useEffect(() => () => {
+    if (liveTimerRef.current) clearTimeout(liveTimerRef.current);
+  }, []);
+
   function toggleAdvanced() {
     if (!advancedOpen) syncFromUrl(false);
     setAdvancedOpen((v) => !v);
@@ -113,10 +166,13 @@ export default function TopBar() {
       return;
     }
 
-    // Hledání v sekci (Historie, Tvoje videa...) umí jen text. S filtry se
-    // hledá na celém Kine - jinak by je hledání v sekci potichu zahodilo.
+    // Hledání v knihovně (playlist, lajkovaná, historie...) umí jen text a filtruje
+    // hned při psaní - Enter jen zavře klávesnici. S filtry se hledá na celém Kine -
+    // jinak by je hledání v knihovně potichu zahodilo.
+    if (liveTimerRef.current) clearTimeout(liveTimerRef.current);
     if (scoped && activeCount === 0) {
-      router.push(`${pathname}?${new URLSearchParams({ q }).toString()}`);
+      applyScoped(q);
+      inputRef.current?.blur();
     } else {
       router.push(searchHref(q, filters, {}, highRatingOnly ? '80' : null));
     }
@@ -145,11 +201,23 @@ export default function TopBar() {
               <input
                 ref={inputRef}
                 type="text"
-                placeholder={scoped ? t('searchThisSection') : t('search')}
+                placeholder={placeholder}
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => changeQuery(e.target.value)}
                 enterKeyHint="search"
+                aria-label={placeholder}
               />
+              {query && (
+                <button type="button" className="icon-btn top-bar-search-clear" onClick={clearQuery} aria-label={t('clearSearch')} title={t('clearSearch')}>
+                  <ClearIcon />
+                </button>
+              )}
+              {scoped && query.trim() && (
+                // Z knihovny na celé Kine jedním klepnutím.
+                <button type="button" className="top-bar-search-everywhere" onClick={searchEverywhere} title={t('searchAllKine')}>
+                  {t('searchAllKineShort')}
+                </button>
+              )}
               <button
                 type="button"
                 className={`icon-btn top-bar-filter-btn ${advancedOpen ? 'open' : ''}`}
@@ -262,7 +330,7 @@ export default function TopBar() {
             >
               <SearchIcon />
               <span className="top-bar-search-trigger-text">
-                {SCOPED_PATHS.includes(pathname) ? t('searchThisSection') : t('search')}
+                {query && scoped ? query : placeholder}
               </span>
               <kbd className="top-bar-search-hint">/</kbd>
             </button>
@@ -271,6 +339,14 @@ export default function TopBar() {
 
       </div>
     </div>
+  );
+}
+
+function ClearIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+      <path d="M6 6l12 12M18 6 6 18" />
+    </svg>
   );
 }
 

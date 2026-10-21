@@ -7,8 +7,23 @@
  * dalo otestovat: tests/playerControls.test.mjs.
  */
 
-/** Po jaké době bez pohybu se lišta schová (jen když video hraje). */
-export const AUTO_HIDE_MS = 3000;
+/**
+ * Kdy se lišta a tlačítko uprostřed schovají (jen když video hraje). Dřív
+ * všude 3 s - na telefonu to přes video viselo dlouho.
+ *  - po spuštění videa skoro hned,
+ *  - po klepnutí do videa (ukázat ovládání) za vteřinu,
+ *  - myš: chvíli po posledním pohybu.
+ * Dotyk lišty (posuvník, tlačítka) odpočet vždycky obnoví.
+ */
+export const AUTO_HIDE_AFTER_PLAY_MS = 500;
+export const AUTO_HIDE_TOUCH_MS = 1000;
+export const AUTO_HIDE_MOUSE_MS = 1500;
+
+/** Za jak dlouho schovat ovládání: po spuštění videa / po klepnutí prstem / po pohybu myši. */
+export function autoHideDelay(reason: 'play' | 'touch' | 'mouse'): number {
+  if (reason === 'play') return AUTO_HIDE_AFTER_PLAY_MS;
+  return reason === 'touch' ? AUTO_HIDE_TOUCH_MS : AUTO_HIDE_MOUSE_MS;
+}
 
 /** Dvě klepnutí do téhle doby jsou dvojité klepnutí. */
 export const DOUBLE_TAP_MS = 320;

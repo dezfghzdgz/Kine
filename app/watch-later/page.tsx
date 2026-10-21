@@ -3,6 +3,8 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { useSearchParams } from 'next/navigation';
+import { filterBySearch } from '@/lib/searchScope';
+import ScopedSearchEmpty from '@/components/ScopedSearchEmpty';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
@@ -13,6 +15,8 @@ function WatchLaterPageInner() {
   const { t } = useLanguage();
   const searchParams = useSearchParams();
   const query = searchParams.get('q')?.toLowerCase() ?? '';
+  // Hledání v knihovně (pole nahoře) - lib/searchScope.ts; původní text pro hlášku „nic tu není“.
+  const rawQuery = searchParams.get('q') ?? '';
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   // Dotaz může spadnout (vypadlá síť, propadlé přihlášení). Bez tohohle
@@ -90,7 +94,7 @@ function WatchLaterPageInner() {
     );
   }
 
-  const filtered = query ? videos.filter((v) => v.title.toLowerCase().includes(query)) : videos;
+  const filtered = filterBySearch(videos, query);
 
   if (videos.length === 0) {
     return (
@@ -104,6 +108,7 @@ function WatchLaterPageInner() {
   return (
     <div>
       <p className="section-title">{t('watchLaterTitle')}</p>
+      {query && filtered.length === 0 && <ScopedSearchEmpty query={rawQuery} />}
       <div className="video-grid">
         {filtered.map((v: any) => (
           <Link href={`/watch/${v.id}`} key={v.id} className="video-card">

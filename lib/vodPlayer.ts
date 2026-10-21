@@ -5,10 +5,9 @@ import { fragmentSample, qualityOptions, startEstimateFor, type FragmentSample, 
 import {
   LIGHT_START_ESTIMATE,
   LIGHT_UPGRADE_BANDWIDTH,
-  dataSaverPref,
   lightLevelCap,
   lightManifestUrl,
-  playbackMode,
+  playbackDecision,
   recordStall,
   recordStart,
   type PlaybackMode,
@@ -23,12 +22,21 @@ import { detectDeviceClass } from './deviceClass';
 
 const BANDWIDTH_KEY = 'kine-vod-bandwidth';
 
-function rememberedBandwidth(): number | null {
+/** Zapamatovaná rychlost připojení (b/s) a jak je stará; staré uložení (jen číslo) = stáří neznámé. */
+function rememberedBandwidth(): { bps: number | null; ageMs: number | null } {
   try {
-    const n = Number(localStorage.getItem(BANDWIDTH_KEY));
-    return Number.isFinite(n) && n > 0 ? n : null;
+    const raw = localStorage.getItem(BANDWIDTH_KEY);
+    if (!raw) return { bps: null, ageMs: null };
+    if (raw.startsWith('{')) {
+      const v = JSON.parse(raw);
+      const bps = Number(v?.bps);
+      const at = Number(v?.at);
+      return { bps: Number.isFinite(bps) && bps > 0 ? bps : null, ageMs: Number.isFinite(at) ? Date.now() - at : null };
+    }
+    const n = Number(raw);
+    return { bps: Number.isFinite(n) && n > 0 ? n : null, ageMs: null };
   } catch {
-    return null;
+    return { bps: null, ageMs: null };
   }
 }
 
@@ -44,7 +52,7 @@ function browserDownlink(): number | null {
 
 function rememberBandwidth(bps: number): void {
   try {
-    if (Number.isFinite(bps) && bps > 0) localStorage.setItem(BANDWIDTH_KEY, String(Math.round(bps)));
+    if (Number.isFinite(bps) && bps > 0) localStorage.setItem(BANDWIDTH_KEY, JSON.stringify({ bps: Math.round(bps), at: Date.now() }));
   } catch {
     // Bez úložiště se příště začne s výchozím odhadem.
   }
@@ -116,7 +124,33 @@ export type VodOptions = {
   mode?: PlaybackMode;
   /** Zapisovat rozjezd a zaseknutí do měření připojení (výchozí ano; náhled po najetí ne). */
   measure?: boolean;
+  /**
+   * Safari v lehkém režimu (jedna nižší kvalita od Cloudflare): když se ukáže, že
+   * připojení je dobré (video jede bez zaseknutí a stahuje se daleko dopředu),
+   * zavolá se tohle - stránka přepne na plnou kvalitu od `at` vteřin. Bez toho
+   * by celé video zůstalo v nižší kvalitě, i když se signál mezitím zlepšil.
+   */
+  onUpgrade?: (at: number) => void;
 };
+
+/** Safari: kolik vteřin dopředu musí být staženo (v lehké kvalitě) a jak dlouho hrát bez zaseknutí, než se přepne na plnou. */
+export const LIGHT_UPGRADE_AHEAD_S = 25;
+export const LIGHT_UPGRADE_PLAYED_S = 8;
+/** Přepnutí má smysl jen u videa, kterému zbývá aspoň tolik vteřin. */
+export const LIGHT_UPGRADE_REMAINING_S = 30;
+
+/** Kolik vteřin videa je staženo dopředu od místa přehrávání. */
+function bufferedAheadOf(video: HTMLVideoElement): number {
+  try {
+    const t = video.currentTime;
+    for (let i = 0; i < video.buffered.length; i++) {
+      if (video.buffered.start(i) <= t + 0.5 && video.buffered.end(i) >= t) return video.buffered.end(i) - t;
+    }
+  } catch {
+    // nic staženo
+  }
+  return 0;
+}
 
 /** Safari (HLS sám) se nedá říct "jen 4 s dopředu" - u přednačítaného videa aspoň preload=metadata. */
 function nativePreload(capSeconds: number): 'auto' | 'metadata' {
@@ -152,7 +186,9 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
   } catch {
     host = '';
   }
-  const mode: PlaybackMode = options.mode ?? playbackMode();
+  // Režim: vynucený stránkou (přepínač v přehrávači), jinak podle připojení - i s důvodem.
+  const decision = options.mode ? { mode: options.mode, reason: null } : playbackDecision();
+  const mode: PlaybackMode = decision.mode;
   const measure = options.measure !== false;
   const stats: VodStats = {
     engine: supportsNativeHls() ? 'native' : 'hls.js',
@@ -230,6 +266,35 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
   }
 
   let nativeCleanup: (() => void) | null = null;
+  let upgradeTimer: ReturnType<typeof setInterval> | null = null;
+
+  // Jen když lehký režim zapnulo měření - ne volba člověka ani hlášení prohlížeče (šetření dat).
+  if (stats.engine === 'native' && mode === 'light' && decision.reason === 'measured' && options.onUpgrade) {
+    // Safari v lehkém režimu: hraje to plynule a stahuje se daleko dopředu = signál je dobrý -> plná kvalita.
+    let playedFrom: number | null = null;
+    let stallsAtStart = 0;
+    upgradeTimer = setInterval(() => {
+      if (destroyed || fatalSent || video.paused || video.seeking || stats.firstFrameMs === null) return;
+      if (playedFrom === null) {
+        playedFrom = video.currentTime;
+        stallsAtStart = stats.stalls;
+        return;
+      }
+      const played = video.currentTime - playedFrom;
+      const remaining = Number.isFinite(video.duration) ? video.duration - video.currentTime : 0;
+      if (stats.stalls !== stallsAtStart) {
+        // Zaseklo se i v lehké kvalitě - signál dobrý není, zůstává se.
+        if (upgradeTimer) clearInterval(upgradeTimer);
+        upgradeTimer = null;
+        return;
+      }
+      if (played >= LIGHT_UPGRADE_PLAYED_S && remaining >= LIGHT_UPGRADE_REMAINING_S && bufferedAheadOf(video) >= LIGHT_UPGRADE_AHEAD_S) {
+        if (upgradeTimer) clearInterval(upgradeTimer);
+        upgradeTimer = null;
+        options.onUpgrade?.(video.currentTime);
+      }
+    }, 2000);
+  }
 
   if (stats.engine === 'native') {
     // Safari: HLS umí sám. Začátek se nastaví, jakmile zná délku videa.
@@ -275,16 +340,20 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
         // První kus videa se stahuje hned po manifestu, ne až po stisku přehrát - start je o jeden
         // dotaz na server rychlejší (jeden kus dat navíc, když člověk nakonec nepustí).
         startFragPrefetch: true,
-        // Lehký režim začíná ještě níž (lib/netQuality.ts); počítač s dobrým připojením rovnou
-        // v plné kvalitě, telefon s malým prvním kusem (lib/vodPlayerCore.ts - startEstimateFor).
+        // Lehký režim (slabý signál) začíná ještě níž (lib/netQuality.ts); jinak rovnou v kvalitě,
+        // na kterou připojení stačí - počítač i telefon (lib/vodPlayerCore.ts - startEstimateFor).
         abrEwmaDefaultEstimate:
           mode === 'light'
             ? LIGHT_START_ESTIMATE
-            : startEstimateFor({ remembered: rememberedBandwidth(), device: detectDeviceClass(), downlinkMbps: browserDownlink(), small: !measure }),
+            : (() => {
+                const memory = rememberedBandwidth();
+                return startEstimateFor({ remembered: memory.bps, rememberedAgeMs: memory.ageMs, device: detectDeviceClass(), downlinkMbps: browserDownlink(), small: !measure });
+              })(),
         // Do malého okna se nestahuje 1080p; na celé obrazovce kvalita vyskočí.
         capLevelToPlayerSize: true,
-        // Telefon s hustým displejem (3x) nepotřebuje video na trojnásobek okna - stačí 2x (o dost míň dat).
-        maxDevicePixelRatio: 2,
+        // Hustý displej telefonu (3x): v plné kvalitě video ostré i na něm (dřív strop 2x = na
+        // telefonu ~480p i na rychlém připojení); v lehkém režimu 2x (o dost míň dat).
+        maxDevicePixelRatio: mode === 'light' ? 2 : 3,
         maxBufferLength: bufferAhead,
         maxMaxBufferLength: bufferCap,
         backBufferLength: options.backBuffer ?? 30,
@@ -327,7 +396,7 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
           // Lehký režim a připojení se ukázalo dobré (3 kusy po sobě): strop pryč - kvalita
           // vyskočí sama ("když bude internet OK, tak bez komprese"). Ne, když si člověk
           // šetření dat zapnul sám.
-          if (mode === 'light' && hls && hls.autoLevelCapping !== -1 && dataSaverPref() !== 'save') {
+          if (mode === 'light' && decision.reason === 'measured' && hls && hls.autoLevelCapping !== -1) {
             fastFragments = bw >= LIGHT_UPGRADE_BANDWIDTH ? fastFragments + 1 : 0;
             if (fastFragments >= 3) hls.autoLevelCapping = -1;
           }
@@ -393,6 +462,8 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
     },
     detach: () => {
       destroyed = true;
+      if (upgradeTimer) clearInterval(upgradeTimer);
+      upgradeTimer = null;
       video.removeEventListener('play', onPlay);
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('waiting', onWaiting);

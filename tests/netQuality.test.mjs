@@ -32,25 +32,57 @@ test('prohlížeč: šetření dat a 2G/3G = pomalé, 4G s rychlostí = rychlé,
   assert.equal(n.connectionSlow({}), null);
 });
 
-test('změřené rozjezdy: pomalé (medián nad 3 s, nebo zasekávání), rychlé (dvakrát pod 1,2 s bez zaseknutí)', () => {
-  assert.equal(n.measuredVerdict([sample(4000), sample(5200)], NOW), 'slow');
-  assert.equal(n.measuredVerdict([sample(800, 2), sample(900, 1)], NOW), 'slow');
-  assert.equal(n.measuredVerdict([sample(600), sample(900)], NOW), 'fast');
-  assert.equal(n.measuredVerdict([sample(600), sample(1500)], NOW), null);
-  assert.equal(n.measuredVerdict([sample(4000)], NOW), null, 'jeden pomalý rozjezd nestačí');
+test('výchozí je plná kvalita: jedno pomalé video ani jedno zaseknutí lehký režim nezapnou', () => {
   assert.equal(n.measuredVerdict([], NOW), null);
+  assert.equal(n.measuredVerdict([sample(4000)], NOW), null, 'pomalejší rozjezd (4 s) není slabý signál');
+  assert.equal(n.measuredVerdict([sample(4000), sample(4500)], NOW), null, 'ani dvakrát 4 s (Safari na datech začíná vysoko)');
+  assert.equal(n.measuredVerdict([sample(900, 1)], NOW), null, 'jedno zaseknutí nestačí');
+  assert.equal(n.decideMode('auto', null, null, null), 'full');
 });
 
-test('staré rozjezdy (přes půl hodiny) se nepočítají - připojení se mění', () => {
-  assert.equal(n.measuredVerdict([sample(6000, 0, 40), sample(6000, 0, 35)], NOW), null);
+test('slabý signál: plná kvalita se zasekávala (2×), nebo se dvakrát po sobě rozjížděla přes 5 s', () => {
+  assert.equal(n.measuredVerdict([sample(800, 2)], NOW), 'slow');
+  assert.equal(n.measuredVerdict([sample(6000), sample(7000)], NOW), 'slow');
+  assert.equal(n.measuredVerdict([sample(6000), sample(900), sample(7000)], NOW), null, 'mezi nimi rychlé video - nejde říct');
+  assert.equal(n.measuredVerdict([sample(900, 0, 2, 'light'), sample(1000, 1, 1, 'light')], NOW), 'slow', 'zasekává se i lehká kvalita');
 });
 
-test('v lehkém režimu musí být rozjezd na návrat k plné kvalitě rychlejší (jinak by režim skákal)', () => {
-  assert.equal(n.measuredVerdict([sample(900, 0, 2, 'light'), sample(1000, 0, 1, 'light')], NOW), null);
-  assert.equal(n.measuredVerdict([sample(500, 0, 2, 'light'), sample(600, 0, 1, 'light')], NOW), 'fast');
+test('dobrý signál: video se rozjelo do 3 s bez zaseknutí (i v lehkém režimu - návrat k plné kvalitě)', () => {
+  assert.equal(n.measuredVerdict([sample(2500)], NOW), 'fast');
+  assert.equal(n.measuredVerdict([sample(1800, 0, 1, 'light')], NOW), 'fast', 'dřív na iPhonu muselo být pod 0,7 s - skoro nikdy');
+  assert.equal(n.measuredVerdict([sample(3500)], NOW), null);
 });
 
-test('režim: volba člověka vyhrává, pak prohlížeč, pak měření, jinak minulý', () => {
+test('lehký režim po potížích drží 10 minut (žádné přeskakování u každého videa), pak zase plná kvalita', () => {
+  const troubled = [sample(900, 3, 6), sample(800, 0, 4, 'light'), sample(700, 0, 2, 'light')];
+  assert.equal(n.measuredVerdict(troubled, NOW), 'slow', 'zaseknutá plná kvalita před 6 min se pořád počítá');
+  const later = [sample(900, 3, 12), sample(800, 0, 4, 'light'), sample(700, 0, 2, 'light')];
+  assert.equal(n.measuredVerdict(later, NOW), 'fast', 'po 10 minutách se potíž zapomene');
+});
+
+test('staré rozjezdy (přes 10 minut) se nepočítají - připojení se mění', () => {
+  assert.equal(n.measuredVerdict([sample(6000, 0, 15), sample(6000, 0, 12)], NOW), null);
+  assert.equal(n.measuredVerdict([sample(800, 4, 11)], NOW), null);
+});
+
+test('zapamatovaný režim platí jen 10 minut; staré uložení bez času se nepočítá', () => {
+  assert.equal(n.freshMode(JSON.stringify({ mode: 'light', at: NOW - 3 * 60000 }), NOW), 'light');
+  assert.equal(n.freshMode(JSON.stringify({ mode: 'light', at: NOW - 11 * 60000 }), NOW), null);
+  assert.equal(n.freshMode('light', NOW), null, 'dřívější uložení "light" by jinak drželo lehký režim navždy');
+  assert.equal(n.freshMode(null, NOW), null);
+  assert.equal(n.freshMode('{nonsense', NOW), null);
+});
+
+test('lehký režim se opakováním neobnovuje - bez nového důvodu vyprší po 10 minutách', () => {
+  const prev = { mode: 'light', at: NOW - 8 * 60000 };
+  assert.deepEqual(n.nextModeRecord(prev, 'light', false, NOW), prev, 'jen zopakovaný režim: čas zůstane starý');
+  assert.deepEqual(n.nextModeRecord(prev, 'light', true, NOW), { mode: 'light', at: NOW }, 'nové měření potíží: čas se obnoví');
+  assert.deepEqual(n.nextModeRecord(prev, 'full', false, NOW), { mode: 'full', at: NOW }, 'změna režimu se zapíše');
+  assert.deepEqual(n.nextModeRecord({ mode: 'light', at: NOW - 11 * 60000 }, 'light', false, NOW), { mode: 'light', at: NOW }, 'prošlý záznam se nedrží');
+  assert.deepEqual(n.nextModeRecord(null, 'full', false, NOW), { mode: 'full', at: NOW });
+});
+
+test('režim: volba člověka vyhrává, pak prohlížeč, pak měření, jinak čerstvý minulý, jinak plná', () => {
   assert.equal(n.decideMode('save', false, 'fast', 'full'), 'light');
   assert.equal(n.decideMode('best', true, 'slow', 'light'), 'full');
   assert.equal(n.decideMode('auto', true, 'fast', 'full'), 'light');

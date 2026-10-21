@@ -2051,6 +2051,58 @@ html[data-theme="gray"] {
   color: var(--text);
 }
 
+/* Hledání v knihovně nic nenašlo (components/ScopedSearchEmpty.tsx). */
+.scoped-search-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 4px 0 18px;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.scoped-search-empty p {
+  margin: 0;
+}
+
+.scoped-search-everywhere {
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--glass-fill-strong);
+  box-shadow: inset 0 0 0 1px var(--glass-line);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Smazat hledaný text (křížek v poli). */
+.top-bar-search-clear {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-pill);
+  color: var(--text-dim);
+}
+
+/* Hledání v knihovně: jedním klepnutím na celé Kine (lib/searchScope.ts). */
+button.top-bar-search-everywhere {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--glass-fill-strong);
+  box-shadow: inset 0 0 0 1px var(--glass-line);
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+button.top-bar-search-everywhere:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--glass-fill-strong-hover);
+}
+
 .top-bar-filter-count {
   position: absolute;
   top: -4px;
@@ -4891,12 +4943,22 @@ body.has-music-bar .content-area-fullbleed {
   .kine-loader-mark { animation: none; }
 }
 
-.player-tap-to-play {
+/* Vrstva přes celé video: tlačítko „Přehrát“ drží přesně uprostřed. Dřív se centrovalo
+   posunem (transform), který mu přepsala animace objevení i zmenšení při stisku - na
+   iPhonu pak viselo levým horním rohem uprostřed videa. */
+.player-tap-layer {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  inset: 0;
   z-index: 7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.player-tap-to-play {
+  position: relative;
+  pointer-events: auto;
   display: flex;
   align-items: center;
   gap: var(--sp-2);
@@ -5260,8 +5322,9 @@ body.has-music-bar .upload-bar {
 
 .player-center-toggle {
   position: absolute;
-  left: 50%;
-  top: 50%;
+  /* Uprostřed bez posunu (transform) - stisk tlačítko zmenší, ale neposune. */
+  inset: 0;
+  margin: auto;
   z-index: 4;
   width: 68px;
   height: 68px;
@@ -5277,14 +5340,148 @@ body.has-music-bar .upload-bar {
   -webkit-backdrop-filter: blur(8px);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transform: translate(-50%, -50%);
   transition: opacity var(--dur-2) var(--ease), transform var(--dur-2) var(--ease);
 }
 
 .player-center-toggle-hidden {
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, -50%) scale(0.9);
+  transform: scale(0.9);
+}
+
+/* Poslední snímek při přepnutí kvality za běhu (app/watch/[id]/page.tsx). */
+.player-freeze {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ---------- Konec videa: další (nezhlédnutá) videa ----------
+   Dvě karty vedle sebe, velikost podle šířky přehrávače - na telefonu se vejdou
+   do videa (dřív se zalomily pod sebe a spodní byla oříznutá). */
+.player-upnext {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(8px, 3%, 20px);
+  background: rgba(10, 10, 11, 0.95);
+  animation: content-fade-in var(--dur-2) var(--ease) both;
+}
+
+.player-upnext-inner {
+  width: 100%;
+  max-width: 760px;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(6px, 1.6vw, 14px);
+}
+
+.player-upnext-note {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: clamp(11px, 1.6vw, 13px);
+  text-align: center;
+}
+
+.player-upnext-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(8px, 2.4vw, 18px);
+  width: 100%;
+}
+
+.player-upnext-grid-single {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 380px;
+}
+
+.player-upnext-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border-radius: 10px;
+  background: none;
+  box-shadow: none;
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.player-upnext-thumb {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.player-upnext-card-next .player-upnext-thumb {
+  box-shadow: 0 0 0 2px var(--brand);
+}
+
+@media (hover: hover) {
+  .player-upnext-card:hover .player-upnext-thumb {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+  }
+}
+
+.player-upnext-duration {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.78);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.player-upnext-title {
+  font-size: clamp(11px, 1.7vw, 13px);
+  font-weight: 600;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+button.player-upnext-cancel {
+  padding: 6px 16px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: none;
+  color: #fff;
+  font-size: 13px;
+}
+
+@media (max-width: 520px) {
+  .player-upnext-title {
+    -webkit-line-clamp: 1;
+  }
+
+  button.player-upnext-cancel {
+    padding: 4px 14px;
+    font-size: 12px;
+  }
 }
 
 .player-tap-ripple {
@@ -5580,17 +5777,15 @@ body.has-music-bar .player-wrap.player-wrap-mini {
   display: none;
 }
 
-/* Konec videa v mini okně: karty "další video" musí být menší než okno. */
+/* Konec videa v mini okně: jen náhledy, bez textů (okno je malé). */
 .player-wrap-mini .player-upnext {
-  padding: 10px !important;
+  padding: 8px;
 }
 
-.player-wrap-mini .player-upnext-card {
-  width: 44% !important;
-}
-
-.player-wrap-mini .player-upnext-card p {
-  font-size: 11px !important;
+.player-wrap-mini .player-upnext-note,
+.player-wrap-mini .player-upnext-title,
+.player-wrap-mini .player-upnext-cancel {
+  display: none;
 }
 
 @media (max-width: 768px) {

@@ -33,7 +33,7 @@ test('začíná se malým kusem: bez paměti ~360p, s pamětí nejvýš ~720p', 
   assert.ok(v.DEFAULT_START_BPS * 0.95 > 800_000 && v.DEFAULT_START_BPS * 0.95 < 2_500_000);
 });
 
-test('počítač s dobrým připojením začíná rovnou v plné kvalitě, telefon dál s malým kusem', () => {
+test('počítač s dobrým připojením začíná rovnou v plné kvalitě', () => {
   // počítač bez paměti a bez údaje od prohlížeče: ~1080p (Cloudflare 1080p ~4-5 Mb/s se vejde)
   assert.equal(v.startEstimateFor({ remembered: null, device: 'desktop' }), v.DESKTOP_DEFAULT_START_BPS);
   assert.ok(v.DESKTOP_DEFAULT_START_BPS * 0.95 > 4_000_000);
@@ -44,11 +44,21 @@ test('počítač s dobrým připojením začíná rovnou v plné kvalitě, telef
   // prohlížeč řekl rychlost (Chrome: nejvýš 10 Mb/s)
   assert.equal(v.startEstimateFor({ remembered: null, device: 'desktop', downlinkMbps: 10 }), 8_000_000);
   assert.equal(v.startEstimateFor({ remembered: null, device: 'tv', downlinkMbps: 2 }), 1_600_000);
-  // telefon a tablet beze změny (malý první kus, i na rychlé wifi)
-  assert.equal(v.startEstimateFor({ remembered: null, device: 'phone', downlinkMbps: 10 }), v.DEFAULT_START_BPS);
-  assert.equal(v.startEstimateFor({ remembered: 50_000_000, device: 'tablet' }), v.MAX_START_BPS);
   // náhled po najetí myší na počítači: dál malý
   assert.equal(v.startEstimateFor({ remembered: 40_000_000, device: 'desktop', small: true }), v.MAX_START_BPS);
+});
+
+test('telefon: plná kvalita od začátku, když je připojení dobré; nižší jen při slabém nebo neznámém', () => {
+  // rychlé připojení před chvílí (20 Mb/s před 5 min): rovnou vysoko (strop ~1080p)
+  assert.equal(v.startEstimateFor({ remembered: 20_000_000, rememberedAgeMs: 5 * 60000, device: 'phone' }), v.MOBILE_MAX_START_BPS);
+  assert.ok(v.MOBILE_MAX_START_BPS * 0.95 > 4_000_000, '1080p z Cloudflare se do stropu vejde');
+  // slabé připojení (1,2 Mb/s): nízko - tady komprese patří
+  assert.equal(v.startEstimateFor({ remembered: 1_200_000, rememberedAgeMs: 60000, device: 'phone' }), 840_000);
+  // stará paměť (hodina) se na telefonu nebere - připojení se mohlo změnit; pak prohlížeč, jinak ~480p
+  assert.equal(v.startEstimateFor({ remembered: 20_000_000, rememberedAgeMs: 60 * 60000, device: 'phone', downlinkMbps: 10 }), 7_000_000);
+  assert.equal(v.startEstimateFor({ remembered: 20_000_000, rememberedAgeMs: null, device: 'tablet' }), v.MOBILE_DEFAULT_START_BPS);
+  assert.equal(v.startEstimateFor({ remembered: null, device: 'phone' }), v.MOBILE_DEFAULT_START_BPS);
+  assert.ok(v.MOBILE_DEFAULT_START_BPS > v.DEFAULT_START_BPS, 'neznámé připojení: lepší než dřívějších ~360p');
 });
 
 test('vlastní přehrávač, kde to jde; jinak (nebo na přání) Cloudflare', () => {
