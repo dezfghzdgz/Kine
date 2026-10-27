@@ -1,11 +1,10 @@
 /**
- * Test pravidel pro uživatelské jméno (lib/username.ts) - hlavně filtru
- * nadávek. Dvě věci se hlídají stejně přísně: že nadávka neprojde ani
- * s číslicemi místo písmen, a že slušné jméno, které nadávku náhodou
- * obsahuje uvnitř (montenegro, spicy), projde.
+ * Test pravidel pro uživatelské jméno (lib/username.ts): délka, povolené
+ * znaky, rezervovaná jména a porovnávání bez velkých písmen. Filtr nadávek
+ * ve jménech Kine nemá (rozhodnutí v říjnu 2026) - dřívější test na něj
+ * padal; tenhle hlídá, co platí teď.
  *
- * Stejné případy jede i databázová funkce username_is_valid - viz
- * supabase-migration-username-rules.sql a kontrola v PRECTI-ME.
+ * Stejná pravidla hlídá databáze (supabase-migration-username-rules.sql).
  *
  * Spustit:  node tests/username.test.mjs
  */
@@ -15,7 +14,7 @@ import { join } from 'node:path';
 import { prelozit } from './prelozit.mjs';
 
 const kam = prelozit('lib/username.ts');
-const { validateUsername, usernameContainsSlur } = await import(join(kam, 'username.js'));
+const { validateUsername, normalizeUsername, USERNAME_MIN, USERNAME_MAX } = await import(join(kam, 'username.js'));
 
 let prosly = 0;
 let padly = 0;
@@ -24,33 +23,34 @@ function test(nazev, fn) {
   catch (e) { console.log('CHYBA ' + nazev + '\n      ' + e.message); padly++; }
 }
 
-// Sdílené případy - to samé se pouští proti databázi.
-export const BLOKOVANA = [
-  'nigger', 'NIGGER', 'n1gger', 'n1gg3r', 'nigga_king', 'xnigga', 'faggot.lol',
-  'hitler1945', 'adolf_hitler', 'heilhitler', 'buzerant', 'negr', 'negr_123', 'n3gr',
-  'spic', 'chink', 'coon', 'dyke', 'cunt', 'retard', 'nazi', 'nazi_boy', 'rape', 'rapist', '1488',
-];
-
-export const POVOLENA = [
-  'montenegro', 'spicy_food', 'raccoon_fan', 'tycoon', 'scunthorpe', 'grape', 'drapery',
-  'chinkiang', 'vandyke', 'retardant', 'coonhound', 'nazim', 'therapist', 'danielccerven58',
-  'psicak', 'kine_fan', 'honza.novak', 'x_ae_a12', 'negrini', 'cigoska_lucie', 'kike_lopez',
-];
-
-test('nadávky neprojdou, ani s číslicemi místo písmen', () => {
-  for (const j of BLOKOVANA) assert.equal(usernameContainsSlur(j), true, `mělo být blokované: ${j}`);
+test('běžná jména projdou (písmena, číslice, tečka, podtržítko)', () => {
+  for (const ok of ['kine_fan', 'honza.novak', 'x_ae_a12', 'Psicak', 'abc', 'a'.repeat(USERNAME_MAX)]) {
+    assert.equal(validateUsername(ok), null, ok);
+  }
 });
 
-test('slušná jména, která nadávku obsahují jen uvnitř, projdou', () => {
-  for (const j of POVOLENA) assert.equal(usernameContainsSlur(j), false, `nemělo být blokované: ${j}`);
+test('délka: moc krátké a moc dlouhé neprojde (mezery okolo se nepočítají)', () => {
+  assert.equal(validateUsername('ab'), 'usernameTooShort');
+  assert.equal(validateUsername('  ab  '), 'usernameTooShort');
+  assert.equal(validateUsername('a'.repeat(USERNAME_MAX + 1)), 'usernameTooLong');
+  assert.equal(USERNAME_MIN, 3);
 });
 
-test('validateUsername hlásí usernameBlocked až po ostatních pravidlech', () => {
-  assert.equal(validateUsername('nigger'), 'usernameBlocked');
-  assert.equal(validateUsername('ni'), 'usernameTooShort', 'krátké jméno hlásí délku, ne nadávku');
-  assert.equal(validateUsername('admin'), 'usernameReserved');
-  assert.equal(validateUsername('honza.novak'), null);
+test('znaky: jen základní latinka, bez znaménka na kraji a dvou za sebou', () => {
+  for (const bad of ['jan novak', '.kine', 'kine_', 'jan..novak', 'jan._novak', 'kіne_fan', 'čeněk', 'emoji😀']) {
+    assert.equal(validateUsername(bad), 'usernameBadCharacters', bad);
+  }
 });
 
-console.log('\n' + prosly + ' prošlo, ' + padly + ' spadlo');
-if (padly) process.exit(1);
+test('rezervovaná jména (appka, podpora, adresy) si nikdo nevezme - ani velkými písmeny', () => {
+  for (const bad of ['admin', 'Kine', 'SUPPORT', 'moderator', 'all', 'null']) {
+    assert.equal(validateUsername(bad), 'usernameReserved', bad);
+  }
+});
+
+test('porovnání bez velkých písmen a mezer okolo', () => {
+  assert.equal(normalizeUsername('  Kine_Fan '), 'kine_fan');
+});
+
+console.log(`\n${prosly} prošlo, ${padly} spadlo`);
+if (padly > 0) process.exit(1);

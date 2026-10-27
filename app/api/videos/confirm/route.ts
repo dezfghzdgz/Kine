@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { shouldBeProtected, syncVideoProtection } from '@/lib/streamProtection';
 import { sweepProcessing } from '@/lib/markVideoReady';
+import { runInBackground } from '@/lib/background';
 import { sanitizeCaptions, sanitizeChapters } from '@/lib/captions';
 import { isCloudflareUid } from '@/lib/cloudflareVideos';
 import { attachVideoToTicket, claimTicket, legacyUploadAllowed, limitsForProfile, uploadProfile, uploadUsage } from '@/lib/uploadTickets';
 import { outdatedAppResponse } from '@/lib/desktopGate';
+import { normalizeCategory } from '@/lib/categories';
 
 export const dynamic = 'force-dynamic';
 // Na pozadí může běžet kontrola obsahu (lib/nudityScan.ts) - funkce smí doběhnout až minutu.
@@ -99,7 +101,8 @@ export async function POST(req: NextRequest) {
     has_paid_promotion: hasPaidPromotion === true,
     is_ai_generated: isAiGenerated === true,
     language: typeof language === 'string' && language.length <= 12 ? language : 'cs',
-    category: typeof category === 'string' && category.length <= 40 ? category : null,
+    // Klíč kategorie ('catGaming'); "gaming" z mobilní appky se převede, neznámé = bez kategorie.
+    category: normalizeCategory(category),
     visibility: VISIBILITIES.has(visibility) ? visibility : 'public',
     is_premiere: isPremiere === true,
     scheduled_at: typeof scheduledAt === 'string' && Number.isFinite(Date.parse(scheduledAt)) ? scheduledAt : null,
@@ -143,7 +146,9 @@ export async function POST(req: NextRequest) {
 
   // Nové nahrání = tvůrce je aktivní; při té příležitosti se dodělají
   // jeho (i cizí) dřívější videa, která zůstala viset jako "processing".
-  await sweepProcessing();
+  // Na pozadí: úklid se může ptát Cloudflare na víc videí a appka by na potvrzení čekala
+  // (při pomalém Cloudflare by vypršela a nahrála klip znovu - duplikát).
+  runInBackground(sweepProcessing(), 'úklid zaseklých videí');
 
   return NextResponse.json({ video: data });
 }
