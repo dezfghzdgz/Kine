@@ -4,6 +4,8 @@ import { requestAutoCaptions, sweepCaptions } from './autoCaptions';
 import { runInBackground } from './background';
 import { isCloudflareUid, processCloudflareCleanup, streamApiUrl } from './cloudflareVideos';
 import { expireTickets, markTicketFailed } from './uploadTickets';
+import { isKineVideoId } from './videoRef';
+import { sweepOrder, uploadNeverFinished } from './videoProcessing';
 
 /**
  * "Video je zpracované" - jedno místo pro obě cesty, kterými se to appka
@@ -201,12 +203,16 @@ export async function markVideoFailed(videoId: string, cloudflareVideoId: string
 }
 
 export async function refreshFromCloudflare(videoId: string, progress?: { percent: number | null }): Promise<ReadyResult> {
-  const { data: video } = await supabaseServer
+  // Jen id videa na Kine (uuid) - cokoli jiného by databáze odmítla chybou (lib/videoRef.ts).
+  if (!isKineVideoId(videoId)) return 'not-found';
+  const { data: video, error } = await supabaseServer
     .from('videos')
-    .select('id, cloudflare_video_id, status')
+    .select('id, cloudflare_video_id, status, created_at')
     .eq('id', videoId)
     .maybeSingle();
 
+  // Výpadek databáze není "video neexistuje" - appky by si pak klip označily jako smazaný.
+  if (error) return 'processing';
   if (!video) return 'not-found';
   if (video.status === 'ready') return 'ready';
   if (video.status === 'failed') return 'failed';
@@ -246,6 +252,13 @@ export async function refreshFromCloudflare(videoId: string, progress?: { percen
     return 'failed';
   }
 
+  // Soubor k Cloudflare nikdy celý nedorazil (appka spadla uprostřed) - čekat dál nemá smysl.
+  if (cfData?.success && uploadNeverFinished(cfData.result?.status?.state, video.created_at)) {
+    lastCfCheck.delete(videoId);
+    await markVideoFailed(videoId, video.cloudflare_video_id, 'nahrání u Cloudflare nedokončené');
+    return 'failed';
+  }
+
   if (!cfData.success || !cfData.result?.readyToStream) {
     // Jak daleko Cloudflare je - u dlouhého videa ať tvůrce vidí, že se to hýbe.
     const percent = processingPercent(cfData.result);
@@ -271,9 +284,11 @@ export async function refreshFromCloudflare(videoId: string, progress?: { percen
  * neotevřel Tvoje videa. Bez webhooku od Cloudflare (který se musí
  * nastavit ručně) se to dřív nikdy samo nespravilo.
  *
- * Tohle projde nejstarší zaseklá videa (nejvýš `max` naráz, z posledních
- * sedmi dnů, starší než minutu - Cloudflare potřebuje chvíli) a u každého
- * se zeptá. Volá se z míst, kam chodí provoz i bez tvůrce (dotaz na stav,
+ * Tohle projde zaseklá videa (starší než minutu - Cloudflare potřebuje
+ * chvíli) a u každého se zeptá: nejvýš `max` nejnovějších z posledních
+ * sedmi dnů a k tomu dvě nejstarší (jakkoli stará). Dřív jen nejstarší
+ * z týdne - pár videí, která se u Cloudflare nikdy nedokončí, pak úklid
+ * zablokovalo a nová nahrávání (klipy z mobilní appky) nenaskočila. Volá se z míst, kam chodí provoz i bez tvůrce (dotaz na stav,
  * záloha stránky videa, potvrzení nahrání, appka Kine do PC při startu),
  * ale nejvýš jednou za `THROTTLE_MS` na instanci - jinak by každý dotaz
  * platil daň za cizí videa. Denně to navíc pouští cron (vercel.json ->
@@ -297,15 +312,15 @@ export async function sweepProcessing(options: { max?: number; force?: boolean }
     try {
       const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
       const minuteAgo = new Date(now - 60 * 1000).toISOString();
-      const { data } = await supabaseServer
-        .from('videos')
-        .select('id')
-        .eq('status', 'processing')
-        .gte('created_at', weekAgo)
-        .lte('created_at', minuteAgo)
-        .order('created_at', { ascending: true })
-        .limit(max);
-      for (const row of data ?? []) {
+      // Nejnovější z posledního týdne (na ty se čeká) + 2 nejstarší bez ohledu na stáří
+      // (starší zaseklá se tak postupně dodělají nebo označí jako nepovedená).
+      const stuck = (ascending: boolean, limit: number, since: string | null) => {
+        let q = supabaseServer.from('videos').select('id').eq('status', 'processing').lte('created_at', minuteAgo);
+        if (since) q = q.gte('created_at', since);
+        return q.order('created_at', { ascending }).limit(limit);
+      };
+      const [newest, oldest] = await Promise.all([stuck(false, max, weekAgo), stuck(true, 2, null)]);
+      for (const row of sweepOrder(newest.data, oldest.data)) {
         result.checked += 1;
         try {
           if ((await refreshFromCloudflare(row.id)) === 'ready') result.ready += 1;

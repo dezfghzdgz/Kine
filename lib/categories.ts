@@ -37,3 +37,17 @@ export function categoryLabel(category: string | null | undefined, t: (key: any)
   if (!category) return '—';
   return isCategoryKey(category) ? t(category) : category;
 }
+
+/**
+ * Kategorie z nahrání (web, appky) na klíč: "catGaming" zůstane, "gaming"
+ * nebo "Gaming" (mobilní Kine Clipper do 0.4.1) se převede na "catGaming",
+ * cokoli neznámého = null (bez kategorie). Dřív se uložilo, co přišlo, a
+ * klip z mobilu pak nebyl v Exploru v Hrách.
+ */
+export function normalizeCategory(value: unknown): CategoryKey | null {
+  if (typeof value !== 'string') return null;
+  const v = value.trim();
+  if (isCategoryKey(v)) return v;
+  const wanted = (/^cat/i.test(v) ? v : `cat${v}`).toLowerCase();
+  return CATEGORY_KEYS.find((k) => k.toLowerCase() === wanted) ?? null;
+}

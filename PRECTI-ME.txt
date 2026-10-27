@@ -1,3 +1,57 @@
+KINE web + Android Clipper 0.4.2: klipy nahrané z mobilního Clipperu se na Kine ukážou
+(u Cloudflare byly, na Kine ne); u klipu je vidět, kdo ho na Kine uvidí
+(dodávka kine-0127-2026-10-27)
+==========================================================================================
+
+PROČ SE KLIPY NEUKAZOVALY
+- Mobilní Clipper (Android) se po nahrání ptal Kine na stav videa s id od Cloudflare místo
+  id na Kine. Kine video nenašla, nikdo ho nepřepnul na „hotové“ - a nehotové video Kine
+  nikde neukazuje. U Cloudflare přitom bylo celé.
+- Záložní úklid zaseklých videí bral jen ta nejstarší; pár videí, která se u Cloudflare
+  nikdy nedokončí, ho zablokovalo a nová nahrávání nenaskočila.
+- Klipy z Clipperu (PC i mobil) se ve výchozím stavu nahrávají jako Soukromé - takové
+  video vidí jen autor, ostatní ho na Kine nenajdou.
+
+POSTUP
+1. Web: rozbal kine-web-0127.zip do kořene repa Kine, nahraj. Žádná migrace ani proměnná.
+   Zaseklé klipy se pak samy přepnou na hotové (stačí, aby kámoš otevřel Clipper nebo na
+   webu Tvoje videa; jinak nejpozději noční úklid).
+2. kine-mobile: rozbal kine-mobile-0.4.2.zip do kořene repa, nahraj. Actions postaví 0.4.2.
+3. Kámoš: už nahrané klipy jsou nejspíš Soukromé - na webu Tvoje videa -> Upravit ->
+   Viditelnost: Veřejné. V Clipperu 0.4.2 při nahrání vybere, kdo klip uvidí.
+
+WEB
+- /api/videos/status přijme id videa na Kine i id od Cloudflare (spraví to i nainstalovaný
+  Clipper 0.4.1) a vrací i id na Kine; výpadek databáze už neznamená „video neexistuje“.
+- Úklid zaseklých videí: nejnovější z týdne napřed + 2 nejstarší (jakkoli stará); běží na
+  pozadí (potvrzení nahrání a dotaz na stav na něj nečekají). Nahrání, které u Cloudflare
+  nikdy nedoběhlo (pendingupload déle než den), se označí jako nepovedené.
+- Kategorie z nahrání se převede na klíč („gaming“ -> Hry), neznámá = bez kategorie.
+- Tvoje videa: u neveřejného videa je „· Soukromé“ / „· Pro odběratele“.
+- tests/username.test.mjs: starý test na zrušený filtr nadávek je nahrazený testem
+  současných pravidel (už není v seznamu ke smazání).
+- Volitelně (SQL editor) kategorie u klipů z mobilu nahraných dřív:
+    update videos set category = 'catGaming' where category = 'gaming';
+
+ANDROID CLIPPER 0.4.2
+- Po nahrání se ptá na stav s id na Kine (po celé frontě: 5 s, pak 15 s, nejvýš 10 min)
+  a znovu při otevření appky - i u klipů nahraných ve 0.4.1.
+- Před nahráním okno: Veřejné / Jen odběratelé / Soukromé (předvybraná poslední volba,
+  platí i pro automatické nahrávání).
+- U klipu „Na Kine · zpracovává se…“, potom „Na Kine · Veřejné“ / „· Soukromé (vidíš jen ty)“.
+- Kategorie Hry a hashtag „klip“ jako z PC; uložení na Kine se při výpadku sítě zkusí
+  znovu (žádný duplikát), potvrzené video se při chybě nikdy neruší.
+- Na Kine smazaný klip ukáže „Na Kine smazané“ (automatika ho znovu neposílá);
+  nahrávání přerušené zavřením appky už nevisí na „Nahrává se %“.
+
+OVĚŘENO
+- web: tsc, 57 testů (vše prošlo), sestavení
+- Android: překlad Kotlinu proti Android 34 (i po nahrání na kopii z GitHubu), kontroly id
+  klipu a doby kontroly (9); skutečný telefon tady spustit nemůžu.
+
+==========================================================================================
+PŘEDCHOZÍ DODÁVKA
+==========================================================================================
 KINE web + Android Clipper 0.4.0: plná kvalita videa při dobrém signálu, ovládání přehrávače
 mizí rychleji, tlačítko Přehrát uprostřed a jen když video stojí, na konci videa jen nová
 videa (vejdou se na mobil), hledání v playlistu / lajkovaných / historii jen v nich;

@@ -35,7 +35,7 @@ function YourVideosPageInner() {
     }
     const { data } = await supabase
       .from('videos')
-      .select('id, title, thumbnail_url, views, status, width, height, duration_seconds, created_at')
+      .select('id, title, thumbnail_url, views, status, visibility, width, height, duration_seconds, created_at')
       .eq('owner_id', authData.user.id)
       .order('created_at', { ascending: false });
 
@@ -102,7 +102,7 @@ function YourVideosPageInner() {
 
     const { data: refreshed } = await supabase
       .from('videos')
-      .select('id, title, thumbnail_url, views, status, width, height, duration_seconds, created_at')
+      .select('id, title, thumbnail_url, views, status, visibility, width, height, duration_seconds, created_at')
       .eq('owner_id', ownerId)
       .order('created_at', { ascending: false });
 
@@ -179,6 +179,8 @@ function YourVideosPageInner() {
                 <p className="video-card-title">{video.title}</p>
                 <p className="video-card-meta">
                   {video.status === 'ready' ? `${video.views} ${t('views')}` : video.status === 'failed' ? t('videoStatusFailed') : t('videoStatusProcessing')}
+                  {/* Neveřejné video ostatní nevidí - ať je to tady poznat (klipy z Clipperu jsou ve výchozím soukromé). */}
+                  {video.visibility === 'private' ? ` · ${t('shortVisibilityPrivate')}` : video.visibility === 'subscribers' ? ` · ${t('shortVisibilitySubscribers')}` : ''}
                 </p>
               </Link>
               <div style={{ display: 'flex', gap: 6, marginTop: 8, width: '100%' }}>
