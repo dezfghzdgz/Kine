@@ -16,7 +16,7 @@ import { ThumbsDownIcon, ThumbsUpIcon } from '@/components/ReactionIcons';
 import { SETTINGS_SECTION_EVENT } from '@/lib/settingsNav';
 import ProfileImage from '@/components/ProfileImage';
 import ComingSoon from '@/components/ComingSoon';
-import { PAYMENTS_ENABLED } from '@/lib/payments';
+import { CREATOR_PAYMENTS_ENABLED } from '@/lib/payments';
 import {
   PROFILE_IMAGE_MAX_BYTES,
   STILL_MAX_SIDE,
@@ -587,7 +587,7 @@ export default function SettingsPage() {
         <div className="panel" id="earnings">
           <PanelHeading icon="coins" title={t('creatorEarningsTitle')} help={t('creatorEarningsIntro')} />
           {/* Placení zatím neběží (lib/payments.ts) - předplatné kanálu a napojení výplat přijdou s ním. */}
-          {!PAYMENTS_ENABLED ? (
+          {!CREATOR_PAYMENTS_ENABLED ? (
             <ComingSoon text={t('comingSoonEarnings')} />
           ) : !stripeOnboardingComplete ? (
             <>

@@ -110,6 +110,18 @@ test('Stripe: do kdy platí předplatné (aktivní, zrušené, nezaplacené)', (
   assert.equal(r({ ...base, status: 'active', cancel_at: s('2026-10-20T00:00:00Z') }).planUntil, '2026-10-20T00:00:00.000Z');
 });
 
+test('Stripe: varianta podle ceny, štítku ceny a štítku předplatného', () => {
+  const now = Date.parse('2026-10-28T00:00:00Z');
+  const end = Date.parse('2026-11-28T00:00:00Z') / 1000;
+  const sub = (price, meta) => ({ status: 'active', current_period_end: end, items: { data: [{ price }] }, metadata: meta });
+  const byEnv = (id) => (id === 'price_kine' ? 'kine' : null);
+  const r = (s, metadataTier) => billing.plusFromSubscription(s, { metadataTier, tierFromPrice: byEnv, now }).plan;
+  assert.equal(r(sub({ id: 'price_kine', metadata: { tier: 'all' } }), 'clips'), 'kine', 'cena z Vercelu má přednost');
+  assert.equal(r(sub({ id: 'price_stara', metadata: { tier: 'all' } }), 'kine'), 'all', 'přechod v portálu na starší cenu jiné varianty');
+  assert.equal(r(sub({ id: 'price_rucni', metadata: {} }), 'clips'), 'clips', 'ručně založená cena bez štítku');
+  assert.equal(r(sub({ id: 'price_rucni', metadata: { tier: 'nesmysl' } }), undefined), 'all');
+});
+
 test('Stripe: předplatné ze sporné platby', () => {
   assert.equal(billing.subscriptionIdFromCharge({ invoice: { subscription: 'sub_1' } }), 'sub_1');
   assert.equal(billing.subscriptionIdFromCharge({ invoice: { subscription: { id: 'sub_2' } } }), 'sub_2');

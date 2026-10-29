@@ -6,7 +6,10 @@
  * Psáno srozumitelně, ne právnicky - a podle toho, co Kine opravdu dělá
  * (živé vysílání, podpory, Kine Plus, Kine Clipper, automatická kontrola
  * obsahu, hlášení chyb). Kontakt je jen kinesupport@gmail.com.
+ * Provozovatel (jméno, IČO, místo podnikání) se doplní z Vercelu - lib/operator.ts.
  */
+
+import { operatorLine } from './operator';
 
 export type LegalSection = { heading: string; paragraphs?: string[]; items?: string[] };
 export type LegalDocText = { title: string; intro: string[]; sections: LegalSection[]; footer: string };
@@ -14,6 +17,11 @@ export type LegalDoc = { cs: LegalDocText; en: LegalDocText };
 
 export const LEGAL_CONTACT = 'kinesupport@gmail.com';
 export const LEGAL_UPDATED = { cs: '12. října 2026', en: '12 October 2026' };
+/** Podmínky a ochrana údajů: naposledy změněné (provozovatel, odstoupení od předplatného). */
+export const TERMS_UPDATED = { cs: '28. října 2026', en: '28 October 2026' };
+
+const OPERATOR_CS = operatorLine('cs');
+const OPERATOR_EN = operatorLine('en');
 
 export const RULES: LegalDoc = {
   cs: {
@@ -157,6 +165,7 @@ export const TERMS: LegalDoc = {
     title: 'Podmínky používání Kine',
     intro: [
       `Kine je služba pro videa, krátká videa (Sparks), živé vysílání a klipy z her - na webu i v aplikacích Kine do PC a Kine Clipper (dohromady „Kine"). Tyhle podmínky říkají, co můžeš čekat ty od nás a my od tebe. Kontakt na nás: ${LEGAL_CONTACT}.`,
+      ...(OPERATOR_CS ? [OPERATOR_CS] : []),
     ],
     sections: [
       {
@@ -205,7 +214,7 @@ export const TERMS: LegalDoc = {
           'Kine Plus a Klipy Plus jsou předplatné placené předem přes Stripe. Cenu (včetně daně) uvidíš před zaplacením. Předplatné se samo obnovuje, dokud ho nezrušíš; zrušit ho můžeš kdykoliv a platí do konce zaplaceného období.',
           'Předplatné tvůrců a podpory ve vysílání jdou přes Stripe přímo tvůrci; Kine si z nich nechává poplatek, který uvidíš předem (běžně 15 %). Podpory jsou dobrovolné dary a nevracejí se, ledaže to vyžaduje zákon nebo jde o podvod.',
           'Tvůrci, kteří dostávají peníze, potřebují vlastní účet u Stripe a sami odpovídají za své daně a odvody.',
-          `Pokud jsi spotřebitel, máš všechna práva, která ti dává zákon (včetně odstoupení od smlouvy uzavřené na dálku v rozsahu, který zákon stanoví). Stačí napsat na ${LEGAL_CONTACT}.`,
+          `Pokud jsi spotřebitel, můžeš od předplatného odstoupit do 14 dnů od zaplacení - stačí napsat na ${LEGAL_CONTACT}. Předplatné začíná hned po zaplacení na tvou výslovnou žádost (potvrzuješ ji při platbě), proto ti vrátíme platbu sníženou o poměrnou část za dny, kdy běželo. Ostatní práva, která ti dává zákon, tím nejsou dotčená.`,
         ],
       },
       {
@@ -241,12 +250,13 @@ export const TERMS: LegalDoc = {
         ],
       },
     ],
-    footer: `Kontakt: ${LEGAL_CONTACT}. Poslední změna: ${LEGAL_UPDATED.cs}.`,
+    footer: `Kontakt: ${LEGAL_CONTACT}. Poslední změna: ${TERMS_UPDATED.cs}.`,
   },
   en: {
     title: 'Kine Terms of Service',
     intro: [
       `Kine is a service for videos, short videos (Sparks), live streams and game clips - on the web and in the Kine for PC and Kine Clipper apps (together "Kine"). These terms describe what you can expect from us and what we expect from you. Contact: ${LEGAL_CONTACT}.`,
+      ...(OPERATOR_EN ? [OPERATOR_EN] : []),
     ],
     sections: [
       {
@@ -295,7 +305,7 @@ export const TERMS: LegalDoc = {
           'Kine Plus and Clips Plus are subscriptions paid in advance through Stripe. You see the price (including tax) before paying. A subscription renews automatically until you cancel it; you can cancel any time and it stays active until the end of the paid period.',
           "Creator subscriptions and tips in streams go through Stripe directly to the creator; Kine keeps a fee shown to you in advance (usually 15%). Tips are voluntary gifts and are not refunded unless the law requires it or in case of fraud.",
           'Creators who receive money need their own Stripe account and are responsible for their own taxes.',
-          `If you are a consumer, you keep all the rights the law gives you (including withdrawal from a distance contract to the extent the law provides). Just write to ${LEGAL_CONTACT}.`,
+          `If you are a consumer, you can withdraw from a subscription within 14 days of paying - just write to ${LEGAL_CONTACT}. The subscription starts right after payment at your express request (you confirm it when paying), so we refund the payment reduced by the share for the days it was active. Your other statutory rights are not affected.`,
         ],
       },
       {
@@ -331,7 +341,7 @@ export const TERMS: LegalDoc = {
         ],
       },
     ],
-    footer: `Contact: ${LEGAL_CONTACT}. Last updated: ${LEGAL_UPDATED.en}.`,
+    footer: `Contact: ${LEGAL_CONTACT}. Last updated: ${TERMS_UPDATED.en}.`,
   },
 };
 
@@ -340,6 +350,7 @@ export const PRIVACY: LegalDoc = {
     title: 'Ochrana osobních údajů',
     intro: [
       `Tady najdeš, jaké údaje o tobě Kine má, k čemu je potřebuje, komu je svěřuje a jaká máš práva. Správcem údajů je provozovatel Kine; s čímkoliv se obrať na ${LEGAL_CONTACT}.`,
+      ...(OPERATOR_CS ? [OPERATOR_CS] : []),
     ],
     sections: [
       {
@@ -413,12 +424,13 @@ export const PRIVACY: LegalDoc = {
         ],
       },
     ],
-    footer: `Tenhle dokument budeme upravovat, když se Kine změní; o podstatných změnách dáme vědět. Kontakt: ${LEGAL_CONTACT}. Poslední změna: ${LEGAL_UPDATED.cs}.`,
+    footer: `Tenhle dokument budeme upravovat, když se Kine změní; o podstatných změnách dáme vědět. Kontakt: ${LEGAL_CONTACT}. Poslední změna: ${TERMS_UPDATED.cs}.`,
   },
   en: {
     title: 'Privacy Policy',
     intro: [
       `This page explains what data Kine has about you, what it needs it for, who it shares it with and what rights you have. The data controller is the operator of Kine; for anything, contact ${LEGAL_CONTACT}.`,
+      ...(OPERATOR_EN ? [OPERATOR_EN] : []),
     ],
     sections: [
       {
@@ -492,6 +504,6 @@ export const PRIVACY: LegalDoc = {
         ],
       },
     ],
-    footer: `We will update this document when Kine changes and will let you know about significant changes. Contact: ${LEGAL_CONTACT}. Last updated: ${LEGAL_UPDATED.en}.`,
+    footer: `We will update this document when Kine changes and will let you know about significant changes. Contact: ${LEGAL_CONTACT}. Last updated: ${TERMS_UPDATED.en}.`,
   },
 };

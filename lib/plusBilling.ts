@@ -37,7 +37,12 @@ export function plusFromSubscription(
 
   const item = sub?.items?.data?.[0];
   const priceId: string | null = item?.price?.id ?? sub?.plan?.id ?? null;
-  const tier: PaidTier = opts.tierFromPrice(priceId) ?? (isPaidTier(opts.metadataTier) ? opts.metadataTier : 'all');
+  // Varianta: cena z Vercelu, jinak štítek ceny (ceny z /admin/stripe ho mají - platí i pro starší
+  // cenu po zdražení a pro přechod na jinou variantu v portálu), až pak štítek předplatného
+  // (ten se při přechodu nemění).
+  const priceTier = item?.price?.metadata?.tier ?? sub?.plan?.metadata?.tier;
+  const tier: PaidTier =
+    opts.tierFromPrice(priceId) ?? (isPaidTier(priceTier) ? priceTier : null) ?? (isPaidTier(opts.metadataTier) ? opts.metadataTier : 'all');
 
   // Novější verze API Stripe mají období u položky předplatného, ne u předplatného.
   const end = seconds(sub.current_period_end) ?? seconds(item?.current_period_end);

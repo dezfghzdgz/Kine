@@ -4,11 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
-import { PAYMENTS_ENABLED } from '@/lib/payments';
+import { CREATOR_PAYMENTS_ENABLED } from '@/lib/payments';
 
 /** Předplatné kanálu (platba) - dokud placení neběží (lib/payments.ts), tlačítko není. */
 export default function CreatorSubscribeButton({ creatorId }: { creatorId: string }) {
-  if (!PAYMENTS_ENABLED) return null;
+  if (!CREATOR_PAYMENTS_ENABLED) return null;
   return <CreatorSubscribeButtonInner creatorId={creatorId} />;
 }
 

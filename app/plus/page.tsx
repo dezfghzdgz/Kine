@@ -8,6 +8,7 @@ import { useLanguage } from '@/lib/i18n';
 import { allPriceLabels, hasPlus, normalizePlan, type PaidTier } from '@/lib/plus';
 import { PAYMENTS_ENABLED } from '@/lib/payments';
 import ComingSoon from '@/components/ComingSoon';
+import { operatorLine } from '@/lib/operator';
 
 /**
  * Předplatné Kine - tři varianty (lib/plus.ts):
@@ -99,7 +100,8 @@ function PlusPageInner() {
       const res = await fetch(path, {
         method: 'POST',
         headers: { Authorization: `Bearer ${data.session?.access_token}`, 'Content-Type': 'application/json' },
-        body: tier ? JSON.stringify({ tier }) : undefined,
+        // Jazyk webu - texty na platební stránce Stripe (souhlas, obnovování) v tom samém jazyce.
+        body: tier ? JSON.stringify({ tier, lang }) : undefined,
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok || !body.url) throw new Error(body.error || t('plusFailed'));
@@ -211,7 +213,8 @@ function PlusPageInner() {
                 {price ? (
                   <>
                     <span className="plus-price-value">{price}</span>
-                    <span className="plus-price-per">{t('plusMonthly')}</span>
+                    {/* Popisek „49 Kč / měsíc“ už období má (tak ho chce i appka do PC) - neopakovat. */}
+                    {!price.includes('/') && <span className="plus-price-per">{t('plusMonthly')}</span>}
                   </>
                 ) : (
                   <span className="plus-price-soon">{t('plusNotAvailable')}</span>
@@ -274,6 +277,12 @@ function PlusPageInner() {
       </section>
 
       <p style={{ color: 'var(--text-faint)', fontSize: 12, lineHeight: 1.6 }}>{t('plusFinePrint')}</p>
+      {/* Kdo prodává (zákon to chce vidět u nákupu) - jen když je ve Vercelu vyplněný provozovatel. */}
+      {PAYMENTS_ENABLED && operatorLine(lang === 'cs' || lang === 'sk' ? 'cs' : 'en') && (
+        <p style={{ color: 'var(--text-faint)', fontSize: 12, lineHeight: 1.6 }}>
+          {operatorLine(lang === 'cs' || lang === 'sk' ? 'cs' : 'en')} <Link href="/terms">{t('termsLink')}</Link>
+        </p>
+      )}
     </div>
   );
 }

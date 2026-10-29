@@ -166,6 +166,11 @@ function nonNegative(value: string | undefined, fallback: number): number {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
+/** Úložiště běžného účtu v hodinách podle Vercelu (0 = bez stropu) - pro kontrolu v /admin/stripe. */
+export function storageHoursFromEnv(env: Record<string, string | undefined>): number {
+  return nonNegative(env.UPLOAD_STORAGE_HOURS, UPLOAD_DEFAULTS.storageHours);
+}
+
 export type UploadWho = {
   /** Moderátor / správce (role) nebo is_admin. */
   staff: boolean;

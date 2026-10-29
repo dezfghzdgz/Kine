@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PAYMENTS_ENABLED, PAYMENTS_OFF } from '@/lib/payments';
+import { CREATOR_PAYMENTS_ENABLED, CREATOR_PAYMENTS_OFF } from '@/lib/payments';
 import { stripeServer } from '@/lib/stripeServer';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { siteUrlFrom } from '@/lib/siteUrl';
@@ -9,8 +9,8 @@ import { siteUrlFrom } from '@/lib/siteUrl';
 // bankovní účet a doklady). Naše appka tyhle údaje nikdy nevidí
 // citlivé bankovní údaje přímo - to celé řeší appka Stripe.
 export async function POST(req: NextRequest) {
-  // Placení zatím neběží (lib/payments.ts) - nic se nezaplatí ani omylem.
-  if (!PAYMENTS_ENABLED) return NextResponse.json(PAYMENTS_OFF, { status: 503 });
+  // Peníze pro tvůrce zatím neběží (lib/payments.ts, NEXT_PUBLIC_CREATOR_PAYMENTS) - nic se nezaplatí ani omylem.
+  if (!CREATOR_PAYMENTS_ENABLED) return NextResponse.json(CREATOR_PAYMENTS_OFF, { status: 503 });
   try {
     const authHeader = req.headers.get('Authorization');
     const token = authHeader?.replace('Bearer ', '');

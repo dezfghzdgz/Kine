@@ -3,6 +3,7 @@ import { PAYMENTS_ENABLED, PAYMENTS_OFF } from '@/lib/payments';
 import { stripeServer } from '@/lib/stripeServer';
 import { siteUrlFrom } from '@/lib/siteUrl';
 import { userFromRequest } from '@/lib/apiUser';
+import { paymentAllowedNow, TEST_MODE_OFF } from '@/lib/paymentsServer';
 
 // Vytvoří appce jednorázovou platební relaci na podporu appky Kine (ne
 // appky konkrétního tvůrce - to appka řešit později v rámci většího
@@ -18,6 +19,8 @@ export async function POST(req: NextRequest) {
     // i zápis daru libovolnému účtu. Bez přihlášení je dar anonymní.
     const user = await userFromRequest(req);
     const userId = user?.id ?? null;
+    // Testovací klíč Stripe: zkouší jen správce (lib/paymentsServer.ts).
+    if (!(await paymentAllowedNow(userId))) return NextResponse.json(TEST_MODE_OFF, { status: 503 });
 
     // Dřív se pole jmenovalo amountCzk, ale účtovalo se v eurech - kdo
     // napsal "200" v domnění, že jde o koruny, zaplatil 200 EUR. Starý název

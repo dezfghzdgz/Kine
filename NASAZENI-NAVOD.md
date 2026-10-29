@@ -73,3 +73,43 @@ appce trvá pár dní až týdny, než appka appku poprvé zaindexuje, a mnohem
 déle, než appka appku začne appce ukazovat na předních místech výsledků
 (to už záleží hlavně na tom, kolik lidí appku skutečně používá a odkazuje
 na ni odjinud, ne na technickém nastavení).
+
+## 7. Platby (Stripe) - Kine Plus a Podpořit Kine
+
+Klíče Stripe patří **jen do Vercelu**, nikdy do GitHubu (repo je veřejné).
+Nejdřív všechno v testovacím režimu (klíč `sk_test_…`), pak to samé naostro
+(`sk_live_…`) - ceny, webhook i portál má Stripe pro každý režim zvlášť.
+
+1. **Stripe:** dokonči aktivaci účtu (podnikání, IČO, bankovní účet).
+   Settings → Public details: web, podpora `kinesupport@gmail.com`, podmínky
+   `https://tvoje-adresa/terms`, ochrana údajů `https://tvoje-adresa/privacy`,
+   text na výpisu `KINE`. Settings → Billing → Customer portal → **Save**.
+   Platby v Kč na eurový účet Stripe převádí (poplatek) - přidej i bankovní
+   účet v Kč (Settings → Bank accounts and currencies).
+2. **Vercel → Environment Variables:**
+   - `STRIPE_SECRET_KEY` - Stripe → Developers → API keys → Secret key
+   - `NEXT_PUBLIC_OPERATOR_NAME`, `NEXT_PUBLIC_OPERATOR_ICO`,
+     `NEXT_PUBLIC_OPERATOR_ADDRESS` - provozovatel (jméno, IČO, místo
+     podnikání); zákon je chce na webu. U firmy navíc
+     `NEXT_PUBLIC_OPERATOR_REGISTRY` (např. „zapsaná v obchodním rejstříku
+     u Městského soudu v Praze, oddíl C, vložka …“).
+   - → **Redeploy**
+3. **Na webu `/admin/stripe`** (jen admin, v menu „Platby (Stripe)“):
+   - „Vytvořit ceny ve Stripe“ (předvyplněné doporučené ceny: Kine Plus 59 Kč,
+     Klipy Plus 79 Kč, Kine Plus + Klipy 99 Kč, v eurech 2,49 / 3,29 / 3,99 €)
+     → vypíše `STRIPE_PLUS_KINE_PRICE_ID`, `STRIPE_PLUS_CLIPS_PRICE_ID`,
+     `STRIPE_PLUS_ALL_PRICE_ID` a popisky `NEXT_PUBLIC_PLUS_…_PRICE_LABEL`
+     (např. `59 Kč / měsíc (2,49 €)`)
+   - „Vytvořit / opravit webhook“ → vypíše `STRIPE_WEBHOOK_SECRET` (ukáže se
+     jen jednou)
+   - všechny řádky do Vercelu → **Redeploy**; stránka pak ukáže, co ještě chybí
+4. **Zapnutí:** `NEXT_PUBLIC_PAYMENTS=1` → **Redeploy**. Zkus koupi na `/plus`
+   testovací kartou `4242 4242 4242 4242` (libovolné budoucí datum a CVC).
+5. **Peníze pro tvůrce** (předplatné kanálu, podpory ve vysílání, výplaty) až
+   později: Stripe Connect + `NEXT_PUBLIC_CREATOR_PAYMENTS=1`, po poradě
+   s účetní.
+6. Placení je komerční použití → Vercel plán **Pro** (Hobby je jen nekomerční).
+7. Doporučeně ve Vercelu `UPLOAD_STORAGE_HOURS=5` (úložiště účtu 5 h, Kine Plus
+   3× víc = 15 h; výchozí je 30 h / 90 h). Cloudflare účtuje každou uloženou
+   minutu (plný účet s Plus by stál až ~570 Kč měsíčně), takže než přejdeme na
+   levnější úložiště videí, ať předplatné pokryje i nejnáročnější tvůrce.

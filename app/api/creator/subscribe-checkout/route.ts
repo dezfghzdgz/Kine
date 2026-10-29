@@ -1,22 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PAYMENTS_ENABLED, PAYMENTS_OFF } from '@/lib/payments';
+import { CREATOR_PAYMENTS_ENABLED, CREATOR_PAYMENTS_OFF } from '@/lib/payments';
 import { stripeServer } from '@/lib/stripeServer';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { siteUrlFrom } from '@/lib/siteUrl';
+import { paymentAllowedNow, TEST_MODE_OFF } from '@/lib/paymentsServer';
 
 // Appka si bere 15 % z každého předplatného jako provizi za appku - je
 // to jen konstanta appky, appka jde kdykoliv změnit.
 const PLATFORM_FEE_PERCENT = 15;
 
 export async function POST(req: NextRequest) {
-  // Placení zatím neběží (lib/payments.ts) - nic se nezaplatí ani omylem.
-  if (!PAYMENTS_ENABLED) return NextResponse.json(PAYMENTS_OFF, { status: 503 });
+  // Peníze pro tvůrce zatím neběží (lib/payments.ts, NEXT_PUBLIC_CREATOR_PAYMENTS) - nic se nezaplatí ani omylem.
+  if (!CREATOR_PAYMENTS_ENABLED) return NextResponse.json(CREATOR_PAYMENTS_OFF, { status: 503 });
   const authHeader = req.headers.get('Authorization');
   const token = authHeader?.replace('Bearer ', '');
   if (!token) return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });
 
   const { data: userData } = await supabaseServer.auth.getUser(token);
   if (!userData.user) return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });
+  // Testovací klíč Stripe: zkouší jen správce (lib/paymentsServer.ts).
+  if (!(await paymentAllowedNow(userData.user.id))) return NextResponse.json(TEST_MODE_OFF, { status: 503 });
 
   const { creatorId } = await req.json();
   if (!creatorId) return NextResponse.json({ error: 'Chybí creatorId.' }, { status: 400 });

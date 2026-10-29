@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PAYMENTS_ENABLED, PAYMENTS_OFF } from '@/lib/payments';
+import { CREATOR_PAYMENTS_ENABLED, CREATOR_PAYMENTS_OFF } from '@/lib/payments';
 import { stripeServer } from '@/lib/stripeServer';
 import { supabaseServer } from '@/lib/supabaseServer';
 
@@ -11,8 +11,8 @@ const MAX_PRICE_EUR = 100;
 // účtu. Samotná platba pak poběží přes appka "destination charge"
 // (transfer_data), ne přímo na Connect účtu tvůrce.
 export async function POST(req: NextRequest) {
-  // Placení zatím neběží (lib/payments.ts) - nic se nezaplatí ani omylem.
-  if (!PAYMENTS_ENABLED) return NextResponse.json(PAYMENTS_OFF, { status: 503 });
+  // Peníze pro tvůrce zatím neběží (lib/payments.ts, NEXT_PUBLIC_CREATOR_PAYMENTS) - nic se nezaplatí ani omylem.
+  if (!CREATOR_PAYMENTS_ENABLED) return NextResponse.json(CREATOR_PAYMENTS_OFF, { status: 503 });
   const authHeader = req.headers.get('Authorization');
   const token = authHeader?.replace('Bearer ', '');
   if (!token) return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });

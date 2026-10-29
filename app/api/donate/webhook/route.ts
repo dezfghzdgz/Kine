@@ -32,7 +32,8 @@ export async function POST(req: NextRequest) {
 
   let event;
   try {
-    event = stripeServer.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!);
+    // trim: mezera / nový řádek na konci hodnoty z Vercelu by jinak shodil každé ověření.
+    event = stripeServer.webhooks.constructEvent(body, signature, (process.env.STRIPE_WEBHOOK_SECRET ?? '').trim());
   } catch (err: any) {
     return NextResponse.json({ error: `Ověření podpisu selhalo: ${err.message}` }, { status: 400 });
   }
@@ -87,13 +88,17 @@ export async function POST(req: NextRequest) {
         const state = plusFromSubscription(sub, { metadataTier: sub?.metadata?.tier ?? session.metadata?.tier, tierFromPrice: tierFromStripePriceId });
 
         // Starší předplatné téhož účtu (koupil podruhé ve dvou oknech, nebo po
-        // nezaplacení znovu): zrušit, ať se neplatí dvakrát.
+        // nezaplacení znovu): zrušit, ať se neplatí dvakrát - a když ho zaplatil
+        // před chvílí (dvě okna), vrátit mu tu platbu celou.
         const { data: before } = await supabaseServer.from('profiles').select('plan_stripe_subscription_id').eq('id', userId).maybeSingle();
         const previous = (before as { plan_stripe_subscription_id?: string | null } | null)?.plan_stripe_subscription_id;
         if (previous && previous !== sub.id) {
           try {
-            const old = await stripeServer.subscriptions.retrieve(previous);
-            if (['active', 'trialing', 'past_due', 'unpaid'].includes(String(old?.status))) await stripeServer.subscriptions.cancel(previous);
+            const old: any = await stripeServer.subscriptions.retrieve(previous, { expand: ['latest_invoice'] });
+            if (['active', 'trialing', 'past_due', 'unpaid'].includes(String(old?.status))) {
+              await stripeServer.subscriptions.cancel(previous);
+              await refundDuplicate(old);
+            }
           } catch {
             // Staré předplatné už není - nic.
           }
@@ -217,6 +222,29 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ received: true });
+}
+
+/**
+ * Zdvojené Kine Plus (dvě okna): platba staršího předplatného z posledních
+ * 2 dnů se vrátí celá - první měsíc by jinak zaplatil dvakrát. Jen jednou
+ * (idempotencyKey), chyba nic neblokuje (jen záznam v logu).
+ */
+async function refundDuplicate(old: any) {
+  const inv = old?.latest_invoice;
+  if (!inv || typeof inv !== 'object' || inv.status !== 'paid' || !(Number(inv.amount_paid) > 0)) return;
+  const paidAt = Number(inv.status_transitions?.paid_at ?? 0);
+  if (!paidAt || Date.now() / 1000 - paidAt > 2 * 24 * 3600) return;
+  const paymentIntent = typeof inv.payment_intent === 'string' ? inv.payment_intent : inv.payment_intent?.id;
+  const charge = typeof inv.charge === 'string' ? inv.charge : inv.charge?.id;
+  if (!paymentIntent && !charge) return;
+  try {
+    await stripeServer.refunds.create(
+      { ...(paymentIntent ? { payment_intent: paymentIntent } : { charge }), reason: 'duplicate', metadata: { kind: 'kine-plus-duplicate', subscription: String(old.id) } },
+      { idempotencyKey: `kine-plus-duplicate-${old.id}` }
+    );
+  } catch (e: any) {
+    console.warn(`Kine Plus: zdvojenou platbu (${old.id}) se nepodařilo vrátit: ${e?.message ?? e}`);
+  }
 }
 
 /** Zápis do databáze selhal - 500, ať Stripe událost pošle znovu (dělá to až 3 dny). */

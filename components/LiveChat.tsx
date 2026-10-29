@@ -22,7 +22,7 @@ import {
 } from '@/lib/chatEmotes';
 import { useChatEmotes } from '@/lib/useChatEmotes';
 import { formatTipAmount } from '@/lib/liveTips';
-import { PAYMENTS_ENABLED } from '@/lib/payments';
+import { CREATOR_PAYMENTS_ENABLED } from '@/lib/payments';
 import { ChatSpeaker, TTS_MODES, readTtsMode, saveTtsMode, speechText, type TtsMode } from '@/lib/chatSpeech';
 import ProfileImage from './ProfileImage';
 import UiIcon, { type UiIconName } from './UiIcon';
@@ -719,7 +719,7 @@ export default function LiveChat({
               <span className="live-chat-tts-menu" role="menu">
                 {!ttsSupported && <span className="live-chat-panel-note">{t('ttsUnsupported')}</span>}
                 {/* "Jen podpory" až s placením (lib/payments.ts) - bez podpor by nečetlo nic. */}
-                {TTS_MODES.filter((m) => m !== 'tips' || PAYMENTS_ENABLED || ttsMode === 'tips').map((m) => (
+                {TTS_MODES.filter((m) => m !== 'tips' || CREATOR_PAYMENTS_ENABLED || ttsMode === 'tips').map((m) => (
                   <button
                     key={m}
                     type="button"

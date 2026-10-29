@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PAYMENTS_ENABLED, PAYMENTS_OFF } from '@/lib/payments';
+import { CREATOR_PAYMENTS_ENABLED, CREATOR_PAYMENTS_OFF } from '@/lib/payments';
 import { stripeServer } from '@/lib/stripeServer';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isMissingTable, userFromRequest } from '@/lib/apiUser';
@@ -9,6 +9,7 @@ import { checkChatMessage, containsLink } from '@/lib/liveChatRules';
 import { activeBan, loadChatSettings } from '@/lib/liveChatModeration';
 import { cleanTipMessage, formatTipAmount, parseTipCurrency, tipAmountCents, tipFeeCents, tipFeePercent } from '@/lib/liveTips';
 import { tipTarget } from '@/lib/liveTipsServer';
+import { paymentAllowedNow, TEST_MODE_OFF } from '@/lib/paymentsServer';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,10 +26,12 @@ const MAX_PENDING_PER_10_MIN = 6;
  * chatu kanálu (zakázaná slova, zákaz psaní) - odkazy ve vzkazu nikdy.
  */
 export async function POST(req: NextRequest) {
-  // Placení zatím neběží (lib/payments.ts) - nic se nezaplatí ani omylem.
-  if (!PAYMENTS_ENABLED) return NextResponse.json(PAYMENTS_OFF, { status: 503 });
+  // Peníze pro tvůrce zatím neběží (lib/payments.ts, NEXT_PUBLIC_CREATOR_PAYMENTS) - nic se nezaplatí ani omylem.
+  if (!CREATOR_PAYMENTS_ENABLED) return NextResponse.json(CREATOR_PAYMENTS_OFF, { status: 503 });
   const user = await userFromRequest(req);
   if (!user) return NextResponse.json({ error: 'Musíš být přihlášený.', code: 'login' }, { status: 401 });
+  // Testovací klíč Stripe: zkouší jen správce (lib/paymentsServer.ts).
+  if (!(await paymentAllowedNow(user.id))) return NextResponse.json(TEST_MODE_OFF, { status: 503 });
   const body = await req.json().catch(() => ({}));
   const channelId = String(body?.channelId ?? '').toLowerCase();
   if (!UUID.test(channelId)) return NextResponse.json({ error: 'Neplatný kanál.' }, { status: 400 });

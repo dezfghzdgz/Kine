@@ -60,6 +60,15 @@ test('proměnné na Vercelu', () => {
   assert.ok(L.uploadsPaused({ UPLOADS_PAUSED: '1' }));
 });
 
+test('úložiště účtu z Vercelu (kontrola v /admin/stripe)', () => {
+  assert.equal(L.storageHoursFromEnv({}), 30, 'výchozí');
+  assert.equal(L.storageHoursFromEnv({ UPLOAD_STORAGE_HOURS: '5' }), 5);
+  assert.equal(L.storageHoursFromEnv({ UPLOAD_STORAGE_HOURS: '0' }), 0, '0 = bez stropu');
+  assert.equal(L.storageHoursFromEnv({ UPLOAD_STORAGE_HOURS: '' }), 30);
+  assert.equal(L.storageHoursFromEnv({ UPLOAD_STORAGE_HOURS: 'nesmysl' }), 30);
+  assert.equal(L.storageHoursFromEnv({ UPLOAD_STORAGE_HOURS: '-3' }), 30);
+});
+
 test('rezerva u Cloudflare = délka videa, ne 6 hodin', () => {
   const r = L.checkUpload(free, L.NO_USAGE, 600);
   assert.equal(r.ok, true);

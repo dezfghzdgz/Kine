@@ -3,6 +3,7 @@ import { PAYMENTS_ENABLED, PAYMENTS_OFF } from '@/lib/payments';
 import { stripeServer } from '@/lib/stripeServer';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { siteUrlFrom } from '@/lib/siteUrl';
+import { stripeMissing } from '@/lib/stripeSetup';
 
 /**
  * Správa předplatného Kine Plus (zrušení, změna karty) - zákaznický
@@ -36,6 +37,10 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ url: session.url });
   } catch (e: any) {
+    // Zákazník u Stripe v tomhle režimu není - předplatné ze zkoušení plateb (testovací klíč).
+    if (stripeMissing(e, 'customer')) {
+      return NextResponse.json({ error: 'Tohle předplatné bylo ze zkoušení plateb a u Stripe už není - kup si Kine Plus znovu.', code: 'stale-customer' }, { status: 409 });
+    }
     return NextResponse.json({ error: e?.message ?? 'Stripe se nepodařilo zavolat.' }, { status: 502 });
   }
 }

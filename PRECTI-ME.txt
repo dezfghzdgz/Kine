@@ -1,3 +1,98 @@
+KINE web: doporučené ceny předplatného (Kine Plus 59 Kč, Klipy Plus 79 Kč, Kine Plus + Klipy
+99 Kč) a kontrola úložiště v /admin/stripe
+(dodávka kine-0129-2026-10-29 - obsahuje i celou dodávku 0128, ta na GitHubu ještě není)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0129.zip do kořene repa Kine, nahraj (stačí jen tenhle ZIP, 0128 je
+   v něm). Migrace není.
+2. Spuštění plateb krok za krokem: NASAZENI-NAVOD.md, krok 7 (a dodávka 0128 níž).
+
+CO JE NOVÉ
+- /admin/stripe má předvyplněné doporučené ceny: 59 / 79 / 99 Kč, v eurech 2,49 / 3,29 /
+  3,99 €. Proč: ze 49 Kč by si Stripe vzal 15 % (pevných 6,50 Kč za platbu), z 59 Kč 13 %;
+  59 Kč je pořád míň než Discord Nitro Basic a čtvrtina YouTube Premium (239 Kč). Balíček
+  pod 100 Kč je jen o 20 Kč dražší než samotné Klipy. Jde přepsat před kliknutím; pozdější
+  změna platí pro nové předplatitele, stávající zůstanou na své ceně.
+- /admin/stripe ukáže úložiště účtu (UPLOAD_STORAGE_HOURS) a kolik plný účet stojí na
+  Cloudflare. Výchozích 30 h (Kine Plus 90 h) = až ~190 / ~570 Kč měsíčně za jeden účet,
+  víc, než předplatné vynese. Do přechodu na levnější úložiště videí doporučuju ve Vercelu
+  UPLOAD_STORAGE_HOURS=5 (Plus 15 h).
+
+OVĚŘENO
+- tsc, 59 testových souborů (nové kontroly úložiště a cen), sestavení
+- /api/admin/stripe proti náhradě Stripe, 19 scénářů
+
+==========================================================================================
+PŘEDCHOZÍ DODÁVKA
+==========================================================================================
+KINE web: spuštění plateb - Kine Plus a Podpořit Kine přes Stripe, nastavení na pár kliknutí
+(stránka /admin/stripe), souhlas s podmínkami u platby, provozovatel na webu; peníze pro
+tvůrce mají vlastní vypínač
+(dodávka kine-0128-2026-10-28)
+==========================================================================================
+
+CO JE NOVÉ
+- /admin/stripe (jen admin, v menu „Platby (Stripe)“): co je hotové a co chybí (klíč, účet,
+  webhook, ceny, zákaznický portál, provozovatel, vypínač) + tlačítka „Vytvořit ceny ve
+  Stripe“ (3 měsíční ceny, i v eurech) a „Vytvořit / opravit webhook“. Vypíšou hotové
+  řádky do Vercelu. Nic tajného se neukládá; podpisový klíč webhooku Stripe ukáže jen jednou.
+- Placení ve 2 krocích: NEXT_PUBLIC_PAYMENTS=1 zapne Kine Plus / Klipy Plus a Podpořit Kine.
+  Předplatné kanálů, podpory ve vysílání a výplaty tvůrcům zůstanou „Připravujeme“, dokud
+  není i NEXT_PUBLIC_CREATOR_PAYMENTS=1 (až se Stripe Connect a po poradě s účetní).
+- Platební stránka Stripe: zaškrtávátko „souhlasím s podmínkami a chci začít hned“ (při
+  odstoupení do 14 dnů se vrací platba bez poměrné části za uplynulé dny), text o měsíčním
+  obnovování a zrušení, v jazyce webu (cs/sk/en). Bez adresy podmínek ve Stripe platba
+  projde i tak (souhlas je pak v textu u tlačítka).
+- Provozovatel (jméno, IČO, místo podnikání) se bere z Vercelu a ukáže se v podmínkách,
+  v ochraně údajů a na /plus (zákon to u prodeje chce). Do GitHubu nepatří.
+- Podmínky: jasné odstoupení od předplatného (14 dní, vrácení poměrné části), datum změny.
+- /plus: popisek „49 Kč / měsíc“ už nemá „/ měsíc“ dvakrát.
+- Pojistky: s testovacím klíčem (sk_test_…) smí platit jen správce - jinak by si kdokoliv
+  s testovací kartou 4242 „koupil“ Plus zadarmo. Předplatné a zákazník ze zkoušení po
+  přechodu na ostrý klíč nic neblokují (koupí se znovu jako nový zákazník).
+- Webhook: kontrola, že vede přesně na adresu webu (playkine.com vs www.playkine.com -
+  Stripe přesměrování nenásleduje) a že web na adrese odpovídá; oprava adresu přepíše.
+  /admin/stripe ukáže i události, které Stripe nedoručil (typicky špatný STRIPE_WEBHOOK_SECRET).
+- Zaplatil Plus dvakrát (dvě okna): starší předplatné se zruší a jeho platba vrátí celá.
+- Varianta Plus se pozná i podle ceny (štítek z /admin/stripe) - po zdražení nebo přechodu
+  na jinou variantu v portálu sedí.
+- Návod: NASAZENI-NAVOD.md, krok 7 „Platby (Stripe)“ - všechny proměnné na jednom místě
+  (.env.example se neměnil - soubory s tečkou GitHub z přetažení nebere).
+
+POSTUP (nejdřív testovací režim, pak ostrý)
+1. Rozbal kine-web-0128.zip do kořene repa Kine, nahraj. Migrace není.
+2. Stripe: dokonči aktivaci účtu (podnikání, IČO, bankovní účet).
+   Settings -> Public details: web https://www.playkine.com, podpora kinesupport@gmail.com,
+   podmínky https://www.playkine.com/terms, ochrana údajů https://www.playkine.com/privacy,
+   text na výpisu KINE.
+   Settings -> Billing -> Customer portal -> Save (jednou v testovacím, jednou v ostrém režimu).
+   Tip: platby v Kč se na eurový účet převádějí (poplatek ~2 %) - přidej ve Stripe i
+   bankovní účet v Kč (Settings -> Bank accounts and currencies).
+3. Vercel -> Settings -> Environment Variables:
+   STRIPE_SECRET_KEY = sk_test_… (Stripe -> Developers -> API keys -> Secret key)
+   NEXT_PUBLIC_OPERATOR_NAME, NEXT_PUBLIC_OPERATOR_ICO, NEXT_PUBLIC_OPERATOR_ADDRESS
+   -> Redeploy.
+4. Na webu /admin/stripe: „Vytvořit ceny ve Stripe“ -> 6 řádků do Vercelu;
+   „Vytvořit / opravit webhook“ -> STRIPE_WEBHOOK_SECRET do Vercelu -> Redeploy.
+5. Vercel: NEXT_PUBLIC_PAYMENTS=1 -> Redeploy. Na /plus kup kartou 4242 4242 4242 4242
+   (libovolné budoucí datum a CVC). Účet má hned PLUS; zrušení: /plus -> Spravovat předplatné.
+6. Naostro: totéž se sk_live_… - ceny, webhook i portál jsou v ostrém režimu zvlášť, takže
+   v /admin/stripe znovu obě tlačítka -> nové řádky do Vercelu (přepsat) -> Redeploy.
+7. Vercel plán Pro (Hobby je jen na nekomerční použití).
+
+OVĚŘENO
+- tsc, 59 testových souborů (nové: stripeSetup, plusCheckout), sestavení
+- /api/admin/stripe proti náhradě Stripe, 18 scénářů (ceny podruhé bez zdvojení, nová
+  částka, archivovaná cena / produkt, webhook nový / doplnění / oprava adresy, přesměrování,
+  nedoručené události, špatný klíč, cizí uživatel 403); platba Kine Plus 7 scénářů (souhlas,
+  bez adresy podmínek, testovací klíč jen správce, zbytky z testu, 401 / 409 / 503);
+  webhook 6 scénářů (zdvojené předplatné vrácené jednou, špatný podpis)
+- nezávislá kontrola kódu plateb (4 nálezy - všechny opravené)
+
+==========================================================================================
+PŘEDCHOZÍ DODÁVKA
+==========================================================================================
 KINE web + Android Clipper 0.4.2: klipy nahrané z mobilního Clipperu se na Kine ukážou
 (u Cloudflare byly, na Kine ne); u klipu je vidět, kdo ho na Kine uvidí
 (dodávka kine-0127-2026-10-27)

@@ -11,7 +11,7 @@ import ChatEmoteManager from '@/components/ChatEmoteManager';
 import { useChatEmotes } from '@/lib/useChatEmotes';
 import LiveTipsPanel from '@/components/LiveTipsPanel';
 import ComingSoon from '@/components/ComingSoon';
-import { PAYMENTS_ENABLED } from '@/lib/payments';
+import { CREATOR_PAYMENTS_ENABLED } from '@/lib/payments';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import Toast, { ToastType } from '@/components/Toast';
 import { PanelHeading, WithHelp } from '@/components/HelpTip';
@@ -717,7 +717,7 @@ export default function LiveStudioPage() {
             </div>
 
             {/* Podpory ve vysílání: zapnutí, poslední podpory, překryv pro OBS se čtením nahlas. */}
-            {PAYMENTS_ENABLED ? <LiveTipsPanel token={token} userId={userId} onCopy={copy} /> : <ComingSoon text={t('comingSoonTips')} />}
+            {CREATOR_PAYMENTS_ENABLED ? <LiveTipsPanel token={token} userId={userId} onCopy={copy} /> : <ComingSoon text={t('comingSoonTips')} />}
 
             <div className="panel">
               <PanelHeading icon="chat" title={t('liveChatToolsHeading')} help={t('liveChatObsOverlayHint')} />

@@ -5,7 +5,7 @@ import { LIST_SYNC_BUDGET_MS, publicLive, syncLiveStreamsForViewers, type LiveSt
 import type { LiveRestriction } from '@/lib/liveNow';
 import { liveHiddenNow } from '@/lib/nudityRules';
 import { runInBackground } from '@/lib/background';
-import { PAYMENTS_ENABLED } from '@/lib/payments';
+import { CREATOR_PAYMENTS_ENABLED } from '@/lib/payments';
 import { tipTarget } from '@/lib/liveTipsServer';
 import { tipFeePercent } from '@/lib/liveTips';
 
@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
   }
   // Podpory ve vysílání (tlačítko 💛 u přenosu): jen když kanál běží a umí je přijmout.
   // Podpory ve vysílání jsou placené - dokud placení neběží (lib/payments.ts), nejsou.
-  const tips = stream.live && PAYMENTS_ENABLED ? { enabled: await tipsEnabled(channel), feePercent: tipFeePercent(process.env.LIVE_TIP_FEE_PERCENT) } : { enabled: false, feePercent: 0 };
+  const tips = stream.live && CREATOR_PAYMENTS_ENABLED ? { enabled: await tipsEnabled(channel), feePercent: tipFeePercent(process.env.LIVE_TIP_FEE_PERCENT) } : { enabled: false, feePercent: 0 };
   // Po vysílání: odkaz na záznam (když ho tvůrce zveřejnil) - kdo přišel pozdě, pustí si ho.
   const lastRecording = stream.live ? null : await latestRecording(channel);
   // Bez přihlášení je odpověď pro všechny stejná (stránka přenosu se ptá každých 6 s, odznak

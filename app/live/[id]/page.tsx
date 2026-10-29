@@ -21,7 +21,7 @@ import ProfileImage from '@/components/ProfileImage';
 import UiIcon from '@/components/UiIcon';
 import LivePlayer from '@/components/LivePlayer';
 import { nextPlayerUrl } from '@/lib/livePlayback';
-import { PAYMENTS_ENABLED } from '@/lib/payments';
+import { CREATOR_PAYMENTS_ENABLED } from '@/lib/payments';
 
 type Status = {
   enabled: boolean;
@@ -200,7 +200,7 @@ export default function LivePage() {
             {t('liveStudioTitle')}
           </Link>
         )}
-        {!isOwner && status.live && status.tips?.enabled && PAYMENTS_ENABLED && (
+        {!isOwner && status.live && status.tips?.enabled && CREATOR_PAYMENTS_ENABLED && (
           <button type="button" className="live-tip-btn" onClick={() => setTipOpen(true)}>
             💛 {t('tipButton')}
           </button>

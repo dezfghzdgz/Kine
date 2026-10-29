@@ -283,6 +283,13 @@ export default function Sidebar() {
             {t('clientErrorsLabel')}
           </Link>
         )}
+        {/* Nastavení plateb: kontrola Stripe, ceny, webhook (app/admin/stripe). */}
+        {isAdmin && (
+          <Link href="/admin/stripe" className={`sidebar-link ${pathname === '/admin/stripe' ? 'active' : ''}`}>
+            <UiIcon name="coins" size={20} />
+            {t('stripeSetupLabel')}
+          </Link>
+        )}
         {/* Odznaky spravuje celý tým Kine - moderátor i správce. */}
         {(isAdmin || isModerator) && (
           <Link href="/admin/badges" className={`sidebar-link ${pathname === '/admin/badges' ? 'active' : ''}`}>
@@ -502,6 +509,12 @@ export default function Sidebar() {
             <Link href="/admin/errors" className="sidebar-link" onClick={closeMobileNav}>
               <UiIcon name="bug" size={20} />
               {t('clientErrorsLabel')}
+            </Link>
+          )}
+          {isAdmin && (
+            <Link href="/admin/stripe" className="sidebar-link" onClick={closeMobileNav}>
+              <UiIcon name="coins" size={20} />
+              {t('stripeSetupLabel')}
             </Link>
           )}
           {(isAdmin || isModerator) && (
