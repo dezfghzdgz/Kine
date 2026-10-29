@@ -91,9 +91,9 @@ test('částky pro lidi a popisek ceny', () => {
   assert.equal(s.formatAmount(499, 'usd'), '$4.99');
   assert.equal(s.formatAmount(500, 'usd'), '$5');
   assert.equal(s.formatAmount(1000, 'jpy'), '1000 JPY');
-  assert.equal(s.priceLabelFor({ unitAmount: 4900, currency: 'czk' }), '49 Kč / měsíc');
-  assert.equal(s.priceLabelFor({ unitAmount: 4900, currency: 'czk' }, { unitAmount: 199, currency: 'eur' }), '49 Kč / měsíc (1,99 €)');
-  assert.ok(s.priceLabelFor({ unitAmount: 4900, currency: 'czk' }).includes('/'), 'stránka /plus pak nepřidá druhé „/ měsíc“');
+  // Bez období - „/ month“ / „/ měsíc“ doplní stránka /plus v jazyce webu.
+  assert.equal(s.priceLabelFor({ unitAmount: 5900, currency: 'czk' }), '59 Kč');
+  assert.equal(s.priceLabelFor({ unitAmount: 5900, currency: 'czk' }, { unitAmount: 249, currency: 'eur' }), '59 Kč (2,49 €)');
 });
 
 test('částka z formuláře', () => {
@@ -132,9 +132,9 @@ const hotovo = {
   storageHours: 5,
   plusMultiplier: 3,
   prices: {
-    kine: { id: 'price_k', problems: [], label: '49 Kč / měsíc' },
-    clips: { id: 'price_c', problems: [], label: '79 Kč / měsíc' },
-    all: { id: 'price_a', problems: [], label: '99 Kč / měsíc' },
+    kine: { id: 'price_k', problems: [], label: '49 Kč' },
+    clips: { id: 'price_c', problems: [], label: '79 Kč' },
+    all: { id: 'price_a', problems: [], label: '99 Kč' },
   },
   portalDefault: true,
 };
@@ -164,7 +164,7 @@ test('chyby nastavení se ukážou', () => {
     operatorIco: false,
     account: { chargesEnabled: true, payoutsEnabled: false, detailsSubmitted: true },
     webhook: { url: 'x', status: 'enabled', missing: ['charge.dispute.created'] },
-    prices: { ...hotovo.prices, clips: { id: null, problems: [], label: null }, all: { id: 'price_a', problems: ['Cena je u Stripe archivovaná.'], label: '99 Kč / měsíc' } },
+    prices: { ...hotovo.prices, clips: { id: null, problems: [], label: null }, all: { id: 'price_a', problems: ['Cena je u Stripe archivovaná.'], label: '99 Kč' } },
     portalDefault: false,
   });
   const by = Object.fromEntries(checks.map((c) => [c.id, c]));
@@ -213,6 +213,19 @@ test('úložiště účtu: cena plného účtu na Cloudflare a doporučení', ()
   c = s.evaluateSetup({ ...hotovo, storageHours: 0 }).find((x) => x.id === 'storage');
   assert.equal(c.ok, false, 'bez stropu je riziko');
   assert.ok(!s.evaluateSetup({ ...hotovo, storageHours: undefined }).some((x) => x.id === 'storage'));
+});
+
+test('anglicky pro web v jiném jazyce než cs/sk', () => {
+  const by = Object.fromEntries(s.evaluateSetup({ ...hotovo, keyMode: 'test', webhookSecretSet: false, storageHours: 30, payoutCurrencies: ['eur'], priceCurrencies: ['czk'] }, 'en').map((c) => [c.id, c]));
+  assert.equal(by.key.title, 'Secret key: test (sk_test_…) - only test cards work');
+  assert.match(by['webhook-secret'].detail, /Reveal secret/);
+  assert.match(by.storage.detail, /~191 CZK at Cloudflare, ~572 CZK with Plus/);
+  assert.match(by.currency.title, /^Payouts in EUR - Stripe converts payments in CZK$/);
+  assert.equal(by['price-clips'].title, 'Price Clips Plus');
+  assert.equal(by['price-kine'].detail, '49 Kč / month', 'cena s obdobím v angličtině');
+  assert.ok(!JSON.stringify(Object.values(by)).replace(/Kč/g, '').match(/[ěščřžýáíéůúňťď]/), 'žádná čeština (kromě měny Kč)');
+  assert.deepEqual(s.priceProblems(null, 'en'), ['The price does not exist at Stripe (wrong ID, or it is from the other mode - test / live).']);
+  assert.equal(Object.fromEntries(s.evaluateSetup({ ...hotovo, prices: { ...hotovo.prices, kine: { id: 'p', problems: [], label: '59 Kč (2,49 €)' } } }).map((c) => [c.id, c]))['price-kine'].detail, '59 Kč / měsíc (2,49 €)');
 });
 
 test('výplaty v jiné měně než ceny - upozornění na převod', () => {

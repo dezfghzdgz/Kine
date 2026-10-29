@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
-import { allPriceLabels, hasPlus, normalizePlan, type PaidTier } from '@/lib/plus';
+import { allPriceLabels, hasPlus, normalizePlan, splitPriceLabel, type PaidTier } from '@/lib/plus';
 import { PAYMENTS_ENABLED } from '@/lib/payments';
 import ComingSoon from '@/components/ComingSoon';
 import { operatorLine } from '@/lib/operator';
@@ -69,7 +69,7 @@ function PlusPageInner() {
   const justPaid = params.get('ok') === '1';
   const [me, setMe] = useState<{ plan: string | null; planUntil: string | null; loggedIn: boolean } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ text: string; detail: string | null } | null>(null);
   // Placení zatím neběží (lib/payments.ts): bez cen jsou karty "Připravujeme" a nic se nekupuje.
   const prices = PAYMENTS_ENABLED ? allPriceLabels() : { kine: null, clips: null, all: null };
 
@@ -104,10 +104,25 @@ function PlusPageInner() {
         body: tier ? JSON.stringify({ tier, lang }) : undefined,
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok || !body.url) throw new Error(body.error || t('plusFailed'));
+      if (!res.ok || !body.url) {
+        // Hláška v jazyce webu podle kódu; technická zpráva serveru (anglicky ze Stripe) jen v podrobnostech.
+        const byCode: Record<string, string> = {
+          'already-subscribed': t('plusErrAlreadySubscribed'),
+          'not-configured': t('plusNotAvailable'),
+          'test-mode': t('payErrTesting'),
+          'stale-customer': t('plusErrStaleCustomer'),
+          'no-customer': t('plusErrNoCustomer'),
+        };
+        const text = (body?.code && byCode[body.code]) || (body?.comingSoon ? t('comingSoonPayments') : t('plusFailed'));
+        const detail = typeof body?.error === 'string' && body.error !== text ? body.error : null;
+        if (detail) console.warn('Kine Plus:', detail);
+        setError({ text, detail });
+        setBusy(null);
+        return;
+      }
       window.location.href = body.url;
-    } catch (e) {
-      setError((e as Error).message);
+    } catch {
+      setError({ text: t('plusFailed'), detail: null });
       setBusy(null);
     }
   }
@@ -140,7 +155,7 @@ function PlusPageInner() {
     if (active) return null;
     return (
       <button type="button" className="plus-cta" onClick={() => call('/api/plus/checkout', tier)} disabled={busy !== null}>
-        {busy === tier ? t('loading') : t('plusChoose').replace('{price}', price)}
+        {busy === tier ? t('loading') : t('plusChoose').replace('{price}', `${splitPriceLabel(price).main} ${t('plusMonthly')}`)}
       </button>
     );
   };
@@ -212,9 +227,10 @@ function PlusPageInner() {
               <div className="plus-price">
                 {price ? (
                   <>
-                    <span className="plus-price-value">{price}</span>
-                    {/* Popisek „49 Kč / měsíc“ už období má (tak ho chce i appka do PC) - neopakovat. */}
-                    {!price.includes('/') && <span className="plus-price-per">{t('plusMonthly')}</span>}
+                    {/* Popisek z Vercelu je bez období („59 Kč (2,49 €)“) - období v jazyce webu. */}
+                    <span className="plus-price-value">{splitPriceLabel(price).main}</span>
+                    <span className="plus-price-per">{t('plusMonthly')}</span>
+                    {splitPriceLabel(price).extra && <span className="plus-price-alt">({splitPriceLabel(price).extra})</span>}
                   </>
                 ) : (
                   <span className="plus-price-soon">{t('plusNotAvailable')}</span>
@@ -234,7 +250,17 @@ function PlusPageInner() {
         })}
       </div>
 
-      {error && <p className="error-text" style={{ marginTop: 10 }}>{error}</p>}
+      {error && (
+        <div style={{ marginTop: 10 }}>
+          <p className="error-text" style={{ margin: 0 }}>{error.text}</p>
+          {error.detail && (
+            <details style={{ marginTop: 4, fontSize: 12, color: 'var(--text-faint)' }}>
+              <summary style={{ cursor: 'pointer' }}>{t('errorDetailsLabel')}</summary>
+              <p style={{ margin: '4px 0 0', wordBreak: 'break-word' }}>{error.detail}</p>
+            </details>
+          )}
+        </div>
+      )}
 
       <section className="panel plus-compare">
         <p className="panel-heading" style={{ marginBottom: 4 }}>{t('plusCompareTitle')}</p>

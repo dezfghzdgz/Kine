@@ -97,14 +97,18 @@ export type PriceInfo = {
   currencies?: string[];
 };
 
+/** Jazyk textů kontroly (stránka /admin/stripe): čeština pro cs/sk, jinak angličtina. */
+export type SetupLang = 'cs' | 'en';
+
 /** Co je s cenou špatně (prázdné = v pořádku). */
-export function priceProblems(price: PriceInfo | null): string[] {
-  if (!price) return ['Cena u Stripe není (špatné ID, nebo je z jiného režimu - testovací / ostrý).'];
+export function priceProblems(price: PriceInfo | null, lang: SetupLang = 'cs'): string[] {
+  const tx = (cs: string, en: string) => (lang === 'en' ? en : cs);
+  if (!price) return [tx('Cena u Stripe není (špatné ID, nebo je z jiného režimu - testovací / ostrý).', 'The price does not exist at Stripe (wrong ID, or it is from the other mode - test / live).')];
   const out: string[] = [];
-  if (!price.active) out.push('Cena je u Stripe archivovaná.');
-  if (price.productActive === false) out.push('Produkt je u Stripe archivovaný.');
-  if (price.interval !== 'month' || (price.intervalCount ?? 1) !== 1) out.push('Cena není měsíční předplatné (Recurring, Monthly).');
-  if (!price.unitAmount || price.unitAmount <= 0) out.push('Cena nemá částku.');
+  if (!price.active) out.push(tx('Cena je u Stripe archivovaná.', 'The price is archived at Stripe.'));
+  if (price.productActive === false) out.push(tx('Produkt je u Stripe archivovaný.', 'The product is archived at Stripe.'));
+  if (price.interval !== 'month' || (price.intervalCount ?? 1) !== 1) out.push(tx('Cena není měsíční předplatné (Recurring, Monthly).', 'The price is not a monthly subscription (Recurring, Monthly).'));
+  if (!price.unitAmount || price.unitAmount <= 0) out.push(tx('Cena nemá částku.', 'The price has no amount.'));
   return out;
 }
 
@@ -123,9 +127,14 @@ export function formatAmount(unitAmount: number, currency: string): string {
   return `${num('.')} ${cur.toUpperCase()}`;
 }
 
-/** Popisek ceny do NEXT_PUBLIC_PLUS_*_PRICE_LABEL: „49 Kč / měsíc“, s druhou měnou „49 Kč / měsíc (1,99 €)“. */
+/**
+ * Popisek ceny do NEXT_PUBLIC_PLUS_*_PRICE_LABEL bez období: „59 Kč“, s druhou
+ * měnou „59 Kč (2,49 €)“. Období („/ month“, „/ měsíc“…) doplní stránka /plus
+ * v jazyce webu (lib/plus.ts stripPricePeriod ho z případných starších popisků
+ * „59 Kč / měsíc (2,49 €)“ sama odebere).
+ */
 export function priceLabelFor(main: { unitAmount: number; currency: string }, extra?: { unitAmount: number; currency: string } | null): string {
-  const base = `${formatAmount(main.unitAmount, main.currency)} / měsíc`;
+  const base = formatAmount(main.unitAmount, main.currency);
   return extra ? `${base} (${formatAmount(extra.unitAmount, extra.currency)})` : base;
 }
 
@@ -174,23 +183,44 @@ export const CF_STORAGE_KC_PER_MIN = 0.106;
 /** Do přechodu na levnější úložiště videí doporučené úložiště účtu (h). */
 export const RECOMMENDED_STORAGE_HOURS = 5;
 
-/** Seznam kontrol pro stránku (pořadí = pořadí kroků v návodu). */
-export function evaluateSetup(f: SetupFacts): SetupCheck[] {
+/** „59 Kč (2,49 €)“ + „/ month“ -> „59 Kč / month (2,49 €)“. */
+function withPeriod(label: string, per: string): string {
+  const m = /^(.*?)\s*\(([^()]+)\)\s*$/.exec(label);
+  return m && m[1].trim() ? `${m[1].trim()} ${per} (${m[2].trim()})` : `${label} ${per}`;
+}
+
+/** Seznam kontrol pro stránku (pořadí = pořadí kroků v návodu). Texty česky, nebo anglicky (lang 'en'). */
+export function evaluateSetup(f: SetupFacts, lang: SetupLang = 'cs'): SetupCheck[] {
+  const tx = (cs: string, en: string) => (lang === 'en' ? en : cs);
+  const keyOk = f.keyMode === 'test' || f.keyMode === 'live';
   const checks: SetupCheck[] = [];
   checks.push({
     id: 'key',
-    ok: f.keyMode === 'test' || f.keyMode === 'live',
-    title: f.keyMode === 'live' ? 'Tajný klíč: ostrý (sk_live_…)' : f.keyMode === 'test' ? 'Tajný klíč: testovací (sk_test_…) - platí se jen testovací kartou' : 'Tajný klíč STRIPE_SECRET_KEY',
-    detail: f.keyMode === 'missing' ? 'Chybí ve Vercelu (Developers → API keys → Secret key).' : f.keyMode === 'invalid' ? 'Nevypadá jako klíč Stripe (začíná sk_test_ nebo sk_live_).' : undefined,
+    ok: keyOk,
+    title:
+      f.keyMode === 'live'
+        ? tx('Tajný klíč: ostrý (sk_live_…)', 'Secret key: live (sk_live_…)')
+        : f.keyMode === 'test'
+          ? tx('Tajný klíč: testovací (sk_test_…) - platí se jen testovací kartou', 'Secret key: test (sk_test_…) - only test cards work')
+          : tx('Tajný klíč STRIPE_SECRET_KEY', 'Secret key STRIPE_SECRET_KEY'),
+    detail:
+      f.keyMode === 'missing'
+        ? tx('Chybí ve Vercelu (Developers → API keys → Secret key).', 'Missing in Vercel (Developers → API keys → Secret key).')
+        : f.keyMode === 'invalid'
+          ? tx('Nevypadá jako klíč Stripe (začíná sk_test_ nebo sk_live_).', 'Does not look like a Stripe key (starts with sk_test_ or sk_live_).')
+          : undefined,
   });
   checks.push({
     id: 'account',
-    ok: f.account ? f.account.chargesEnabled && f.account.payoutsEnabled : f.keyMode === 'test' || f.keyMode === 'live' ? false : null,
-    title: 'Účet Stripe aktivní (platby a výplaty)',
+    ok: f.account ? f.account.chargesEnabled && f.account.payoutsEnabled : keyOk ? false : null,
+    title: tx('Účet Stripe aktivní (platby a výplaty)', 'Stripe account active (payments and payouts)'),
     detail: f.accountError
       ? `Stripe: ${f.accountError}`
       : f.account && !(f.account.chargesEnabled && f.account.payoutsEnabled)
-        ? 'Dokonči ve Stripe aktivaci účtu (údaje o podnikání, IČO, bankovní účet) - jinak nepřijme platby nebo nepošle peníze.'
+        ? tx(
+            'Dokonči ve Stripe aktivaci účtu (údaje o podnikání, IČO, bankovní účet) - jinak nepřijme platby nebo nepošle peníze.',
+            'Finish activating the Stripe account (business details, company ID, bank account) - otherwise it cannot take payments or pay out.'
+          )
         : undefined,
   });
   const payout = (f.payoutCurrencies ?? []).map((c) => c.toLowerCase());
@@ -200,26 +230,28 @@ export function evaluateSetup(f: SetupFacts): SetupCheck[] {
     checks.push({
       id: 'currency',
       ok: null,
-      title: `Výplaty v ${up(payout)} - platby v ${up(converted)} Stripe převede`,
-      detail: `Za převod měny si Stripe bere zhruba 2 %. Bez převodu: přidej ve Stripe bankovní účet i v ${up(converted)} (Settings → Bank accounts and currencies).`,
+      title: tx(`Výplaty v ${up(payout)} - platby v ${up(converted)} Stripe převede`, `Payouts in ${up(payout)} - Stripe converts payments in ${up(converted)}`),
+      detail: tx(
+        `Za převod měny si Stripe bere zhruba 2 %. Bez převodu: přidej ve Stripe bankovní účet i v ${up(converted)} (Settings → Linked accounts and payouts).`,
+        `Stripe charges about 2% for currency conversion. To avoid it, add a bank account in ${up(converted)} too (Settings → Linked accounts and payouts).`
+      ),
     });
   }
   checks.push({
     id: 'webhook',
-    ok: f.webhook
-      ? f.webhook.status === 'enabled' && f.webhook.missing.length === 0 && f.webhook.exact !== false
-      : f.keyMode === 'test' || f.keyMode === 'live'
-        ? false
-        : null,
-    title: 'Webhook /api/donate/webhook se všemi událostmi',
+    ok: f.webhook ? f.webhook.status === 'enabled' && f.webhook.missing.length === 0 && f.webhook.exact !== false : keyOk ? false : null,
+    title: tx('Webhook /api/donate/webhook se všemi událostmi', 'Webhook /api/donate/webhook with all events'),
     detail: !f.webhook
-      ? 'U Stripe není - vytvoř ho tlačítkem níž (nebo Developers → Webhooks).'
+      ? tx('U Stripe není - vytvoř ho tlačítkem níž (nebo Workbench → Webhooks).', 'Not at Stripe yet - create it with the button below (or Workbench → Webhooks).')
       : f.webhook.exact === false
-        ? `Webhook vede na ${f.webhook.url}, ale web je na jiné adrese - Stripe přesměrování nenásleduje a platby by se nepropsaly. Oprav tlačítkem níž.`
+        ? tx(
+            `Webhook vede na ${f.webhook.url}, ale web je na jiné adrese - Stripe přesměrování nenásleduje a platby by se nepropsaly. Oprav tlačítkem níž.`,
+            `The webhook points to ${f.webhook.url}, but the site runs on a different address - Stripe does not follow redirects, so payments would not show up. Fix it with the button below.`
+          )
         : f.webhook.status !== 'enabled'
-          ? 'Webhook je vypnutý - zapni ho tlačítkem níž.'
+          ? tx('Webhook je vypnutý - zapni ho tlačítkem níž.', 'The webhook is disabled - enable it with the button below.')
           : f.webhook.missing.length > 0
-            ? `Chybí události: ${f.webhook.missing.join(', ')} - doplň tlačítkem níž.`
+            ? tx(`Chybí události: ${f.webhook.missing.join(', ')} - doplň tlačítkem níž.`, `Missing events: ${f.webhook.missing.join(', ')} - add them with the button below.`)
             : undefined,
   });
   if (f.probe) {
@@ -227,26 +259,32 @@ export function evaluateSetup(f: SetupFacts): SetupCheck[] {
     checks.push({
       id: 'webhook-reachable',
       ok: st === 400 ? true : st === null ? null : false,
-      title: 'Adresa webhooku na webu odpovídá',
+      title: tx('Adresa webhooku na webu odpovídá', 'The webhook address answers on the site'),
       detail:
         st === 400
           ? undefined
           : st === null
-            ? `Nepodařilo se ověřit${f.probe.error ? ` (${f.probe.error})` : ''}.`
+            ? tx(`Nepodařilo se ověřit${f.probe.error ? ` (${f.probe.error})` : ''}.`, `Could not check it${f.probe.error ? ` (${f.probe.error})` : ''}.`)
             : st >= 300 && st < 400
-              ? `Adresa přesměrovává${f.probe.location ? ` na ${f.probe.location}` : ''} - Stripe přesměrování nenásleduje. Nastav ve Vercelu NEXT_PUBLIC_SITE_URL na hlavní adresu webu, Redeploy a webhook oprav tlačítkem níž.`
+              ? tx(
+                  `Adresa přesměrovává${f.probe.location ? ` na ${f.probe.location}` : ''} - Stripe přesměrování nenásleduje. Nastav ve Vercelu NEXT_PUBLIC_SITE_URL na hlavní adresu webu, Redeploy a webhook oprav tlačítkem níž.`,
+                  `The address redirects${f.probe.location ? ` to ${f.probe.location}` : ''} - Stripe does not follow redirects. Set NEXT_PUBLIC_SITE_URL in Vercel to the main site address, Redeploy and fix the webhook with the button below.`
+                )
               : st === 404
-                ? 'Na adrese webhooku nic není (404) - je nahraná poslední verze webu?'
-                : `Webhook odpověděl ${st} místo 400 (bez podpisu) - ochrana nasazení ve Vercelu, nebo chyba na webu.`,
+                ? tx('Na adrese webhooku nic není (404) - je nahraná poslední verze webu?', 'Nothing at the webhook address (404) - is the latest version of the site deployed?')
+                : tx(`Webhook odpověděl ${st} místo 400 (bez podpisu) - ochrana nasazení ve Vercelu, nebo chyba na webu.`, `The webhook answered ${st} instead of 400 (no signature) - Vercel deployment protection, or an error on the site.`),
     });
   }
   checks.push({
     id: 'webhook-secret',
     ok: f.webhookSecretSet,
-    title: 'Podpisový klíč webhooku STRIPE_WEBHOOK_SECRET (whsec_…)',
+    title: tx('Podpisový klíč webhooku STRIPE_WEBHOOK_SECRET (whsec_…)', 'Webhook signing secret STRIPE_WEBHOOK_SECRET (whsec_…)'),
     detail: f.webhookSecretSet
-      ? 'Patří jen k webhooku, u kterého vznikl - po přechodu na ostrý klíč (nový webhook) ho vyměň.'
-      : 'Chybí ve Vercelu - bez něj Kine nepozná, že někdo zaplatil.',
+      ? tx('Patří jen k webhooku, u kterého vznikl - k novému webhooku patří nový klíč.', 'It belongs only to the webhook it was created with - a new webhook has a new secret.')
+      : tx(
+          'Chybí ve Vercelu (nebo je neúplný) - bez něj Kine nepozná, že někdo zaplatil. Najdeš ho ve Stripe: Workbench → Webhooks → webhook → Reveal secret.',
+          'Missing in Vercel (or incomplete) - without it Kine cannot tell that someone paid. Find it at Stripe: Workbench → Webhooks → webhook → Reveal secret.'
+        ),
   });
   if (f.failedDeliveries) {
     const n = f.failedDeliveries.count;
@@ -254,32 +292,47 @@ export function evaluateSetup(f: SetupFacts): SetupCheck[] {
     checks.push({
       id: 'deliveries',
       ok: n === 0,
-      title: n === 0 ? 'Stripe doručuje události webhooku (za poslední týden nic nevisí)' : `Stripe nedoručil ${n} ${n === 1 ? 'událost' : n < 5 ? 'události' : 'událostí'} za poslední týden`,
+      title:
+        n === 0
+          ? tx('Stripe doručuje události webhooku (za poslední týden nic nevisí)', 'Stripe delivers webhook events (nothing stuck in the last week)')
+          : tx(`Stripe nedoručil ${n} ${n === 1 ? 'událost' : n < 5 ? 'události' : 'událostí'} za poslední týden`, `Stripe could not deliver ${n} ${n === 1 ? 'event' : 'events'} in the last week`),
       detail:
         n === 0
           ? undefined
-          : `Poslední: ${f.failedDeliveries.latestType ?? '?'}${when ? ` (${when} UTC)` : ''}. Nejčastěji je STRIPE_WEBHOOK_SECRET z jiného webhooku nebo režimu, nebo adresa přesměrovává. Oprav, Redeploy - Stripe to zkouší znovu až 3 dny; starší pošli znovu ve Stripe (Developers → Webhooks → událost → Resend).`,
+          : tx(
+              `Poslední: ${f.failedDeliveries.latestType ?? '?'}${when ? ` (${when} UTC)` : ''}. Nejčastěji je STRIPE_WEBHOOK_SECRET z jiného webhooku nebo režimu, nebo adresa přesměrovává. Oprav, Redeploy - Stripe to zkouší znovu až 3 dny; starší pošli znovu ve Stripe (Workbench → Webhooks → událost → Resend).`,
+              `Latest: ${f.failedDeliveries.latestType ?? '?'}${when ? ` (${when} UTC)` : ''}. Usually STRIPE_WEBHOOK_SECRET is from another webhook or mode, or the address redirects. Fix it and Redeploy - Stripe retries for up to 3 days; resend older ones at Stripe (Workbench → Webhooks → event → Resend).`
+            ),
     });
   }
   for (const tier of ['kine', 'clips', 'all'] as const) {
     const p = f.prices[tier];
-    const name = tier === 'kine' ? 'Kine Plus' : tier === 'clips' ? 'Klipy Plus' : 'Kine Plus + Klipy';
+    const name = tier === 'kine' ? 'Kine Plus' : tier === 'clips' ? tx('Klipy Plus', 'Clips Plus') : tx('Kine Plus + Klipy', 'Kine Plus + Clips');
     checks.push({
       id: `price-${tier}`,
       ok: p.id ? p.problems.length === 0 && !!p.label : null,
-      title: `Cena ${name}`,
-      detail: !p.id ? 'Bez ceny se varianta nedá koupit (ukáže „Brzy“) - vytvoř ceny tlačítkem níž.' : p.problems.length > 0 ? p.problems.join(' ') : !p.label ? 'Chybí popisek ceny (NEXT_PUBLIC_PLUS_…_PRICE_LABEL).' : p.label,
+      title: tx(`Cena ${name}`, `Price ${name}`),
+      detail: !p.id
+        ? tx('Bez ceny se varianta nedá koupit (ukáže „Brzy“) - vytvoř ceny tlačítkem níž.', 'Without a price this plan cannot be bought (shows “Soon”) - create the prices with the button below.')
+        : p.problems.length > 0
+          ? p.problems.join(' ')
+          : !p.label
+            ? tx('Chybí popisek ceny (NEXT_PUBLIC_PLUS_…_PRICE_LABEL).', 'The price label is missing (NEXT_PUBLIC_PLUS_…_PRICE_LABEL).')
+            : withPeriod(p.label, tx('/ měsíc', '/ month')),
     });
   }
   checks.push({
     id: 'portal',
     ok: f.portalDefault,
-    title: 'Zákaznický portál (zrušení a změna předplatného)',
+    title: tx('Zákaznický portál (zrušení a změna předplatného)', 'Customer portal (cancel and change the subscription)'),
     detail:
       f.portalDefault === false
-        ? 'Ve Stripe: Settings → Billing → Customer portal → Save (stačí jednou).'
+        ? tx('Ve Stripe: Settings → Billing → Customer portal → Save (stačí jednou).', 'At Stripe: Settings → Billing → Customer portal → Save (once is enough).')
         : f.portalDefault && f.portalSwitching === false
-          ? 'Zrušení a změna karty jdou. Přechod na jinou variantu je vypnutý (zákazník zruší a koupí jinou) - zapnout: Customer portal → Subscriptions → Customers can switch plans + přidat tři produkty Kine.'
+          ? tx(
+              'Zrušení a změna karty jdou. Přechod na jinou variantu je vypnutý (zákazník zruší a koupí jinou) - zapnout: Customer portal → Subscriptions → Customers can switch plans + přidat tři produkty Kine.',
+              'Cancelling and changing the card work. Switching plans is off (customers cancel and buy another) - to turn it on: Customer portal → Subscriptions → Customers can switch plans + add the three Kine products.'
+            )
           : undefined,
   });
   if (typeof f.storageHours === 'number') {
@@ -289,26 +342,42 @@ export function evaluateSetup(f: SetupFacts): SetupCheck[] {
     checks.push({
       id: 'storage',
       ok: h === 0 ? false : h <= RECOMMENDED_STORAGE_HOURS ? true : null,
-      title: h === 0 ? 'Úložiště účtu bez stropu' : `Úložiště účtu ${h} h (Kine Plus ${plusH} h)`,
+      title: h === 0 ? tx('Úložiště účtu bez stropu', 'Account storage without a limit') : tx(`Úložiště účtu ${h} h (Kine Plus ${plusH} h)`, `Account storage ${h} h (Kine Plus ${plusH} h)`),
       detail:
         h === 0
-          ? `Bez stropu může jeden účet na Cloudflare stát libovolně moc - nastav ve Vercelu UPLOAD_STORAGE_HOURS=${RECOMMENDED_STORAGE_HOURS}.`
+          ? tx(
+              `Bez stropu může jeden účet na Cloudflare stát libovolně moc - nastav ve Vercelu UPLOAD_STORAGE_HOURS=${RECOMMENDED_STORAGE_HOURS}.`,
+              `Without a limit one account can cost any amount at Cloudflare - set UPLOAD_STORAGE_HOURS=${RECOMMENDED_STORAGE_HOURS} in Vercel.`
+            )
           : h > RECOMMENDED_STORAGE_HOURS
-            ? `Plný účet stojí na Cloudflare ~${cost(h)} Kč, s Plus ~${cost(plusH)} Kč měsíčně - víc, než předplatné vynese. Do přechodu na levnější úložiště doporučuju ve Vercelu UPLOAD_STORAGE_HOURS=${RECOMMENDED_STORAGE_HOURS}.`
-            : `Plný účet ~${cost(h)} Kč, s Plus ~${cost(plusH)} Kč měsíčně na Cloudflare.`,
+            ? tx(
+                `Plný účet stojí na Cloudflare ~${cost(h)} Kč, s Plus ~${cost(plusH)} Kč měsíčně - víc, než předplatné vynese. Do přechodu na levnější úložiště doporučuju ve Vercelu UPLOAD_STORAGE_HOURS=${RECOMMENDED_STORAGE_HOURS}.`,
+                `A full account costs ~${cost(h)} CZK at Cloudflare, ~${cost(plusH)} CZK with Plus per month - more than a subscription brings in. Until cheaper video storage, set UPLOAD_STORAGE_HOURS=${RECOMMENDED_STORAGE_HOURS} in Vercel.`
+              )
+            : tx(`Plný účet ~${cost(h)} Kč, s Plus ~${cost(plusH)} Kč měsíčně na Cloudflare.`, `A full account ~${cost(h)} CZK, with Plus ~${cost(plusH)} CZK per month at Cloudflare.`),
     });
   }
   checks.push({
     id: 'operator',
     ok: f.operatorName && f.operatorIco,
-    title: 'Provozovatel na webu (jméno, IČO, místo podnikání)',
-    detail: f.operatorName && f.operatorIco ? undefined : 'NEXT_PUBLIC_OPERATOR_NAME, NEXT_PUBLIC_OPERATOR_ICO, NEXT_PUBLIC_OPERATOR_ADDRESS - zákon je chce u prodeje vidět.',
+    title: tx('Provozovatel na webu (jméno, IČO, místo podnikání)', 'Operator on the site (name, company ID, registered address)'),
+    detail:
+      f.operatorName && f.operatorIco
+        ? undefined
+        : tx(
+            'NEXT_PUBLIC_OPERATOR_NAME, NEXT_PUBLIC_OPERATOR_ICO, NEXT_PUBLIC_OPERATOR_ADDRESS - zákon je chce u prodeje vidět.',
+            'NEXT_PUBLIC_OPERATOR_NAME, NEXT_PUBLIC_OPERATOR_ICO, NEXT_PUBLIC_OPERATOR_ADDRESS - the law requires them where you sell.'
+          ),
   });
   checks.push({
     id: 'payments-flag',
     ok: f.paymentsFlag,
-    title: 'Placení zapnuté (NEXT_PUBLIC_PAYMENTS=1)',
-    detail: f.paymentsFlag ? (f.creatorFlag ? 'Zapnuté i peníze pro tvůrce (NEXT_PUBLIC_CREATOR_PAYMENTS=1).' : 'Peníze pro tvůrce zatím vypnuté (správně - až s Connect a účetní).') : 'Až bude všechno výš zelené: přidej do Vercelu a Redeploy.',
+    title: tx('Placení zapnuté (NEXT_PUBLIC_PAYMENTS=1)', 'Payments enabled (NEXT_PUBLIC_PAYMENTS=1)'),
+    detail: f.paymentsFlag
+      ? f.creatorFlag
+        ? tx('Zapnuté i peníze pro tvůrce (NEXT_PUBLIC_CREATOR_PAYMENTS=1).', 'Creator payments are on too (NEXT_PUBLIC_CREATOR_PAYMENTS=1).')
+        : tx('Peníze pro tvůrce zatím vypnuté (správně - až s Connect a účetní).', 'Creator payments are still off (as intended - later, with Connect and an accountant).')
+      : tx('Až bude všechno výš zelené: přidej do Vercelu a Redeploy.', 'Once everything above is green: add it in Vercel and Redeploy.'),
   });
   return checks;
 }

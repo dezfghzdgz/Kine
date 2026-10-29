@@ -81,7 +81,8 @@ Nejdřív všechno v testovacím režimu (klíč `sk_test_…`), pak to samé na
 (`sk_live_…`) - ceny, webhook i portál má Stripe pro každý režim zvlášť.
 
 1. **Stripe:** dokonči aktivaci účtu (podnikání, IČO, bankovní účet).
-   Settings → Public details: web, podpora `kinesupport@gmail.com`, podmínky
+   Settings → Business (první dlaždice v Account settings) → Public details:
+   web, podpora `kinesupport@gmail.com`, podmínky
    `https://tvoje-adresa/terms`, ochrana údajů `https://tvoje-adresa/privacy`,
    text na výpisu `KINE`. Settings → Billing → Customer portal → **Save**.
    Platby v Kč na eurový účet Stripe převádí (poplatek) - přidej i bankovní

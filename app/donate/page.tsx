@@ -48,7 +48,9 @@ export default function DonatePage() {
     if (data.url) {
       window.location.href = data.url;
     } else {
-      setError(data.error ?? t('donateGenericError'));
+      // Hláška v jazyce webu; technická zpráva serveru (česky / anglicky ze Stripe) jen do konzole.
+      if (data.error) console.warn('Kine dar:', data.error);
+      setError(data.code === 'test-mode' ? t('payErrTesting') : t('donateGenericError'));
     }
   }
 

@@ -19,6 +19,7 @@ import {
   webhookUrlFor,
   type PriceInfo,
   type SetupFacts,
+  type SetupLang,
 } from '@/lib/stripeSetup';
 
 export const dynamic = 'force-dynamic';
@@ -44,11 +45,20 @@ export const dynamic = 'force-dynamic';
 const NO_STORE = { 'Cache-Control': 'no-store' };
 const API_VERSION = '2024-06-20';
 
+/**
+ * Produkty u Stripe - název a popis vidí zákazník na platební stránce a ve
+ * správě předplatného, a to každý stejně, proto anglicky (základní jazyk Kine).
+ */
 const TIER_PRODUCT: Record<PaidTier, { name: string; description: string; env: string }> = {
-  kine: { name: 'Kine Plus', description: 'Odznak PLUS a 3× víc nahrávání na Kine.', env: 'KINE' },
-  clips: { name: 'Klipy Plus', description: 'Automatické nahrávání klipů z appky po hře, klipy až 5 minut.', env: 'CLIPS' },
-  all: { name: 'Kine Plus + Klipy', description: 'Kine Plus i Klipy Plus dohromady.', env: 'ALL' },
+  kine: { name: 'Kine Plus', description: 'PLUS badge and 3× more uploads on Kine.', env: 'KINE' },
+  clips: { name: 'Clips Plus', description: 'Clips upload automatically after the game in the Kine apps, clips up to 5 minutes.', env: 'CLIPS' },
+  all: { name: 'Kine Plus + Clips', description: 'Kine Plus and Clips Plus together.', env: 'ALL' },
 };
+
+/** Jazyk odpovědí: angličtina, když o ni stránka řekne (web v jiném jazyce než cs/sk). */
+function langOf(value: unknown): SetupLang {
+  return value === 'en' ? 'en' : 'cs';
+}
 
 async function requireAdmin(req: NextRequest): Promise<string | null> {
   const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '').trim();
@@ -106,13 +116,16 @@ function priceInfo(p: Stripe.Price): PriceInfo {
 }
 
 export async function GET(req: NextRequest) {
-  if (!(await requireAdmin(req))) return NextResponse.json({ error: 'Nemáš oprávnění.' }, { status: 403, headers: NO_STORE });
+  const lang = langOf(req.nextUrl.searchParams.get('lang'));
+  const tx = (cs: string, en: string) => (lang === 'en' ? en : cs);
+  if (!(await requireAdmin(req))) return NextResponse.json({ error: tx('Nemáš oprávnění.', 'Not allowed.') }, { status: 403, headers: NO_STORE });
 
   const siteUrl = siteUrlFrom(req);
   const mode = keyMode(process.env.STRIPE_SECRET_KEY);
   const facts: SetupFacts = {
     keyMode: mode,
-    webhookSecretSet: /^whsec_[A-Za-z0-9]+$/.test((process.env.STRIPE_WEBHOOK_SECRET ?? '').trim()),
+    // Celý klíč (whsec_ + desítky znaků) - zkrácený „whsec_8a7f…“ z náhledu neprojde.
+    webhookSecretSet: /^whsec_[A-Za-z0-9]{20,}$/.test((process.env.STRIPE_WEBHOOK_SECRET ?? '').trim()),
     paymentsFlag: PAYMENTS_ENABLED,
     creatorFlag: CREATOR_PAYMENTS_ENABLED,
     operatorName: !!LEGAL_OPERATOR.name,
@@ -183,51 +196,65 @@ export async function GET(req: NextRequest) {
       try {
         const p = priceInfo(await stripe.prices.retrieve(id, { expand: ['product', 'currency_options'] }));
         prices[tier] = p;
-        facts.prices[tier].problems = priceProblems(p);
+        facts.prices[tier].problems = priceProblems(p, lang);
         facts.priceCurrencies = Array.from(new Set([...(facts.priceCurrencies ?? []), ...(p.currencies ?? [p.currency])]));
       } catch {
         prices[tier] = null;
-        facts.prices[tier].problems = priceProblems(null);
+        facts.prices[tier].problems = priceProblems(null, lang);
       }
     }
     info.prices = prices;
   }
 
-  return NextResponse.json({ checks: evaluateSetup(facts), info }, { headers: NO_STORE });
+  return NextResponse.json({ checks: evaluateSetup(facts, lang), info }, { headers: NO_STORE });
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await requireAdmin(req))) return NextResponse.json({ error: 'Nemáš oprávnění.' }, { status: 403, headers: NO_STORE });
-  const stripe = stripeClient();
-  if (!stripe) return NextResponse.json({ error: 'Ve Vercelu chybí STRIPE_SECRET_KEY (sk_test_… nebo sk_live_…) - nejdřív ho přidej a dej Redeploy.' }, { status: 400, headers: NO_STORE });
-
   const body = await req.json().catch(() => ({}));
+  const lang = langOf(body?.lang);
+  const tx = (cs: string, en: string) => (lang === 'en' ? en : cs);
+  if (!(await requireAdmin(req))) return NextResponse.json({ error: tx('Nemáš oprávnění.', 'Not allowed.') }, { status: 403, headers: NO_STORE });
+  const stripe = stripeClient();
+  if (!stripe) {
+    return NextResponse.json(
+      { error: tx('Ve Vercelu chybí STRIPE_SECRET_KEY (sk_test_… nebo sk_live_…) - nejdřív ho přidej a dej Redeploy.', 'STRIPE_SECRET_KEY (sk_test_… or sk_live_…) is missing in Vercel - add it first and Redeploy.') },
+      { status: 400, headers: NO_STORE }
+    );
+  }
+
   const siteUrl = siteUrlFrom(req);
 
   try {
-    if (body?.action === 'create-prices') return NextResponse.json(await createPrices(stripe, body), { headers: NO_STORE });
-    if (body?.action === 'create-webhook') return NextResponse.json(await createWebhook(stripe, siteUrl), { headers: NO_STORE });
+    if (body?.action === 'create-prices') return NextResponse.json(await createPrices(stripe, body, lang), { headers: NO_STORE });
+    if (body?.action === 'create-webhook') return NextResponse.json(await createWebhook(stripe, siteUrl, lang), { headers: NO_STORE });
   } catch (e: any) {
     if (e instanceof InputError) return NextResponse.json({ error: e.message }, { status: 400, headers: NO_STORE });
-    return NextResponse.json({ error: `Stripe: ${e?.message ?? 'nepodařilo se'}` }, { status: 502, headers: NO_STORE });
+    return NextResponse.json({ error: `Stripe: ${e?.message ?? tx('nepodařilo se', 'failed')}` }, { status: 502, headers: NO_STORE });
   }
-  return NextResponse.json({ error: 'Neznámá akce.' }, { status: 400, headers: NO_STORE });
+  return NextResponse.json({ error: tx('Neznámá akce.', 'Unknown action.') }, { status: 400, headers: NO_STORE });
 }
 
 class InputError extends Error {}
 
 /** Produkty a měsíční ceny tří variant. Stejná částka = použije se existující cena (lookup_key). */
-async function createPrices(stripe: Stripe, body: any) {
+async function createPrices(stripe: Stripe, body: any, lang: SetupLang) {
+  const tx = (cs: string, en: string) => (lang === 'en' ? en : cs);
   const currency = body?.currency === 'eur' ? 'eur' : 'czk';
   const extraCurrency = currency === 'czk' && body?.eur ? 'eur' : null;
   const out: Record<string, { id: string; label: string; reused: boolean }> = {};
   const env: string[] = [];
+  let renamed = 0;
 
   for (const tier of PAID_TIERS) {
     const amount = parseAmount(body?.amounts?.[tier], currency);
-    if (amount === null) throw new InputError(`Neplatná cena pro ${TIER_PRODUCT[tier].name} (${currency === 'czk' ? 'aspoň 15 Kč' : 'aspoň 0,50 €'}).`);
+    if (amount === null) {
+      const min = currency === 'czk' ? tx('aspoň 15 Kč', 'at least 15 CZK') : tx('aspoň 0,50 €', 'at least €0.50');
+      throw new InputError(tx(`Neplatná cena pro ${TIER_PRODUCT[tier].name} (${min}).`, `Invalid price for ${TIER_PRODUCT[tier].name} (${min}).`));
+    }
     const extraAmount = extraCurrency ? parseAmount(body?.eur?.[tier], extraCurrency) : null;
-    if (extraCurrency && extraAmount === null) throw new InputError(`Neplatná cena v eurech pro ${TIER_PRODUCT[tier].name} (aspoň 0,50 €).`);
+    if (extraCurrency && extraAmount === null) {
+      throw new InputError(tx(`Neplatná cena v eurech pro ${TIER_PRODUCT[tier].name} (aspoň 0,50 €).`, `Invalid euro price for ${TIER_PRODUCT[tier].name} (at least €0.50).`));
+    }
 
     const lookupKey = `kine_plus_${tier}_month_${currency}`;
     // lookup_key je u Stripe jedinečný (i u archivované ceny) - proto bez filtru na aktivní.
@@ -245,6 +272,12 @@ async function createPrices(stripe: Stripe, body: any) {
         ? existingExtra.length === 1 && existing.currency_options?.[extraCurrency]?.unit_amount === extraAmount
         : existingExtra.length === 0);
 
+    // Starší produkt (dřív s českým názvem a popisem): přejmenovat - Stripe ho ukazuje všem zákazníkům.
+    if (existingProduct?.active && (existingProduct.name !== TIER_PRODUCT[tier].name || (existingProduct.description ?? '') !== TIER_PRODUCT[tier].description)) {
+      await stripe.products.update(existingProduct.id, { name: TIER_PRODUCT[tier].name, description: TIER_PRODUCT[tier].description });
+      renamed += 1;
+    }
+
     let price: Stripe.Price;
     if (existing && sameAmount) {
       price = existing;
@@ -261,7 +294,7 @@ async function createPrices(stripe: Stripe, body: any) {
         lookup_key: lookupKey,
         // Nová částka přebere lookup_key starší ceny (ta zůstane pro stávající předplatitele).
         transfer_lookup_key: !!existing,
-        nickname: `${TIER_PRODUCT[tier].name} - měsíčně`,
+        nickname: `${TIER_PRODUCT[tier].name} - monthly`,
         metadata: { kind: 'kine-plus', tier },
         ...(extraCurrency && extraAmount !== null ? { currency_options: { [extraCurrency]: { unit_amount: extraAmount } } } : {}),
       });
@@ -271,13 +304,19 @@ async function createPrices(stripe: Stripe, body: any) {
     env.push(`STRIPE_PLUS_${TIER_PRODUCT[tier].env}_PRICE_ID=${price.id}`);
     env.push(`NEXT_PUBLIC_PLUS_${TIER_PRODUCT[tier].env}_PRICE_LABEL=${label}`);
   }
-  return { prices: out, env };
+  return { prices: out, env, renamed };
 }
 
 /** Webhook Kine: nový (vrátí podpisový klíč), nebo doplnění událostí u existujícího. */
-async function createWebhook(stripe: Stripe, siteUrl: string) {
+async function createWebhook(stripe: Stripe, siteUrl: string, lang: SetupLang) {
   const url = webhookUrlFor(siteUrl);
-  if (!/^https:\/\//.test(url)) throw new InputError(`Webhook musí mít adresu https (teď ${url}) - otevři tuhle stránku na ostrém webu.`);
+  if (!/^https:\/\//.test(url)) {
+    throw new InputError(
+      lang === 'en'
+        ? `The webhook needs an https address (now ${url}) - open this page on the live site.`
+        : `Webhook musí mít adresu https (teď ${url}) - otevři tuhle stránku na ostrém webu.`
+    );
+  }
   const endpoints = await stripe.webhookEndpoints.list({ limit: 100 });
   const existing = pickKineWebhook(endpoints.data, siteUrl);
   if (existing) {
@@ -299,7 +338,7 @@ async function createWebhook(stripe: Stripe, siteUrl: string) {
     url,
     enabled_events: [...REQUIRED_WEBHOOK_EVENTS],
     api_version: API_VERSION,
-    description: 'Kine - platby (Kine Plus, dary, předplatné kanálů, podpory)',
+    description: 'Kine - payments (Kine Plus, donations, channel subscriptions, tips)',
   });
   return { created: true, updated: false, url: created.url, secret: created.secret ?? null, env: created.secret ? [`STRIPE_WEBHOOK_SECRET=${created.secret}`] : [] };
 }

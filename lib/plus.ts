@@ -51,14 +51,34 @@ export function hasClipsPlus(plan: string | null | undefined, planUntil: string 
   return (p === 'clips' || p === 'all' || p === 'plus') && activeNow(planUntil, now);
 }
 
-/** Cena, jak se ukazuje lidem - text z prostředí, ať jde měnit bez nasazení kódu. */
+/**
+ * Popisek ceny bez období: „59 Kč / měsíc (2,49 €)“ -> „59 Kč (2,49 €)“. Období
+ * („/ month“, „/ měsíc“…) doplní stránka v jazyce webu - v popisku z Vercelu
+ * by bylo jen česky.
+ */
+export function stripPricePeriod(label: string): string {
+  return label
+    .replace(/\s*\/\s*(?:měsíc|mesiac|mesic|měs\.|mes\.|month|mo\.|mo)(?=\s|\(|$)/giu, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+/** „59 Kč (2,49 €)“ -> { main: „59 Kč“, extra: „2,49 €“ } (druhá měna nepovinná). */
+export function splitPriceLabel(label: string): { main: string; extra: string | null } {
+  const clean = stripPricePeriod(label);
+  const m = /^(.*?)\s*\(([^()]+)\)\s*$/.exec(clean);
+  return m && m[1].trim() ? { main: m[1].trim(), extra: m[2].trim() } : { main: clean, extra: null };
+}
+
+/** Cena, jak se ukazuje lidem - text z prostředí (bez období), ať jde měnit bez nasazení kódu. */
 export function tierPriceLabel(tier: PaidTier): string | null {
   const byTier: Record<PaidTier, string | undefined> = {
     kine: process.env.NEXT_PUBLIC_PLUS_KINE_PRICE_LABEL,
     clips: process.env.NEXT_PUBLIC_PLUS_CLIPS_PRICE_LABEL,
     all: process.env.NEXT_PUBLIC_PLUS_ALL_PRICE_LABEL || process.env.NEXT_PUBLIC_PLUS_PRICE_LABEL,
   };
-  return byTier[tier] || null;
+  const label = byTier[tier]?.trim();
+  return label ? stripPricePeriod(label) || null : null;
 }
 
 /** Ceny všech tří variant (pro /plus a pro appku). */

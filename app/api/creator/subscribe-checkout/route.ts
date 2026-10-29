@@ -40,6 +40,8 @@ export async function POST(req: NextRequest) {
   const sessionParams: any = {
     mode: 'subscription',
     line_items: [{ price: creator.subscription_stripe_price_id, quantity: 1 }],
+    // Managed Payments (zapnuté na účtu jako výchozí) nepodporují peníze pro tvůrce (Connect).
+    managed_payments: { enabled: false },
     subscription_data: {
       application_fee_percent: PLATFORM_FEE_PERCENT,
       transfer_data: { destination: creator.stripe_account_id },

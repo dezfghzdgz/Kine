@@ -6619,7 +6619,8 @@ input:focus, textarea:focus, select:focus {
 .plus-card.featured .plus-tier-icon { background: var(--brand-soft); border-color: rgba(var(--brand-rgb), 0.35); }
 .plus-tier-name { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: var(--track-tight); color: var(--text); }
 .plus-tier-sub { margin: 2px 0 0; font-size: 13px; color: var(--text-dim); }
-.plus-price { display: flex; align-items: baseline; gap: 6px; min-height: 40px; }
+.plus-price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; min-height: 40px; }
+.plus-price-alt { font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .plus-price-value { font-size: 30px; font-weight: 700; letter-spacing: var(--track-tight); color: var(--text); font-variant-numeric: tabular-nums; }
 .plus-price-per { font-size: 13px; color: var(--text-faint); }
 .plus-price-soon, .plus-soon {

@@ -52,7 +52,8 @@ test('ceny a Stripe podle varianty (starší STRIPE_PLUS_PRICE_ID = all)', () =>
   assert.equal(plus.tierFromStripePriceId('price_clips'), 'clips');
   assert.equal(plus.tierFromStripePriceId('price_neznama'), null);
   assert.equal(plus.anyTierAvailable(), true);
-  assert.deepEqual(plus.allPriceLabels(), { kine: null, clips: '79 Kč / měsíc', all: null });
+  // Období („/ měsíc“) se z popisku odebere - stránka ho doplní v jazyce webu.
+  assert.deepEqual(plus.allPriceLabels(), { kine: null, clips: '79 Kč', all: null });
   assert.ok(plus.isPaidTier('clips') && !plus.isPaidTier('free') && !plus.isPaidTier('plus'));
   assert.equal(plus.KINE_PLUS_UPLOAD_MULTIPLIER, 3);
 });
@@ -120,6 +121,17 @@ test('Stripe: varianta podle ceny, štítku ceny a štítku předplatného', () 
   assert.equal(r(sub({ id: 'price_stara', metadata: { tier: 'all' } }), 'kine'), 'all', 'přechod v portálu na starší cenu jiné varianty');
   assert.equal(r(sub({ id: 'price_rucni', metadata: {} }), 'clips'), 'clips', 'ručně založená cena bez štítku');
   assert.equal(r(sub({ id: 'price_rucni', metadata: { tier: 'nesmysl' } }), undefined), 'all');
+});
+
+test('popisek ceny bez období a rozdělený na hlavní a druhou měnu', () => {
+  assert.equal(plus.stripPricePeriod('59 Kč / měsíc (2,49 €)'), '59 Kč (2,49 €)');
+  assert.equal(plus.stripPricePeriod('59 Kč / month'), '59 Kč');
+  assert.equal(plus.stripPricePeriod('€4.99/mo'), '€4.99');
+  assert.equal(plus.stripPricePeriod('2,49 € / mesiac'), '2,49 €');
+  assert.equal(plus.stripPricePeriod('59 Kč (2,49 €)'), '59 Kč (2,49 €)', 'bez období beze změny');
+  assert.deepEqual(plus.splitPriceLabel('59 Kč / měsíc (2,49 €)'), { main: '59 Kč', extra: '2,49 €' });
+  assert.deepEqual(plus.splitPriceLabel('99 Kč'), { main: '99 Kč', extra: null });
+  assert.deepEqual(plus.splitPriceLabel('(nesmysl)'), { main: '(nesmysl)', extra: null });
 });
 
 test('Stripe: předplatné ze sporné platby', () => {

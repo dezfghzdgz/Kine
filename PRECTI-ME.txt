@@ -1,10 +1,47 @@
-KINE web: doporučené ceny předplatného (Kine Plus 59 Kč, Klipy Plus 79 Kč, Kine Plus + Klipy
-99 Kč) a kontrola úložiště v /admin/stripe
-(dodávka kine-0129-2026-10-29 - obsahuje i celou dodávku 0128, ta na GitHubu ještě není)
+KINE web: platba Kine Plus projde i s Managed Payments zapnutými na účtu, ceny a chyby na /plus
+v jazyce webu („/ month“ místo „/ měsíc“), produkty u Stripe anglicky, /admin/stripe česky i
+anglicky
+(dodávka kine-0130-2026-10-29)
 ==========================================================================================
 
 POSTUP
-1. Rozbal kine-web-0129.zip do kořene repa Kine, nahraj (stačí jen tenhle ZIP, 0128 je
+1. Rozbal kine-web-0130.zip do kořene repa Kine, nahraj. Migrace ani nová proměnná není.
+2. Na www.playkine.com/admin/stripe klikni ještě jednou na „Vytvořit ceny ve Stripe“
+   (Create prices at Stripe) - stejné částky nic nového nezaloží, jen přejmenuje produkty
+   u Stripe do angličtiny (Kine Plus, Clips Plus, Kine Plus + Clips). Ve Vercelu nic neměň.
+3. Zkus nákup na /plus.
+
+CO JE NOVÉ
+- Opravená chyba „custom_text cannot be used with Managed Payments“: na účtu Stripe jsou
+  Managed Payments (Stripe jako prodejce) zapnuté jako výchozí a nesnesou vlastní texty
+  u platby. Kine je teď u svých plateb vypíná (Kine Plus, předplatné kanálů; dary a podpory
+  to dělaly už dřív). Dobrovolně je jde vypnout i ve Stripe: Settings -> Managed Payments.
+- /plus: cena „59 Kč / month (2,49 €)“ v jazyce webu - popisek z Vercelu se bere bez období
+  (starší „59 Kč / měsíc (2,49 €)“ se upraví sám, nic měnit nemusíš). Stejně v tlačítku a
+  v appce do PC.
+- /plus a Podpořit Kine: chybové hlášky v jazyce webu (8 jazyků); technická zpráva Stripe
+  je jen v „Podrobnostech“.
+- Produkty u Stripe (platební stránka, správa předplatného) mají anglické názvy a popisy.
+- /admin/stripe: česky pro češtinu a slovenštinu, jinak anglicky (kontroly i tlačítka).
+- Podpisový klíč webhooku se kontroluje celý - zkrácený „whsec_8a7f…“ se ukáže jako chybějící.
+- Doporučená cesta k bankovnímu účtu v Kč: Settings -> Linked accounts and payouts.
+
+OVĚŘENO
+- tsc, 59 testových souborů, sestavení; /plus anglicky i česky (snímky, mobil bez přetékání)
+- /api/admin/stripe proti náhradě Stripe 22 scénářů (přejmenování starých produktů, anglické
+  texty, zkrácený klíč), platba Kine Plus 8 scénářů (účet s Managed Payments jako výchozími)
+
+==========================================================================================
+PŘEDCHOZÍ DODÁVKA
+==========================================================================================
+KINE web: doporučené ceny předplatného (Kine Plus 59 Kč, Klipy Plus 79 Kč, Kine Plus + Klipy
+99 Kč) a kontrola úložiště v /admin/stripe
+(dodávka kine-0129b-2026-10-29 - obsahuje i celou dodávku 0128, ta na GitHubu ještě není;
+nahrazuje první ZIP 0129 - kdo už ho nahrál, nevadí, tenhle soubory přepíše)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0129b.zip do kořene repa Kine, nahraj (stačí jen tenhle ZIP, 0128 je
    v něm). Migrace není.
 2. Spuštění plateb krok za krokem: NASAZENI-NAVOD.md, krok 7 (a dodávka 0128 níž).
 
@@ -14,6 +51,10 @@ CO JE NOVÉ
   59 Kč je pořád míň než Discord Nitro Basic a čtvrtina YouTube Premium (239 Kč). Balíček
   pod 100 Kč je jen o 20 Kč dražší než samotné Klipy. Jde přepsat před kliknutím; pozdější
   změna platí pro nové předplatitele, stávající zůstanou na své ceně.
+- Platba Kine Plus projde i na účtu se zapnutými Managed Payments (Stripe jako prodejce
+  chce u produktu daňový kód) - Kine prodává samo, takže se v tom případě platí bez nich
+  (jako u darů a podpor).
+- Návody: Public details jsou v novém Stripe v Settings -> Business -> Public details.
 - /admin/stripe ukáže úložiště účtu (UPLOAD_STORAGE_HOURS) a kolik plný účet stojí na
   Cloudflare. Výchozích 30 h (Kine Plus 90 h) = až ~190 / ~570 Kč měsíčně za jeden účet,
   víc, než předplatné vynese. Do přechodu na levnější úložiště videí doporučuju ve Vercelu
@@ -21,7 +62,7 @@ CO JE NOVÉ
 
 OVĚŘENO
 - tsc, 59 testových souborů (nové kontroly úložiště a cen), sestavení
-- /api/admin/stripe proti náhradě Stripe, 19 scénářů
+- /api/admin/stripe proti náhradě Stripe, 19 scénářů; platba Kine Plus 8 scénářů
 
 ==========================================================================================
 PŘEDCHOZÍ DODÁVKA
@@ -63,7 +104,7 @@ CO JE NOVÉ
 POSTUP (nejdřív testovací režim, pak ostrý)
 1. Rozbal kine-web-0128.zip do kořene repa Kine, nahraj. Migrace není.
 2. Stripe: dokonči aktivaci účtu (podnikání, IČO, bankovní účet).
-   Settings -> Public details: web https://www.playkine.com, podpora kinesupport@gmail.com,
+   Settings -> Business -> Public details: web https://www.playkine.com, podpora kinesupport@gmail.com,
    podmínky https://www.playkine.com/terms, ochrana údajů https://www.playkine.com/privacy,
    text na výpisu KINE.
    Settings -> Billing -> Customer portal -> Save (jednou v testovacím, jednou v ostrém režimu).

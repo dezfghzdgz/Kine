@@ -80,6 +80,9 @@ export async function POST(req: NextRequest) {
     subscription_data: { metadata: { kind: 'kine-plus', userId, tier } },
     metadata: { kind: 'kine-plus', userId, tier },
     allow_promotion_codes: true,
+    // Managed Payments (Stripe jako prodejce) je na účtu zapnuté jako výchozí a nesnese
+    // vlastní texty (souhlas s podmínkami) - Kine prodává samo, jako u darů a podpor.
+    managed_payments: { enabled: false },
     locale: texts.locale,
     success_url: `${siteUrl}/plus?ok=1`,
     cancel_url: `${siteUrl}/plus`,
@@ -96,10 +99,11 @@ export async function POST(req: NextRequest) {
     } catch (e: any) {
       // Ve Stripe chybí adresa podmínek - zaplatit jde i tak, souhlas je pak v textu u tlačítka.
       if (!/terms of service|terms_of_service/i.test(String(e?.message ?? ''))) throw e;
-      console.warn('Kine Plus: ve Stripe chybí adresa podmínek (Settings -> Public details) - platba bez zaškrtávátka');
+      console.warn('Kine Plus: ve Stripe chybí adresa podmínek (Settings -> Business -> Public details) - platba bez zaškrtávátka');
       return await stripeServer.checkout.sessions.create({ ...p, custom_text: { submit: { message: `${texts.consentPlain} ${texts.renewal}` } } });
     }
   }
+
 
   try {
     let session;
