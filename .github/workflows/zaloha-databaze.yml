@@ -1,10 +1,16 @@
-# Týdenní záloha databáze Kine.
+# Týdenní záloha databáze Kine - ŠIFROVANÁ.
 #
 # PROČ
 #   Supabase zdarma nemá zálohy "zpátky v čase". Jeden překlep v SQL editoru
 #   (update bez where) a data jsou pryč bez možnosti návratu. Tohle jednou
 #   týdně stáhne celou databázi (schéma i data) a uloží ji jako artefakt
-#   tohohle repozitáře - 90 dní zpátky, tedy ~13 záloh.
+#   tohohle repozitáře - 30 dní zpátky, tedy ~4 zálohy.
+#
+# PROČ ŠIFROVANĚ
+#   Artefakty veřejného repozitáře si může stáhnout kdokoli přihlášený na
+#   GitHubu. Nešifrovaná záloha by tak komukoli dala celou databázi (profily,
+#   zprávy, nastavení vysílání...). Proto se záloha zašifruje heslem
+#   (AES-256) a bez hesla se nahrát nedá - workflow radši skončí chybou.
 #
 # NASTAVENÍ (jednou)
 #   1. Supabase -> Project Settings -> Database -> Connection string
@@ -13,14 +19,19 @@
 #      Vypadá jako: postgresql://postgres.xxxx:HESLO@aws-0-eu-central-1.pooler.supabase.com:5432/postgres
 #   2. GitHub -> repo Kine -> Settings -> Secrets and variables -> Actions
 #      -> New repository secret:  jméno SUPABASE_DB_URL, hodnota ta adresa.
-#   3. Záložka Actions -> "Záloha databáze" -> Run workflow (první spuštění
+#   3. Tamtéž druhý secret: jméno BACKUP_PASSPHRASE, hodnota dlouhé náhodné
+#      heslo (aspoň 24 znaků). ULOŽ SI HO I JINDE (správce hesel) - bez něj
+#      zálohu nikdo neotevře, ani ty.
+#   4. Záložka Actions -> "Záloha databáze" -> Run workflow (první spuštění
 #      ručně, ať víš, že to jde). Pak už jede každou neděli ve 3:15 UTC.
 #
 # OBNOVA (kdyby bylo potřeba)
-#   Stáhni artefakt (zaloha-YYYY-MM-DD.sql.gz), rozbal a:
-#     psql "$SUPABASE_DB_URL" -f zaloha-YYYY-MM-DD.sql
-#   Do PRÁZDNÉ databáze (nový projekt), ne přes běžící - jinak se
-#   pomíchají řádky. Nejdřív si to zkus na novém projektu, ne až v krizi.
+#   Stáhni artefakt (zaloha-YYYY-MM-DD.sql.gz.gpg) a:
+#     gpg --decrypt zaloha-YYYY-MM-DD.sql.gz.gpg | gunzip > zaloha.sql
+#     psql "$SUPABASE_DB_URL" -f zaloha.sql
+#   (gpg se zeptá na BACKUP_PASSPHRASE.) Do PRÁZDNÉ databáze (nový projekt),
+#   ne přes běžící - jinak se pomíchají řádky. Nejdřív si to zkus na novém
+#   projektu, ne až v krizi.
 #
 # CO NENÍ V ZÁLOZE
 #   Uživatelé z auth schématu (hesla) - Supabase je drží mimo public schéma
@@ -46,16 +57,24 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client
 
-      - name: Stáhnout databázi
+      - name: Stáhnout a zašifrovat databázi
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
         run: |
-          if [ -z "$SUPABASE_DB_URL" ]; then
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
             echo "Chybí secret SUPABASE_DB_URL - viz komentář v tomhle souboru."
+            exit 1
+          fi
+          # Bez hesla se záloha nenahraje vůbec: artefakt veřejného repa si stáhne kdokoli.
+          if [ "${#BACKUP_PASSPHRASE}" -lt 16 ]; then
+            echo "Chybí secret BACKUP_PASSPHRASE (aspoň 16 znaků) - nešifrovanou zálohu nenahraju. Viz komentář v tomhle souboru."
             exit 1
           fi
           DEN=$(date -u +%F)
           echo "DEN=$DEN" >> "$GITHUB_ENV"
+          umask 077
           # --no-owner --no-privileges: role Supabase v cizím projektu neexistují,
           # bez toho by obnova padala na GRANT/OWNER.
           # --schema=public: jen naše tabulky; auth/storage spravuje Supabase.
@@ -64,17 +83,22 @@ jobs:
             --no-owner --no-privileges \
             --format=plain \
             | gzip -9 > "zaloha-$DEN.sql.gz"
-          ls -la "zaloha-$DEN.sql.gz"
           # Prázdná záloha = něco se pokazilo, i když pg_dump neskončil chybou.
           if [ "$(stat -c %s "zaloha-$DEN.sql.gz")" -lt 1000 ]; then
             echo "Záloha je podezřele malá."
             exit 1
           fi
+          # Heslo jde do gpg přes soubor v paměti procesu (ne na příkazové řádce - ta je vidět v seznamu procesů).
+          printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+            --symmetric --cipher-algo AES256 --output "zaloha-$DEN.sql.gz.gpg" "zaloha-$DEN.sql.gz"
+          # Nešifrovaná kopie pryč, ať se omylem nenahraje.
+          shred -u "zaloha-$DEN.sql.gz" 2>/dev/null || rm -f "zaloha-$DEN.sql.gz"
+          ls -la "zaloha-$DEN.sql.gz.gpg"
 
-      - name: Uložit jako artefakt (90 dní)
+      - name: Uložit jako artefakt (30 dní, jen šifrovaně)
         uses: actions/upload-artifact@v4
         with:
           name: zaloha-${{ env.DEN }}
-          path: zaloha-${{ env.DEN }}.sql.gz
-          retention-days: 90
+          path: zaloha-${{ env.DEN }}.sql.gz.gpg
+          retention-days: 30
           if-no-files-found: error
