@@ -162,27 +162,58 @@ export async function enforceLiveLimits(options: { force?: boolean } = {}): Prom
   }
 }
 
+/** Záznam z výpisu Cloudflare: nezveřejněný (naplánované smazání), ne živý, starší než hranice. */
+export function expiredRecording(v: any, cutoffMs: number): string | null {
+  const uid = String(v?.uid ?? '');
+  if (!isCloudflareUid(uid) || !v?.liveInput || !v?.scheduledDeletion) return null;
+  if (String(v?.status?.state ?? '').startsWith('live')) return null;
+  const created = Date.parse(String(v?.created ?? ''));
+  if (!Number.isFinite(created) || created > cutoffMs) return null;
+  return uid;
+}
+
 /**
  * Smaže nezveřejněné záznamy vysílání starší než recordingKeepDays().
  * Nezveřejněný = Cloudflare ho má naplánovaný ke smazání (scheduledDeletion,
  * zveřejnění to plánování ruší - lib/liveStream.ts keepRecording) a žádné
  * video na Kine na něj neukazuje. Nejvýš `max` naráz.
+ *
+ * Záznamy se hledají po vstupech (kanálech), které za poslední měsíc vysílaly -
+ * dřív se bralo jen 200 nejstarších videí celého účtu a mezi nimi byla hlavně
+ * obyčejná nahraná videa, takže na záznamy často nedošlo a ležely (a stály)
+ * až do automatického smazání po 30 dnech. Na konec ještě starý průchod
+ * přes celý účet (záznamy ze smazaných vstupů po změně klíče).
  */
-export async function cleanupOldRecordings(max = 40): Promise<number> {
-  const cutoff = new Date(Date.now() - recordingKeepDays() * 24 * 3600 * 1000).toISOString();
-  const list = await cfLive(`?before=${encodeURIComponent(cutoff)}&asc=true&limit=200`);
-  if (!Array.isArray(list)) return 0;
+export async function cleanupOldRecordings(max = 150): Promise<number> {
+  const cutoffMs = Date.now() - recordingKeepDays() * 24 * 3600 * 1000;
+  const seen = new Set<string>();
   let deleted = 0;
-  for (const v of list) {
-    if (deleted >= max) break;
-    const uid = String(v?.uid ?? '');
-    if (!isCloudflareUid(uid) || !v?.liveInput || !v?.scheduledDeletion) continue;
-    if (String(v?.status?.state ?? '').startsWith('live')) continue;
-    const created = Date.parse(String(v?.created ?? ''));
-    if (!Number.isFinite(created) || created > Date.parse(cutoff)) continue;
-    if (await cloudflareUidInUse(uid)) continue;
-    const outcome = await deleteStreamVideo(uid);
-    if (outcome === 'deleted') deleted += 1;
+  const tryDelete = async (v: any) => {
+    const uid = expiredRecording(v, cutoffMs);
+    if (!uid || seen.has(uid) || deleted >= max) return;
+    seen.add(uid);
+    if (await cloudflareUidInUse(uid)) return;
+    if ((await deleteStreamVideo(uid)) === 'deleted') deleted += 1;
+  };
+
+  // 1. Po vstupech, které vysílaly za posledních 31 dní (starší záznamy Cloudflare smaže sám).
+  const since = new Date(Date.now() - 31 * 24 * 3600 * 1000).toISOString();
+  const inputs = await supabaseServer.from('live_streams').select('cf_input_id').not('started_at', 'is', null).gte('started_at', since).limit(300);
+  if (!inputs.error) {
+    for (const row of (inputs.data ?? []) as { cf_input_id: string | null }[]) {
+      if (deleted >= max) break;
+      const id = String(row.cf_input_id ?? '');
+      if (!INPUT_ID.test(id)) continue;
+      const list = await cfLive(`/live_inputs/${id}/videos`);
+      if (!Array.isArray(list)) continue;
+      for (const v of list) await tryDelete(v);
+    }
+  }
+
+  // 2. Celý účet od nejstarších (záznamy vstupů, které už neexistují).
+  if (deleted < max) {
+    const list = await cfLive(`?before=${encodeURIComponent(new Date(cutoffMs).toISOString())}&asc=true&limit=200`);
+    if (Array.isArray(list)) for (const v of list) await tryDelete(v);
   }
   return deleted;
 }

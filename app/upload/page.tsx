@@ -1,16 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import FieldHint from '@/components/FieldHint';
-import { useLanguage } from '@/lib/i18n';
+import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { CATEGORY_KEYS } from '@/lib/categories';
 import { useUploadCommands, useUploadState } from '@/lib/uploadManager';
 import ProfileImage from '@/components/ProfileImage';
 import UploadQuota from '@/components/UploadQuota';
 import { IMAGE_MAX_BYTES, imageUploadProblem } from '@/lib/imageUpload';
+import { formatDuration } from '@/lib/homeRecommendation';
+import UiIcon from '@/components/UiIcon';
+import { CharCount, StudioCard, StudioChecklist, StudioChoices, StudioDropzone, StudioSteps, formatFileSize, resolutionLabel } from '@/components/StudioParts';
 
 const LANGUAGE_OPTIONS = [
   { code: 'cs', key: 'langOptCzech' },
@@ -34,7 +37,7 @@ const MAX_COLLABORATORS = MAX_VIDEO_CREATORS - 1;
 
 export default function UploadPage() {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
@@ -141,6 +144,68 @@ export default function UploadPage() {
   const uploadCommands = useUploadCommands();
   const failedInvites = upload.failedInvites;
 
+  // Vlastní náhled jako obrázek pro bok stránky (adresa se po změně uvolní).
+  const thumbPreview = useMemo(() => (thumbnailFile ? URL.createObjectURL(thumbnailFile) : null), [thumbnailFile]);
+  useEffect(
+    () => () => {
+      if (thumbPreview) URL.revokeObjectURL(thumbPreview);
+    },
+    [thumbPreview]
+  );
+  useEffect(
+    () => () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    },
+    [previewUrl]
+  );
+
+  /** Vybrané video (výběrem i přetažením): náhled, a když ještě není název, vezme se ze souboru. */
+  function pickVideo(f: File | null) {
+    setFile(f);
+    setVideoDuration(null);
+    setVideoWidth(null);
+    setVideoHeight(null);
+    setPreviewUrl(f ? URL.createObjectURL(f) : null);
+    setError(null);
+    if (f && !title.trim()) {
+      setTitle(f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().slice(0, 150));
+    }
+  }
+
+  /** Vlastní náhled: typ a velikost hned (ne až po nahrání videa), jiný poměr stran jen s potvrzením. */
+  function pickThumbnail(f: File | null) {
+    if (!f) {
+      setThumbnailFile(null);
+      return;
+    }
+    // Úložiště pustí jen obrázky do 10 MB (lib/imageUpload.ts).
+    const problem = imageUploadProblem(f, 'thumbnail');
+    if (problem) {
+      setError(problem === 'type' ? t('imageUploadBadType') : t('imageUploadTooBig').replace('{mb}', String(IMAGE_MAX_BYTES.thumbnail / 1024 / 1024)));
+      setThumbnailFile(null);
+      return;
+    }
+    setError(null);
+    const url = URL.createObjectURL(f);
+    const img = new window.Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const imageRatio = img.width / img.height;
+      const videoRatio = videoWidth && videoHeight ? videoWidth / videoHeight : 16 / 9;
+      const diff = Math.abs(imageRatio - videoRatio) / videoRatio;
+      if (diff > 0.15 && !confirm(t('aspectRatioMismatchWarning'))) {
+        setThumbnailFile(null);
+        return;
+      }
+      setThumbnailFile(f);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      setError(t('imageUploadBadType'));
+    };
+    img.src = url;
+  }
+
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
       setIsLoggedIn(!!data.user);
@@ -160,7 +225,7 @@ export default function UploadPage() {
   function goToStep2(e: React.FormEvent) {
     e.preventDefault();
     if (!file || !title.trim()) {
-      setError('Vyber video a vyplň alespoň název.');
+      setError(t('uploadNeedFileAndTitle'));
       return;
     }
     if (tooLongMessage) {
@@ -184,7 +249,7 @@ export default function UploadPage() {
    * u dvanáctiminutového videa to znamenalo sedět čtvrt hodiny u jedné
    * stránky a nedělat nic.
    */
-  function pickBulkFiles(list: FileList | null) {
+  function pickBulkFiles(list: FileList | File[] | null) {
     const files = Array.from(list ?? []).filter((f) => f.type.startsWith('video/') || /\.(mp4|mov|mkv|webm|avi|m4v)$/i.test(f.name));
     setBulkFiles(
       files.map((f) => ({
@@ -218,10 +283,7 @@ export default function UploadPage() {
         thumbnailFile: null,
         title: name.trim() || f.name,
         description: '',
-        hashtags: hashtagsInput
-          .split(/[\s,]+/)
-          .map((h) => h.trim().replace(/^#/, '').toLowerCase())
-          .filter((h) => h.length > 0),
+        hashtags: parseHashtags(hashtagsInput),
         madeForKids,
         hasPaidPromotion: false,
         isAiGenerated,
@@ -256,10 +318,7 @@ export default function UploadPage() {
       thumbnailFile,
       title,
       description,
-      hashtags: hashtagsInput
-        .split(/[\s,]+/)
-        .map((h) => h.trim().replace(/^#/, '').toLowerCase())
-        .filter((h) => h.length > 0),
+      hashtags: parseHashtags(hashtagsInput),
       madeForKids,
       hasPaidPromotion,
       isAiGenerated,
@@ -296,126 +355,163 @@ export default function UploadPage() {
     );
   }
 
+  // Náhled videa a vlastního náhledu - v boku stránky v obou krocích.
+  const tags = parseHashtags(hashtagsInput);
+  const preview = (
+    <div className="studio-preview">
+      <div className="studio-preview-media">
+        {previewUrl ? (
+          <video
+            src={previewUrl}
+            controls
+            playsInline
+            preload="metadata"
+            poster={thumbPreview ?? undefined}
+            onLoadedMetadata={(e) => {
+              const v = e.currentTarget;
+              setVideoWidth(v.videoWidth);
+              setVideoHeight(v.videoHeight);
+              setVideoDuration(Number.isFinite(v.duration) && v.duration > 0 ? v.duration : null);
+            }}
+          />
+        ) : thumbPreview ? (
+          <img src={thumbPreview} alt="" />
+        ) : (
+          <span className="studio-preview-empty" aria-hidden="true">
+            <UiIcon name="film" size={30} />
+          </span>
+        )}
+        {videoDuration ? <span className="studio-preview-duration">{formatDuration(videoDuration)}</span> : null}
+      </div>
+      <p className={`studio-preview-title${title.trim() ? '' : ' empty'}`}>{title.trim() || t('studioTitlePlaceholder')}</p>
+      {(category || tags.length > 0) && (
+        <p className="studio-preview-meta">
+          {[category ? t(category as (typeof CATEGORY_KEYS)[number]) : null, ...tags.slice(0, 3).map((h) => `#${h}`)].filter(Boolean).join(' · ')}
+        </p>
+      )}
+    </div>
+  );
+
   if (step === 1 && bulkMode) {
     return (
-      <form className="form-container" style={{ maxWidth: 560 }} onSubmit={handleBulkSubmit}>
-        {/* Vysvětlení za otazníčkem (heslovitě), ne odstavec pod nadpisem. */}
-        <h1>
-          {t('bulkUploadTitle')}
-          <FieldHint text={t('bulkUploadIntro')} />
-        </h1>
-        <button type="button" className="reaction-btn" onClick={() => { setBulkMode(false); setError(null); }} style={{ alignSelf: 'flex-start' }}>
-          ← {t('bulkBackToSingle')}
-        </button>
+      <form className="studio studio-narrow" onSubmit={handleBulkSubmit}>
+        <header className="studio-head">
+          <div className="studio-head-text">
+            <h1>
+              {t('bulkUploadTitle')}
+              <FieldHint text={t('bulkUploadIntro')} />
+            </h1>
+          </div>
+          <button type="button" className="studio-ghost-btn" onClick={() => { setBulkMode(false); setError(null); }}>
+            <UiIcon name="chevronLeft" size={15} /> {t('bulkBackToSingle')}
+          </button>
+        </header>
 
         {bulkSent > 0 && (
-          <div className="panel">
-            <p style={{ margin: 0, color: 'var(--text)' }}>{t('bulkStarted').replace('{count}', String(bulkSent))}</p>
-            <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--text-dim)' }}>{t('bulkStartedNote')}</p>
-            <Link href="/your-videos" className="reaction-btn" style={{ display: 'inline-flex', marginTop: 12, textDecoration: 'none' }}>
+          <div className="studio-card studio-success">
+            <p style={{ margin: 0, color: 'var(--text)', fontWeight: 600 }}>{t('bulkStarted').replace('{count}', String(bulkSent))}</p>
+            <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-dim)' }}>{t('bulkStartedNote')}</p>
+            <Link href="/your-videos" className="studio-ghost-btn" style={{ marginTop: 12 }}>
               {t('yourVideos')}
             </Link>
           </div>
         )}
 
-        <div className="panel">
-          <p className="panel-heading">
-            {t('bulkFilesLabel')}
-            <FieldHint text={t('bulkFilesHint')} />
-          </p>
-          <input type="file" accept="video/*" multiple onChange={(e) => pickBulkFiles(e.target.files)} />
+        <StudioCard icon="upload" title={t('bulkFilesLabel')} hint={t('bulkFilesHint')}>
+          <StudioDropzone
+            accept="video/*"
+            multiple
+            icon="upload"
+            title={t('studioDropVideos')}
+            hint={t('studioDropVideoHint')}
+            button={t('studioPickFile')}
+            onFiles={(fs) => pickBulkFiles(fs)}
+          />
           <UploadQuota />
           {bulkFiles.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+            <div className="studio-bulk-list">
               {bulkFiles.map((item, i) => (
-                <div key={`${item.file.name}-${i}`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div key={`${item.file.name}-${i}`} className="studio-bulk-row">
+                  <UiIcon name="film" size={16} />
                   <input
                     value={item.title}
                     onChange={(e) => setBulkFiles((prev) => prev.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))}
-                    style={{ flex: 1, minWidth: 0, fontSize: 13 }}
                     aria-label={t('videoTitle')}
+                    maxLength={150}
                   />
-                  <span style={{ fontSize: 12, color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>
-                    {(item.file.size / 1024 / 1024).toFixed(0)} MB
-                  </span>
-                  <button
-                    type="button"
-                    className="reaction-btn"
-                    onClick={() => setBulkFiles((prev) => prev.filter((_, j) => j !== i))}
-                    aria-label={t('delete')}
-                    style={{ minHeight: 30, padding: '2px 8px' }}
-                  >
-                    ✕
+                  <span className="studio-bulk-size">{formatFileSize(item.file.size)}</span>
+                  <button type="button" className="icon-btn" onClick={() => setBulkFiles((prev) => prev.filter((_, j) => j !== i))} aria-label={t('delete')}>
+                    <UiIcon name="close" size={14} />
                   </button>
                 </div>
               ))}
-              <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>{t('bulkCount').replace('{count}', String(bulkFiles.length))}</p>
+              <p className="studio-note">{t('bulkCount').replace('{count}', String(bulkFiles.length))}</p>
             </div>
           )}
-        </div>
+        </StudioCard>
 
-        <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <p className="panel-heading" style={{ marginBottom: -4 }}>{t('bulkSharedSettings')}</p>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('categoryLabel')}</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)} required>
-              <option value="" disabled>{t('selectCategoryPlaceholder')}</option>
-              {CATEGORY_KEYS.map((c) => <option key={c} value={c}>{t(c)}</option>)}
-            </select>
+        <StudioCard icon="sliders" title={t('bulkSharedSettings')}>
+          <div className="studio-row2">
+            <div className="studio-field">
+              <label htmlFor="bulk-cat">{t('categoryLabel')}</label>
+              <select id="bulk-cat" value={category} onChange={(e) => setCategory(e.target.value)} required>
+                <option value="" disabled>{t('selectCategoryPlaceholder')}</option>
+                {CATEGORY_KEYS.map((c) => <option key={c} value={c}>{t(c)}</option>)}
+              </select>
+            </div>
+            <div className="studio-field">
+              <label htmlFor="bulk-lang">{t('videoLanguageLabel')}</label>
+              <select id="bulk-lang" value={language} onChange={(e) => setLanguage(e.target.value)}>
+                {LANGUAGE_OPTIONS.map((l) => <option key={l.code} value={l.code}>{t(l.key)}</option>)}
+              </select>
+            </div>
           </div>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('videoLanguageLabel')}</label>
-            <select value={language} onChange={(e) => setLanguage(e.target.value)}>
-              {LANGUAGE_OPTIONS.map((l) => <option key={l.code} value={l.code}>{t(l.key)}</option>)}
-            </select>
+          <div className="studio-field">
+            <label>{t('whoCanSeeVideo')}</label>
+            <StudioChoices
+              name="bulkVisibility"
+              value={bulkVisibility}
+              onChange={setBulkVisibility}
+              options={[
+                { value: 'private', icon: 'lock', title: t('studioVisPrivate'), desc: t('studioVisPrivateDesc') },
+                { value: 'subscribers', icon: 'users', title: t('studioVisSubscribers'), desc: t('studioVisSubscribersDesc') },
+                { value: 'public', icon: 'globe', title: t('studioVisPublic'), desc: t('studioVisPublicDesc') },
+              ]}
+            />
+            <p className="studio-note">{t('bulkVisibilityNote')}</p>
           </div>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('whoCanSeeVideo')}</label>
-            {([
-              ['private', t('visibilityPrivate')],
-              ['subscribers', t('visibilitySubscribers')],
-              ['public', t('visibilityPublic')],
-            ] as [Visibility, string][]).map(([value, label]) => (
-              <label key={value} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginTop: 6 }}>
-                <input type="radio" name="bulkVisibility" style={{ width: 'auto' }} checked={bulkVisibility === value} onChange={() => setBulkVisibility(value)} />
-                {label}
-              </label>
-            ))}
-            <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: '6px 0 0' }}>{t('bulkVisibilityNote')}</p>
+          <div className="studio-field">
+            <label htmlFor="bulk-tags">{t('studioHashtags')}</label>
+            <input id="bulk-tags" value={hashtagsInput} onChange={(e) => setHashtagsInput(e.target.value)} placeholder={t('hashtagsPlaceholderExample')} />
           </div>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('srcHashtag')}</label>
-            <input value={hashtagsInput} onChange={(e) => setHashtagsInput(e.target.value)} placeholder={t('hashtagsPlaceholderExample')} />
+          <div className="studio-flags">
+            <label className="studio-flag">
+              <input type="checkbox" checked={madeForKids} onChange={(e) => setMadeForKids(e.target.checked)} />
+              <span>{t('madeForKidsLabel')}</span>
+            </label>
+            <label className="studio-flag">
+              <input type="checkbox" checked={isAiGenerated} onChange={(e) => setIsAiGenerated(e.target.checked)} />
+              <span>{t('aiContentLabel')}</span>
+            </label>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-            <input type="checkbox" style={{ width: 'auto' }} checked={madeForKids} onChange={(e) => setMadeForKids(e.target.checked)} />
-            {t('madeForKidsLabel')}
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-            <input type="checkbox" style={{ width: 'auto' }} checked={isAiGenerated} onChange={(e) => setIsAiGenerated(e.target.checked)} />
-            {t('aiContentLabel')}
-          </label>
           {playlists.length > 0 && (
-            <div>
-              <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('playlists')}</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+            <div className="studio-field">
+              <label>{t('playlists')}</label>
+              <div className="studio-chips">
                 {playlists.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className={`reaction-btn ${selectedPlaylists.includes(p.id) ? 'active' : ''}`}
-                    onClick={() => togglePlaylist(p.id)}
-                  >
+                  <button key={p.id} type="button" className={`studio-chip${selectedPlaylists.includes(p.id) ? ' active' : ''}`} aria-pressed={selectedPlaylists.includes(p.id)} onClick={() => togglePlaylist(p.id)}>
+                    {selectedPlaylists.includes(p.id) && <UiIcon name="check" size={13} />}
                     {p.title}
                   </button>
                 ))}
               </div>
             </div>
           )}
-        </div>
+        </StudioCard>
 
         {error && <p className="error-text">{error}</p>}
-        <button type="submit" disabled={bulkFiles.length === 0}>
+        <button type="submit" className="studio-primary" disabled={bulkFiles.length === 0}>
+          <UiIcon name="upload" size={16} />
           {t('bulkUploadButton').replace('{count}', String(bulkFiles.length))}
         </button>
       </form>
@@ -424,462 +520,504 @@ export default function UploadPage() {
 
   if (step === 1) {
     return (
-      <form className="form-container" style={{ maxWidth: 560 }} onSubmit={goToStep2}>
-        <h1>{t('uploadVideo')}</h1>
-
-        <button type="button" className="reaction-btn" onClick={() => { setBulkMode(true); setError(null); }} style={{ alignSelf: 'flex-start' }}>
-          {t('bulkSwitch')}
-        </button>
-
-        <div className="panel">
-          <p className="panel-heading">
-            {t('videoFile')}
-            <FieldHint text={t('selectVideoFileHint')} />
-          </p>
-          <input
-            type="file"
-            accept="video/*"
-            onChange={(e) => {
-              const f = e.target.files?.[0] ?? null;
-              setFile(f);
-              setVideoDuration(null);
-              setPreviewUrl(f ? URL.createObjectURL(f) : null);
-            }}
-            required={!file}
-          />
-          {file && (
-            <p style={{ fontSize: 12, color: 'var(--brand)', marginTop: 6 }}>
-              ✓ {file.name}
-            </p>
-          )}
-          <UploadQuota durationSeconds={file ? videoDuration : null} onTooLong={setTooLongMessage} />
-
-          {previewUrl && (
-            <video
-              src={previewUrl}
-              controls
-              onLoadedMetadata={(e) => {
-                const v = e.currentTarget;
-                setVideoWidth(v.videoWidth);
-                setVideoHeight(v.videoHeight);
-                setVideoDuration(Number.isFinite(v.duration) && v.duration > 0 ? v.duration : null);
-              }}
-              style={{ width: '100%', borderRadius: 8, background: '#000', maxHeight: 260, marginTop: 12 }}
-            />
-          )}
-        </div>
-
-        <div className="panel">
-          <p className="panel-heading">
-            {t('customThumbnail')}
-            <FieldHint text={t('optionalThumbnailHint')} />
-          </p>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => {
-              const f = e.target.files?.[0] ?? null;
-              if (!f) { setThumbnailFile(null); return; }
-              // Úložiště pustí jen obrázky do 10 MB (lib/imageUpload.ts) - hláška hned, ne až po nahrání videa.
-              const problem = imageUploadProblem(f, 'thumbnail');
-              if (problem) {
-                setError(problem === 'type' ? t('imageUploadBadType') : t('imageUploadTooBig').replace('{mb}', String(IMAGE_MAX_BYTES.thumbnail / 1024 / 1024)));
-                e.target.value = '';
-                setThumbnailFile(null);
-                return;
-              }
-              setError(null);
-
-              const img = new window.Image();
-              img.onload = () => {
-                const imageRatio = img.width / img.height;
-                const videoRatio = videoWidth && videoHeight ? videoWidth / videoHeight : 16 / 9;
-                const diff = Math.abs(imageRatio - videoRatio) / videoRatio;
-
-                if (diff > 0.15) {
-                  const ok = confirm(t('aspectRatioMismatchWarning'));
-                  if (!ok) {
-                    e.target.value = '';
-                    setThumbnailFile(null);
-                    return;
-                  }
-                }
-                setThumbnailFile(f);
-              };
-              img.src = URL.createObjectURL(f);
-            }}
-          />
-        </div>
-
-        <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <p className="panel-heading" style={{ marginBottom: -4 }}>{t('basicInfo')}</p>
-
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>
-              {t('videoTitle')}
-              <FieldHint text={t('titleFieldHint')} />
-            </label>
-            <input type="text" placeholder={t('videoTitle')} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={150} required />
+      <form className="studio" onSubmit={goToStep2}>
+        <header className="studio-head">
+          <div className="studio-head-text">
+            <h1>{t('uploadVideo')}</h1>
+            <StudioSteps steps={[t('studioStepDetails'), t('studioStepPublish')]} current={0} />
           </div>
+          <button type="button" className="studio-ghost-btn" onClick={() => { setBulkMode(true); setError(null); }}>
+            <UiIcon name="folder" size={15} /> {t('bulkSwitch')}
+          </button>
+        </header>
 
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>
-              {t('description2')}
-              <FieldHint text={t('descriptionFieldHint')} />
-            </label>
-            <textarea placeholder={t('optionalDescription')} value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
-            <input
-              type="text"
-              placeholder={t('hashtagsPlaceholderExample')}
-              value={hashtagsInput}
-              onChange={(e) => setHashtagsInput(e.target.value)}
-              style={{ marginTop: 10 }}
-            />
-          </div>
-        </div>
-
-        {playlists.length > 0 && (
-          <div className="panel" style={{ position: 'relative' }}>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>
-              {t('playlists')}
-              <FieldHint text={t('playlistsFieldHint')} />
-            </label>
-            <button
-              type="button"
-              onClick={() => setPlaylistMenuOpen((v) => !v)}
-              style={{ background: 'var(--panel-raised)', color: 'var(--text)', width: '100%', textAlign: 'left', display: 'flex', justifyContent: 'space-between' }}
-            >
-              <span>
-                {selectedPlaylists.length === 0
-                  ? t('addToPlaylistPlaceholder')
-                  : `${t('selectedCountLabel')} ${selectedPlaylists.length}`}
-              </span>
-              <span>{playlistMenuOpen ? '▲' : '▼'}</span>
-            </button>
-            {playlistMenuOpen && (
-              <div className="profile-dropdown" style={{ position: 'static', width: '100%', marginTop: 6, boxShadow: 'none' }}>
-                {playlists.map((p) => (
-                  <label key={p.id} className="profile-dropdown-item" style={{ cursor: 'pointer' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <input
-                        type="checkbox"
-                        style={{ width: 'auto' }}
-                        checked={selectedPlaylists.includes(p.id)}
-                        onChange={() => togglePlaylist(p.id)}
-                      />
-                      {p.title}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="panel">
-          <p className="panel-heading">
-            {t('collaboratorsLabel')}
-            <span style={{ fontWeight: 400, color: 'var(--text-faint)', fontSize: 12, marginLeft: 8 }}>
-              {selectedCollaborators.length + 1}/{MAX_VIDEO_CREATORS}
-            </span>
-          </p>
-          <p style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 10 }}>{t('collaboratorsHint')}</p>
-
-          {selectedCollaborators.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
-              {selectedCollaborators.map((c) => (
-                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span className="profile-avatar-small" style={{ width: 26, height: 26, overflow: 'hidden' }}>
-                    {c.avatar_url ? <ProfileImage src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+        <div className="studio-grid">
+          <div className="studio-main">
+            <StudioCard icon="film" title={t('videoFile')} hint={t('selectVideoFileHint')}>
+              {!file ? (
+                <StudioDropzone
+                  accept="video/*"
+                  icon="upload"
+                  title={t('studioDropVideo')}
+                  hint={t('studioDropVideoHint')}
+                  button={t('studioPickFile')}
+                  onFiles={(fs) => pickVideo(fs[0] ?? null)}
+                />
+              ) : (
+                <div className="studio-file">
+                  <span className="studio-file-icon" aria-hidden="true">
+                    <UiIcon name="check" size={18} />
                   </span>
-                  <span style={{ fontSize: 13, flex: 1 }}>{c.username}</span>
-                  <button type="button" onClick={() => removeCollaborator(c.id)} style={{ background: 'none', color: 'var(--text-faint)', padding: 4, fontSize: 12 }}>
-                    ✕
+                  <span className="studio-file-text">
+                    <span className="studio-file-name">{file.name}</span>
+                    <span className="studio-file-meta">
+                      {[formatFileSize(file.size), videoDuration ? formatDuration(videoDuration) : null, resolutionLabel(videoWidth, videoHeight)].filter(Boolean).join(' · ')}
+                    </span>
+                  </span>
+                  <label className="studio-ghost-btn">
+                    <input
+                      type="file"
+                      accept="video/*"
+                      className="studio-drop-input"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) pickVideo(f);
+                        e.target.value = '';
+                      }}
+                    />
+                    {t('studioChangeFile')}
+                  </label>
+                </div>
+              )}
+              <UploadQuota durationSeconds={file ? videoDuration : null} onTooLong={setTooLongMessage} />
+            </StudioCard>
+
+            <StudioCard icon="pencil" title={t('basicInfo')}>
+              <div className="studio-field">
+                <label htmlFor="up-title">
+                  {t('videoTitle')}
+                  <FieldHint text={t('titleFieldHint')} />
+                </label>
+                <input id="up-title" type="text" placeholder={t('studioTitlePlaceholder')} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={150} required />
+                <CharCount value={title} max={150} />
+              </div>
+              <div className="studio-field">
+                <label htmlFor="up-desc">
+                  {t('description2')}
+                  <FieldHint text={t('descriptionFieldHint')} />
+                </label>
+                <textarea id="up-desc" placeholder={t('optionalDescription')} value={description} onChange={(e) => setDescription(e.target.value)} rows={5} maxLength={5000} />
+                <CharCount value={description} max={5000} />
+              </div>
+              <div className="studio-field">
+                <label htmlFor="up-tags">{t('studioHashtags')}</label>
+                <input id="up-tags" type="text" placeholder={t('hashtagsPlaceholderExample')} value={hashtagsInput} onChange={(e) => setHashtagsInput(e.target.value)} />
+                {tags.length > 0 && (
+                  <div className="studio-tags">
+                    {tags.slice(0, 15).map((h) => (
+                      <span key={h}>#{h}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </StudioCard>
+
+            <StudioCard icon="image" title={t('customThumbnail')} hint={t('optionalThumbnailHint')}>
+              {thumbPreview ? (
+                <div className="studio-thumb">
+                  <img src={thumbPreview} alt="" />
+                  <div className="studio-thumb-actions">
+                    <label className="studio-ghost-btn">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="studio-drop-input"
+                        onChange={(e) => {
+                          pickThumbnail(e.target.files?.[0] ?? null);
+                          e.target.value = '';
+                        }}
+                      />
+                      {t('studioChangeFile')}
+                    </label>
+                    <button type="button" className="studio-ghost-btn" onClick={() => setThumbnailFile(null)}>
+                      {t('studioRemove')}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <StudioDropzone
+                  compact
+                  accept="image/*"
+                  icon="image"
+                  title={t('studioDropThumb')}
+                  hint={t('studioThumbAuto')}
+                  button={t('studioPickImage')}
+                  onFiles={(fs) => pickThumbnail(fs[0] ?? null)}
+                />
+              )}
+            </StudioCard>
+
+            <StudioCard icon="grid" title={t('studioCategoryLanguage')}>
+              <div className="studio-row2">
+                <div className="studio-field">
+                  <label htmlFor="up-cat">
+                    {t('categoryLabel')}
+                    <FieldHint text={t('categoryHint')} />
+                  </label>
+                  <select id="up-cat" value={category} onChange={(e) => setCategory(e.target.value)} required>
+                    <option value="" disabled>{t('selectCategoryPlaceholder')}</option>
+                    {CATEGORY_KEYS.map((c) => <option key={c} value={c}>{t(c)}</option>)}
+                  </select>
+                </div>
+                <div className="studio-field">
+                  <label htmlFor="up-lang">
+                    {t('videoLanguageLabel')}
+                    <FieldHint text={t('videoLanguageHint')} />
+                  </label>
+                  <select id="up-lang" value={language} onChange={(e) => setLanguage(e.target.value)}>
+                    {LANGUAGE_OPTIONS.map((l) => <option key={l.code} value={l.code}>{t(l.key)}</option>)}
+                  </select>
+                </div>
+              </div>
+            </StudioCard>
+
+            {playlists.length > 0 && (
+              <StudioCard icon="folder" title={t('playlists')} hint={t('playlistsFieldHint')}>
+                <div className="studio-chips">
+                  {playlists.map((p) => (
+                    <button key={p.id} type="button" className={`studio-chip${selectedPlaylists.includes(p.id) ? ' active' : ''}`} aria-pressed={selectedPlaylists.includes(p.id)} onClick={() => togglePlaylist(p.id)}>
+                      {selectedPlaylists.includes(p.id) && <UiIcon name="check" size={13} />}
+                      {p.title}
+                    </button>
+                  ))}
+                </div>
+              </StudioCard>
+            )}
+
+            <details className="studio-more">
+              <summary>
+                <span className="studio-card-icon" aria-hidden="true">
+                  <UiIcon name="sliders" size={17} />
+                </span>
+                <span className="studio-more-text">
+                  <span className="studio-more-title">{t('studioMoreOptions')}</span>
+                  <span className="studio-more-hint">{t('studioMoreOptionsHint')}</span>
+                </span>
+                <UiIcon name="chevronDown" size={18} className="studio-more-chevron" />
+              </summary>
+              <div className="studio-more-body">
+                <div className="studio-sub">
+                  <p className="studio-sub-title">
+                    <UiIcon name="users" size={15} />
+                    {t('collaboratorsLabel')}
+                    <span className="studio-sub-count">
+                      {selectedCollaborators.length + 1}/{MAX_VIDEO_CREATORS}
+                    </span>
+                  </p>
+                  <p className="studio-note">{t('collaboratorsHint')}</p>
+                  {selectedCollaborators.length > 0 && (
+                    <div className="studio-people">
+                      {selectedCollaborators.map((c) => (
+                        <span key={c.id} className="studio-person">
+                          <span className="studio-person-avatar">
+                            {c.avatar_url ? <ProfileImage src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                          </span>
+                          {c.username}
+                          <button type="button" className="icon-btn" onClick={() => removeCollaborator(c.id)} aria-label={t('studioRemove')}>
+                            <UiIcon name="close" size={12} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <input
+                    type="text"
+                    placeholder={t('searchUsernamePlaceholder')}
+                    value={collabSearch}
+                    onChange={(e) => searchCollaborators(e.target.value)}
+                    disabled={selectedCollaborators.length >= MAX_COLLABORATORS}
+                  />
+                  {selectedCollaborators.length >= MAX_COLLABORATORS && (
+                    <p className="studio-note">{t('collabLimitReachedNote').replace('{max}', String(MAX_VIDEO_CREATORS))}</p>
+                  )}
+                  {collabResults.length > 0 && (
+                    <div className="studio-results">
+                      {collabResults.map((r) => (
+                        <button key={r.id} type="button" className="studio-result" onClick={() => addCollaborator(r)}>
+                          <span className="studio-person-avatar">
+                            {r.avatar_url ? <ProfileImage src={r.avatar_url} alt={r.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                          </span>
+                          {r.username}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {collabError && <p className="error-text" style={{ margin: 0 }}>{collabError}</p>}
+                </div>
+
+                <div className="studio-sub">
+                  <p className="studio-sub-title">
+                    <UiIcon name="sort" size={15} />
+                    {t('chapters')}
+                    <FieldHint text={t('chaptersFieldHint')} />
+                  </p>
+                  {chapters.map((ch, i) => (
+                    <div key={i} className="studio-timed-row">
+                      <input
+                        type="text"
+                        placeholder="mm:ss"
+                        value={ch.time}
+                        onChange={(e) => {
+                          const next = [...chapters];
+                          next[i] = { ...next[i], time: e.target.value };
+                          setChapters(next);
+                        }}
+                        className="studio-time"
+                        aria-label="mm:ss"
+                      />
+                      <input
+                        type="text"
+                        placeholder={t('chapterTitlePlaceholder')}
+                        value={ch.title}
+                        onChange={(e) => {
+                          const next = [...chapters];
+                          next[i] = { ...next[i], title: e.target.value };
+                          setChapters(next);
+                        }}
+                      />
+                      {chapters.length > 1 && (
+                        <button type="button" className="icon-btn" onClick={() => setChapters(chapters.filter((_, idx) => idx !== i))} aria-label={t('studioRemove')}>
+                          <UiIcon name="close" size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button type="button" className="studio-add-btn" onClick={() => setChapters([...chapters, { time: '', title: '' }])}>
+                    <UiIcon name="plus" size={14} />
+                    {t('addChapter').replace(/^\+\s*/, '')}
                   </button>
                 </div>
-              ))}
-            </div>
-          )}
 
-          <input
-            type="text"
-            placeholder={t('searchUsernamePlaceholder')}
-            value={collabSearch}
-            onChange={(e) => searchCollaborators(e.target.value)}
-            disabled={selectedCollaborators.length >= MAX_COLLABORATORS}
-          />
-          {selectedCollaborators.length >= MAX_COLLABORATORS && (
-            <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 6 }}>
-              {t('collabLimitReachedNote').replace('{max}', String(MAX_VIDEO_CREATORS))}
-            </p>
-          )}
-          {collabResults.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
-              {collabResults.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  onClick={() => addCollaborator(r)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 8, background: 'var(--panel-raised)',
-                    border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', textAlign: 'left',
-                  }}
-                >
-                  <span className="profile-avatar-small" style={{ width: 22, height: 22, overflow: 'hidden', flexShrink: 0 }}>
-                    {r.avatar_url ? <ProfileImage src={r.avatar_url} alt={r.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
-                  </span>
-                  <span style={{ fontSize: 13, color: 'var(--text)' }}>{r.username}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {collabError && <p className="error-text" style={{ marginTop: 8 }}>{collabError}</p>}
-        </div>
+                <div className="studio-sub">
+                  <p className="studio-sub-title">
+                    <UiIcon name="quote" size={15} />
+                    {t('captions')}
+                    <FieldHint text={t('overlaysFieldHint')} />
+                  </p>
+                  {captions.map((cap, i) => (
+                    <div key={i} className="studio-timed-row">
+                      <input
+                        type="text"
+                        placeholder="mm:ss"
+                        value={cap.time}
+                        onChange={(e) => {
+                          const next = [...captions];
+                          next[i] = { ...next[i], time: e.target.value };
+                          setCaptions(next);
+                        }}
+                        className="studio-time"
+                        aria-label="mm:ss"
+                      />
+                      <input
+                        type="text"
+                        placeholder={t('captionTextPlaceholder')}
+                        value={cap.text}
+                        onChange={(e) => {
+                          const next = [...captions];
+                          next[i] = { ...next[i], text: e.target.value };
+                          setCaptions(next);
+                        }}
+                      />
+                      {captions.length > 1 && (
+                        <button type="button" className="icon-btn" onClick={() => setCaptions(captions.filter((_, idx) => idx !== i))} aria-label={t('studioRemove')}>
+                          <UiIcon name="close" size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button type="button" className="studio-add-btn" onClick={() => setCaptions([...captions, { time: '', text: '' }])}>
+                    <UiIcon name="plus" size={14} />
+                    {t('addCaption').replace(/^\+\s*/, '')}
+                  </button>
+                </div>
 
-        <div className="panel">
-          <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>
-            {t('chapters')}
-            <FieldHint text={t('chaptersFieldHint')} />
-          </label>
-          {chapters.map((ch, i) => (
-            <div key={i} style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-              <input
-                type="text"
-                placeholder="mm:ss"
-                value={ch.time}
-                onChange={(e) => {
-                  const next = [...chapters];
-                  next[i] = { ...next[i], time: e.target.value };
-                  setChapters(next);
-                }}
-                style={{ width: 70 }}
-              />
-              <input
-                type="text"
-                placeholder={t('chapterTitlePlaceholder')}
-                value={ch.title}
-                onChange={(e) => {
-                  const next = [...chapters];
-                  next[i] = { ...next[i], title: e.target.value };
-                  setChapters(next);
-                }}
-                style={{ flex: 1 }}
-              />
-              {chapters.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setChapters(chapters.filter((_, idx) => idx !== i))}
-                  style={{ background: 'var(--panel-raised)', color: 'var(--text-faint)', padding: '0 10px' }}
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={() => setChapters([...chapters, { time: '', title: '' }])}
-            style={{ marginTop: 8, background: 'var(--panel-raised)', color: 'var(--text)', fontSize: 12 }}
-          >
-            {t('addChapter')}
-          </button>
-        </div>
-
-        <div className="panel">
-          <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>
-            {t('captions')}
-            <FieldHint text={t('overlaysFieldHint')} />
-          </label>
-          {captions.map((cap, i) => (
-            <div key={i} style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-              <input
-                type="text"
-                placeholder="mm:ss"
-                value={cap.time}
-                onChange={(e) => {
-                  const next = [...captions];
-                  next[i] = { ...next[i], time: e.target.value };
-                  setCaptions(next);
-                }}
-                style={{ width: 70 }}
-              />
-              <input
-                type="text"
-                placeholder={t('captionTextPlaceholder')}
-                value={cap.text}
-                onChange={(e) => {
-                  const next = [...captions];
-                  next[i] = { ...next[i], text: e.target.value };
-                  setCaptions(next);
-                }}
-                style={{ flex: 1 }}
-              />
-              {captions.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setCaptions(captions.filter((_, idx) => idx !== i))}
-                  style={{ background: 'var(--panel-raised)', color: 'var(--text-faint)', padding: '0 10px' }}
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={() => setCaptions([...captions, { time: '', text: '' }])}
-            style={{ marginTop: 8, background: 'var(--panel-raised)', color: 'var(--text)', fontSize: 12 }}
-          >
-            {t('addCaption')}
-          </button>
-        </div>
-
-        <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-dim)' }}>
-            <input type="checkbox" style={{ width: 'auto' }} checked={madeForKids} onChange={(e) => setMadeForKids(e.target.checked)} />
-            {t('madeForKidsLabel')}
-            <FieldHint text={t('madeForKidsHint')} />
-          </label>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-dim)' }}>
-            <input type="checkbox" style={{ width: 'auto' }} checked={hasPaidPromotion} onChange={(e) => setHasPaidPromotion(e.target.checked)} />
-            {t('paidPromoLabel')}
-            <FieldHint text={t('paidPromoHint')} />
-          </label>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-dim)' }}>
-            <input type="checkbox" style={{ width: 'auto' }} checked={isAiGenerated} onChange={(e) => setIsAiGenerated(e.target.checked)} />
-            {t('aiContentLabel')}
-            <FieldHint text={t('aiContentHint')} />
-          </label>
-
-          {/* Automatická kontrola nahoty (lib/nudityRules.ts): umělecké video neskryje, jen ho dá ke kontrole moderátorům. */}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-dim)' }}>
-            <input type="checkbox" className="upload-artistic" style={{ width: 'auto' }} checked={isArtistic} onChange={(e) => setIsArtistic(e.target.checked)} />
-            {t('artisticNudityLabel')}
-            <FieldHint text={t('artisticNudityHint')} />
-          </label>
-        </div>
-
-        <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>
-              {t('videoLanguageLabel')}
-              <FieldHint text={t('videoLanguageHint')} />
-            </label>
-            <select value={language} onChange={(e) => setLanguage(e.target.value)}>
-              {LANGUAGE_OPTIONS.map((l) => <option key={l.code} value={l.code}>{t(l.key)}</option>)}
-            </select>
+                <div className="studio-sub">
+                  <p className="studio-sub-title">
+                    <UiIcon name="flag" size={15} />
+                    {t('studioFlags')}
+                  </p>
+                  <div className="studio-flags">
+                    <label className="studio-flag">
+                      <input type="checkbox" checked={madeForKids} onChange={(e) => setMadeForKids(e.target.checked)} />
+                      <span>{t('madeForKidsLabel')}</span>
+                      <FieldHint text={t('madeForKidsHint')} />
+                    </label>
+                    <label className="studio-flag">
+                      <input type="checkbox" checked={hasPaidPromotion} onChange={(e) => setHasPaidPromotion(e.target.checked)} />
+                      <span>{t('paidPromoLabel')}</span>
+                      <FieldHint text={t('paidPromoHint')} />
+                    </label>
+                    <label className="studio-flag">
+                      <input type="checkbox" checked={isAiGenerated} onChange={(e) => setIsAiGenerated(e.target.checked)} />
+                      <span>{t('aiContentLabel')}</span>
+                      <FieldHint text={t('aiContentHint')} />
+                    </label>
+                    {/* Automatická kontrola nahoty (lib/nudityRules.ts): umělecké video neskryje, jen ho dá ke kontrole moderátorům. */}
+                    <label className="studio-flag">
+                      <input type="checkbox" className="upload-artistic" checked={isArtistic} onChange={(e) => setIsArtistic(e.target.checked)} />
+                      <span>{t('artisticNudityLabel')}</span>
+                      <FieldHint text={t('artisticNudityHint')} />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </details>
           </div>
 
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--text-faint)' }}>
-              {t('categoryLabel')}
-              <FieldHint text={t('categoryHint')} />
-            </label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)} required>
-              <option value="" disabled>{t('selectCategoryPlaceholder')}</option>
-              {CATEGORY_KEYS.map((c) => <option key={c} value={c}>{t(c)}</option>)}
-            </select>
-          </div>
+          <aside className="studio-side">
+            <div className="studio-side-sticky">
+              {preview}
+              <StudioChecklist
+                title={t('studioChecklist')}
+                items={[
+                  { label: t('studioCheckFile'), done: !!file && !tooLongMessage, required: true },
+                  { label: t('studioCheckTitle'), done: !!title.trim(), required: true },
+                  { label: t('studioCheckCategory'), done: !!category, required: true },
+                  { label: t('studioCheckDescription'), done: description.trim().length >= 20 },
+                  { label: t('studioCheckThumb'), done: !!thumbnailFile },
+                  { label: t('studioCheckTags'), done: tags.length > 0 },
+                ]}
+              />
+              {error && <p className="error-text" style={{ margin: 0 }}>{error}</p>}
+              <button type="submit" className="studio-primary">
+                {t('continueButton')}
+              </button>
+            </div>
+          </aside>
         </div>
-
-        {error && <p className="error-text">{error}</p>}
-        <button type="submit">{t('continueButton')}</button>
       </form>
     );
   }
 
+  const visibilityLabel = { public: t('studioVisPublic'), subscribers: t('studioVisSubscribers'), private: t('studioVisPrivate') }[selectedCollaborators.length > 0 ? 'private' : visibility];
+  const scheduleLabel =
+    scheduleMode === 'now'
+      ? t('studioNow')
+      : `${scheduleMode === 'premiere' ? t('studioPremiere') : t('studioScheduled')}${scheduledAt ? ` · ${new Date(scheduledAt).toLocaleString(DATE_LOCALES[lang], { dateStyle: 'medium', timeStyle: 'short' })}` : ''}`;
+
   return (
-    <form className="form-container" style={{ maxWidth: 480 }} onSubmit={handleFinalSubmit}>
-      <h1>{t('visibilityAndSchedulingHeading')}</h1>
-
-      <div className="panel">
-        <p className="panel-heading">
-          {t('whoCanSeeVideo')}
-          <FieldHint text={t('visibilityExplanationHint')} />
-        </p>
-        {([
-          ['public', t('visibilityPublic')],
-          ['subscribers', t('visibilitySubscribers')],
-          ['private', t('visibilityPrivate')],
-        ] as [Visibility, string][]).map(([value, label]) => (
-          <label key={value} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8 }}>
-            <input type="radio" name="visibility" style={{ width: 'auto' }} checked={visibility === value} onChange={() => setVisibility(value)} />
-            {label}
-          </label>
-        ))}
-      </div>
-
-      <div className="panel">
-        <p className="panel-heading">
-          {t('publishingSectionLabel')}
-          <FieldHint text={t('premiereVsScheduledHint')} />
-        </p>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8 }}>
-          <input type="radio" name="schedule" style={{ width: 'auto' }} checked={scheduleMode === 'now'} onChange={() => setScheduleMode('now')} />
-          {t('publishNow')}
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8 }}>
-          <input type="radio" name="schedule" style={{ width: 'auto' }} checked={scheduleMode === 'scheduled'} onChange={() => setScheduleMode('scheduled')} />
-          {t('scheduleOption')}
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8 }}>
-          <input type="radio" name="schedule" style={{ width: 'auto' }} checked={scheduleMode === 'premiere'} onChange={() => setScheduleMode('premiere')} />
-          {t('premiereOption')}
-        </label>
-
-        {scheduleMode !== 'now' && (
-          <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} required />
-        )}
-      </div>
-
-      {error && <p className="error-text">{error}</p>}
-
-      {/* Video je nahrané, ale někoho se nepodařilo pozvat ke spolupráci.
-          Zůstáváme na stránce a nabídneme rovnou úpravy videa, ať to jde
-          dotáhnout - dřív hláška zmizela dřív, než ji šlo přečíst. */}
-      {failedInvites && (
-        <div className="panel" style={{ borderColor: '#e0453f' }}>
-          <p className="error-text" style={{ margin: 0 }}>
-            {t('collabInviteFailedNote').replace('{names}', failedInvites.names.join(', '))}
-          </p>
-          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-            <Link href={`/your-videos/${failedInvites.videoId}/edit`} className="reaction-btn">
-              {t('collaboratorsLabel')}
-            </Link>
-            <button type="button" onClick={() => { uploadCommands.dismiss(); router.push('/'); }} style={{ background: 'var(--panel-raised)', color: 'var(--text)' }}>
-              {t('home')}
-            </button>
-          </div>
+    <form className="studio" onSubmit={handleFinalSubmit}>
+      <header className="studio-head">
+        <div className="studio-head-text">
+          <h1>{t('visibilityAndSchedulingHeading')}</h1>
+          <StudioSteps steps={[t('studioStepDetails'), t('studioStepPublish')]} current={1} />
         </div>
-      )}
+      </header>
 
-      {upload.phase === 'uploading' && (
-        <>
-          <p>{t('uploading')} {upload.percent}%</p>
-          <p style={{ color: 'var(--text-dim)', fontSize: 13 }}>{t('uploadInBackgroundNote')}</p>
-        </>
-      )}
-      {upload.phase === 'saving' && <p>{t('savingVideoLabel')}</p>}
-      {upload.phase === 'processing' && <p>{t('processingVideoNote')}</p>}
-      {upload.phase === 'error' && upload.error && <p className="error-text">{upload.error}</p>}
+      <div className="studio-grid">
+        <div className="studio-main">
+          <StudioCard icon="eye" title={t('whoCanSeeVideo')} hint={t('visibilityExplanationHint')}>
+            <StudioChoices
+              name="visibility"
+              value={visibility}
+              onChange={setVisibility}
+              options={[
+                { value: 'public', icon: 'globe', title: t('studioVisPublic'), desc: t('studioVisPublicDesc') },
+                { value: 'subscribers', icon: 'users', title: t('studioVisSubscribers'), desc: t('studioVisSubscribersDesc') },
+                { value: 'private', icon: 'lock', title: t('studioVisPrivate'), desc: t('studioVisPrivateDesc') },
+              ]}
+            />
+            {selectedCollaborators.length > 0 && (
+              <p className="studio-note studio-note-info">
+                <UiIcon name="info" size={14} />
+                {t('studioCollabPrivateNote')}
+              </p>
+            )}
+          </StudioCard>
 
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button type="button" onClick={() => setStep(1)} style={{ background: 'var(--panel-raised)', color: 'var(--text)' }}>
-          {t('backButton')}
-        </button>
-        {/* Když už je video nahrané (jen se nepovedly pozvánky), nesmí jít
-            odeslat formulář znovu - jinak by se nahrálo podruhé. */}
-        {/* Dokud nahrávání běží, nesmí jít odeslat znovu - jinak by se
-            video nahrálo podruhé. Totéž když už je nahrané a nepovedly se
-            jen pozvánky. */}
-        <button type="submit" disabled={upload.busy || upload.phase === 'done' || !!failedInvites} style={{ flex: 1 }}>
-          {upload.busy || upload.phase === 'done' ? t('processing') : t('uploadButton')}
-        </button>
+          <StudioCard icon="calendar" title={t('publishingSectionLabel')} hint={t('premiereVsScheduledHint')}>
+            <StudioChoices
+              name="schedule"
+              value={scheduleMode}
+              onChange={setScheduleMode}
+              options={[
+                { value: 'now', icon: 'bolt', title: t('studioNow'), desc: t('studioNowDesc') },
+                { value: 'scheduled', icon: 'calendar', title: t('studioScheduled'), desc: t('studioScheduledDesc') },
+                { value: 'premiere', icon: 'sparkle', title: t('studioPremiere'), desc: t('studioPremiereDesc') },
+              ]}
+            />
+            {scheduleMode !== 'now' && (
+              <div className="studio-field" style={{ marginTop: 12 }}>
+                <label htmlFor="up-when">{t('studioWhen')}</label>
+                <input id="up-when" type="datetime-local" value={scheduledAt} min={localNowForInput()} onChange={(e) => setScheduledAt(e.target.value)} required />
+              </div>
+            )}
+          </StudioCard>
+
+          {/* Video je nahrané, ale někoho se nepodařilo pozvat ke spolupráci.
+              Zůstáváme na stránce a nabídneme rovnou úpravy videa, ať to jde
+              dotáhnout - dřív hláška zmizela dřív, než ji šlo přečíst. */}
+          {failedInvites && (
+            <div className="studio-card studio-card-error">
+              <p className="error-text" style={{ margin: 0 }}>
+                {t('collabInviteFailedNote').replace('{names}', failedInvites.names.join(', '))}
+              </p>
+              <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                <Link href={`/your-videos/${failedInvites.videoId}/edit`} className="studio-ghost-btn">
+                  {t('collaboratorsLabel')}
+                </Link>
+                <button type="button" className="studio-ghost-btn" onClick={() => { uploadCommands.dismiss(); router.push('/'); }}>
+                  {t('home')}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(upload.phase === 'uploading' || upload.phase === 'saving' || upload.phase === 'processing' || (upload.phase === 'error' && upload.error)) && (
+            <div className="studio-card studio-progress-card" role="status">
+              {upload.phase === 'uploading' && (
+                <>
+                  <p className="studio-progress-label">
+                    {t('uploading')} <strong>{upload.percent}%</strong>
+                  </p>
+                  <div className="studio-progress" aria-hidden="true">
+                    <span style={{ width: `${Math.max(2, Math.min(100, upload.percent))}%` }} />
+                  </div>
+                  <p className="studio-note">{t('uploadInBackgroundNote')}</p>
+                </>
+              )}
+              {upload.phase === 'saving' && <p className="studio-progress-label">{t('savingVideoLabel')}</p>}
+              {upload.phase === 'processing' && <p className="studio-progress-label">{t('processingVideoNote')}</p>}
+              {upload.phase === 'error' && upload.error && <p className="error-text" style={{ margin: 0 }}>{upload.error}</p>}
+            </div>
+          )}
+        </div>
+
+        <aside className="studio-side">
+          <div className="studio-side-sticky">
+            {preview}
+            <div className="studio-summary">
+              <p className="studio-side-title">{t('studioSummary')}</p>
+              <dl>
+                <dt>{t('whoCanSeeVideo')}</dt>
+                <dd>{visibilityLabel}</dd>
+                <dt>{t('publishingSectionLabel')}</dt>
+                <dd>{scheduleLabel}</dd>
+              </dl>
+            </div>
+            {error && <p className="error-text" style={{ margin: 0 }}>{error}</p>}
+            <div className="studio-actions">
+              <button type="button" className="studio-ghost-btn" onClick={() => setStep(1)}>
+                {t('backButton')}
+              </button>
+              {/* Dokud nahrávání běží, nesmí jít odeslat znovu - jinak by se video nahrálo
+                  podruhé. Totéž když už je nahrané a nepovedly se jen pozvánky. */}
+              <button type="submit" className="studio-primary" disabled={upload.busy || upload.phase === 'done' || !!failedInvites}>
+                <UiIcon name="upload" size={16} />
+                {upload.busy || upload.phase === 'done' ? t('processing') : t('uploadButton')}
+              </button>
+            </div>
+          </div>
+        </aside>
       </div>
     </form>
   );
+}
+
+/** Hashtagy z pole (mezery / čárky, bez #, malými písmeny, bez opakování). */
+function parseHashtags(input: string): string[] {
+  const out: string[] = [];
+  for (const raw of input.split(/[\s,]+/)) {
+    const h = raw.trim().replace(/^#/, '').toLowerCase();
+    if (h && !out.includes(h)) out.push(h);
+  }
+  return out;
+}
+
+/** Teď v místním čase pro <input type="datetime-local" min>. */
+function localNowForInput(): string {
+  const d = new Date(Date.now() - new Date().getTimezoneOffset() * 60 * 1000);
+  return d.toISOString().slice(0, 16);
 }
 
 function parseTimeToSeconds(value: string): number | null {

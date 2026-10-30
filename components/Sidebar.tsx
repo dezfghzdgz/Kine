@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 import { CATEGORY_KEYS } from '@/lib/categories';
@@ -125,15 +125,24 @@ export default function Sidebar() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // Znovu načíst při každé navigaci - kdyby se něco změnilo (např. rating_mode
-  // v Nastavení), levé menu to hned zohlední, i když appka mezitím neproběhla
-  // úplným znovunačtením.
+  // Znovu načíst po odchodu ze stránek, kde se profil mění (Nastavení - rating_mode,
+  // Kine Plus, průvodce), jinak nejvýš jednou za minutu. Dřív se při KAŽDÉM přechodu
+  // ptalo dvakrát na server (ověření přihlášení + profil) - zbytečně to brzdilo.
+  const lastLoad = useRef(0);
+  const prevPath = useRef<string | null>(pathname);
   useEffect(() => {
-    loadUser();
+    const from = prevPath.current;
+    prevPath.current = pathname;
+    const fromProfilePage = /^\/(settings|plus|welcome|choose-|agree-to-rules)/.test(from ?? '');
+    if (fromProfilePage || Date.now() - lastLoad.current > 60 * 1000) loadUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
   async function loadUser() {
-    const { data: authData } = await supabase.auth.getUser();
+    lastLoad.current = Date.now();
+    // Přihlášení z paměti prohlížeče (bez dotazu na server) - menu jen ukazuje jméno a odkazy.
+    const { data: sessionData } = await supabase.auth.getSession();
+    const authData = { user: sessionData.session?.user ?? null };
     if (!authData.user) {
       setUser(null);
       setKinePlus(false);

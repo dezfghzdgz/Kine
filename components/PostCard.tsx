@@ -45,10 +45,11 @@ function renderPostText(content: string) {
 }
 
 /**
- * Příspěvek (text, fotky, anketa, video): kdo a kdy, text s odkazy, až 4
- * fotky (klik = velký náhled), video z Kine, anketa (konec, změna hlasu,
- * výsledky), palce, komentáře, sdílení. Majitel: připnout, upravit text,
- * smazat. Počty (palce, komentáře) se načtou, až když je karta vidět.
+ * Příspěvek (text, fotky, anketa, video): kdo a kdy, text s odkazy, až 10
+ * fotek (v mřížce 4, na poslední „+N“; klik = velký náhled s listováním
+ * šipkami), video z Kine, anketa (konec, změna hlasu, výsledky), palce,
+ * komentáře, sdílení. Příspěvek jen pro členy má zámek. Majitel: připnout,
+ * upravit text, smazat. Počty (palce, komentáře) se načtou, až když je karta vidět.
  */
 export default function PostCard({
   post,
@@ -92,6 +93,19 @@ export default function PostCard({
   const [video, setVideo] = useState<any | null>(null);
 
   const own = !!userId && userId === post.owner_id;
+
+  // Velký náhled: šipky listují, Escape zavře.
+  useEffect(() => {
+    if (lightbox === null) return;
+    const count = postImages(post).length;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightbox(null);
+      else if (e.key === 'ArrowRight' && count > 1) setLightbox((i) => (i === null ? null : (i + 1) % count));
+      else if (e.key === 'ArrowLeft' && count > 1) setLightbox((i) => (i === null ? null : (i - 1 + count) % count));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightbox, post]);
   // Jen obrázky z úložiště Kine (lib/trustedMedia.ts) - adresa z cizího serveru by prozradila IP diváků.
   const images = postImages(post).filter((u) => trustedImageUrl(u) !== null);
   const poll = pollState({ options, endsAt: post.poll_ends_at ?? null, voted: myVote !== null, own });
@@ -291,6 +305,12 @@ export default function PostCard({
                 {t('postPinned')}
               </span>
             )}
+            {post.members_only && (
+              <span className="post-members-badge" title={t('postMembersOnlyHint')}>
+                <UiIcon name="lock" size={12} />
+                {t('postMembersOnly')}
+              </span>
+            )}
           </span>
         </div>
         <div className="post-menu-wrap">
@@ -358,11 +378,26 @@ export default function PostCard({
 
       {images.length > 0 && (
         <div className={`post-images post-images-${Math.min(images.length, 4)}`}>
-          {images.slice(0, 4).map((src, i) => (
-            <button key={src + i} type="button" className="post-image" onClick={() => setLightbox(i)} aria-label={t('postOpenImage')}>
-              <img loading="lazy" decoding="async" src={src} alt="" />
-            </button>
-          ))}
+          {images.slice(0, 4).map((src, i) => {
+            // Víc než 4 fotky: na čtvrté „+N“ (kolik dalších je ve velkém náhledu).
+            const more = i === 3 && images.length > 4 ? images.length - 4 : 0;
+            return (
+              <button
+                key={src + i}
+                type="button"
+                className={`post-image${more ? ' has-more' : ''}`}
+                onClick={() => setLightbox(i)}
+                aria-label={more ? `${t('postOpenImage')} (+${more})` : t('postOpenImage')}
+              >
+                <img loading="lazy" decoding="async" src={src} alt="" />
+                {more > 0 && (
+                  <span className="post-image-more" aria-hidden="true">
+                    +{more}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -442,6 +477,11 @@ export default function PostCard({
       {lightbox !== null && images[lightbox] && (
         <div className="post-lightbox" role="dialog" aria-modal="true" onClick={() => setLightbox(null)}>
           <img src={images[lightbox]} alt="" />
+          {images.length > 1 && (
+            <span className="post-lightbox-count" aria-live="polite">
+              {lightbox + 1} / {images.length}
+            </span>
+          )}
           <button type="button" className="icon-btn post-lightbox-close" aria-label={t('close')} onClick={() => setLightbox(null)}>
             <UiIcon name="close" size={18} />
           </button>

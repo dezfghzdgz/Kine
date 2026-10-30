@@ -120,7 +120,7 @@ function WatchLaterPageInner() {
             </div>
             <p className="video-card-title">{v.title}</p>
             <p className="video-card-meta">
-              {v.profiles?.username ?? 'neznámý tvůrce'} · {v.views} {t('views')}
+              {v.profiles?.username ?? t('unknownCreator')} · {v.views} {t('views')}
             </p>
           </Link>
         ))}

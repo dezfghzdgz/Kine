@@ -25,7 +25,6 @@ const OWN = 'abcd.supabase.co';
 test('úložiště Kine, Cloudflare a Giphy projdou', () => {
   for (const url of [
     'https://abcd.supabase.co/storage/v1/object/public/avatars/u1/a.png',
-    'https://jiny.supabase.co/storage/v1/object/public/post-images/u1/x.webp',
     'https://customer-abc123.cloudflarestream.com/uid/thumbnails/thumbnail.jpg',
     'https://videodelivery.net/uid/thumbnails/thumbnail.jpg',
     'https://imagedelivery.net/hash/id/public',
@@ -35,6 +34,12 @@ test('úložiště Kine, Cloudflare a Giphy projdou', () => {
   ]) {
     assert.equal(M.trustedImageUrl(url, OWN), url, url);
   }
+});
+
+test('cizí projekt Supabase ne (v logu by viděl IP diváků); bez vlastní adresy ano', () => {
+  assert.equal(M.trustedImageUrl('https://jiny.supabase.co/storage/v1/object/public/post-images/u1/x.webp', OWN), null);
+  assert.equal(M.trustedImageUrl('https://jiny.supabase.co/a.webp', null), 'https://jiny.supabase.co/a.webp');
+  assert.equal(M.isTrustedImageHost('stary.supabase.co', OWN, ['stary.supabase.co']), true, 'starý projekt přes NEXT_PUBLIC_EXTRA_IMAGE_HOSTS');
 });
 
 test('cizí servery ne (IP adresa diváka)', () => {

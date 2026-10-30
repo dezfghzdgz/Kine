@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { prefetchSparks } from '@/lib/sparksPrefetch';
@@ -12,6 +12,7 @@ import { useLanguage } from '@/lib/i18n';
 import VideoCard from '@/components/VideoCard';
 import ContinueWatching from '@/components/ContinueWatching';
 import LiveNowRow from '@/components/LiveNowRow';
+import HomePostsShelf from '@/components/HomePostsShelf';
 import { scoreVideo, explainVideo, buildBlocks, formatDuration, FEED_BATCH, WATCHED_HISTORY_LIMIT } from '@/lib/homeRecommendation';
 import type { Block } from '@/lib/homeRecommendation';
 import { loadHiddenContent, filterHidden, clearHiddenContent, NOTHING_HIDDEN } from '@/lib/hiddenContent';
@@ -600,21 +601,27 @@ export default function HomePage() {
       {notices}
 
       {blocks.map((block, i) => (
-        <VideoBlockRow key={i} type={block.type} style={{ marginBottom: 24 }}>
-          {block.items.map((video: any, j: number) => (
-            <VideoCard
-              key={video.id}
-              priority={i === 0 && j < PRIORITY_CARDS}
-              video={video}
-              href={block.type === 'sparks' ? `/sparks?start=${video.id}` : `/watch/${video.id}`}
-              isSparks={block.type === 'sparks'}
-              progressPercent={progressMap[video.id]}
-              formatDuration={formatDuration}
-              reason={reasonFor(video)}
-            />
-          ))}
-        </VideoBlockRow>
+        <Fragment key={i}>
+          {/* Novinky od odebíraných kanálů: jedna nenápadná řada pod prvním blokem videí (lib/homePosts.ts). */}
+          {i === 1 && <HomePostsShelf />}
+          <VideoBlockRow type={block.type} style={{ marginBottom: 24 }}>
+            {block.items.map((video: any, j: number) => (
+              <VideoCard
+                key={video.id}
+                priority={i === 0 && j < PRIORITY_CARDS}
+                video={video}
+                href={block.type === 'sparks' ? `/sparks?start=${video.id}` : `/watch/${video.id}`}
+                isSparks={block.type === 'sparks'}
+                progressPercent={progressMap[video.id]}
+                formatDuration={formatDuration}
+                reason={reasonFor(video)}
+              />
+            ))}
+          </VideoBlockRow>
+        </Fragment>
       ))}
+      {/* Jen jeden blok videí: řada novinek pod ním. */}
+      {blocks.length === 1 && <HomePostsShelf />}
 
       <div ref={sentinelRef} style={{ height: 1 }} />
       {loadFailed && <LoadFailed onRetry={retryLoad} />}

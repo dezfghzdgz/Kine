@@ -105,7 +105,8 @@ export default function SignupPage() {
       });
 
       if (profileError) {
-        setError('Účet vytvořen, ale profil se nepodařilo založit: ' + profileError.message);
+        console.warn('Kine: profil po registraci se nezaložil -', profileError.message);
+        setError(t('signupProfileFailed'));
         setToast({ message: t('signupFailed'), type: 'error' });
         setLoading(false);
         return;

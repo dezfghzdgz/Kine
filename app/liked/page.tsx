@@ -102,16 +102,14 @@ function LikedPageInner() {
   if (loading) return <p style={{ color: 'var(--text-faint)' }}>{t('loading')}</p>;
 
   const filtered = filterBySearch(videos, query);
-  const pageTitle = ratingMode === 'stars' ? 'Ohodnocená videa' : 'Líbí se mi';
+  const pageTitle = ratingMode === 'stars' ? t('likedRatedTitle') : t('activityLikedTab');
 
   if (videos.length === 0) {
     return (
       <div className="auth-gate">
         <p>{pageTitle}</p>
         <p style={{ fontSize: 13 }}>
-          {ratingMode === 'stars'
-            ? 'Videa, která ohodnotíš hvězdičkami, se objeví tady.'
-            : 'Videa, které si označíš 👍, se objeví tady.'}
+          {ratingMode === 'stars' ? t('likedRatedEmpty') : t('likedEmpty')}
         </p>
       </div>
     );
@@ -132,8 +130,8 @@ function LikedPageInner() {
             </div>
             <p className="video-card-title">{video.title}</p>
             <p className="video-card-meta">
-              {video.profiles?.username ?? 'neznámý tvůrce'} · {video.views} {t('views')}
-              {ratingMode === 'stars' && video.myScore ? ` · tvoje hodnocení: ${video.myScore}★` : ''}
+              {video.profiles?.username ?? t('unknownCreator')} · {video.views} {t('views')}
+              {ratingMode === 'stars' && video.myScore ? ` · ${t('likedYourRating')}: ${video.myScore}★` : ''}
             </p>
           </Link>
         ))}

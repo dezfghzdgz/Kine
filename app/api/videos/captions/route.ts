@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabaseServer';
 import { userFromRequest } from '@/lib/apiUser';
 import { autoCaptionLanguage } from '@/lib/captions';
 import { generateCaptions, generatedCaptions } from '@/lib/autoCaptions';
+import { allowRequest, tooManyRequests } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,9 +18,12 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const videoId = String(body?.videoId ?? '');
   const action = String(body?.action ?? '');
-  if (!videoId || (action !== 'generate' && action !== 'status')) {
+  if (!/^[0-9a-f-]{36}$/i.test(videoId) || (action !== 'generate' && action !== 'status')) {
     return NextResponse.json({ error: 'Neplatný požadavek.' }, { status: 400 });
   }
+  // Generování: pár za hodinu (každé je práce u Cloudflare); stav: stránka se ptá co 5 s.
+  const allowed = action === 'generate' ? allowRequest(`captions-gen:${user.id}`, 6, 60 * 60 * 1000) : allowRequest(`captions-status:${user.id}`, 30, 60 * 1000);
+  if (!allowed) return tooManyRequests(action === 'generate' ? 600 : 15);
 
   const { data: video } = await supabaseServer
     .from('videos')
@@ -40,6 +44,7 @@ export async function POST(req: NextRequest) {
     const state = await generatedCaptions(video.cloudflare_video_id, language);
     return NextResponse.json({ ...state, language });
   } catch (e) {
-    return NextResponse.json({ status: 'error', message: (e as Error).message }, { status: 502 });
+    console.error('Kine: automatické titulky -', (e as Error).message);
+    return NextResponse.json({ status: 'error' }, { status: 502 });
   }
 }

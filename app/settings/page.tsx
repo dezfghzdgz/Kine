@@ -17,6 +17,7 @@ import { SETTINGS_SECTION_EVENT } from '@/lib/settingsNav';
 import ProfileImage from '@/components/ProfileImage';
 import ComingSoon from '@/components/ComingSoon';
 import { CREATOR_PAYMENTS_ENABLED } from '@/lib/payments';
+import { homePostsEnabled, setHomePostsEnabled } from '@/lib/homePosts';
 import {
   PROFILE_IMAGE_MAX_BYTES,
   STILL_MAX_SIDE,
@@ -87,6 +88,11 @@ export default function SettingsPage() {
   const [ratingMode, setRatingMode] = useState<'stars' | 'like_dislike'>('like_dislike');
   const [contentPreference, setContentPreference] = useState<'short' | 'long'>('long');
   const [disableShorts, setDisableShorts] = useState(false);
+  // Řada „Novinky od tvých kanálů“ na hlavní stránce (lib/homePosts.ts) - nastavení v prohlížeči.
+  const [homePosts, setHomePosts] = useState(true);
+  useEffect(() => {
+    setHomePosts(homePostsEnabled());
+  }, []);
   const [uploading, setUploading] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -585,6 +591,19 @@ export default function SettingsPage() {
               <label className="settings-check">
                 <input type="checkbox" checked={disableShorts} onChange={(e) => changeDisableShorts(e.target.checked)} />
                 <span>{t('disableShortsLabel')}</span>
+              </label>
+            </WithHelp>
+            <WithHelp help={t('homePostsSettingHint')} className="settings-option">
+              <label className="settings-check">
+                <input
+                  type="checkbox"
+                  checked={homePosts}
+                  onChange={(e) => {
+                    setHomePosts(e.target.checked);
+                    setHomePostsEnabled(e.target.checked);
+                  }}
+                />
+                <span>{t('homePostsSettingLabel')}</span>
               </label>
             </WithHelp>
           </div>

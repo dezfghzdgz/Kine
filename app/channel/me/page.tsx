@@ -4,10 +4,12 @@ import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { ensureOwnProfile } from '@/lib/ensureProfile';
+import { useLanguage } from '@/lib/i18n';
 
 function MyChannelRedirectInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useLanguage();
 
   useEffect(() => {
     (async () => {
@@ -30,7 +32,7 @@ function MyChannelRedirectInner() {
     })();
   }, [router, searchParams]);
 
-  return <p style={{ color: 'var(--text-faint)' }}>Přesměrovávám na tvůj kanál…</p>;
+  return <p style={{ color: 'var(--text-faint)' }}>{t('redirectingToChannel')}</p>;
 }
 
 export default function MyChannelRedirect() {

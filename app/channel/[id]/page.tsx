@@ -44,6 +44,8 @@ function ChannelPageInner() {
   const [trustRating, setTrustRating] = useState<number | null>(null);
   const [videos, setVideos] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
+  // Kolik příspěvků má kanál jen pro členy (zamčená dlaždice pro ostatní - bez obsahu).
+  const [membersOnlyTotal, setMembersOnlyTotal] = useState(0);
   const [isNewCreator, setIsNewCreator] = useState(false);
   /** Podklady pro odznaky (lib/badges.ts) - vlastní zveřejněná videa, zhlédnutí, Sparks, vysílání. */
   const [badgeStats, setBadgeStats] = useState<BadgeStats | null>(null);
@@ -202,6 +204,10 @@ function ChannelPageInner() {
         })
         .finally(() => clearTimeout(statsTimer));
       setPosts(postData ?? []);
+      // Bez migrace funkce chybí - pak žádná dlaždice.
+      void supabase.rpc('members_only_post_count', { p_owner: channelId }).then(({ data: n, error: e }) => {
+        setMembersOnlyTotal(!e && Number.isFinite(Number(n)) ? Math.max(0, Number(n)) : 0);
+      });
       setChannelPlaylists(playlistData ?? []);
       setSavedPlaylistIds(new Set((myPlaylists ?? []).map((p: any) => p.saved_from)));
 
@@ -482,7 +488,24 @@ function ChannelPageInner() {
       {tab === 'posts' && (
         <div className="post-list">
           {isOwner && <PostComposer userId={userId!} onPosted={load} initialType={searchParams.get('compose') as 'text' | 'photo' | 'poll' | null} />}
-          {posts.length === 0 ? (
+          {(() => {
+            // Příspěvky pro členy, které divák nevidí (není člen): jen počet a možnost se přidat.
+            const locked = isOwner ? 0 : membersOnlyTotal - posts.filter((p) => p.members_only).length;
+            if (locked <= 0 || !profile) return null;
+            return (
+              <div className="post-members-teaser">
+                <span className="post-members-teaser-icon" aria-hidden="true">
+                  <UiIcon name="lock" size={20} />
+                </span>
+                <div className="post-members-teaser-text">
+                  <p className="post-members-teaser-title">{t('postMembersTeaserTitle').replace('{n}', String(locked))}</p>
+                  <p className="post-members-teaser-sub">{t('postMembersTeaserSub')}</p>
+                </div>
+                <CreatorSubscribeButton creatorId={profile.id} />
+              </div>
+            );
+          })()}
+          {posts.length === 0 && !(membersOnlyTotal > 0 && !isOwner) ? (
             <p style={{ color: 'var(--text-faint)' }}>{t('noPostsYet')}</p>
           ) : (
             // Připnuté nahoře (lib/posts.ts - sortPosts).

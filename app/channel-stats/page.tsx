@@ -35,6 +35,7 @@ import {
 import { channelTrust, recordTrustRatingSnapshot, trustScoreFrom, RATING_UNLOCK_THRESHOLD } from '@/lib/trustRatingClient';
 import FieldHint from '@/components/FieldHint';
 import StatsRetention from '@/components/StatsRetention';
+import LiveStatsPanel from '@/components/LiveStatsPanel';
 
 /** Prázdná mřížka 7 dní x 24 hodin pro graf "kdy se lidi dívají". */
 function emptyHeatmap(): number[][] {
@@ -670,6 +671,9 @@ export default function ChannelStatsPage() {
         </p>
         <StatsRetention videos={allVideos} />
       </div>
+
+      {/* Živé vysílání: délka, diváci, chat a podpory (components/LiveStatsPanel.tsx). */}
+      <LiveStatsPanel />
 
       <div
         className="panel"

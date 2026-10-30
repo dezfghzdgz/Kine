@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
@@ -9,6 +9,8 @@ import { useLanguage } from '@/lib/i18n';
 import { autoCaptionLanguage, chaptersFromDescription, parseSubtitles, sanitizeCaptions, sanitizeChapters, toSrt } from '@/lib/captions';
 import ProfileImage from '@/components/ProfileImage';
 import { IMAGE_MAX_BYTES, imageUploadExt, imageUploadProblem, ownStoragePath, thumbnailPath } from '@/lib/imageUpload';
+import UiIcon from '@/components/UiIcon';
+import { CharCount, StudioCard, StudioChoices } from '@/components/StudioParts';
 
 // Na jednom videu se můžou podílet nejvýš 4 tvůrci - ten, kdo ho nahrál,
 // a k tomu tři spolutvůrci. Všichni čtyři se pak ukazují pod videem.
@@ -49,6 +51,25 @@ export default function EditVideoPage() {
   const [videoLanguage, setVideoLanguage] = useState<string | null>(null);
   const [videoReady, setVideoReady] = useState(false);
   const [autoCaptions, setAutoCaptions] = useState<'idle' | 'working' | 'unsupported' | 'error'>('idle');
+  // Nový náhled (ještě neuložený) - ukáže se hned v kartě i v boku.
+  const newThumbPreview = useMemo(() => (newThumbnailFile ? URL.createObjectURL(newThumbnailFile) : null), [newThumbnailFile]);
+  useEffect(
+    () => () => {
+      if (newThumbPreview) URL.revokeObjectURL(newThumbPreview);
+    },
+    [newThumbPreview]
+  );
+
+  /** Nový náhled: typ a velikost hned (lib/imageUpload.ts), uloží se až tlačítkem Uložit. */
+  function pickNewThumbnail(f: File | null) {
+    const problem = f ? imageUploadProblem(f, 'thumbnail') : null;
+    if (f && problem) {
+      setToast({ message: problem === 'size' ? t('imageUploadTooBig').replace('{mb}', String(IMAGE_MAX_BYTES.thumbnail / 1024 / 1024)) : t('imageUploadBadType'), type: 'error' });
+      setNewThumbnailFile(null);
+      return;
+    }
+    setNewThumbnailFile(f);
+  }
 
   async function loadCollaborators() {
     const { data } = await supabase
@@ -395,189 +416,206 @@ export default function EditVideoPage() {
     );
   }
 
+  const shownThumb = newThumbPreview ?? thumbnailUrl;
+
   return (
-    <form className="form-container" style={{ maxWidth: 480 }} onSubmit={handleSave}>
+    <form className="studio" onSubmit={handleSave}>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      <h1>{t('editVideoTitle')}</h1>
-
-      <div className="panel">
-        <p className="panel-heading">{t('thumbnailImageLabel')}</p>
-        {thumbnailUrl && (
-          <img loading="lazy" decoding="async" src={thumbnailUrl} alt={t('thumbnailImageLabel')} style={{ width: '100%', borderRadius: 8, marginBottom: 10 }} />
-        )}
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
-          onChange={(e) => {
-            const f = e.target.files?.[0] ?? null;
-            const problem = f ? imageUploadProblem(f, 'thumbnail') : null;
-            if (f && problem) {
-              setToast({ message: problem === 'size' ? t('imageUploadTooBig').replace('{mb}', String(IMAGE_MAX_BYTES.thumbnail / 1024 / 1024)) : t('imageUploadBadType'), type: 'error' });
-              e.target.value = '';
-              setNewThumbnailFile(null);
-              return;
-            }
-            setNewThumbnailFile(f);
-          }}
-        />
-      </div>
-
-      <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div>
-          <label htmlFor="edit-title" style={{ display: 'block', fontSize: 12, color: 'var(--text-faint)', marginBottom: 6 }}>{t('videoTitle')}</label>
-          <input id="edit-title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={150} required style={{ width: '100%' }} />
+      <header className="studio-head">
+        <div className="studio-head-text">
+          <Link href="/your-videos" className="studio-back">
+            <UiIcon name="chevronLeft" size={15} />
+            {t('backToYourVideosLink').replace(/^\s*[←→]\s*|\s*[←→]\s*$/g, '')}
+          </Link>
+          <h1>{t('editVideoTitle')}</h1>
         </div>
-        <div>
-          <label htmlFor="edit-description" style={{ display: 'block', fontSize: 12, color: 'var(--text-faint)', marginBottom: 6 }}>{t('description2')}</label>
-          <textarea id="edit-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={7} maxLength={5000} style={{ width: '100%' }} />
-        </div>
-      </div>
-
-      <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <p className="panel-heading" style={{ margin: 0 }}>{t('chapters')}</p>
-        <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>{t('chaptersEditHint')}</p>
-        <textarea
-          value={chaptersText}
-          onChange={(e) => setChaptersText(e.target.value)}
-          rows={4}
-          placeholder={'0:00 ' + t('chapterExampleIntro') + '\n1:30 ' + t('chapterExampleMain')}
-          style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 13 }}
-        />
-        {!chaptersText.trim() && chaptersFromDescription(description).length > 0 && (
-          <button type="button" className="live-small-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setChaptersText(chaptersFromDescription(description).map((c) => `${formatChapterTime(c.time)} ${c.title}`).join('\n'))}>
-            {t('chaptersFromDescriptionButton')}
-          </button>
-        )}
-      </div>
-
-      <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <p className="panel-heading" style={{ margin: 0 }}>{t('captions')}</p>
-        <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>{t('captionsEditHint')}</p>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <label className="live-small-btn" style={{ cursor: 'pointer' }}>
-            {t('captionsImportButton')}
-            <input type="file" accept=".srt,.vtt,text/vtt,application/x-subrip" style={{ display: 'none' }} onChange={(e) => importCaptionsFile(e.target.files?.[0] ?? null)} />
-          </label>
-          <button type="button" className="live-small-btn" onClick={generateCaptions} disabled={!videoReady || autoCaptions === 'working'}>
-            {autoCaptions === 'working' ? t('captionsGenerating') : t('captionsGenerateButton')}
-          </button>
-          {captionsText.trim() && (
-            <button type="button" className="live-small-btn live-danger" onClick={() => setCaptionsText('')}>
-              {t('captionsClearButton')}
-            </button>
-          )}
-        </div>
-        {autoCaptions === 'unsupported' && <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>{t('captionsUnsupportedLanguage')}</p>}
-        {autoCaptions === 'error' && <p className="error-text" style={{ margin: 0 }}>{t('captionsGenerateFailed')}</p>}
-        <textarea
-          value={captionsText}
-          onChange={(e) => setCaptionsText(e.target.value)}
-          rows={8}
-          placeholder={'1\n00:00:01,000 --> 00:00:03,500\n' + t('captionTextPlaceholder')}
-          style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12.5 }}
-        />
-      </div>
-
-      <div className="panel">
-        <p className="panel-heading">{t('whoCanSeeVideo')}</p>
-        {([
-          ['public', t('visibilityPublic')],
-          ['subscribers', t('visibilitySubscribers')],
-          ['private', t('visibilityPrivate')],
-        ] as [typeof visibility, string][]).map(([value, label]) => (
-          <label key={value} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8 }}>
-            <input type="radio" name="visibility" style={{ width: 'auto' }} checked={visibility === value} onChange={() => setVisibility(value)} />
-            {label}
-          </label>
-        ))}
-      </div>
-
-      <div className="panel">
-        <p className="panel-heading">{t('channelTrailerLabel')}</p>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-          <input type="checkbox" style={{ width: 'auto' }} checked={isTrailer} onChange={(e) => setIsTrailer(e.target.checked)} />
-          {t('showAsTrailerLabel')}
-        </label>
-      </div>
-
-      <div className="panel">
-        <p className="panel-heading">
-          {t('collaboratorsLabel')}
-          <span style={{ fontWeight: 400, color: 'var(--text-faint)', fontSize: 12, marginLeft: 8 }}>
-            {collaborators.length + 1}/{MAX_VIDEO_CREATORS}
-          </span>
-        </p>
-        <p style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 10 }}>{t('collaboratorsHint')}</p>
-
-        {collaborators.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
-            {collaborators.map((c) => (
-              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="profile-avatar-small" style={{ width: 26, height: 26, overflow: 'hidden' }}>
-                  {c.avatar_url ? <ProfileImage src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
-                </span>
-                <span style={{ fontSize: 13, flex: 1 }}>
-                  {c.username}
-                  {c.status === 'pending' && (
-                    <span style={{ fontSize: 11, color: 'var(--text-faint)', marginLeft: 6 }}>({t('pendingInviteLabel')})</span>
-                  )}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => removeCollaborator(c.id)}
-                  style={{ background: 'none', color: 'var(--text-faint)', padding: 4, fontSize: 12 }}
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <input
-          type="text"
-          placeholder={t('searchUsernamePlaceholder')}
-          value={collabSearch}
-          onChange={(e) => searchCollaborators(e.target.value)}
-          disabled={collaborators.length >= MAX_COLLABORATORS}
-        />
-        {collaborators.length >= MAX_COLLABORATORS && (
-          <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 6 }}>
-            {t('collabLimitReachedNote').replace('{max}', String(MAX_VIDEO_CREATORS))}
-          </p>
-        )}
-        {collabResults.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
-            {collabResults.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => addCollaborator(r.id)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8, background: 'var(--panel-raised)',
-                  border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', textAlign: 'left',
-                }}
-              >
-                <span className="profile-avatar-small" style={{ width: 22, height: 22, overflow: 'hidden', flexShrink: 0 }}>
-                  {r.avatar_url ? <ProfileImage src={r.avatar_url} alt={r.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
-                </span>
-                <span style={{ fontSize: 13, color: 'var(--text)' }}>{r.username}</span>
-              </button>
-            ))}
-          </div>
-        )}
-        {collabError && <p className="error-text" style={{ marginTop: 8 }}>{collabError}</p>}
-      </div>
-
-      <div style={{ display: 'flex', gap: 8 }}>
-        <Link href="/your-videos" style={{ flex: 1 }}>
-          <button type="button" style={{ width: '100%', background: 'var(--panel-raised)', color: 'var(--text)' }}>
-            {t('cancel')}
-          </button>
+        <Link href={`/watch/${videoId}`} className="studio-ghost-btn">
+          <UiIcon name="play" size={14} />
+          {t('studioOpenVideo')}
         </Link>
-        <button type="submit" disabled={saving} style={{ flex: 1 }}>
-          {saving ? t('saving') : t('saveChanges')}
-        </button>
+      </header>
+
+      <div className="studio-grid">
+        <div className="studio-main">
+          <StudioCard icon="pencil" title={t('basicInfo')}>
+            <div className="studio-field">
+              <label htmlFor="edit-title">{t('videoTitle')}</label>
+              <input id="edit-title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={150} required />
+              <CharCount value={title} max={150} />
+            </div>
+            <div className="studio-field">
+              <label htmlFor="edit-description">{t('description2')}</label>
+              <textarea id="edit-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={8} maxLength={5000} />
+              <CharCount value={description} max={5000} />
+            </div>
+          </StudioCard>
+
+          <StudioCard icon="image" title={t('thumbnailImageLabel')}>
+            <div className="studio-thumb">
+              {shownThumb ? <img loading="lazy" decoding="async" src={shownThumb} alt={t('thumbnailImageLabel')} /> : null}
+              <div className="studio-thumb-actions">
+                <label className="studio-ghost-btn">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+                    className="studio-drop-input"
+                    onChange={(e) => {
+                      pickNewThumbnail(e.target.files?.[0] ?? null);
+                      e.target.value = '';
+                    }}
+                  />
+                  <UiIcon name="upload" size={14} />
+                  {t('studioPickImage')}
+                </label>
+                {newThumbnailFile && (
+                  <button type="button" className="studio-ghost-btn" onClick={() => setNewThumbnailFile(null)}>
+                    {t('studioUndoThumb')}
+                  </button>
+                )}
+              </div>
+            </div>
+            {newThumbnailFile && <p className="studio-note">{t('studioThumbUnsaved')}</p>}
+          </StudioCard>
+
+          <StudioCard icon="eye" title={t('whoCanSeeVideo')}>
+            <StudioChoices
+              name="visibility"
+              value={visibility}
+              onChange={setVisibility}
+              options={[
+                { value: 'public', icon: 'globe', title: t('studioVisPublic'), desc: t('studioVisPublicDesc') },
+                { value: 'subscribers', icon: 'users', title: t('studioVisSubscribers'), desc: t('studioVisSubscribersDesc') },
+                { value: 'private', icon: 'lock', title: t('studioVisPrivate'), desc: t('studioVisPrivateDesc') },
+              ]}
+            />
+          </StudioCard>
+
+          <StudioCard icon="sort" title={t('chapters')} hint={t('chaptersEditHint')}>
+            <textarea
+              value={chaptersText}
+              onChange={(e) => setChaptersText(e.target.value)}
+              rows={4}
+              placeholder={'0:00 ' + t('chapterExampleIntro') + '\n1:30 ' + t('chapterExampleMain')}
+              className="studio-mono"
+              aria-label={t('chapters')}
+            />
+            {!chaptersText.trim() && chaptersFromDescription(description).length > 0 && (
+              <button type="button" className="studio-add-btn" onClick={() => setChaptersText(chaptersFromDescription(description).map((c) => `${formatChapterTime(c.time)} ${c.title}`).join('\n'))}>
+                <UiIcon name="sparkle" size={14} />
+                {t('chaptersFromDescriptionButton')}
+              </button>
+            )}
+          </StudioCard>
+
+          <StudioCard icon="quote" title={t('captions')} hint={t('captionsEditHint')}>
+            <div className="studio-thumb-actions">
+              <label className="studio-ghost-btn">
+                <UiIcon name="upload" size={14} />
+                {t('captionsImportButton')}
+                <input type="file" accept=".srt,.vtt,text/vtt,application/x-subrip" className="studio-drop-input" onChange={(e) => importCaptionsFile(e.target.files?.[0] ?? null)} />
+              </label>
+              <button type="button" className="studio-ghost-btn" onClick={generateCaptions} disabled={!videoReady || autoCaptions === 'working'}>
+                <UiIcon name="sparkle" size={14} />
+                {autoCaptions === 'working' ? t('captionsGenerating') : t('captionsGenerateButton')}
+              </button>
+              {captionsText.trim() && (
+                <button type="button" className="studio-ghost-btn studio-danger" onClick={() => setCaptionsText('')}>
+                  {t('captionsClearButton')}
+                </button>
+              )}
+            </div>
+            {autoCaptions === 'unsupported' && <p className="studio-note">{t('captionsUnsupportedLanguage')}</p>}
+            {autoCaptions === 'error' && <p className="error-text" style={{ margin: 0 }}>{t('captionsGenerateFailed')}</p>}
+            <textarea
+              value={captionsText}
+              onChange={(e) => setCaptionsText(e.target.value)}
+              rows={8}
+              placeholder={'1\n00:00:01,000 --> 00:00:03,500\n' + t('captionTextPlaceholder')}
+              className="studio-mono"
+              aria-label={t('captions')}
+            />
+          </StudioCard>
+
+          <StudioCard icon="users" title={t('collaboratorsLabel')} aside={`${collaborators.length + 1}/${MAX_VIDEO_CREATORS}`}>
+            <p className="studio-note">{t('collaboratorsHint')}</p>
+            {collaborators.length > 0 && (
+              <div className="studio-people">
+                {collaborators.map((c) => (
+                  <span key={c.id} className="studio-person">
+                    <span className="studio-person-avatar">
+                      {c.avatar_url ? <ProfileImage src={c.avatar_url} alt={c.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                    </span>
+                    {c.username}
+                    {c.status === 'pending' && <span className="studio-person-pending">{t('pendingInviteLabel')}</span>}
+                    <button type="button" className="icon-btn" onClick={() => removeCollaborator(c.id)} aria-label={t('studioRemove')}>
+                      <UiIcon name="close" size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <input
+              type="text"
+              placeholder={t('searchUsernamePlaceholder')}
+              value={collabSearch}
+              onChange={(e) => searchCollaborators(e.target.value)}
+              disabled={collaborators.length >= MAX_COLLABORATORS}
+              aria-label={t('searchUsernamePlaceholder')}
+            />
+            {collaborators.length >= MAX_COLLABORATORS && <p className="studio-note">{t('collabLimitReachedNote').replace('{max}', String(MAX_VIDEO_CREATORS))}</p>}
+            {collabResults.length > 0 && (
+              <div className="studio-results">
+                {collabResults.map((r) => (
+                  <button key={r.id} type="button" className="studio-result" onClick={() => addCollaborator(r.id)}>
+                    <span className="studio-person-avatar">
+                      {r.avatar_url ? <ProfileImage src={r.avatar_url} alt={r.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                    </span>
+                    {r.username}
+                  </button>
+                ))}
+              </div>
+            )}
+            {collabError && <p className="error-text" style={{ margin: 0 }}>{collabError}</p>}
+          </StudioCard>
+
+          <StudioCard icon="star" title={t('channelTrailerLabel')}>
+            <label className="studio-flag">
+              <input type="checkbox" checked={isTrailer} onChange={(e) => setIsTrailer(e.target.checked)} />
+              <span>{t('showAsTrailerLabel')}</span>
+            </label>
+          </StudioCard>
+        </div>
+
+        <aside className="studio-side">
+          <div className="studio-side-sticky">
+            <div className="studio-preview">
+              <div className="studio-preview-media">
+                {shownThumb ? (
+                  <img src={shownThumb} alt="" />
+                ) : (
+                  <span className="studio-preview-empty" aria-hidden="true">
+                    <UiIcon name="film" size={30} />
+                  </span>
+                )}
+                {!videoReady && <span className="studio-preview-badge">{t('studioProcessing')}</span>}
+              </div>
+              <p className={`studio-preview-title${title.trim() ? '' : ' empty'}`}>{title.trim() || t('studioTitlePlaceholder')}</p>
+              <p className="studio-preview-meta">
+                {{ public: t('studioVisPublic'), subscribers: t('studioVisSubscribers'), private: t('studioVisPrivate') }[visibility]}
+                {isTrailer ? ` · ${t('channelTrailerLabel')}` : ''}
+              </p>
+            </div>
+            <div className="studio-actions">
+              <Link href="/your-videos" className="studio-ghost-btn">
+                {t('cancel')}
+              </Link>
+              <button type="submit" className="studio-primary" disabled={saving}>
+                <UiIcon name="check" size={16} />
+                {saving ? t('saving') : t('saveChanges')}
+              </button>
+            </div>
+          </div>
+        </aside>
       </div>
     </form>
   );

@@ -7,7 +7,8 @@ export const revalidate = 300;
 
 /**
  * Náhled odkazu na příspěvek (Discord, X...): kdo, text a první fotka.
- * Příspěvky jsou veřejné (stejně jako na kanálu); zablokovaný kanál nic neukáže.
+ * Příspěvky jsou veřejné (stejně jako na kanálu); zablokovaný kanál nic neukáže
+ * a příspěvek jen pro členy jen jméno kanálu (bez textu a fotek).
  */
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   if (!/^[0-9a-f-]{36}$/i.test(params.id)) return { title: 'Kine' };
@@ -20,6 +21,10 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const author = (post as any)?.profiles;
   if (!post || author?.is_banned) return { title: 'Kine', robots: { index: false, follow: false } };
   const name = author?.display_name || author?.username || 'Kine';
+  // Příspěvek jen pro členy: náhled odkazu nesmí prozradit text ani fotky (čte se tu bez RLS).
+  if ((post as any).members_only) {
+    return { title: `${name} · Kine`, robots: { index: false, follow: false }, openGraph: { type: 'article', title: `${name} · Kine`, siteName: 'Kine' } };
+  }
   const text = shorten(post.content) ?? (post.type === 'poll' ? (post.poll_options ?? []).map((o: any) => o?.text).filter(Boolean).join(' · ') : null);
   const image = postImages(post)[0];
   const url = `${SITE_URL}/post/${post.id}`;

@@ -345,7 +345,7 @@ function SparksPageInner() {
               color: 'var(--text)', width: 30, height: 30, borderRadius: '50%', fontSize: 16, cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5,
             }}
-            aria-label="Zavřít komentáře"
+            aria-label={t('close')}
           >
             ✕
           </button>

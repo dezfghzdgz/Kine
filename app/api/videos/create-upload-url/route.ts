@@ -6,6 +6,7 @@ import { createTicket, limitsForProfile, uploadProfile, uploadUsage } from '@/li
 import { cloudflareStorageFull, cloudflareStreamCreds, deleteStreamVideo, streamApiUrl } from '@/lib/cloudflareVideos';
 import { outdatedAppResponse } from '@/lib/desktopGate';
 import { kineAppFrom } from '@/lib/desktopClient';
+import { lockKey, withUserLock } from '@/lib/userLock';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,8 @@ export const dynamic = 'force-dynamic';
  * U Cloudflare si zarezervuje jen délku videa (dřív 6 hodin za každé
  * nahrávání - pár požadavků zablokovalo úložiště všem) a nahrávání podepíše
  * id uživatele (creator). K adrese patří lístek (lib/uploadTickets.ts) -
- * bez něj /api/videos/confirm video neuloží.
+ * bez něj /api/videos/confirm video neuloží. Kontrola limitů a založení
+ * nahrávání běží pod zámkem uživatele (souběžné požadavky jdou za sebou).
  */
 export async function POST(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '').trim();
@@ -55,52 +57,63 @@ export async function POST(req: NextRequest) {
   if (!profile) return NextResponse.json({ error: 'Profil nenalezen - dokonči nejdřív registraci.' }, { status: 403 });
   if (profile.is_banned) return NextResponse.json({ error: 'Účet je zablokovaný.', code: 'banned' }, { status: 403 });
 
-  const limits = limitsForProfile(profile, user.created_at ?? null);
-  const { usage } = await uploadUsage(user.id);
-  const check = checkUpload(limits, usage, declared);
-  if (!check.ok) {
-    return NextResponse.json(
-      { error: check.message, code: check.code, limits: { maxVideoSeconds: limits.maxVideoSeconds, perDay: limits.perDay } },
-      { status: check.status, headers: { 'Cache-Control': 'no-store' } }
-    );
-  }
-
-  const reserve = check.reserveSeconds;
-  const resumable = fileSize > RESUMABLE_FROM_BYTES || (preferResumable && fileSize > 0);
-  const created = resumable
-    ? await createResumableUpload(cf.accountId, cf.token, fileSize, reserve, user.id)
-    : await createBasicUpload(cf.accountId, cf.token, reserve, user.id);
-  if (!created.ok) {
-    // Do logů Vercelu - podle toho jde poznat, co Cloudflare vadilo.
-    console.error('create-upload-url: Cloudflare odmítl nahrávání', created.error, JSON.stringify(created.details ?? null).slice(0, 800));
-    // Plné úložiště u Cloudflare (minuty předplatného Stream): ať je jasné, že nejde o chybu appky.
-    if (cloudflareStorageFull(created.details)) {
+  // Požadavky jednoho uživatele jdou za sebou (lib/userLock.ts): jinak by 20 souběžných
+  // požadavků spočítalo stejný stav limitů a všechny by u Cloudflare založily nahrávání.
+  const locked = await withUserLock(lockKey('upload', user.id), async () => {
+    const limits = limitsForProfile(profile, user.created_at ?? null);
+    const { usage } = await uploadUsage(user.id);
+    const check = checkUpload(limits, usage, declared);
+    if (!check.ok) {
       return NextResponse.json(
-        { error: 'Úložiště videí Kine je teď plné - nahrávání chvíli nepůjde. Dej prosím vědět správci Kine.', code: 'cf-storage' },
-        { status: 507, headers: { 'Cache-Control': 'no-store' } }
+        { error: check.message, code: check.code, limits: { maxVideoSeconds: limits.maxVideoSeconds, perDay: limits.perDay } },
+        { status: check.status, headers: { 'Cache-Control': 'no-store' } }
       );
     }
-    return NextResponse.json({ error: created.error, details: created.details }, { status: 502 });
-  }
 
-  const ticket = await createTicket({
-    userId: user.id,
-    cfUid: created.videoId,
-    reservedSeconds: reserve,
-    declaredSeconds: declared,
-    fileBytes: fileSize,
-    source: kineAppFrom(req.headers) ? 'desktop' : 'web',
-  });
-  if (!ticket.ok && !ticket.missingTable) {
-    // Bez lístku by video nešlo uložit - nahrávání u Cloudflare se hned zruší.
-    await deleteStreamVideo(created.videoId);
-    return NextResponse.json({ error: `Nahrávání se nepodařilo připravit: ${ticket.message}` }, { status: 500 });
-  }
+    const reserve = check.reserveSeconds;
+    const resumable = fileSize > RESUMABLE_FROM_BYTES || (preferResumable && fileSize > 0);
+    const created = resumable
+      ? await createResumableUpload(cf.accountId, cf.token, fileSize, reserve, user.id)
+      : await createBasicUpload(cf.accountId, cf.token, reserve, user.id);
+    if (!created.ok) {
+      // Do logů Vercelu - podle toho jde poznat, co Cloudflare vadilo.
+      console.error('create-upload-url: Cloudflare odmítl nahrávání', created.error, JSON.stringify(created.details ?? null).slice(0, 800));
+      // Plné úložiště u Cloudflare (minuty předplatného Stream): ať je jasné, že nejde o chybu appky.
+      if (cloudflareStorageFull(created.details)) {
+        return NextResponse.json(
+          { error: 'Úložiště videí Kine je teď plné - nahrávání chvíli nepůjde. Dej prosím vědět správci Kine.', code: 'cf-storage' },
+          { status: 507, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+      return NextResponse.json({ error: created.error, details: created.details }, { status: 502 });
+    }
 
-  return NextResponse.json(
-    { mode: created.mode, uploadURL: created.uploadURL, videoId: created.videoId, maxDurationSeconds: reserve },
-    { headers: { 'Cache-Control': 'no-store' } }
-  );
+    const ticket = await createTicket({
+      userId: user.id,
+      cfUid: created.videoId,
+      reservedSeconds: reserve,
+      declaredSeconds: declared,
+      fileBytes: fileSize,
+      source: kineAppFrom(req.headers) ? 'desktop' : 'web',
+    });
+    if (!ticket.ok && !ticket.missingTable) {
+      // Bez lístku by video nešlo uložit - nahrávání u Cloudflare se hned zruší.
+      await deleteStreamVideo(created.videoId);
+      return NextResponse.json({ error: `Nahrávání se nepodařilo připravit: ${ticket.message}` }, { status: 500 });
+    }
+
+    return NextResponse.json(
+      { mode: created.mode, uploadURL: created.uploadURL, videoId: created.videoId, maxDurationSeconds: reserve },
+      { headers: { 'Cache-Control': 'no-store' } }
+    );
+  }, { waitMs: 6000 });
+  if (!locked.ok) {
+    return NextResponse.json(
+      { error: 'Právě se připravuje jiné nahrávání - zkus to za pár sekund znovu.', code: 'busy' },
+      { status: 429, headers: { 'Cache-Control': 'no-store', 'Retry-After': '3' } }
+    );
+  }
+  return locked.value;
 }
 
 type Created = { ok: true; mode: 'basic' | 'tus'; uploadURL: string; videoId: string } | { ok: false; error: string; details?: unknown };

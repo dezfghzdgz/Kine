@@ -8,6 +8,7 @@ import { runInBackground } from '@/lib/background';
 import { CREATOR_PAYMENTS_ENABLED } from '@/lib/payments';
 import { tipTarget } from '@/lib/liveTipsServer';
 import { tipFeePercent } from '@/lib/liveTips';
+import { peekLiveViewers, sampleLiveRow } from '@/lib/liveStats';
 
 export const dynamic = 'force-dynamic';
 // Na pozadí může běžet kontrola obsahu (lib/nudityScan.ts) - funkce smí doběhnout až minutu.
@@ -97,6 +98,10 @@ export async function GET(req: NextRequest) {
   if (!row) return NextResponse.json({ enabled: true, live: false, profile: publicProfile, stream: null }, { headers: { 'Cache-Control': 'no-store' } });
   const stream = await publicLive(row as LiveStreamRow);
   if (stream.live) runInBackground(import('@/lib/nudityScan').then((m) => m.scanLiveStreams()), 'kontrola obsahu přenosů');
+  // Statistiky vysílání (lib/liveStats.ts) - na pozadí, nejvýš jednou za minutu; počet diváků
+  // pro stránku přenosu jen z paměti (nikdy se na něj nečeká).
+  if (stream.live) runInBackground(sampleLiveRow(row as LiveStreamRow), 'statistiky vysílání');
+  const viewers = stream.live ? peekLiveViewers((row as LiveStreamRow).cf_input_id) : null;
 
   // Přenos skrytý automatickou kontrolou obsahu: divákům bez přehrávače
   // ("čeká na kontrolu"), majitel a moderátoři Kine ho vidí i s upozorněním.
@@ -125,7 +130,7 @@ export async function GET(req: NextRequest) {
   // Jen dotaz bez přihlášení s "anon=1" v adrese (lib/authHeaders.ts - cacheableUrl) - přihlášený má jinou adresu.
   const anonymous = !req.headers.get('authorization') && req.nextUrl.searchParams.get('anon') === '1';
   return NextResponse.json(
-    { enabled: true, live: stream.live, profile: publicProfile, stream, tips, lastRecording, ...(restricted ? { moderation: { hidden: false, restricted } } : {}) },
+    { enabled: true, live: stream.live, profile: publicProfile, stream, tips, lastRecording, viewers, ...(restricted ? { moderation: { hidden: false, restricted } } : {}) },
     { headers: anonymous && !restricted ? { 'Cache-Control': 'public, s-maxage=3, stale-while-revalidate=5', Vary: 'Authorization' } : { 'Cache-Control': 'private, no-store' } }
   );
 }

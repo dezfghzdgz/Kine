@@ -76,7 +76,9 @@ test('zastaralá appka - jen když je nová verze opravdu venku', () => {
 test('obrázky jen z důvěryhodných míst', () => {
   const own = 'abcxyz.supabase.co';
   assert.equal(M.trustedImageUrl('https://abcxyz.supabase.co/storage/v1/object/public/avatars/u/avatar.png', own), 'https://abcxyz.supabase.co/storage/v1/object/public/avatars/u/avatar.png');
-  assert.ok(M.trustedImageUrl('https://other.supabase.co/x.png', own));
+  // Cizí projekt Supabase ne - jen vlastní (lib/trustedMedia.ts); bez známé vlastní adresy jakýkoli.
+  assert.equal(M.trustedImageUrl('https://other.supabase.co/x.png', own), null);
+  assert.ok(M.trustedImageUrl('https://other.supabase.co/x.png', null));
   assert.ok(M.trustedImageUrl('https://customer-abc123.cloudflarestream.com/uid/thumbnails/thumbnail.jpg', own));
   assert.ok(M.trustedImageUrl('https://videodelivery.net/uid/thumbnails/thumbnail.jpg', own));
   assert.ok(M.trustedImageUrl('https://media2.giphy.com/media/x/giphy.gif', own));

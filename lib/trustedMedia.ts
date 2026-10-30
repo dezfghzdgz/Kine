@@ -5,6 +5,8 @@
  * zapsat sám - kdyby šla libovolná, stačilo by vložit obrázek z vlastního
  * serveru a ten by zjistil IP adresu každého, kdo stránku otevře.
  *
+ * Úložiště Kine = jen vlastní projekt Supabase (NEXT_PUBLIC_SUPABASE_URL).
+ *
  * Čistá logika (tests/trustedMedia.test.mjs).
  */
 
@@ -17,10 +19,24 @@ function supabaseHost(): string | null {
   }
 }
 
-export function isTrustedImageHost(host: string, ownSupabaseHost: string | null = supabaseHost()): boolean {
+/**
+ * Další hosty obrázků navíc (NEXT_PUBLIC_EXTRA_IMAGE_HOSTS, čárkou oddělené) -
+ * třeba starý projekt Supabase po stěhování, aby staré profilovky nezmizely.
+ */
+function extraHosts(): string[] {
+  return String(process.env.NEXT_PUBLIC_EXTRA_IMAGE_HOSTS ?? '')
+    .split(',')
+    .map((h) => h.trim().toLowerCase())
+    .filter((h) => /^[a-z0-9.-]+$/.test(h));
+}
+
+export function isTrustedImageHost(host: string, ownSupabaseHost: string | null = supabaseHost(), extra: readonly string[] = extraHosts()): boolean {
   const h = host.toLowerCase();
   if (ownSupabaseHost && h === ownSupabaseHost) return true;
-  if (/^[a-z0-9-]+\.supabase\.co$/.test(h)) return true;
+  if (extra.includes(h)) return true;
+  // Jen vlastní projekt Supabase: cizí projekt (zdarma ho má kdokoli) by v logu viděl IP diváků.
+  // Bez nastavené adresy (testy, vývoj) jakýkoli *.supabase.co jako dřív.
+  if (!ownSupabaseHost && /^[a-z0-9-]+\.supabase\.co$/.test(h)) return true;
   if (/^customer-[a-z0-9]+\.cloudflarestream\.com$/.test(h) || h === 'videodelivery.net' || h === 'imagedelivery.net') return true;
   if (/^media[0-9]*\.giphy\.com$/.test(h) || h === 'i.giphy.com') return true;
   return false;

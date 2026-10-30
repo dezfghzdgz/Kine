@@ -6,7 +6,6 @@ import {
   diagnoseLiveRow,
   liveDecisionNote,
   liveSyncInfo,
-  liveViewerCount,
   publicLive,
   syncLiveStreamsForViewers,
   type LiveStreamRow,
@@ -16,6 +15,7 @@ import { liveHiddenNow } from '@/lib/nudityRules';
 import { runInBackground } from '@/lib/background';
 import { secondsSince } from '@/lib/liveEvents';
 import { appPingFresh } from '@/lib/liveSignal';
+import { cachedLiveViewers, sampleLiveRow } from '@/lib/liveStats';
 
 /** Proč přenos ostatní nevidí: kontrola obsahu (vidí majitel a tým Kine), zablokovaný účet, shadow-ban (jen tým Kine). */
 type LiveHiddenReason = 'moderation' | LiveRestriction;
@@ -53,22 +53,6 @@ async function loadProfiles(ids: string[]): Promise<Map<string, LiveNowProfile> 
   }
   for (const p of rows ?? []) map.set(p.id, p);
   return map;
-}
-
-/** Počty diváků od Cloudflare si server chvíli pamatuje - stránka Živě se obnovuje každých 20 s. */
-const VIEWERS_TTL_MS = 30 * 1000;
-const viewersCache = new Map<string, { at: number; value: number | null }>();
-
-async function cachedViewers(inputId: string | null): Promise<number | null> {
-  if (!inputId) return null;
-  const hit = viewersCache.get(inputId);
-  if (hit && Date.now() - hit.at < VIEWERS_TTL_MS) return hit.value;
-  const value = await liveViewerCount(inputId).catch(() => null);
-  viewersCache.set(inputId, { at: Date.now(), value });
-  if (viewersCache.size > 500) {
-    for (const [key, entry] of viewersCache) if (Date.now() - entry.at > VIEWERS_TTL_MS) viewersCache.delete(key);
-  }
-  return value;
 }
 
 /** Řádek přenosu pro diagnostiku (jen tým Kine): stav, stáří údajů a proč (ne)je v seznamu. */
@@ -170,6 +154,9 @@ export async function GET(req: NextRequest) {
     // Proč ho ostatní nevidí (popisek u karty) - jen pro majitele (kontrola obsahu) a tým Kine.
     hidden: (liveHiddenNow(entry.row as any) ? 'moderation' : entry.restricted) as LiveHiddenReason | null,
   }));
+  // Statistiky vysílání pro tvůrce (lib/liveStats.ts): diváci a délka - na pozadí, nejvýš jednou
+  // za minutu na přenos, ať se ptá kdokoli (seznam Živě se obnovuje pořád, cron není potřeba).
+  if (live.length > 0) runInBackground(Promise.all(live.map((r) => sampleLiveRow(r))), 'statistiky vysílání');
   // Kolik přenosů vidí každý (číslo u Živě v menu - stejné jako bez přihlášení).
   const publicCount = all.filter((e) => !e.hidden).length;
   if (countOnly) {
@@ -185,7 +172,7 @@ export async function GET(req: NextRequest) {
         return {
           ...(await publicLive(row)),
           followed: followed.has(row.owner_id),
-          viewers: withViewers ? await cachedViewers(row.cf_input_id) : null,
+          viewers: withViewers ? await cachedLiveViewers(row.cf_input_id) : null,
           hidden,
           profile: { id: profile.id, username: profile.username, displayName: profile.display_name, avatarUrl: profile.avatar_url, verificationTier: profile.verification_tier },
         };

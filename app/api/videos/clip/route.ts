@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { supabaseAsUser, bearerFrom } from '@/lib/supabaseAsUser';
 import { CLIPS_PER_DAY, clipTitle, normalizeClipRange } from '@/lib/clips';
+import { deleteStreamVideo } from '@/lib/cloudflareVideos';
+import { lockKey, withUserLock } from '@/lib/userLock';
 
 /**
  * Vystřižení klipu: POST { videoId, start, end } -> { clipId }
@@ -51,78 +53,89 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Neplatný rozsah klipu.', code: range.reason }, { status: 400 });
   }
 
-  // Denní strop na klipy jednoho účtu - každý klip je nové video u Cloudflare.
-  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { count: clipsToday, error: countError } = await supabaseServer
-    .from('videos')
-    .select('id', { count: 'exact', head: true })
-    .eq('clipped_by', userId)
-    .gte('created_at', since24h);
+  // Počítání denního stropu a založení klipu jde pod zámkem (lib/userLock.ts) - souběžné
+  // požadavky by jinak všechny prošly stropem a každý by u Cloudflare vyrobil video.
+  const locked = await withUserLock(lockKey('clip', userId), async () => {
+    // Denní strop na klipy jednoho účtu - každý klip je nové video u Cloudflare.
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { count: clipsToday, error: countError } = await supabaseServer
+      .from('videos')
+      .select('id', { count: 'exact', head: true })
+      .eq('clipped_by', userId)
+      .gte('created_at', since24h);
 
-  if (countError) {
-    // Sloupec ještě není (migrace neproběhla) - klipy bez ní nejdou.
-    return NextResponse.json({ error: 'Klipy zatím nejsou zapnuté (chybí migrace supabase-migration-klipy.sql).', code: 'not-configured' }, { status: 503 });
-  }
-  if ((clipsToday ?? 0) >= CLIPS_PER_DAY) {
-    return NextResponse.json({ error: `Dnes už máš ${CLIPS_PER_DAY} klipů. Zkus to zítra.`, code: 'limit' }, { status: 429 });
-  }
-
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-  const apiToken = process.env.CLOUDFLARE_STREAM_API_TOKEN;
-  const title = clipTitle(video.title, range.start, range.end);
-
-  let clipUid: string | null = null;
-  try {
-    const cfRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/clip`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clippedFromVideoUID: video.cloudflare_video_id,
-        startTimeSeconds: range.start,
-        endTimeSeconds: range.end,
-        thumbnailTimestampPct: 0.1,
-        meta: { name: title },
-      }),
-    });
-    const cfData = await cfRes.json().catch(() => ({ success: false }));
-    if (!cfData?.success || !cfData?.result?.uid) {
-      return NextResponse.json(
-        { error: 'Cloudflare klip odmítl.', details: cfData?.errors ?? cfRes.status },
-        { status: 502 }
-      );
+    if (countError) {
+      // Sloupec ještě není (migrace neproběhla) - klipy bez ní nejdou.
+      return NextResponse.json({ error: 'Klipy zatím nejsou zapnuté (chybí migrace supabase-migration-klipy.sql).', code: 'not-configured' }, { status: 503 });
     }
-    clipUid = cfData.result.uid as string;
-  } catch (e: any) {
-    return NextResponse.json({ error: 'Cloudflare se nepodařilo zavolat.', details: e?.message }, { status: 502 });
+    if ((clipsToday ?? 0) >= CLIPS_PER_DAY) {
+      return NextResponse.json({ error: `Dnes už máš ${CLIPS_PER_DAY} klipů. Zkus to zítra.`, code: 'limit' }, { status: 429 });
+    }
+
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+    const apiToken = process.env.CLOUDFLARE_STREAM_API_TOKEN;
+    const title = clipTitle(video.title, range.start, range.end);
+
+    let clipUid: string | null = null;
+    try {
+      const cfRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/clip`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clippedFromVideoUID: video.cloudflare_video_id,
+          startTimeSeconds: range.start,
+          endTimeSeconds: range.end,
+          thumbnailTimestampPct: 0.1,
+          meta: { name: title },
+        }),
+      });
+      const cfData = await cfRes.json().catch(() => ({ success: false }));
+      if (!cfData?.success || !cfData?.result?.uid) {
+        return NextResponse.json(
+          { error: 'Cloudflare klip odmítl.', details: cfData?.errors ?? cfRes.status },
+          { status: 502 }
+        );
+      }
+      clipUid = cfData.result.uid as string;
+    } catch (e: any) {
+      return NextResponse.json({ error: 'Cloudflare se nepodařilo zavolat.', details: e?.message }, { status: 502 });
+    }
+
+    const { data: clip, error: insertError } = await supabaseServer
+      .from('videos')
+      .insert({
+        owner_id: video.owner_id,
+        title,
+        description: video.description ?? null,
+        cloudflare_video_id: clipUid,
+        status: 'processing',
+        visibility: 'public',
+        category: video.category ?? null,
+        language: video.language ?? 'cs',
+        made_for_kids: video.made_for_kids ?? false,
+        hashtags: video.hashtags ?? [],
+        width: video.width ?? null,
+        height: video.height ?? null,
+        duration_seconds: range.end - range.start,
+        chapters: [],
+        captions: [],
+        clipped_from_video_id: video.id,
+        clipped_by: userId,
+      })
+      .select('id')
+      .single();
+
+    if (insertError || !clip) {
+      // Video u Cloudflare by jinak zůstalo viset bez řádku (a zabíralo by placené úložiště).
+      console.error('clip: klip se neuložil -', insertError?.message);
+      await deleteStreamVideo(clipUid);
+      return NextResponse.json({ error: 'Klip se nepodařilo uložit.' }, { status: 500 });
+    }
+
+    return NextResponse.json({ clipId: clip.id, start: range.start, end: range.end, title });
+  }, { waitMs: 6000 });
+  if (!locked.ok) {
+    return NextResponse.json({ error: 'Jiný klip se právě vytváří - zkus to za pár sekund znovu.', code: 'busy' }, { status: 429, headers: { 'Retry-After': '3' } });
   }
-
-  const { data: clip, error: insertError } = await supabaseServer
-    .from('videos')
-    .insert({
-      owner_id: video.owner_id,
-      title,
-      description: video.description ?? null,
-      cloudflare_video_id: clipUid,
-      status: 'processing',
-      visibility: 'public',
-      category: video.category ?? null,
-      language: video.language ?? 'cs',
-      made_for_kids: video.made_for_kids ?? false,
-      hashtags: video.hashtags ?? [],
-      width: video.width ?? null,
-      height: video.height ?? null,
-      duration_seconds: range.end - range.start,
-      chapters: [],
-      captions: [],
-      clipped_from_video_id: video.id,
-      clipped_by: userId,
-    })
-    .select('id')
-    .single();
-
-  if (insertError || !clip) {
-    return NextResponse.json({ error: insertError?.message ?? 'Klip se nepodařilo uložit.' }, { status: 500 });
-  }
-
-  return NextResponse.json({ clipId: clip.id, start: range.start, end: range.end, title });
+  return locked.value;
 }

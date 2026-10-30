@@ -20,13 +20,15 @@ function test(nazev, fn) {
 
 const NOW = Date.parse('2026-10-13T12:00:00Z');
 
-test('fotky: nové pole i starý jeden obrázek, jen https, bez opakování, nejvýš 4', () => {
+test('fotky: nové pole i starý jeden obrázek, jen https, bez opakování, nejvýš 10', () => {
   assert.deepEqual(p.postImages({ image_url: 'https://a.co/1.jpg' }), ['https://a.co/1.jpg']);
   assert.deepEqual(
     p.postImages({ image_urls: ['https://a.co/1.jpg', 'https://a.co/2.jpg', 'javascript:x', 'https://a.co/1.jpg'], image_url: 'https://a.co/1.jpg' }),
     ['https://a.co/1.jpg', 'https://a.co/2.jpg']
   );
-  assert.equal(p.postImages({ image_urls: ['https://a/1', 'https://a/2', 'https://a/3', 'https://a/4', 'https://a/5'] }).length, 4);
+  assert.equal(p.postImages({ image_urls: ['https://a/1', 'https://a/2', 'https://a/3', 'https://a/4', 'https://a/5'] }).length, 5);
+  assert.equal(p.postImages({ image_urls: Array.from({ length: 14 }, (_, i) => `https://a/${i}`) }).length, 10);
+  assert.equal(p.MAX_POST_IMAGES, 10);
   assert.deepEqual(p.postImages(null), []);
 });
 

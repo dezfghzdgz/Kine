@@ -129,7 +129,9 @@ Peníze jdou přes Stripe rovnou na Stripe účet tvůrce, Kine si nechá 15 %
    (tvůrci to uvidí při propojení).
 2. **Supabase → SQL Editor** - spusť (jdou pouštět opakovaně):
    `supabase-migration-creator-subscriptions.sql`,
-   `supabase-migration-podpory-kontrola.sql`, `supabase-migration-super-diky.sql`.
+   `supabase-migration-podpory-kontrola.sql`, `supabase-migration-super-diky.sql`
+   a pak ještě jednou `supabase-migration-statistiky-prispevky-zamky.sql`
+   (část „příspěvky jen pro členy“ potřebuje tabulku členství).
 3. **Vercel:** `NEXT_PUBLIC_CREATOR_PAYMENTS=1` (volitelně `LIVE_TIP_FEE_PERCENT`,
    výchozí 15) → **Redeploy**. Na `/admin/stripe` pak klikni na „Vytvořit /
    opravit webhook“ - doplní událost `charge.refunded` (vrácené podpory se
@@ -137,9 +139,35 @@ Peníze jdou přes Stripe rovnou na Stripe účet tvůrce, Kine si nechá 15 %
 4. **Tvůrce:** Settings → výdělky tvůrce → propojit Stripe (ověření totožnosti a
    bankovní účet přímo u Stripe) → nastavit cenu předplatného kanálu.
 5. **Vyzkoušej** z druhého účtu: Super díky pod videem, podpora v přenosu,
-   předplatné kanálu.
+   předplatné kanálu a příspěvek „Jen pro členy“ (nečlen vidí jen zamčenou
+   dlaždici s počtem, člen celý příspěvek).
 
 Počítej s tím, že Stripe Connect stojí Kine asi €2 za každého tvůrce v měsíci,
 kdy dostane výplatu (+ 0,25 % a pár centů za výplatu) - 15 % se vyplatí u tvůrců,
 kteří dostanou aspoň ~€15-20 měsíčně. Kine tu přijímá peníze pro tvůrce, tak
 to prober s účetní.
+
+## 9. Databáze: zámky, statistiky vysílání, příspěvky (migrace) a šifrovaná záloha
+
+1. **Supabase → SQL Editor** → spusť `supabase-migration-statistiky-prispevky-zamky.sql`
+   (celý soubor; jde pouštět opakovaně). Na konci vypíše tři sloupce - `true` znamená
+   hotovo:
+   - `zamky` - souběžná nahrávání jednoho účtu jdou za sebou (limity nejde obejít
+     20 požadavky naráz),
+   - `statistiky_vysilani` - Statistiky kanálu → Živé vysílání (sbírá se od teď),
+   - `prispevky_pro_cleny` - až 10 fotek v příspěvku, příspěvky jen pro členy, brzda
+     3 příspěvky za minutu. Když je tu `false`, chybí tabulka členství - viz krok 8.
+2. **Záloha databáze je šifrovaná.** GitHub → repo Kine → Settings → Secrets and
+   variables → Actions → New repository secret `BACKUP_PASSPHRASE` = dlouhé náhodné
+   heslo (aspoň 24 znaků). **Ulož si ho i jinde** (správce hesel) - bez něj zálohu
+   neotevře nikdo, ani ty. Bez tohohle secretu se záloha schválně nenahraje.
+   Obnova: `gpg --decrypt zaloha-….sql.gz.gpg | gunzip > zaloha.sql` (návod je
+   i v `.github/workflows/zaloha-databaze.yml`).
+3. **Doporučeně repo Kine soukromé** (Settings → General → Danger Zone → Change
+   visibility → Private). Artefakty (zálohy) veřejného repa si stáhne kdokoli
+   přihlášený na GitHubu a kód veřejně ukazuje, kde hledat slabá místa. Vercel
+   funguje se soukromým repem dál.
+4. Jestli záloha někdy proběhla nešifrovaně (Actions → Záloha databáze → zelené běhy):
+   smaž u každého běhu artefakt (Artifacts → koš) a ve Studiu (Živě) si nech vygenerovat
+   nový klíč pro vysílání - stará záloha ho obsahovala.
+

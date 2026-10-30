@@ -36,7 +36,8 @@ export default async function EmbedPage({ params, searchParams }: Props) {
   if (!video || !video.cloudflare_video_id) {
     return (
       <div className="embed-shell embed-unavailable">
-        <p>Toto video není na Kine veřejně dostupné.</p>
+        {/* Přehrávač na cizím webu - jazyk návštěvníka neznáme, proto anglicky. */}
+        <p>This video isn&apos;t publicly available on Kine.</p>
         <a href={SITE_URL} target="_blank" rel="noopener noreferrer">Kine</a>
       </div>
     );

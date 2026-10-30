@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { allowRequest, tooManyRequests } from '@/lib/rateLimit';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { shouldBeProtected, syncVideoProtection } from '@/lib/streamProtection';
 import { sweepProcessing } from '@/lib/markVideoReady';
@@ -29,6 +30,8 @@ export async function POST(req: NextRequest) {
   const { data: userData, error: userError } = await supabaseServer.auth.getUser(token);
   if (userError || !userData.user) return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });
   const userId = userData.user.id;
+  // Pojistka proti zahlcení (běžně jedno potvrzení na video, appka ho při chybě pár krát zopakuje).
+  if (!allowRequest(`confirm:${userId}`, 20, 60 * 1000)) return tooManyRequests(20);
 
   const outdated = await outdatedAppResponse(req);
   if (outdated) return outdated;

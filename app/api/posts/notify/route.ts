@@ -19,7 +19,11 @@ export async function POST(req: NextRequest) {
   const postId = typeof body?.postId === 'string' ? body.postId : '';
   if (!/^[0-9a-f-]{36}$/i.test(postId)) return NextResponse.json({ error: 'Neplatný příspěvek.' }, { status: 400 });
 
-  const { data: post } = await supabaseServer.from('posts').select('id, owner_id, type, content, created_at').eq('id', postId).maybeSingle();
+  // members_only je až s migrací statistiky-prispevky-zamky - bez ní se čte bez něj.
+  let { data: post, error } = await supabaseServer.from('posts').select('id, owner_id, type, content, created_at, members_only').eq('id', postId).maybeSingle();
+  if (error && /members_only/i.test(error.message ?? '')) {
+    ({ data: post } = await supabaseServer.from('posts').select('id, owner_id, type, content, created_at').eq('id', postId).maybeSingle());
+  }
   if (!post || post.owner_id !== user.id) return NextResponse.json({ error: 'Příspěvek nenalezen.' }, { status: 404 });
   if (Date.now() - Date.parse(post.created_at) > FRESH_MS) return NextResponse.json({ ok: false, reason: 'old' });
 

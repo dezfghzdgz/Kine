@@ -8,6 +8,7 @@ import { runInBackground } from '@/lib/background';
 import { liveHiddenNow } from '@/lib/nudityRules';
 import { liveMaxHours, recordingKeepDays, reenableIfCooledDown } from '@/lib/liveLimits';
 import { outdatedAppResponse } from '@/lib/desktopGate';
+import { sampleLiveSession } from '@/lib/liveStats';
 
 export const dynamic = 'force-dynamic';
 // Na pozadí může běžet kontrola obsahu (lib/nudityScan.ts) - funkce smí doběhnout až minutu.
@@ -86,6 +87,20 @@ export async function POST(req: NextRequest) {
     if (!result) return NextResponse.json({ error: 'Nejdřív si založ klíč pro vysílání.' }, { status: 404 });
     // Appka hlásí přenos pravidelně - snímek pro kontrolu obsahu se vezme i bez diváků.
     if (action !== 'stopped') runInBackground(import('@/lib/nudityScan').then((m) => m.scanLiveStreams()), 'kontrola obsahu přenosů');
+    // Statistiky vysílání (lib/liveStats.ts): appka hlásí i ve chvíli, kdy se nikdo nedívá na web.
+    if (action !== 'stopped' && result.live) {
+      runInBackground(
+        (async () => {
+          const { data: row } = await supabaseServer
+            .from('live_streams')
+            .select('owner_id, started_at, title, category, cf_input_id, is_live')
+            .eq('owner_id', user.id)
+            .maybeSingle();
+          if (row?.is_live) await sampleLiveSession(row as LiveStreamRow, typeof result.viewers === 'number' ? result.viewers : null);
+        })(),
+        'statistiky vysílání'
+      );
+    }
     return NextResponse.json(
       {
         ok: true,

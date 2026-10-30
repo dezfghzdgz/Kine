@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { sanitizeDeviceClass } from '@/lib/deviceClass';
 import { MAX_MESSAGE, MAX_STACK, MAX_URL } from '@/lib/errorReporter';
+import { allowRequest } from '@/lib/rateLimit';
+import { createHash } from 'node:crypto';
 
 /**
  * Přijímá chyby z prohlížeče (lib/errorReporter.ts) a ukládá je do
@@ -16,11 +18,25 @@ import { MAX_MESSAGE, MAX_STACK, MAX_URL } from '@/lib/errorReporter';
  * "ať jeden rozbitý prohlížeč nezaplní tabulku" to stačí. Prohlížeč sám
  * navíc posílá nejvíc 10 hlášení na jedno načtení stránky.
  *
+ * User agent si ale skript může měnit, proto navíc (jen v paměti serveru,
+ * nikam se neukládá): nejvýš PER_IP_PER_MINUTE hlášení z jedné adresy
+ * (otisk IP), celkový strop GLOBAL_PER_MINUTE na instanci a nejvýš 32 kB
+ * na jedno hlášení - tabulku tak nejde zaplavit (místo v databázi = peníze).
+ *
  * Odpovídá vždycky 204, i když se zápis nepovede: prohlížeč, který právě
  * hlásí chybu, nemá co dělat s další chybou od nás.
  */
 
 const PER_CLIENT_PER_MINUTE = 30;
+const PER_IP_PER_MINUTE = 20;
+const GLOBAL_PER_MINUTE = 600;
+const MAX_BODY_BYTES = 32 * 1024;
+
+/** Krátký otisk IP adresy (jen klíč do paměti brzdy - adresa se nikam neukládá). */
+function ipKey(req: NextRequest): string {
+  const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || req.headers.get('x-real-ip') || 'unknown';
+  return createHash('sha256').update(ip).digest('base64url').slice(0, 16);
+}
 // perf = pomalé video (lib/vodPlayer.ts - reportSlowVideo): statistiky přehrávání místo zásobníku.
 const ALLOWED_KINDS = new Set(['error', 'rejection', 'perf']);
 
@@ -32,11 +48,16 @@ function cut(value: unknown, max: number): string | null {
 }
 
 export async function POST(req: NextRequest) {
+  if (Number(req.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) return new NextResponse(null, { status: 204 });
+  if (!allowRequest(`client-errors:${ipKey(req)}`, PER_IP_PER_MINUTE, 60_000)) return new NextResponse(null, { status: 204 });
+  if (!allowRequest('client-errors:all', GLOBAL_PER_MINUTE, 60_000)) return new NextResponse(null, { status: 204 });
   let data: any;
   try {
     // sendBeacon posílá Blob s application/json, fetch posílá JSON - obojí
     // přečte text() a JSON.parse.
-    data = JSON.parse(await req.text());
+    const text = await req.text();
+    if (text.length > MAX_BODY_BYTES) return new NextResponse(null, { status: 204 });
+    data = JSON.parse(text);
   } catch {
     return new NextResponse(null, { status: 204 });
   }

@@ -15,6 +15,21 @@ function canonicalSite() {
 }
 
 /** @type {import('next').NextConfig} */
+/** Host vlastního projektu Supabase (z NEXT_PUBLIC_SUPABASE_URL); bez nastavení jakýkoli *.supabase.co. */
+function supabaseImageHost() {
+  try {
+    return new URL(String(process.env.NEXT_PUBLIC_SUPABASE_URL || '')).hostname || '*.supabase.co';
+  } catch {
+    return '*.supabase.co';
+  }
+}
+
+/** Náhledy Cloudflare Stream: jen vlastní účet, když je kód zákazníka v nastavení. */
+function streamImageHost() {
+  const code = String(process.env.NEXT_PUBLIC_STREAM_CUSTOMER_CODE || '').trim().toLowerCase();
+  return /^[a-z0-9]+$/.test(code) ? `customer-${code}.cloudflarestream.com` : 'customer-*.cloudflarestream.com';
+}
+
 const nextConfig = {
   // Do prohlížeče jde jen zmenšený kód bez zdrojových map (výchozí Next, tady napsáno
   // schválně, ať to nikdo omylem nezapne) a bez hlavičky "X-Powered-By".
@@ -60,9 +75,12 @@ const nextConfig = {
     },
   },
   images: {
+    // Jen naše zdroje: vlastní projekt Supabase (veřejné úložiště), vlastní účet Cloudflare
+    // Stream (když je kód zákazníka v nastavení) a Giphy. Dřív šel přes optimalizaci obrázků
+    // Vercelu (placená kvóta) obrázek z jakéhokoli projektu Supabase / účtu Cloudflare.
     remotePatterns: [
-      { protocol: 'https', hostname: 'customer-*.cloudflarestream.com' },
-      { protocol: 'https', hostname: '*.supabase.co' },
+      { protocol: 'https', hostname: streamImageHost() },
+      { protocol: 'https', hostname: supabaseImageHost(), pathname: '/storage/v1/object/public/**' },
       { protocol: 'https', hostname: 'media*.giphy.com' },
     ],
   },

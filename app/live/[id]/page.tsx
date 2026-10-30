@@ -34,6 +34,8 @@ type Status = {
   tips?: { enabled: boolean; feePercent: number };
   /** Po vysílání: poslední zveřejněný záznam (kdo přišel pozdě, pustí si ho). */
   lastRecording?: { id: string; title: string; thumbnailUrl: string | null } | null;
+  /** Kolik lidí se teď dívá (Cloudflare, server si číslo pamatuje 30 s); null = zatím nevíme. */
+  viewers?: number | null;
   profile: { id: string; username: string; display_name: string | null; avatar_url: string | null; verification_tier: string | null } | null;
   stream: {
     title: string;
@@ -323,6 +325,13 @@ export default function LivePage() {
           {stream?.title || name}
         </h1>
         <p className="live-meta">
+          {typeof status.viewers === 'number' && (
+            <span className="live-meta-viewers" title={t('liveViewersNow')}>
+              <UiIcon name="eye" size={14} /> {new Intl.NumberFormat(DATE_LOCALES[lang]).format(status.viewers)}
+              <span className="live-stats-sr"> {t('liveViewersNow')}</span>
+              {' · '}
+            </span>
+          )}
           {stream?.startedAt && <span>{liveElapsed(stream.startedAt, now)}</span>}
           {stream?.category && <span> · {categoryLabel(stream.category, t)}</span>}
         </p>

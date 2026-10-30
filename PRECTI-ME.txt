@@ -1,3 +1,71 @@
+KINE web: příspěvky jen pro členy a až 10 fotek, nenápadné novinky od kanálů na Home,
+nový vzhled Nahrát / Upravit video, statistiky živého vysílání, další zabezpečení
+(dodávka kine-0133-2026-10-30)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0133.zip do kořene repa Kine, nahraj.
+2. Supabase -> SQL Editor -> spusť supabase-migration-statistiky-prispevky-zamky.sql
+   (celý, jde pouštět opakovaně). Na konci tři sloupce - všechno true = hotovo.
+3. ZÁLOHA DATABÁZE (důležité): GitHub -> Settings -> Secrets and variables -> Actions ->
+   New repository secret BACKUP_PASSPHRASE = dlouhé náhodné heslo (24+ znaků; ulož si ho
+   i jinde, bez něj zálohu neotevřeš). Pak vlož ručně nový workflow (soubor
+   zaloha-databaze.yml vedle ZIPu): na GitHubu otevři .github/workflows/zaloha-databaze.yml
+   -> tužka -> smaž obsah -> vlož -> Commit.
+4. Doporučuju repo Kine přepnout na Private (Settings -> General -> Danger Zone).
+   Pokud už záloha někdy proběhla: Actions -> Záloha databáze -> u běhů smaž artefakty
+   (byly nešifrované a stáhnout si je mohl kdokoli přihlášený na GitHubu) a ve Studiu
+   si vygeneruj nový klíč pro vysílání. Podrobně NASAZENI-NAVOD.md krok 9.
+5. Volitelně ve Vercelu NEXT_PUBLIC_STREAM_CUSTOMER_CODE (kód z adresy
+   customer-XXXX.cloudflarestream.com) -> optimalizace obrázků jen pro náš účet.
+
+CO JE NOVÉ
+- Příspěvky jen pro členy: přepínač „Jen pro členy“ v psaní příspěvku (když běží peníze
+  pro tvůrce a kanál má cenu členství; jinak „Připravujeme“ / „Nastavit členství“).
+  Nečlen na kanálu vidí jen zamčenou dlaždici „Příspěvky jen pro členy: N“ s tlačítkem
+  Přidat se. Hlídá to databáze (RLS) - text, fotky ani komentáře se k nečlenovi
+  nedostanou (ani v náhledu odkazu na Discordu). Oznámení dostanou jen členové.
+  Anketa pro členy nejde.
+- Až 10 fotek v příspěvku (dřív 4): v mřížce 4, na poslední „+N“; velký náhled s počítadlem
+  „3 / 7“ a listováním šipkami. Fotky se nahrávají po třech naráz (rychlejší) a mají
+  náhodné názvy (adresu nejde uhodnout).
+- Home: „Novinky od tvých kanálů“ - JEDNA nízká řada pod prvním blokem videí, nikdy mezi
+  videi. Jen přihlášení, jen odebírané kanály, posledních 7 dní, jen neotevřené,
+  max 2 od jednoho kanálu. „Skrýt“ = pryč na týden, v Nastavení -> Hlavní stránka jde
+  vypnout úplně. Když není nic nového, není vidět ani nadpis. Načítá se až po videích.
+- Nahrát video - nový vzhled: kroky Detaily -> Zveřejnění, plocha pro přetažení videa
+  (a náhledu), vpravo živý náhled (video, náhledový obrázek, název, kategorie)
+  s kontrolou „Před zveřejněním“, počítadla znaků, hashtagy jako štítky, playlisty
+  jako přepínací štítky, méně častá nastavení schovaná v „Další možnosti“. Název se
+  předvyplní z názvu souboru. Viditelnost a plánování jako karty s popisem, průběh
+  nahrávání jako lišta. Hromadné nahrání ve stejném stylu.
+- Upravit video - stejný styl: karty s ikonami, vpravo náhled + Uložit, nový náhledový
+  obrázek se ukáže hned (s „Vrátit původní“), viditelnost jako karty.
+- Statistiky kanálu -> Živé vysílání: posledních 20 vysílání - délka, nejvíc a průměrně
+  diváků, zprávy v chatu, podpory; nahoře součty a „Právě vysíláš · 37 · 45:01“.
+  Diváci se počítají zhruba jednou za minutu (bez cronu). Na stránce přenosu je vidět
+  počet diváků (👁).
+- Zapomenuté heslo a nové heslo: ve všech 8 jazycích (dřív jen česky), srozumitelné
+  hlášky (jednou za minutu, vypršelý odkaz -> „Poslat nový odkaz“, stejné heslo...).
+  Přeloženo i dalších pár míst (odznak ověřeného tvůrce, GIFy, Líbí se mi, přesměrování).
+
+ZABEZPEČENÍ A NÁKLADY
+- Nahrávání: kontrola limitů a založení u Cloudflare jde pod zámkem uživatele - 20
+  souběžných požadavků už nezaloží 20 nahrávání (dřív šlo limity obejít). Totéž klipy
+  (a nepovedený klip se u Cloudflare hned smaže, nezůstane viset v úložišti).
+- Záloha databáze se šifruje (AES-256) a bez hesla se nenahraje; drží se 30 dní.
+- Optimalizace obrázků (placená kvóta Vercelu) jen pro náš projekt Supabase a Giphy -
+  dřív šlo přes Kine zmenšovat obrázky z jakéhokoli projektu Supabase.
+- Obrázky od lidí jen z našeho projektu Supabase (cizí projekt by v logu viděl IP diváků).
+- Brzdy: potvrzení nahrání, zrušení, stažení, titulky (generování 6× za hodinu),
+  hlášení chyb z prohlížeče (podle adresy + celkový strop, max 32 kB) - tabulku chyb
+  nejde zaplavit.
+- Záznamy vysílání: úklid po 7 dnech hledá po kanálech (dřív na ně často nedošlo a ležely
+  30 dní = 4× dražší úložiště).
+- Příspěvky: databáze pustí max 3 za minutu / 20 za hodinu, max 10 fotek, ankety max 6
+  možností a 4 kB; oznámení o příspěvcích max 5 denně na kanál.
+- Rychlost: levé menu už při každém přechodu nevolá server (dřív 2 dotazy na klik).
+
 KINE web: ceny jen v eurech, atraktivnější /plus s poděkováním po nákupu, rychlejší náhledy,
 nové Podmínky a Pravidla, opravy a zabezpečení plateb
 (dodávka kine-0132-2026-10-30)

@@ -5,10 +5,11 @@
  * image_url), volitelně video z Kine (video_id) a anketu (poll_options,
  * konec poll_ends_at). Sloupce přidává migrace
  * supabase-migration-posty-ankety.sql - bez ní funguje jedna fotka
- * a anketa bez konce jako dřív.
+ * a anketa bez konce jako dřív. Až 10 fotek a příspěvky jen pro členy
+ * (members_only) přidává supabase-migration-statistiky-prispevky-zamky.sql.
  */
 
-export const MAX_POST_IMAGES = 4;
+export const MAX_POST_IMAGES = 10;
 export const MAX_POLL_OPTIONS = 6;
 export const MIN_POLL_OPTIONS = 2;
 export const MAX_POST_TEXT = 5000;
@@ -18,7 +19,7 @@ export type PollOption = { text: string; votes?: number };
 export const POLL_DURATIONS_H = [24, 72, 168, 0] as const;
 export type PollDuration = (typeof POLL_DURATIONS_H)[number];
 
-/** Fotky příspěvku (nové pole i starý jeden obrázek), jen https, bez opakování, nejvýš 4. */
+/** Fotky příspěvku (nové pole i starý jeden obrázek), jen https, bez opakování, nejvýš MAX_POST_IMAGES. */
 export function postImages(post: { image_urls?: unknown; image_url?: unknown } | null | undefined): string[] {
   const out: string[] = [];
   const add = (v: unknown) => {

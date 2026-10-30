@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 import PostCard from '@/components/PostCard';
 import LoadFailed from '@/components/LoadFailed';
+import { markPostSeen } from '@/lib/homePosts';
 
 /** Jeden příspěvek (odkaz ze sdílení, z oznámení): celý, s komentáři. */
 export default function PostPage() {
@@ -33,6 +34,8 @@ export default function PostPage() {
       return;
     }
     setPost(data ?? null);
+    // Otevřený příspěvek se v řadě novinek na hlavní stránce už neukáže (lib/homePosts.ts).
+    if (data) markPostSeen(String(data.id));
   }
 
   useEffect(() => {

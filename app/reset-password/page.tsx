@@ -1,12 +1,24 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { useLanguage } from '@/lib/i18n';
 
+/** Jak dlouho čekat na ověření odkazu z e-mailu, než se ukáže „odkaz vypršel“. */
+const VERIFY_TIMEOUT_MS = 6000;
+
+/**
+ * Nové heslo po kliknutí na odkaz z e-mailu (app/forgot-password).
+ * Supabase z odkazu vytvoří dočasné přihlášení ("recovery") - teprve pak
+ * se ukáže formulář. Texty ve všech jazycích Kine.
+ */
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [ready, setReady] = useState(false);
+  const [expired, setExpired] = useState(false);
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -14,20 +26,19 @@ export default function ResetPasswordPage() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    // Supabase po kliknutí na odkaz z emailu automaticky vytvoří dočasnou
-    // "recovery" session - jakmile se objeví, appka ví, že je bezpečné
-    // ukázat formulář na nové heslo.
+    // Supabase po kliknutí na odkaz z e-mailu sám vytvoří dočasnou "recovery" session -
+    // jakmile se objeví, je bezpečné ukázat formulář na nové heslo.
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setReady(true);
-      }
+      if (event === 'PASSWORD_RECOVERY') setReady(true);
     });
-
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) setReady(true);
     });
-
-    return () => listener.subscription.unsubscribe();
+    const timer = setTimeout(() => setExpired(true), VERIFY_TIMEOUT_MS);
+    return () => {
+      clearTimeout(timer);
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -35,7 +46,7 @@ export default function ResetPasswordPage() {
     setError(null);
 
     if (password !== passwordConfirm) {
-      setError('Hesla se neshodují.');
+      setError(t('passwordsDontMatch'));
       return;
     }
 
@@ -44,7 +55,11 @@ export default function ResetPasswordPage() {
     setSaving(false);
 
     if (updateError) {
-      setError(updateError.message);
+      const msg = updateError.message ?? '';
+      if (/different from the old|same password/i.test(msg)) setError(t('resetPwSameAsOld'));
+      else if (/weak|at least|characters|pwned|leaked/i.test(msg)) setError(t('resetPwWeak'));
+      else if (/session|expired|jwt|not authenticated/i.test(msg)) setError(t('resetPwExpired'));
+      else setError(t('resetPwFailed'));
       return;
     }
 
@@ -55,10 +70,17 @@ export default function ResetPasswordPage() {
   if (!ready) {
     return (
       <div className="form-container">
-        <p style={{ color: 'var(--text-faint)' }}>
-          Ověřuji odkaz na obnovení hesla… Pokud tahle stránka zůstane takhle déle než pár vteřin,
-          odkaz z emailu už asi vypršel - vrať se na přihlášení a vyžádej si nový.
-        </p>
+        {expired ? (
+          <>
+            <h1>{t('resetPwExpiredTitle')}</h1>
+            <p style={{ color: 'var(--text-dim)', fontSize: 14 }}>{t('resetPwExpired')}</p>
+            <Link href="/forgot-password">{t('resetPwRequestNew')}</Link>
+          </>
+        ) : (
+          <p style={{ color: 'var(--text-faint)' }} role="status">
+            {t('resetPwVerifying')}
+          </p>
+        )}
       </div>
     );
   }
@@ -66,18 +88,20 @@ export default function ResetPasswordPage() {
   if (done) {
     return (
       <div className="form-container">
-        <h1>Heslo změněno</h1>
-        <p style={{ color: 'var(--text-dim)' }}>Za chvíli tě přesměrujeme na hlavní stránku…</p>
+        <h1>{t('resetPwDoneTitle')}</h1>
+        <p style={{ color: 'var(--text-dim)' }}>{t('resetPwDoneText')}</p>
       </div>
     );
   }
 
   return (
     <form className="form-container" onSubmit={handleSubmit}>
-      <h1>Nastav si nové heslo</h1>
+      <h1>{t('resetPwTitle')}</h1>
       <input
         type="password"
-        placeholder="Nové heslo (min. 6 znaků)"
+        placeholder={t('resetPwNew')}
+        aria-label={t('resetPwNew')}
+        autoComplete="new-password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         minLength={6}
@@ -85,15 +109,21 @@ export default function ResetPasswordPage() {
       />
       <input
         type="password"
-        placeholder="Zopakuj nové heslo"
+        placeholder={t('resetPwRepeat')}
+        aria-label={t('resetPwRepeat')}
+        autoComplete="new-password"
         value={passwordConfirm}
         onChange={(e) => setPasswordConfirm(e.target.value)}
         minLength={6}
         required
       />
-      {error && <p className="error-text">{error}</p>}
+      {error && (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      )}
       <button type="submit" disabled={saving}>
-        {saving ? 'Ukládám…' : 'Nastavit nové heslo'}
+        {saving ? t('resetPwSaving') : t('resetPwSave')}
       </button>
     </form>
   );

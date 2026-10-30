@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isCloudflareUid } from '@/lib/cloudflareVideos';
 import { cancelTicket } from '@/lib/uploadTickets';
+import { allowRequest, tooManyRequests } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,7 @@ export async function POST(req: NextRequest) {
   if (!token) return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });
   const { data: userData, error: userError } = await supabaseServer.auth.getUser(token);
   if (userError || !userData.user) return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });
+  if (!allowRequest(`cancel-upload:${userData.user.id}`, 60, 60 * 1000)) return tooManyRequests(20);
 
   const body = await req.json().catch(() => ({}));
   const uid = typeof body?.cloudflareVideoId === 'string' ? body.cloudflareVideoId.trim() : '';

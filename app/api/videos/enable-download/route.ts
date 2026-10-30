@@ -4,6 +4,7 @@ import { supabaseAsUser } from '@/lib/supabaseAsUser';
 import { protectionConfigured, shouldBeProtected } from '@/lib/streamProtection';
 import { createStreamToken, signingKeyFromEnv, swapPlaybackId, DOWNLOAD_TOKEN_TTL_S } from '@/lib/streamToken';
 import { isCloudflareUid, streamApiUrl } from '@/lib/cloudflareVideos';
+import { allowRequest, tooManyRequests } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,8 @@ export async function POST(req: NextRequest) {
   if (userError || !userData.user) {
     return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });
   }
+  // Stránka se po spuštění ptá, jestli je soubor hotový - 40 dotazů za minutu stačí s rezervou.
+  if (!allowRequest(`enable-download:${userData.user.id}`, 40, 60 * 1000)) return tooManyRequests(15);
 
   const body = await req.json().catch(() => ({}));
   const cloudflareVideoId = body?.cloudflareVideoId;

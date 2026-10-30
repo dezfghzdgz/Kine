@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import UiIcon from './UiIcon';
+import { useLanguage } from '@/lib/i18n';
 
 // Sdílený veřejný testovací klíč Giphy appka používala jako výchozí, ale
 // Giphy ho časem zablokovala (běžně se to takovým klíčům stává, jsou
@@ -22,6 +23,7 @@ export default function GifPickerModal({
   const [gifs, setGifs] = useState<{ id: string; preview: string; full: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     search('trending');
@@ -51,13 +53,15 @@ export default function GifPickerModal({
 
       if (!res.ok) {
         if (res.status === 403 && USING_SHARED_KEY) {
-          setError('Sdílený testovací klíč Giphy byl zablokovaný. Musíš si založit vlastní zdarma klíč na developers.giphy.com a přidat ho do appky jako NEXT_PUBLIC_GIPHY_API_KEY v souboru .env.local.');
+          // Správce: sdílený testovací klíč Giphy je zablokovaný - chce to vlastní NEXT_PUBLIC_GIPHY_API_KEY ve Vercelu.
+          console.warn('Kine: sdílený klíč Giphy je zablokovaný - nastav NEXT_PUBLIC_GIPHY_API_KEY.');
+          setError(t('gifLoadFailed'));
           setGifs([]);
           setLoading(false);
           return;
         }
-        const body = await res.text();
-        setError(`Giphy vrátilo chybu ${res.status}: ${body.slice(0, 200)}`);
+        console.warn('Kine: Giphy vrátilo chybu', res.status);
+        setError(t('gifLoadFailed'));
         setGifs([]);
         setLoading(false);
         return;
@@ -71,10 +75,11 @@ export default function GifPickerModal({
       }));
       setGifs(parsed);
       if (parsed.length === 0) {
-        setError('Giphy nevrátilo žádné výsledky (odpověď byla v pořádku, ale prázdná).');
+        setError(t('gifNoResults'));
       }
     } catch (e: any) {
-      setError(`Nepodařilo se spojit s Giphy: ${e?.message ?? 'neznámá chyba'}`);
+      console.warn('Kine: Giphy nejde zavolat', e?.message);
+      setError(t('gifLoadFailed'));
       setGifs([]);
     }
     setLoading(false);

@@ -1,11 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 import { authHeaders } from '@/lib/authHeaders';
 import { imageUploadExt, imageUploadProblem } from '@/lib/imageUpload';
 import UiIcon from './UiIcon';
+import ComingSoon from './ComingSoon';
+import { CREATOR_PAYMENTS_ENABLED } from '@/lib/payments';
 import {
   MAX_POLL_OPTIONS,
   MAX_POST_IMAGES,
@@ -20,9 +23,14 @@ import {
 type PostType = 'text' | 'photo' | 'poll';
 
 /**
- * Nový příspěvek na kanálu: text, až 4 fotky, video z Kine (vlastní video
+ * Nový příspěvek na kanálu: text, až 10 fotek, video z Kine (vlastní video
  * nebo odkaz), anketa až o 6 možnostech s koncem (den, 3 dny, týden, bez
  * konce). Odběratelé se zvonečkem dostanou oznámení (/api/posts/notify).
+ *
+ * "Jen pro členy": příspěvek uvidí jen platící členové kanálu (hlídá to
+ * databáze - RLS, migrace supabase-migration-statistiky-prispevky-zamky.sql),
+ * ostatní uvidí jen zamčenou dlaždici s počtem. Jde, když běží peníze pro
+ * tvůrce a kanál má nastavenou cenu členství; anketa pro členy ne.
  */
 export default function PostComposer({
   userId,
@@ -45,6 +53,27 @@ export default function PostComposer({
   const [videoLink, setVideoLink] = useState('');
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [membersOnly, setMembersOnly] = useState(false);
+  // Má kanál členství (cena + propojený Stripe)? null = zjišťuje se / placení neběží.
+  const [membershipReady, setMembershipReady] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!CREATOR_PAYMENTS_ENABLED) return;
+    let alive = true;
+    supabase
+      .from('profiles')
+      .select('subscription_price_eur, stripe_onboarding_complete')
+      .eq('id', userId)
+      .maybeSingle()
+      .then(({ data, error: e }) => {
+        if (!alive) return;
+        const p = data as { subscription_price_eur?: number | null; stripe_onboarding_complete?: boolean | null } | null;
+        setMembershipReady(!e && !!p?.stripe_onboarding_complete && !!p?.subscription_price_eur);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [userId]);
 
   const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
   useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
@@ -98,6 +127,7 @@ export default function PostComposer({
       return;
     }
     if (!text && files.length === 0 && !options && !linkedVideo) return;
+    const forMembers = membersOnly && type !== 'poll' && membershipReady === true;
     setPosting(true);
 
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -112,20 +142,36 @@ export default function PostComposer({
       return;
     }
 
-    // Fotky do úložiště (každá zvlášť; jedna nepovedená = nic se neodešle, ať se dá zkusit znovu).
+    // Fotky do úložiště - tři naráz (10 fotek za sebou trvalo dlouho), pořadí zůstává.
+    // Jedna nepovedená = nic se neodešle, ať se dá zkusit znovu.
     const imageUrls: string[] = [];
-    if (type === 'photo') {
-      for (const [i, file] of files.entries()) {
-        const ext = imageUploadExt(file) ?? 'jpg';
-        const path = `${userId}/${Date.now()}-${i}.${ext}`;
-        const { error: uploadError } = await supabase.storage.from('post-images').upload(path, file);
-        if (uploadError) {
-          setError(`${t('imageUploadFailed')} ${uploadError.message}`);
-          setPosting(false);
-          return;
+    if (type === 'photo' && files.length > 0) {
+      const urls: (string | null)[] = new Array(files.length).fill(null);
+      let failure: string | null = null;
+      let next = 0;
+      const worker = async () => {
+        while (next < files.length && !failure) {
+          const i = next++;
+          const file = files[i];
+          const ext = imageUploadExt(file) ?? 'jpg';
+          // Náhodný název: adresu fotky (třeba z příspěvku pro členy) nejde uhodnout podle času.
+          const random = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 12)}`;
+          const path = `${userId}/${random}.${ext}`;
+          const { error: uploadError } = await supabase.storage.from('post-images').upload(path, file);
+          if (uploadError) {
+            failure = uploadError.message;
+            return;
+          }
+          urls[i] = supabase.storage.from('post-images').getPublicUrl(path).data.publicUrl;
         }
-        imageUrls.push(supabase.storage.from('post-images').getPublicUrl(path).data.publicUrl);
+      };
+      await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker));
+      if (failure || urls.some((u) => !u)) {
+        setError(`${t('imageUploadFailed')} ${failure ?? ''}`.trim());
+        setPosting(false);
+        return;
       }
+      imageUrls.push(...(urls as string[]));
     }
 
     const full = {
@@ -137,8 +183,15 @@ export default function PostComposer({
       video_id: linkedVideo,
       poll_options: options,
       poll_ends_at: options ? pollEndsAt(pollHours) : null,
+      ...(forMembers ? { members_only: true } : {}),
     };
     let { data: inserted, error: insertError } = await supabase.from('posts').insert(full).select('id').single();
+    if (forMembers && insertError) {
+      // Příspěvek pro členy se nikdy nezveřejní pro všechny (ani náhradní cestou níž).
+      setError(/members_only|schema cache|column/i.test(insertError.message ?? '') ? t('postMembersOnlyUnavailable') : `${t('publishFailed')} ${insertError.message ?? ''}`.trim());
+      setPosting(false);
+      return;
+    }
     if (insertError && /image_urls|video_id|poll_ends_at|schema cache|column/i.test(insertError.message ?? '')) {
       // Bez migrace posty-ankety: jedna fotka, odkaz na video do textu, anketa bez konce.
       const withLink = linkedVideo ? `${text}${text ? '\n' : ''}${window.location.origin}/watch/${linkedVideo}` : text;
@@ -166,6 +219,7 @@ export default function PostComposer({
     setVideoId(null);
     setVideoLink('');
     setVideoPicker(false);
+    setMembersOnly(false);
     setPosting(false);
     onPosted();
   }
@@ -316,6 +370,32 @@ export default function PostComposer({
               />
             </div>
           )}
+        </div>
+      )}
+
+      {type !== 'poll' && (
+        <div className={`post-composer-members${membersOnly && membershipReady ? ' on' : ''}`}>
+          <label className="post-composer-members-toggle">
+            <input
+              type="checkbox"
+              checked={membersOnly && membershipReady === true}
+              disabled={membershipReady !== true}
+              onChange={(e) => setMembersOnly(e.target.checked)}
+            />
+            <span className="post-composer-members-switch" aria-hidden="true" />
+            <UiIcon name="lock" size={15} />
+            <span>
+              <span className="post-composer-members-title">{t('postMembersOnly')}</span>
+              <span className="post-composer-members-hint">{t('postMembersOnlyHint')}</span>
+            </span>
+          </label>
+          {!CREATOR_PAYMENTS_ENABLED ? (
+            <ComingSoon pill />
+          ) : membershipReady === false ? (
+            <Link href="/settings" className="post-composer-members-setup">
+              {t('postMembersOnlySetup')}
+            </Link>
+          ) : null}
         </div>
       )}
 
