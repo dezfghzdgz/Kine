@@ -238,7 +238,7 @@ export default function SettingsPage() {
       setSubscriptionPrice(priceInput);
       setToast({ message: t('subscriptionPriceSavedNote'), type: 'success' });
     } else {
-      setPriceError(data.error ?? t('donateGenericError'));
+      setPriceError(data.code === 'price' ? t('subscriptionPriceRangeNote') : data.error ?? t('donateGenericError'));
     }
   }
 
@@ -607,7 +607,7 @@ export default function SettingsPage() {
                 <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                   <input
                     type="number"
-                    min={1}
+                    min={3}
                     max={100}
                     step="0.5"
                     placeholder={subscriptionPrice || '5'}
@@ -619,6 +619,7 @@ export default function SettingsPage() {
                     {priceLoading ? t('saving') : t('saveChanges')}
                   </button>
                 </div>
+                <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 8 }}>{t('subscriptionPriceRangeNote')}</p>
                 {subscriptionPrice && (
                   <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 8 }}>
                     {t('currentPriceNote')} {subscriptionPrice} €/{t('perMonth')}

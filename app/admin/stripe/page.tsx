@@ -26,17 +26,17 @@ type Report = {
 };
 
 /**
- * Doporučené ceny (říjen 2026): Kine Plus 59 Kč - ze 49 Kč by si Stripe vzal
- * 15 % (pevných 6,50 Kč), z 59 Kč 13 %, a pořád je to levnější než Discord
- * Nitro Basic a čtvrtina YouTube Premium (239 Kč). Balíček pod 100 Kč je
- * jen o 20 Kč dražší než samotné Klipy - většina vezme balíček. Eura pro
- * Slovensko a cizinu zhruba stejně. Jde přepsat před kliknutím; nová částka
- * platí pro nové předplatitele, stávající zůstanou na staré ceně.
+ * Doporučené ceny (říjen 2026), v eurech - Kine je mezinárodní a výplaty jdou
+ * v eurech (žádný převod měny). Kine Plus €2.49 (méně než Discord Nitro Basic,
+ * zlomek YouTube Premium), balíček €3.99 je jen o €1 dražší než samotné Klipy
+ * - většina vezme balíček. Dolary pro zákazníky v USA (Stripe jim je ukáže sám).
+ * Jde přepsat před kliknutím; nová částka platí pro nové předplatitele,
+ * stávající zůstanou na staré ceně.
  */
 const TIERS = [
-  { tier: 'kine', cs: 'Kine Plus', en: 'Kine Plus', czk: '59', eur: '2,49' },
-  { tier: 'clips', cs: 'Klipy Plus', en: 'Clips Plus', czk: '79', eur: '3,29' },
-  { tier: 'all', cs: 'Kine Plus + Klipy', en: 'Kine Plus + Clips', czk: '99', eur: '3,99' },
+  { tier: 'kine', cs: 'Kine Plus', en: 'Kine Plus', eur: '2.49', usd: '2.99' },
+  { tier: 'clips', cs: 'Klipy Plus', en: 'Clips Plus', eur: '2.99', usd: '3.49' },
+  { tier: 'all', cs: 'Kine Plus + Klipy', en: 'Kine Plus + Clips', eur: '3.99', usd: '4.49' },
 ] as const;
 
 function Mark({ ok, labels }: { ok: boolean | null; labels: [string, string, string] }) {
@@ -79,9 +79,9 @@ export default function AdminStripePage() {
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [amounts, setAmounts] = useState<Record<string, string>>(() => Object.fromEntries(TIERS.map((x) => [x.tier, x.czk])));
-  const [eurAmounts, setEurAmounts] = useState<Record<string, string>>(() => Object.fromEntries(TIERS.map((x) => [x.tier, x.eur])));
-  const [withEur, setWithEur] = useState(true);
+  const [amounts, setAmounts] = useState<Record<string, string>>(() => Object.fromEntries(TIERS.map((x) => [x.tier, x.eur])));
+  const [usdAmounts, setUsdAmounts] = useState<Record<string, string>>(() => Object.fromEntries(TIERS.map((x) => [x.tier, x.usd])));
+  const [withUsd, setWithUsd] = useState(true);
   const [priceEnv, setPriceEnv] = useState<string[]>([]);
   const [priceNote, setPriceNote] = useState<string | null>(null);
   const [webhookEnv, setWebhookEnv] = useState<string[]>([]);
@@ -123,7 +123,9 @@ export default function AdminStripePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await token()}` },
         body: JSON.stringify(
-          action === 'create-prices' ? { action, lang: apiLang, currency: 'czk', amounts, eur: withEur ? eurAmounts : null } : { action, lang: apiLang }
+          action === 'create-prices'
+            ? { action, lang: apiLang, currency: 'eur', amounts, extra: withUsd ? { currency: 'usd', amounts: usdAmounts } : null }
+            : { action, lang: apiLang }
         ),
       });
       const body = await res.json().catch(() => ({}));
@@ -226,20 +228,20 @@ export default function AdminStripePage() {
               <div key={x.tier} style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
                 <span style={{ width: 120 }}>{tx(x.cs, x.en)}</span>
                 <label style={{ fontSize: 13 }}>
-                  Kč{' '}
+                  €{' '}
                   <input value={amounts[x.tier]} onChange={(e) => setAmounts({ ...amounts, [x.tier]: e.target.value })} style={{ width: 64 }} inputMode="decimal" />
                 </label>
-                {withEur && (
+                {withUsd && (
                   <label style={{ fontSize: 13 }}>
-                    €{' '}
-                    <input value={eurAmounts[x.tier]} onChange={(e) => setEurAmounts({ ...eurAmounts, [x.tier]: e.target.value })} style={{ width: 64 }} inputMode="decimal" />
+                    ${' '}
+                    <input value={usdAmounts[x.tier]} onChange={(e) => setUsdAmounts({ ...usdAmounts, [x.tier]: e.target.value })} style={{ width: 64 }} inputMode="decimal" />
                   </label>
                 )}
               </div>
             ))}
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, margin: '4px 0 10px' }}>
-              <input type="checkbox" checked={withEur} onChange={(e) => setWithEur(e.target.checked)} />
-              {tx('I v eurech (zákazník mimo Česko zaplatí v eurech)', 'Also in euros (customers outside Czechia pay in euros)')}
+              <input type="checkbox" checked={withUsd} onChange={(e) => setWithUsd(e.target.checked)} />
+              {tx('I v dolarech (zákazník v USA zaplatí v dolarech)', 'Also in US dollars (customers in the USA pay in dollars)')}
             </label>
             <button type="button" disabled={busy !== null} onClick={() => act('create-prices')}>
               {busy === 'create-prices' ? tx('Zakládám…', 'Creating…') : tx('Vytvořit ceny ve Stripe', 'Create prices at Stripe')}
@@ -288,8 +290,8 @@ export default function AdminStripePage() {
               <li>{tx('Vercel: plán Pro (placení je komerční použití), pak NEXT_PUBLIC_PAYMENTS=1 a Redeploy.', 'Vercel: Pro plan (payments are commercial use), then NEXT_PUBLIC_PAYMENTS=1 and Redeploy.')}</li>
               <li>
                 {tx(
-                  'Peníze pro tvůrce (předplatné kanálu, podpory ve vysílání) až později: Stripe Connect + NEXT_PUBLIC_CREATOR_PAYMENTS=1.',
-                  'Creator payments (channel subscriptions, tips in streams) later: Stripe Connect + NEXT_PUBLIC_CREATOR_PAYMENTS=1.'
+                  'Peníze pro tvůrce (předplatné kanálu, podpory ve vysílání, Super díky pod videi): Stripe Connect, migrace a NEXT_PUBLIC_CREATOR_PAYMENTS=1 - postup v NASAZENI-NAVOD.md, krok 8.',
+                  'Creator payments (channel subscriptions, tips in streams, Super Thanks under videos): Stripe Connect, migrations and NEXT_PUBLIC_CREATOR_PAYMENTS=1 - steps in NASAZENI-NAVOD.md, step 8.'
                 )}
               </li>
             </ul>

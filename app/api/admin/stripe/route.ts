@@ -236,30 +236,49 @@ export async function POST(req: NextRequest) {
 
 class InputError extends Error {}
 
-/** Produkty a měsíční ceny tří variant. Stejná částka = použije se existující cena (lookup_key). */
+/** Měny, ve kterých jde Kine Plus prodávat (hlavní cena i druhá měna). */
+const PRICE_CURRENCIES = ['eur', 'usd', 'czk'] as const;
+type PriceCurrency = (typeof PRICE_CURRENCIES)[number];
+const asCurrency = (v: unknown, fallback: PriceCurrency | null): PriceCurrency | null =>
+  (PRICE_CURRENCIES as readonly string[]).includes(String(v)) ? (v as PriceCurrency) : fallback;
+
+/**
+ * Produkty a měsíční ceny tří variant. Hlavní měna (výchozí EUR) a nepovinně
+ * druhá (USD - zákazník v USA pak platí v dolarech, Stripe vybere podle místa).
+ * Stejná částka = použije se existující cena (lookup_key); produkt se používá
+ * stejný i pro jinou měnu (žádné zdvojené „Kine Plus“ u Stripe).
+ *
+ * Tělo: { currency: 'eur', amounts: {kine, clips, all}, extra?: { currency: 'usd', amounts } }
+ */
 async function createPrices(stripe: Stripe, body: any, lang: SetupLang) {
   const tx = (cs: string, en: string) => (lang === 'en' ? en : cs);
-  const currency = body?.currency === 'eur' ? 'eur' : 'czk';
-  const extraCurrency = currency === 'czk' && body?.eur ? 'eur' : null;
+  const currency = asCurrency(body?.currency, 'eur') as PriceCurrency;
+  const extraCurrency = body?.extra ? asCurrency(body.extra.currency, null) : null;
+  if (extraCurrency === currency) throw new InputError(tx('Druhá měna musí být jiná než hlavní.', 'The second currency must differ from the main one.'));
   const out: Record<string, { id: string; label: string; reused: boolean }> = {};
   const env: string[] = [];
   let renamed = 0;
+  const minText = (c: PriceCurrency) => (c === 'czk' ? tx('aspoň 15 Kč', 'at least 15 CZK') : c === 'usd' ? tx('aspoň 0,50 $', 'at least $0.50') : tx('aspoň 0,50 €', 'at least €0.50'));
 
   for (const tier of PAID_TIERS) {
+    const name = TIER_PRODUCT[tier].name;
     const amount = parseAmount(body?.amounts?.[tier], currency);
-    if (amount === null) {
-      const min = currency === 'czk' ? tx('aspoň 15 Kč', 'at least 15 CZK') : tx('aspoň 0,50 €', 'at least €0.50');
-      throw new InputError(tx(`Neplatná cena pro ${TIER_PRODUCT[tier].name} (${min}).`, `Invalid price for ${TIER_PRODUCT[tier].name} (${min}).`));
-    }
-    const extraAmount = extraCurrency ? parseAmount(body?.eur?.[tier], extraCurrency) : null;
+    if (amount === null) throw new InputError(tx(`Neplatná cena pro ${name} (${minText(currency)}).`, `Invalid price for ${name} (${minText(currency)}).`));
+    const extraAmount = extraCurrency ? parseAmount(body?.extra?.amounts?.[tier], extraCurrency) : null;
     if (extraCurrency && extraAmount === null) {
-      throw new InputError(tx(`Neplatná cena v eurech pro ${TIER_PRODUCT[tier].name} (aspoň 0,50 €).`, `Invalid euro price for ${TIER_PRODUCT[tier].name} (at least €0.50).`));
+      throw new InputError(tx(`Neplatná cena v ${extraCurrency.toUpperCase()} pro ${name} (${minText(extraCurrency)}).`, `Invalid ${extraCurrency.toUpperCase()} price for ${name} (${minText(extraCurrency)}).`));
     }
 
     const lookupKey = `kine_plus_${tier}_month_${currency}`;
     // lookup_key je u Stripe jedinečný (i u archivované ceny) - proto bez filtru na aktivní.
-    const existing = (await stripe.prices.list({ lookup_keys: [lookupKey], limit: 1, expand: ['data.product', 'data.currency_options'] })).data[0];
-    const existingProduct = existing && typeof existing.product === 'object' && !('deleted' in existing.product && existing.product.deleted) ? (existing.product as Stripe.Product) : null;
+    // Najednou i ceny té varianty v ostatních měnách - kvůli produktu (ať se nezdvojí).
+    const keys = PRICE_CURRENCIES.map((c) => `kine_plus_${tier}_month_${c}`);
+    const found = (await stripe.prices.list({ lookup_keys: keys, limit: 10, expand: ['data.product', 'data.currency_options'] })).data;
+    const existing = found.find((x) => x.lookup_key === lookupKey);
+    const productOf = (x: Stripe.Price | undefined) =>
+      x && typeof x.product === 'object' && !('deleted' in x.product && x.product.deleted) ? (x.product as Stripe.Product) : null;
+    const existingProduct = productOf(existing);
+    const reusableProduct = [existing, ...found].map(productOf).find((prod) => prod?.active) ?? null;
     const existingExtra = existing ? Object.keys(existing.currency_options ?? {}).filter((c) => c !== existing.currency) : [];
     const sameAmount =
       !!existing &&
@@ -273,8 +292,8 @@ async function createPrices(stripe: Stripe, body: any, lang: SetupLang) {
         : existingExtra.length === 0);
 
     // Starší produkt (dřív s českým názvem a popisem): přejmenovat - Stripe ho ukazuje všem zákazníkům.
-    if (existingProduct?.active && (existingProduct.name !== TIER_PRODUCT[tier].name || (existingProduct.description ?? '') !== TIER_PRODUCT[tier].description)) {
-      await stripe.products.update(existingProduct.id, { name: TIER_PRODUCT[tier].name, description: TIER_PRODUCT[tier].description });
+    if (reusableProduct && (reusableProduct.name !== name || (reusableProduct.description ?? '') !== TIER_PRODUCT[tier].description)) {
+      await stripe.products.update(reusableProduct.id, { name, description: TIER_PRODUCT[tier].description });
       renamed += 1;
     }
 
@@ -282,10 +301,9 @@ async function createPrices(stripe: Stripe, body: any, lang: SetupLang) {
     if (existing && sameAmount) {
       price = existing;
     } else {
-      // Produkt: stejný jako u předchozí ceny té varianty (když není archivovaný), jinak nový.
-      const productId = existingProduct?.active
-        ? existingProduct.id
-        : (await stripe.products.create({ name: TIER_PRODUCT[tier].name, description: TIER_PRODUCT[tier].description, metadata: { kind: 'kine-plus', tier } })).id;
+      // Produkt: stejný jako u jiné ceny té varianty (když není archivovaný), jinak nový.
+      const productId =
+        reusableProduct?.id ?? (await stripe.products.create({ name, description: TIER_PRODUCT[tier].description, metadata: { kind: 'kine-plus', tier } })).id;
       price = await stripe.prices.create({
         product: productId,
         currency,
@@ -294,7 +312,7 @@ async function createPrices(stripe: Stripe, body: any, lang: SetupLang) {
         lookup_key: lookupKey,
         // Nová částka přebere lookup_key starší ceny (ta zůstane pro stávající předplatitele).
         transfer_lookup_key: !!existing,
-        nickname: `${TIER_PRODUCT[tier].name} - monthly`,
+        nickname: `${name} - monthly`,
         metadata: { kind: 'kine-plus', tier },
         ...(extraCurrency && extraAmount !== null ? { currency_options: { [extraCurrency]: { unit_amount: extraAmount } } } : {}),
       });

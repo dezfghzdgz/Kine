@@ -42,7 +42,8 @@ export async function POST(req: NextRequest) {
   // zapsat jako dar Kine (dřív se každá jednorázová platba brala jako dar).
   if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
     const session = event.data.object as any;
-    if (session.mode === 'payment' && session.metadata?.kind === 'live-tip') {
+    // Super díky pod videem (app/api/videos/thanks) - stejná tabulka live_tips, jen bez chatu.
+    if (session.mode === 'payment' && (session.metadata?.kind === 'live-tip' || session.metadata?.kind === 'video-thanks')) {
       const result = await recordLiveTip(event.type === 'checkout.session.async_payment_succeeded' ? { ...session, payment_status: 'paid' } : session);
       if (!result.ok) return retryLater(result.error);
       return NextResponse.json({ received: true });
@@ -193,6 +194,8 @@ export async function POST(req: NextRequest) {
           return retryLater(`Stripe: ${e?.message ?? 'platbu nejde načíst'}`);
         }
       }
+      // Sporná podpora / Super díky: peníze, které šly tvůrci, se mu vezmou zpět.
+      await reverseTipPayment(charge, 'dispute');
       let subscriptionId = subscriptionIdFromCharge(charge);
       if (!subscriptionId && typeof charge?.invoice === 'string') {
         try {
@@ -221,7 +224,36 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  if (event.type === 'charge.refunded') {
+    // Vrácená podpora / Super díky (celá částka): zmizí a tvůrci se peníze vezmou zpět.
+    const charge = event.data.object as any;
+    if (charge?.refunded === true) await reverseTipPayment(charge, 'refund');
+  }
+
   return NextResponse.json({ received: true });
+}
+
+/**
+ * Vrácená nebo sporná platba u podpory ve vysílání / Super díky (live_tips):
+ * zmizí (status refunded) a peníze, které šly tvůrci (destination charge), se
+ * mu vezmou zpět - jinak by spor nebo vrácení zaplatilo Kine ze svého. Jen
+ * jednou (idempotencyKey); chyba nic neblokuje (jen záznam v logu).
+ */
+async function reverseTipPayment(charge: any, why: 'dispute' | 'refund'): Promise<void> {
+  const paymentIntent = typeof charge?.payment_intent === 'string' ? charge.payment_intent : charge?.payment_intent?.id;
+  if (!paymentIntent) return;
+  const { data, error } = await supabaseServer.from('live_tips').select('id, status').eq('stripe_payment_intent', paymentIntent).maybeSingle();
+  if (error || !data) return; // není to podpora (nebo podpory nejsou v databázi)
+  const tip = data as { id: number; status: string };
+  if (tip.status !== 'refunded') await supabaseServer.from('live_tips').update({ status: 'refunded' }).eq('id', tip.id);
+  const transfer = typeof charge?.transfer === 'string' ? charge.transfer : charge?.transfer?.id;
+  if (!transfer) return;
+  try {
+    await stripeServer.transfers.createReversal(transfer, { metadata: { reason: why, tipId: String(tip.id) } }, { idempotencyKey: `kine-tip-reversal-${transfer}` });
+  } catch (e: any) {
+    // Už vrácené (třeba ručně ve Stripe), nebo tvůrce nemá na účtu dost - jen záznam.
+    console.warn(`Kine: peníze z podpory ${tip.id} se nepodařilo vzít tvůrci zpět (${why}): ${e?.message ?? e}`);
+  }
 }
 
 /**

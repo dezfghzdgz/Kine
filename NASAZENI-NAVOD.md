@@ -85,8 +85,7 @@ Nejdřív všechno v testovacím režimu (klíč `sk_test_…`), pak to samé na
    web, podpora `kinesupport@gmail.com`, podmínky
    `https://tvoje-adresa/terms`, ochrana údajů `https://tvoje-adresa/privacy`,
    text na výpisu `KINE`. Settings → Billing → Customer portal → **Save**.
-   Platby v Kč na eurový účet Stripe převádí (poplatek) - přidej i bankovní
-   účet v Kč (Settings → Bank accounts and currencies).
+   Kine Plus se prodává v eurech (výplaty v eurech = bez převodu měny).
 2. **Vercel → Environment Variables:**
    - `STRIPE_SECRET_KEY` - Stripe → Developers → API keys → Secret key
    - `NEXT_PUBLIC_OPERATOR_NAME`, `NEXT_PUBLIC_OPERATOR_ICO`,
@@ -96,21 +95,48 @@ Nejdřív všechno v testovacím režimu (klíč `sk_test_…`), pak to samé na
      u Městského soudu v Praze, oddíl C, vložka …“).
    - → **Redeploy**
 3. **Na webu `/admin/stripe`** (jen admin, v menu „Platby (Stripe)“):
-   - „Vytvořit ceny ve Stripe“ (předvyplněné doporučené ceny: Kine Plus 59 Kč,
-     Klipy Plus 79 Kč, Kine Plus + Klipy 99 Kč, v eurech 2,49 / 3,29 / 3,99 €)
-     → vypíše `STRIPE_PLUS_KINE_PRICE_ID`, `STRIPE_PLUS_CLIPS_PRICE_ID`,
-     `STRIPE_PLUS_ALL_PRICE_ID` a popisky `NEXT_PUBLIC_PLUS_…_PRICE_LABEL`
-     (např. `59 Kč / měsíc (2,49 €)`)
+   - „Vytvořit ceny ve Stripe“ (předvyplněné doporučené ceny v eurech: Kine Plus
+     €2.49, Clips Plus €2.99, Kine Plus + Clips €3.99; pro USA v dolarech
+     $2.99 / $3.49 / $4.49) → vypíše `STRIPE_PLUS_KINE_PRICE_ID`,
+     `STRIPE_PLUS_CLIPS_PRICE_ID`, `STRIPE_PLUS_ALL_PRICE_ID` a popisky
+     `NEXT_PUBLIC_PLUS_…_PRICE_LABEL` (např. `€2.49 ($2.99)`)
    - „Vytvořit / opravit webhook“ → vypíše `STRIPE_WEBHOOK_SECRET` (ukáže se
      jen jednou)
    - všechny řádky do Vercelu → **Redeploy**; stránka pak ukáže, co ještě chybí
 4. **Zapnutí:** `NEXT_PUBLIC_PAYMENTS=1` → **Redeploy**. Zkus koupi na `/plus`
    testovací kartou `4242 4242 4242 4242` (libovolné budoucí datum a CVC).
-5. **Peníze pro tvůrce** (předplatné kanálu, podpory ve vysílání, výplaty) až
-   později: Stripe Connect + `NEXT_PUBLIC_CREATOR_PAYMENTS=1`, po poradě
-   s účetní.
+5. **Peníze pro tvůrce** (předplatné kanálu, podpory ve vysílání, Super díky
+   pod videi): krok 8 níž.
 6. Placení je komerční použití → Vercel plán **Pro** (Hobby je jen nekomerční).
 7. Doporučeně ve Vercelu `UPLOAD_STORAGE_HOURS=5` (úložiště účtu 5 h, Kine Plus
    3× víc = 15 h; výchozí je 30 h / 90 h). Cloudflare účtuje každou uloženou
    minutu (plný účet s Plus by stál až ~570 Kč měsíčně), takže než přejdeme na
    levnější úložiště videí, ať předplatné pokryje i nejnáročnější tvůrce.
+
+## 8. Peníze pro tvůrce - předplatné kanálu, podpory ve vysílání, Super díky
+
+Diváci platí tvůrcům: měsíční předplatné kanálu (od €3), podpory se vzkazem
+v chatu přenosu (jako Super Chat) a Super díky pod videi (jako Super Thanks).
+Peníze jdou přes Stripe rovnou na Stripe účet tvůrce, Kine si nechá 15 %
+(z toho platí poplatek Stripe za platbu). Výplaty tvůrcům jednou měsíčně.
+
+1. **Stripe → Connect** (v menu More → Connect, nebo Settings → Connect) →
+   „Get started“: platforma / marketplace, účty tvůrců **Express**, platby
+   zakládá platforma. Settings → Connect → Branding: název Kine, ikona, barva
+   (tvůrci to uvidí při propojení).
+2. **Supabase → SQL Editor** - spusť (jdou pouštět opakovaně):
+   `supabase-migration-creator-subscriptions.sql`,
+   `supabase-migration-podpory-kontrola.sql`, `supabase-migration-super-diky.sql`.
+3. **Vercel:** `NEXT_PUBLIC_CREATOR_PAYMENTS=1` (volitelně `LIVE_TIP_FEE_PERCENT`,
+   výchozí 15) → **Redeploy**. Na `/admin/stripe` pak klikni na „Vytvořit /
+   opravit webhook“ - doplní událost `charge.refunded` (vrácené podpory se
+   tvůrci vezmou zpět); podpisový klíč zůstává stejný.
+4. **Tvůrce:** Settings → výdělky tvůrce → propojit Stripe (ověření totožnosti a
+   bankovní účet přímo u Stripe) → nastavit cenu předplatného kanálu.
+5. **Vyzkoušej** z druhého účtu: Super díky pod videem, podpora v přenosu,
+   předplatné kanálu.
+
+Počítej s tím, že Stripe Connect stojí Kine asi €2 za každého tvůrce v měsíci,
+kdy dostane výplatu (+ 0,25 % a pár centů za výplatu) - 15 % se vyplatí u tvůrců,
+kteří dostanou aspoň ~€15-20 měsíčně. Kine tu přijímá peníze pro tvůrce, tak
+to prober s účetní.

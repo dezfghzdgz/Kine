@@ -160,14 +160,39 @@ function PlusPageInner() {
     );
   };
 
-  const rows: { label: string; cells: (boolean | string)[] }[] = [
-    { label: t('plusCmpClipping'), cells: [true, true, true, true] },
-    { label: t('plusCmpClipLength'), cells: ['60 s', '60 s', '5 min', '5 min'] },
-    { label: t('plusCmpManualUpload'), cells: [true, true, true, true] },
-    { label: t('plusCmpAutoUpload'), cells: [false, false, true, true] },
-    { label: t('plusCmpBadge'), cells: [false, true, false, true] },
-    { label: t('plusCmpLimit'), cells: ['1×', '3×', '1×', '3×'] },
-    { label: t('plusCmpSupport'), cells: [false, true, true, true] },
+  // Srovnání po skupinách - jen věci, které Kine opravdu dělá. Sloupce: Zdarma, Kine Plus, Klipy Plus, obojí.
+  const priceCell = (tier: PaidTier) => (prices[tier] ? splitPriceLabel(prices[tier] as string).main : '–');
+  const groups: { title: string; rows: { label: string; cells: (boolean | string)[] }[] }[] = [
+    {
+      title: t('plusCmpGroupWatch'),
+      rows: [
+        { label: t('plusCmpWatch'), cells: [true, true, true, true] },
+        { label: t('plusCmpLive'), cells: [true, true, true, true] },
+      ],
+    },
+    {
+      title: t('plusCmpGroupUpload'),
+      rows: [
+        { label: t('plusCmpLimit'), cells: ['1×', '3×', '1×', '3×'] },
+        { label: t('plusCmpStorage'), cells: ['1×', '3×', '1×', '3×'] },
+      ],
+    },
+    {
+      title: t('plusCmpGroupClips'),
+      rows: [
+        { label: t('plusCmpClipping'), cells: [true, true, true, true] },
+        { label: t('plusCmpClipLength'), cells: ['60 s', '60 s', '5 min', '5 min'] },
+        { label: t('plusCmpManualUpload'), cells: [true, true, true, true] },
+        { label: t('plusCmpAutoUpload'), cells: [false, false, true, true] },
+      ],
+    },
+    {
+      title: t('plusCmpGroupProfile'),
+      rows: [
+        { label: t('plusCmpBadge'), cells: [false, true, false, true] },
+        { label: t('plusCmpSupport'), cells: [false, true, true, true] },
+      ],
+    },
   ];
   const faq = [1, 2, 3, 4].map((n) => ({ q: t(`plusFaq${n}Q` as 'plusFaq1Q'), a: t(`plusFaq${n}A` as 'plusFaq1A') }));
 
@@ -276,21 +301,62 @@ function PlusPageInner() {
                 <th className="featured">{t('plusTierAll')}</th>
               </tr>
             </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.label}>
-                  <th scope="row">{row.label}</th>
-                  {row.cells.map((cell, i) => (
-                    <td key={i} className={i === 3 ? 'featured' : ''}>
-                      {typeof cell === 'boolean' ? <Check off={!cell} /> : <span className="plus-cell-text">{cell}</span>}
-                    </td>
-                  ))}
+            {groups.map((group) => (
+              <tbody key={group.title}>
+                <tr className="plus-table-group">
+                  <th scope="rowgroup">{group.title}</th>
+                  <td />
+                  <td />
+                  <td />
+                  <td className="featured" />
                 </tr>
-              ))}
-            </tbody>
+                {group.rows.map((row) => (
+                  <tr key={row.label}>
+                    <th scope="row">{row.label}</th>
+                    {row.cells.map((cell, i) => (
+                      <td key={i} className={i === 3 ? 'featured' : ''}>
+                        {typeof cell === 'boolean' ? <Check off={!cell} /> : <span className="plus-cell-text">{cell}</span>}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            ))}
+            {PAYMENTS_ENABLED && (
+              <tfoot>
+                <tr className="plus-table-price">
+                  <th scope="row">{t('plusCmpPrice')}</th>
+                  <td>
+                    <span className="plus-cell-text">{t('plusFreeTitle')}</span>
+                  </td>
+                  <td>
+                    <span className="plus-cell-text">{priceCell('kine')}</span>
+                  </td>
+                  <td>
+                    <span className="plus-cell-text">{priceCell('clips')}</span>
+                  </td>
+                  <td className="featured">
+                    <span className="plus-cell-text">{priceCell('all')}</span>
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </section>
+
+      {/* Jednorázový dar místo předplatného (stránka /donate) - až když běží placení. */}
+      {PAYMENTS_ENABLED && (
+        <section className="panel plus-support">
+          <div>
+            <p className="panel-heading" style={{ margin: 0 }}>{t('plusSupportTitle')}</p>
+            <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-dim)' }}>{t('plusSupportText')}</p>
+          </div>
+          <Link href="/donate" className="reaction-btn plus-support-btn">
+            {t('donateSidebarLabel')}
+          </Link>
+        </section>
+      )}
 
       <section className="plus-faq">
         <p className="panel-heading">{t('plusFaqTitle')}</p>

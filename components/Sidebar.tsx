@@ -258,8 +258,9 @@ export default function Sidebar() {
             {t('goLiveLink')}
           </Link>
         )}
-        {/* Podpora Kine (platba) - až poběží placení (lib/payments.ts). */}
-        {user && PAYMENTS_ENABLED && (
+        {/* Podpora Kine (platba) - až poběží placení (lib/payments.ts). I bez přihlášení
+            (dar je pak anonymní), ať je „Podpořit Kine“ vidět pro všechny. */}
+        {PAYMENTS_ENABLED && (
           <Link href="/donate" className={`sidebar-link ${pathname === '/donate' ? 'active' : ''}`}>
             <DonateIcon />
             {t('donateSidebarLabel')}
@@ -467,7 +468,7 @@ export default function Sidebar() {
               {t('goLiveLink')}
             </Link>
           )}
-          {user && PAYMENTS_ENABLED && (
+          {PAYMENTS_ENABLED && (
             <Link href="/donate" className="sidebar-link" onClick={closeMobileNav}>
               <DonateIcon />
               {t('donateSidebarLabel')}

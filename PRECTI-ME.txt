@@ -1,3 +1,48 @@
+KINE web: Kine Plus v eurech (+ dolary pro USA), přehlednější srovnání na /plus, Podpořit Kine
+pro všechny, Super díky pod videi a peníze pro tvůrce připravené k zapnutí
+(dodávka kine-0131-2026-10-30)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0131.zip do kořene repa Kine, nahraj.
+2. Ceny v eurech: www.playkine.com/admin/stripe -> „Vytvořit ceny ve Stripe“ (předvyplněné
+   €2.49 / €2.99 / €3.99, pro USA $2.99 / $3.49 / $4.49) -> 6 nových řádků -> ve Vercelu
+   přepiš STRIPE_PLUS_*_PRICE_ID a NEXT_PUBLIC_PLUS_*_PRICE_LABEL -> Redeploy.
+   Produkty u Stripe zůstanou stejné (nic se nezdvojí); kdo už platí v korunách, platí dál.
+3. Na /admin/stripe klikni i na „Vytvořit / opravit webhook“ - doplní novou událost
+   charge.refunded (podpisový klíč se nemění).
+4. Peníze pro tvůrce (předplatné kanálu, podpory ve vysílání, Super díky):
+   NASAZENI-NAVOD.md krok 8 - Stripe Connect, 3 migrace (poslední nová:
+   supabase-migration-super-diky.sql), NEXT_PUBLIC_CREATOR_PAYMENTS=1.
+
+CO JE NOVÉ
+- Kine Plus v eurech: na /plus „€2.49 / month ($2.99)“, bez korun. Výplaty jsou v eurech,
+  takže žádný převod měny. Zákazník v USA platí v dolarech (Stripe vybere sám).
+- /plus: srovnání po skupinách (Sledování, Nahrávání, Klipy, Profil) s novými řádky
+  (sledování a vlastní vysílání zdarma, místo pro videa) a řádkem s cenou; pod ním karta
+  „Radši jednorázově?“ s odkazem na Podpořit Kine.
+- Podpořit Kine je v menu pro všechny (i bez přihlášení - dar je pak anonymní), když
+  běží placení.
+- Super díky pod videem (jako Super Thanks): tlačítko u videa, částka + vzkaz, peníze jdou
+  tvůrci (Kine 15 %), vzkaz zvýrazněný pod videem. Stejná pravidla jako chat kanálu
+  (zakázaná slova, zákaz psaní, žádné odkazy), jen u veřejných videí, ne když jsou vypnuté
+  komentáře. Tvůrce a moderátor vzkaz skryjí. Tvůrce dostane oznámení.
+- Vrácená nebo sporná podpora / Super díky: zmizí a tvůrci se peníze vezmou zpět (jinak by
+  to zaplatilo Kine). Pozastavené výdělky tvůrce (sankce) zastaví i podpory a předplatné.
+- Tvůrci: výplaty jednou měsíčně (méně poplatků Stripe Connect), předplatné kanálu od €3
+  (pod tím by Kine na poplatcích prodělalo), produkty u Stripe anglicky.
+- Testovací Super díky (testovací klíč) se s ostrým klíčem neukazují.
+
+OVĚŘENO
+- tsc, 59 testových souborů, sestavení; /plus anglicky i česky (snímky, mobil bez přetékání)
+- náhrada Stripe: /api/admin/stripe 23 scénářů (eura + dolary bez zdvojení produktů),
+  Super díky 7 scénářů (pravidla, skrytí, testovací platby, bez migrace), zápis zaplacení
+  3 scénáře, webhook 10 scénářů (vrácení a spory podpor)
+- nezávislá kontrola kódu (8 nálezů - opravené)
+
+==========================================================================================
+PŘEDCHOZÍ DODÁVKA
+==========================================================================================
 KINE web: platba Kine Plus projde i s Managed Payments zapnutými na účtu, ceny a chyby na /plus
 v jazyce webu („/ month“ místo „/ měsíc“), produkty u Stripe anglicky, /admin/stripe česky i
 anglicky

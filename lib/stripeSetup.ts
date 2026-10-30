@@ -16,6 +16,8 @@ export const REQUIRED_WEBHOOK_EVENTS = [
   'customer.subscription.updated',
   'customer.subscription.deleted',
   'charge.dispute.created',
+  // Vrácená platba u podpory / Super díky: zmizí a peníze se tvůrci vezmou zpět.
+  'charge.refunded',
 ] as const;
 
 export type KeyMode = 'missing' | 'test' | 'live' | 'invalid';
@@ -115,21 +117,24 @@ export function priceProblems(price: PriceInfo | null, lang: SetupLang = 'cs'): 
 /** Měny, které Stripe vede v setinách; ostatní (JPY…) celé. Kine potřebuje jen CZK, EUR, USD. */
 const ZERO_DECIMAL = new Set(['jpy', 'krw', 'vnd', 'clp', 'pyg', 'ugx', 'xaf', 'xof']);
 
-/** Částka pro lidi: 4900 czk → „49 Kč“, 199 eur → „1,99 €“, 499 usd → „$4.99“. */
+/**
+ * Částka pro lidi: 4900 czk → „49 Kč“, 249 eur → „€2.49“, 299 usd → „$2.99“.
+ * Eura a dolary mezinárodně (Kine je v základu anglicky), koruny česky.
+ */
 export function formatAmount(unitAmount: number, currency: string): string {
   const cur = currency.toLowerCase();
   const value = ZERO_DECIMAL.has(cur) ? unitAmount : unitAmount / 100;
   const whole = Number.isInteger(value);
   const num = (sep: string) => (whole ? String(value) : value.toFixed(2).replace('.', sep));
   if (cur === 'czk') return `${num(',')} Kč`;
-  if (cur === 'eur') return `${num(',')} €`;
-  if (cur === 'usd') return `$${whole ? value : value.toFixed(2)}`;
+  if (cur === 'eur') return `€${num('.')}`;
+  if (cur === 'usd') return `$${num('.')}`;
   return `${num('.')} ${cur.toUpperCase()}`;
 }
 
 /**
- * Popisek ceny do NEXT_PUBLIC_PLUS_*_PRICE_LABEL bez období: „59 Kč“, s druhou
- * měnou „59 Kč (2,49 €)“. Období („/ month“, „/ měsíc“…) doplní stránka /plus
+ * Popisek ceny do NEXT_PUBLIC_PLUS_*_PRICE_LABEL bez období: „€2.49“, s druhou
+ * měnou „€2.49 ($2.99)“. Období („/ month“, „/ měsíc“…) doplní stránka /plus
  * v jazyce webu (lib/plus.ts stripPricePeriod ho z případných starších popisků
  * „59 Kč / měsíc (2,49 €)“ sama odebere).
  */
@@ -376,7 +381,10 @@ export function evaluateSetup(f: SetupFacts, lang: SetupLang = 'cs'): SetupCheck
     detail: f.paymentsFlag
       ? f.creatorFlag
         ? tx('Zapnuté i peníze pro tvůrce (NEXT_PUBLIC_CREATOR_PAYMENTS=1).', 'Creator payments are on too (NEXT_PUBLIC_CREATOR_PAYMENTS=1).')
-        : tx('Peníze pro tvůrce zatím vypnuté (správně - až s Connect a účetní).', 'Creator payments are still off (as intended - later, with Connect and an accountant).')
+        : tx(
+            'Peníze pro tvůrce (předplatné kanálu, podpory, Super díky) zatím vypnuté - zapnutí: NASAZENI-NAVOD.md krok 8 (Stripe Connect, migrace, NEXT_PUBLIC_CREATOR_PAYMENTS=1).',
+            'Creator payments (channel subscriptions, tips, Super Thanks) are off - to turn them on: NASAZENI-NAVOD.md step 8 (Stripe Connect, migrations, NEXT_PUBLIC_CREATOR_PAYMENTS=1).'
+          )
       : tx('Až bude všechno výš zelené: přidej do Vercelu a Redeploy.', 'Once everything above is green: add it in Vercel and Redeploy.'),
   });
   return checks;

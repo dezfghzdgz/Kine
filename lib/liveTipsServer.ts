@@ -23,6 +23,8 @@ export async function tipTarget(channelId: string): Promise<TipTarget> {
   if (!Object.prototype.hasOwnProperty.call(p, 'live_tips_enabled')) return { ok: false, reason: 'unavailable' };
   if (!p.stripe_account_id || !p.stripe_onboarding_complete) return { ok: false, reason: 'not-connected' };
   if (p.live_tips_enabled === false) return { ok: false, reason: 'disabled' };
+  // Moderátor tvůrci pozastavil výdělky (sankce) - žádné peníze, ani podpory a Super díky.
+  if (p.payouts_suspended === true) return { ok: false, reason: 'disabled' };
   return { ok: true, accountId: String(p.stripe_account_id), name: String(p.display_name || p.username || 'Kine') };
 }
 
@@ -54,6 +56,27 @@ export async function recordLiveTip(session: any): Promise<{ ok: true } | { ok: 
   }
 
   const message = String(tip.message ?? '').trim();
+
+  // Super díky pod videem (app/api/videos/thanks): do chatu nic - vzkaz se ukáže pod videem
+  // (GET /api/videos/thanks), tvůrce jen dostane oznámení s odkazem na video. Podle druhu
+  // platby, ne jen podle video_id - když tvůrce mezitím video smazal (video_id = null),
+  // vzkaz nesmí skončit v chatu přenosu.
+  if (tip.video_id || session?.metadata?.kind === 'video-thanks') {
+    let who = 'Někdo';
+    if (tip.user_id) {
+      const { data: p } = await supabaseServer.from('profiles').select('username, display_name').eq('id', tip.user_id).maybeSingle();
+      who = p?.display_name || p?.username || who;
+    }
+    const sum = formatTipAmount(tip.amount_cents, tip.currency, 'cs');
+    await supabaseServer.from('notifications').insert({
+      user_id: tip.channel_id,
+      type: 'donation',
+      message: `💛 Super díky ${sum} od ${who}${message ? `: „${message.slice(0, 120)}“` : ''}`,
+      link: tip.video_id ? `/watch/${tip.video_id}` : '/channel-stats',
+    });
+    return { ok: true };
+  }
+
   const room = channelRoom(String(tip.channel_id));
   let chat = await supabaseServer
     .from('live_chat_messages')

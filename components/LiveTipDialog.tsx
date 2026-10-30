@@ -10,6 +10,9 @@ import { TIP_CURRENCIES, TIP_LIMITS, TIP_MESSAGE_MAX, defaultTipCurrency, format
  * Podpora ve vysílání (tlačítko 💛 u přenosu): částka, měna, vzkaz -> platba
  * přes Stripe. Vzkaz se po zaplacení ukáže zvýrazněný v chatu a tvůrce si
  * ho může nechat přečíst nahlas. Peníze jdou tvůrci (Kine si nechá poplatek).
+ *
+ * S videoId je to Super díky pod videem (app/api/videos/thanks): stejné
+ * částky a poplatek, vzkaz se ukáže zvýrazněný pod videem.
  */
 export default function LiveTipDialog({
   channelId,
@@ -17,12 +20,14 @@ export default function LiveTipDialog({
   feePercent,
   loggedIn,
   onClose,
+  videoId,
 }: {
   channelId: string;
   channelName: string;
   feePercent: number;
   loggedIn: boolean;
   onClose: () => void;
+  videoId?: string;
 }) {
   const { t, lang } = useLanguage();
   const [currency, setCurrency] = useState<TipCurrency>(() => defaultTipCurrency(lang));
@@ -59,10 +64,10 @@ export default function LiveTipDialog({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch('/api/live/tip', {
+      const res = await fetch(videoId ? '/api/videos/thanks' : '/api/live/tip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-        body: JSON.stringify({ channelId, amount: value, currency, message }),
+        body: JSON.stringify(videoId ? { videoId, amount: value, currency, message } : { channelId, amount: value, currency, message }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok || !body?.url) {
@@ -78,7 +83,11 @@ export default function LiveTipDialog({
                   ? range
                   : code === 'slow'
                     ? t('liveChatTooFast')
-                    : t('tipFailed')
+                    : videoId && ['not-connected', 'disabled', 'unavailable', 'missing', 'video', 'self', 'comments-off'].includes(code)
+                      ? t('superThanksUnavailable')
+                      : code === 'test-mode'
+                        ? t('payErrTesting')
+                        : t('tipFailed')
         );
         return;
       }
@@ -95,7 +104,7 @@ export default function LiveTipDialog({
       <div ref={dialogRef} className="tip-dialog panel" role="dialog" aria-modal="true" aria-labelledby="tip-title">
         <div className="tip-head">
           <p id="tip-title" className="tip-title">
-            💛 {t('tipTitle').replace('{name}', channelName)}
+            💛 {(videoId ? t('superThanksTitle') : t('tipTitle')).replace('{name}', channelName)}
           </p>
           <button type="button" className="tip-close" onClick={onClose} aria-label={t('close')}>
             ✕
@@ -103,8 +112,8 @@ export default function LiveTipDialog({
         </div>
         {!loggedIn ? (
           <div className="tip-login">
-            <p>{t('tipLogin')}</p>
-            <Link href={`/login?next=${encodeURIComponent(`/live/${channelId}`)}`} className="streams-btn primary">
+            <p>{videoId ? t('superThanksLogin') : t('tipLogin')}</p>
+            <Link href={`/login?next=${encodeURIComponent(videoId ? `/watch/${videoId}` : `/live/${channelId}`)}`} className="streams-btn primary">
               {t('liveChatSignIn')}
             </Link>
           </div>
@@ -140,9 +149,15 @@ export default function LiveTipDialog({
             </label>
             <label className="tip-field">
               <span>{t('tipMessage')}</span>
-              <textarea rows={3} maxLength={TIP_MESSAGE_MAX} value={message} onChange={(e) => setMessage(e.target.value)} placeholder={t('tipMessagePlaceholder')} />
+              <textarea
+                rows={3}
+                maxLength={TIP_MESSAGE_MAX}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder={videoId ? t('superThanksPlaceholder') : t('tipMessagePlaceholder')}
+              />
               <small>
-                {message.length}/{TIP_MESSAGE_MAX} · {t('tipMessageHint')}
+                {message.length}/{TIP_MESSAGE_MAX} · {videoId ? t('superThanksHint') : t('tipMessageHint')}
               </small>
             </label>
             <p className="tip-note">{t('tipFeeNote').replace('{fee}', String(feePercent))}</p>

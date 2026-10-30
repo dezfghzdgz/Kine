@@ -131,6 +131,8 @@ test('popisek ceny bez období a rozdělený na hlavní a druhou měnu', () => {
   assert.equal(plus.stripPricePeriod('59 Kč (2,49 €)'), '59 Kč (2,49 €)', 'bez období beze změny');
   assert.deepEqual(plus.splitPriceLabel('59 Kč / měsíc (2,49 €)'), { main: '59 Kč', extra: '2,49 €' });
   assert.deepEqual(plus.splitPriceLabel('99 Kč'), { main: '99 Kč', extra: null });
+  assert.deepEqual(plus.splitPriceLabel('€2.49 ($2.99)'), { main: '€2.49', extra: '$2.99' }, 'eura + dolary');
+  assert.equal(plus.stripPricePeriod('€2.49 / month ($2.99)'), '€2.49 ($2.99)');
   assert.deepEqual(plus.splitPriceLabel('(nesmysl)'), { main: '(nesmysl)', extra: null });
 });
 

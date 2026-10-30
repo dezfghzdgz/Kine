@@ -86,14 +86,15 @@ test('kontrola ceny', () => {
 test('částky pro lidi a popisek ceny', () => {
   assert.equal(s.formatAmount(4900, 'czk'), '49 Kč');
   assert.equal(s.formatAmount(4950, 'CZK'), '49,50 Kč');
-  assert.equal(s.formatAmount(199, 'eur'), '1,99 €');
-  assert.equal(s.formatAmount(300, 'eur'), '3 €');
+  assert.equal(s.formatAmount(199, 'eur'), '€1.99', 'eura mezinárodně');
+  assert.equal(s.formatAmount(300, 'eur'), '€3');
   assert.equal(s.formatAmount(499, 'usd'), '$4.99');
   assert.equal(s.formatAmount(500, 'usd'), '$5');
   assert.equal(s.formatAmount(1000, 'jpy'), '1000 JPY');
   // Bez období - „/ month“ / „/ měsíc“ doplní stránka /plus v jazyce webu.
   assert.equal(s.priceLabelFor({ unitAmount: 5900, currency: 'czk' }), '59 Kč');
-  assert.equal(s.priceLabelFor({ unitAmount: 5900, currency: 'czk' }, { unitAmount: 249, currency: 'eur' }), '59 Kč (2,49 €)');
+  assert.equal(s.priceLabelFor({ unitAmount: 5900, currency: 'czk' }, { unitAmount: 249, currency: 'eur' }), '59 Kč (€2.49)');
+  assert.equal(s.priceLabelFor({ unitAmount: 249, currency: 'eur' }, { unitAmount: 299, currency: 'usd' }), '€2.49 ($2.99)', 'eura + dolary pro USA');
 });
 
 test('částka z formuláře', () => {

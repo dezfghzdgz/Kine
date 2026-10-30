@@ -25,14 +25,16 @@ export async function POST(req: NextRequest) {
   if (!creatorId) return NextResponse.json({ error: 'Chybí creatorId.' }, { status: 400 });
   if (creatorId === userData.user.id) return NextResponse.json({ error: 'Sám sebe si předplatit nemůžeš.' }, { status: 400 });
 
-  const { data: creator } = await supabaseServer
-    .from('profiles')
-    .select('stripe_account_id, stripe_onboarding_complete, subscription_stripe_price_id, username')
-    .eq('id', creatorId)
-    .single();
+  // select('*') - payouts_suspended je až s migrací moderátorských rolí.
+  const { data: creatorRow } = await supabaseServer.from('profiles').select('*').eq('id', creatorId).single();
+  const creator = creatorRow as { stripe_account_id?: string | null; stripe_onboarding_complete?: boolean | null; subscription_stripe_price_id?: string | null; username?: string | null; payouts_suspended?: boolean | null } | null;
 
   if (!creator?.stripe_onboarding_complete || !creator.subscription_stripe_price_id) {
     return NextResponse.json({ error: 'Tenhle tvůrce ještě předplatné nenastavil.' }, { status: 400 });
+  }
+  // Moderátor tvůrci pozastavil výdělky (sankce) - nové předplatné nejde.
+  if (creator.payouts_suspended === true) {
+    return NextResponse.json({ error: 'Tenhle tvůrce teď předplatné nepřijímá.', code: 'disabled' }, { status: 400 });
   }
 
   const siteUrl = siteUrlFrom(req);

@@ -6645,6 +6645,22 @@ input:focus, textarea:focus, select:focus {
 .plus-table .plus-check { color: var(--brand); vertical-align: middle; }
 .plus-cell-off { color: var(--text-faint); }
 .plus-cell-text { font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Skupiny ve srovnání (Sledování, Nahrávání…) a řádek s cenou. */
+.plus-table tr.plus-table-group th {
+  padding-top: 18px; padding-bottom: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-faint); border-top: 0;
+}
+.plus-table tr.plus-table-group td { border-top: 0; }
+.plus-table tbody:first-of-type tr.plus-table-group th { padding-top: 4px; }
+.plus-table tfoot th, .plus-table tfoot td { border-top: 1px solid var(--border-strong, var(--border)); padding-top: 14px; }
+.plus-table tfoot th { text-align: left; font-weight: 600; color: var(--text); }
+.plus-table tfoot .plus-cell-text { font-size: 15px; color: var(--text); }
+.plus-table tfoot td.featured { border-radius: 0 0 10px 10px; }
+.plus-table tfoot td.featured .plus-cell-text { color: var(--brand); }
+.plus-support {
+  margin-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+}
+.plus-support-btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; white-space: nowrap; }
 .plus-faq { margin-top: 18px; }
 .plus-faq-item { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel); margin-bottom: 8px; }
 .plus-faq-item summary { cursor: pointer; padding: 13px 16px; font-weight: 600; font-size: 14px; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
@@ -9299,6 +9315,28 @@ html[data-calm="1"] *:not([class*="spin"])::after {
   background: var(--panel-raised);
   color: var(--text-dim);
 }
+
+/* Super díky pod videem (components/VideoThanks.tsx). */
+.thanks-list { margin: 0 0 18px; display: flex; flex-direction: column; gap: 10px; }
+.thanks-sent { margin: 0; font-size: 13px; color: var(--brand); }
+.thanks-item {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px;
+  background: rgba(var(--brand-rgb), 0.08); border: 1px solid rgba(var(--brand-rgb), 0.28);
+}
+.thanks-avatar { width: 32px; height: 32px; flex: none; border-radius: 50%; overflow: hidden; background: var(--panel-raised); }
+.thanks-body { min-width: 0; flex: 1; }
+.thanks-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.thanks-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.thanks-amount {
+  font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-pill);
+  background: var(--brand); color: #0a0a0b; font-variant-numeric: tabular-nums;
+}
+.thanks-hide {
+  margin-left: auto; padding: 2px 8px; font-size: 12px; border-radius: var(--radius-pill);
+  background: transparent; border: 1px solid var(--border); color: var(--text-dim); cursor: pointer;
+}
+.thanks-hide:hover { color: var(--text); border-color: var(--text-faint); }
+.thanks-message { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; }
 
 .tip-backdrop {
   position: fixed;

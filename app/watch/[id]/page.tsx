@@ -12,6 +12,7 @@ import UiIcon from '@/components/UiIcon';
 import KineLoader from '@/components/KineLoader';
 import AddToPlaylist from '@/components/AddToPlaylist';
 import SubscribeButton from '@/components/SubscribeButton';
+import { VideoThanksButton, VideoThanksList } from '@/components/VideoThanks';
 import DownloadButton from '@/components/DownloadButton';
 import WatchHistoryTracker from '@/components/WatchHistoryTracker';
 import ChapterTimeline from '@/components/ChapterTimeline';
@@ -2132,6 +2133,10 @@ function WatchPageInner() {
         <div className="video-actions-row" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 14 }}>
           <VideoReactions videoId={video.id} ownerId={video.profiles?.id} />
           {video.profiles?.id && <SubscribeButton channelId={video.profiles.id} />}
+          {/* Super díky (peníze tvůrci se vzkazem pod videem) - jen když tvůrce může peníze přijímat. */}
+          {video.profiles?.id && (
+            <VideoThanksButton videoId={video.id} channelId={video.profiles.id} channelName={creatorName} isOwner={ownerView} loggedIn={!!userId} />
+          )}
           <div style={{ position: 'relative' }}>
             <button className="reaction-btn" onClick={() => setShareMenuOpen((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <ShareIcon size={16} /> {t('share')}
@@ -2272,6 +2277,7 @@ function WatchPageInner() {
             <LiveChat room={videoRoom(video.id)} canModerate={ownerView} />
           </div>
         )}
+        <VideoThanksList videoId={video.id} canModerate={ownerView || isModerator} />
         <p className="section-title">{t('interactionPanelTitle')}</p>
 
         {/* Tvůrce a diskuse v JEDNÉ kartě: nahoře tvůrce (odkaz na kanál), pod ním záložky

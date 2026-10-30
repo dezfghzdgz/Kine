@@ -3,7 +3,9 @@ import { CREATOR_PAYMENTS_ENABLED, CREATOR_PAYMENTS_OFF } from '@/lib/payments';
 import { stripeServer } from '@/lib/stripeServer';
 import { supabaseServer } from '@/lib/supabaseServer';
 
-const MIN_PRICE_EUR = 1;
+// Pod ~3 € by Kine na předplatném prodělalo: z 15 % provize platí poplatek Stripe za platbu
+// (~1,5 % + 0,25 €) i Connect (výplaty tvůrcům) - u 1 € by z 0,15 € zbylo míň než nic.
+const MIN_PRICE_EUR = 3;
 const MAX_PRICE_EUR = 100;
 
 // Založí (nebo přepíše) měsíční cenu předplatného pro daného tvůrce -
@@ -23,7 +25,7 @@ export async function POST(req: NextRequest) {
   const { priceEur } = await req.json();
   const price = Number(priceEur);
   if (!price || price < MIN_PRICE_EUR || price > MAX_PRICE_EUR) {
-    return NextResponse.json({ error: `Cena musí být mezi ${MIN_PRICE_EUR} a ${MAX_PRICE_EUR} EUR.` }, { status: 400 });
+    return NextResponse.json({ error: `Cena musí být mezi ${MIN_PRICE_EUR} a ${MAX_PRICE_EUR} EUR.`, code: 'price', min: MIN_PRICE_EUR, max: MAX_PRICE_EUR }, { status: 400 });
   }
 
   const { data: profile } = await supabaseServer
@@ -36,8 +38,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Nejdřív musíš dokončit propojení se Stripe.' }, { status: 400 });
   }
 
+  // Název vidí předplatitel na platební stránce a ve správě předplatného - anglicky (základní jazyk Kine).
   const product = await stripeServer.products.create({
-    name: `Předplatné - ${profile.username}`,
+    name: `Channel membership - ${profile.username} on Kine`,
+    metadata: { kind: 'creator-subscription', creatorId: userData.user.id },
   });
 
   const stripePrice = await stripeServer.prices.create({

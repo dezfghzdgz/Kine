@@ -89,8 +89,9 @@ export async function POST(req: NextRequest) {
           price_data: {
             currency,
             product_data: {
-              name: `Podpora pro ${target.name} na Kine`,
-              description: message ? `Vzkaz: ${message.slice(0, 120)}` : 'Podpora ve vysílání na Kine.',
+              // Zákazník vidí na platební stránce - anglicky (základní jazyk Kine).
+              name: `Tip for ${target.name} on Kine`,
+              description: message ? `Message: ${message.slice(0, 120)}` : 'Tip in a live stream on Kine.',
             },
             unit_amount: amountCents,
           },

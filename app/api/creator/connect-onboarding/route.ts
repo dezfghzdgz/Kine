@@ -35,6 +35,9 @@ export async function POST(req: NextRequest) {
           transfers: { requested: true },
           card_payments: { requested: true },
         },
+        // Výplaty tvůrci jednou za měsíc (1. den): Stripe Connect účtuje Kine poplatek za každý
+        // měsíc s výplatou a za každou výplatu - po kouskách každý den by to sežralo provizi.
+        settings: { payouts: { schedule: { interval: 'monthly', monthly_anchor: 1 } } },
       });
       accountId = account.id;
       await supabaseServer.from('profiles').update({ stripe_account_id: accountId }).eq('id', userData.user.id);
