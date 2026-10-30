@@ -23,20 +23,16 @@ export default function EmojiPicker({ onSelect }: { onSelect: (emoji: string) =>
   }, []);
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', display: 'inline-block' }}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: '0 4px', display: 'inline-flex', alignItems: 'center' }}
-        aria-label="Emoji"
-        title="Emoji"
-      >
+    <div ref={wrapRef} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+      {/* Vlastní třída: bez ní by tlačítko dostalo ze základního stylu skleněný ovál. */}
+      <button type="button" className="composer-icon-btn" onClick={() => setOpen((v) => !v)} aria-label="Emoji" aria-expanded={open} title="Emoji">
         <UiIcon name="smile" size={19} />
       </button>
       {open && (
         <div
           style={{
-            position: 'absolute', bottom: 'calc(100% + 6px)', left: 0, zIndex: 50,
+            // Tlačítko je u pravého okraje pole - nabídka se otevře doleva, ať nevyjede z panelu.
+            position: 'absolute', bottom: 'calc(100% + 6px)', right: 0, zIndex: 50,
             background: 'var(--panel-raised)', border: '1px solid var(--border)', borderRadius: 8,
             padding: 8, display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 2, width: 224,
           }}

@@ -644,13 +644,7 @@ export default function AppearanceSettings() {
       {segmented('appearanceDensityLabel', DENSITIES, appearance.density, DENSITY_LABELS, (v) => change({ density: v }), 'appearance-density')}
       {segmented('appearanceAvatarsLabel', AVATAR_MOTIONS, appearance.avatars, AVATAR_LABELS, (v) => change({ avatars: v }), 'appearance-avatars')}
 
-      <WithHelp help={t('appearancePreviewsHint')} className="settings-option">
-        <label className="settings-check">
-          <input type="checkbox" className="appearance-previews" checked={appearance.previews} onChange={(e) => change({ previews: e.target.checked })} />
-          <UiIcon name="play" size={16} />
-          <span>{t('appearancePreviews')}</span>
-        </label>
-      </WithHelp>
+      {/* Náhledy po najetí jsou teď v Nastavení -> Přehrávání (components/PlaybackSettings.tsx). */}
 
       <WithHelp help={t('appearanceContrastHint')} className="settings-option">
         <label className="settings-check">

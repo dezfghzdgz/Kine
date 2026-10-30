@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { publicError } from '@/lib/paymentsServer';
 import { PAYMENTS_ENABLED, PAYMENTS_OFF } from '@/lib/payments';
 import { stripeServer } from '@/lib/stripeServer';
 import { supabaseServer } from '@/lib/supabaseServer';
@@ -41,6 +42,6 @@ export async function POST(req: NextRequest) {
     if (stripeMissing(e, 'customer')) {
       return NextResponse.json({ error: 'Tohle předplatné bylo ze zkoušení plateb a u Stripe už není - kup si Kine Plus znovu.', code: 'stale-customer' }, { status: 409 });
     }
-    return NextResponse.json({ error: e?.message ?? 'Stripe se nepodařilo zavolat.' }, { status: 502 });
+    return NextResponse.json({ error: publicError(e, 'Stripe se nepodařilo zavolat.', 'Kine Plus portal') }, { status: 502 });
   }
 }

@@ -7,9 +7,9 @@ import type { LegalDoc as Doc } from '@/lib/legal';
 
 /** Odkazy v textu (/rules, /copyright...) jako opravdové odkazy, e-mail jako mailto. */
 function rich(text: string) {
-  const parts = text.split(/(\/(?:rules|terms|privacy|copyright)\b|[\w.+-]+@[\w-]+(?:\.[\w-]+)+)/g);
+  const parts = text.split(/(\/(?:rules|terms|privacy|copyright|plus|settings|donate)\b|[\w.+-]+@[\w-]+(?:\.[\w-]+)+)/g);
   return parts.map((part, i) => {
-    if (/^\/(rules|terms|privacy|copyright)$/.test(part)) {
+    if (/^\/(rules|terms|privacy|copyright|plus|settings|donate)$/.test(part)) {
       return (
         <Link key={i} href={part}>
           {part}
@@ -30,6 +30,10 @@ function rich(text: string) {
 /**
  * Pravidla / Podmínky / Ochrana údajů (lib/legal.ts). Česky pro češtinu
  * a slovenštinu, jinak anglicky - nahoře jde přepnout.
+ *
+ * Delší dokumenty mají nahoře „Ve zkratce“ (shrnutí pro rychlou orientaci),
+ * obsah s odkazy na články a číslované odstavce (1.1, 1.2…), na které jde
+ * odkazovat (#cl-3 = článek 3).
  */
 export default function LegalDoc({ doc }: { doc: Doc }) {
   const { lang } = useLanguage();
@@ -38,6 +42,8 @@ export default function LegalDoc({ doc }: { doc: Doc }) {
     setVersion(lang === 'cs' || lang === 'sk' ? 'cs' : 'en');
   }, [lang]);
   const d = doc[version];
+  const cs = version === 'cs';
+  const num = (i: number) => (d.numbered ? `${i + 1}. ` : '');
 
   return (
     <article className="legal-doc">
@@ -55,17 +61,60 @@ export default function LegalDoc({ doc }: { doc: Doc }) {
           {rich(p)}
         </p>
       ))}
-      {d.sections.map((s) => (
-        <section key={s.heading}>
-          <h2>{s.heading}</h2>
-          {s.paragraphs?.map((p, i) => <p key={i}>{rich(p)}</p>)}
-          {s.items && (
-            <ul>
-              {s.items.map((item, i) => (
-                <li key={i}>{rich(item)}</li>
-              ))}
-            </ul>
-          )}
+
+      {d.summary && d.summary.length > 0 && (
+        <aside className="legal-summary" aria-label={cs ? 'Ve zkratce' : 'In short'}>
+          <p className="legal-summary-title">{cs ? 'Ve zkratce' : 'In short'}</p>
+          <ul>
+            {d.summary.map((item, i) => (
+              <li key={i}>{rich(item)}</li>
+            ))}
+          </ul>
+          <p className="legal-summary-note">
+            {cs ? 'Shrnutí slouží jen pro rychlou orientaci - závazný je celý text níže.' : 'This summary is only for quick orientation - the full text below is binding.'}
+          </p>
+        </aside>
+      )}
+
+      {d.sections.length >= 6 && (
+        <nav className="legal-toc" aria-label={cs ? 'Obsah' : 'Contents'}>
+          <p className="legal-toc-title">{cs ? 'Obsah' : 'Contents'}</p>
+          <ol>
+            {d.sections.map((s, i) => (
+              <li key={s.heading}>
+                <a href={`#cl-${i + 1}`}>
+                  {num(i)}
+                  {s.heading}
+                </a>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
+
+      {d.sections.map((s, i) => (
+        <section key={s.heading} id={`cl-${i + 1}`}>
+          <h2>
+            {num(i)}
+            {s.heading}
+          </h2>
+          {s.paragraphs?.map((p, j) => <p key={j}>{rich(p)}</p>)}
+          {s.items &&
+            (d.numbered ? (
+              <ol className="legal-clauses">
+                {s.items.map((item, j) => (
+                  <li key={j} data-num={`${i + 1}.${j + 1}`}>
+                    {rich(item)}
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <ul>
+                {s.items.map((item, j) => (
+                  <li key={j}>{rich(item)}</li>
+                ))}
+              </ul>
+            ))}
         </section>
       ))}
       <p className="legal-footer">{rich(d.footer)}</p>

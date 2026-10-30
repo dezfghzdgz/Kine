@@ -5,6 +5,7 @@ import { siteUrlFrom } from '@/lib/siteUrl';
 import { CREATOR_PAYMENTS_ENABLED, PAYMENTS_ENABLED } from '@/lib/payments';
 import { PAID_TIERS, tierPriceLabel, tierStripePriceId, type PaidTier } from '@/lib/plus';
 import { LEGAL_OPERATOR } from '@/lib/operator';
+import { forgetPlusPrices, getPlusPrices } from '@/lib/plusPrices';
 import { PLUS_UPLOAD_MULTIPLIER, storageHoursFromEnv } from '@/lib/uploadLimits';
 import {
   REQUIRED_WEBHOOK_EVENTS,
@@ -29,10 +30,11 @@ export const dynamic = 'force-dynamic';
  *
  * GET  - kontrola: klíč, účet, webhook, ceny, portál, provozovatel, přepínač.
  *        Nic se nemění, žádné tajné hodnoty se nevrací.
- * POST { action: 'create-prices', currency: 'czk'|'eur', amounts: {kine, clips, all},
- *        eur?: {kine, clips, all} }
+ * POST { action: 'create-prices', currency: 'eur', amounts: {kine, clips, all},
+ *        extra?: { currency: 'usd', amounts } }
  *      - založí u Stripe produkty a měsíční ceny tří variant (znovu nic
- *        nezdvojí - ceny mají lookup_key) a vrátí řádky do Vercelu.
+ *        nezdvojí - ceny mají lookup_key). Web je pak používá sám
+ *        (lib/plusPrices.ts) - nic se do Vercelu nekopíruje.
  * POST { action: 'create-webhook' }
  *      - založí webhook na /api/donate/webhook se všemi událostmi a vrátí
  *        jeho podpisový klíč (Stripe ho ukáže jen teď); existující webhook
@@ -189,10 +191,15 @@ export async function GET(req: NextRequest) {
     facts.portalDefault = portal ? portal.data.length > 0 : null;
     facts.portalSwitching = portal?.data[0] ? !!portal.data[0].features?.subscription_update?.enabled : null;
 
+    // Cena, za kterou web opravdu prodává (lib/plusPrices.ts: EUR/USD z tlačítka níž, jinak z Vercelu).
+    const live = await getPlusPrices({ fresh: true });
     const prices: Record<string, PriceInfo | null> = {};
     for (const tier of PAID_TIERS) {
-      const id = facts.prices[tier].id;
+      const sold = live.ok ? live.tiers[tier] : null;
+      if (live.ok) facts.prices[tier].sells = sold ? { currency: sold.currency, eur: sold.amounts.eur, usd: sold.amounts.usd } : null;
+      const id = sold?.priceId ?? facts.prices[tier].id;
       if (!id) continue;
+      facts.prices[tier].id = id;
       try {
         const p = priceInfo(await stripe.prices.retrieve(id, { expand: ['product', 'currency_options'] }));
         prices[tier] = p;
@@ -256,7 +263,6 @@ async function createPrices(stripe: Stripe, body: any, lang: SetupLang) {
   const extraCurrency = body?.extra ? asCurrency(body.extra.currency, null) : null;
   if (extraCurrency === currency) throw new InputError(tx('Druhá měna musí být jiná než hlavní.', 'The second currency must differ from the main one.'));
   const out: Record<string, { id: string; label: string; reused: boolean }> = {};
-  const env: string[] = [];
   let renamed = 0;
   const minText = (c: PriceCurrency) => (c === 'czk' ? tx('aspoň 15 Kč', 'at least 15 CZK') : c === 'usd' ? tx('aspoň 0,50 $', 'at least $0.50') : tx('aspoň 0,50 €', 'at least €0.50'));
 
@@ -319,10 +325,11 @@ async function createPrices(stripe: Stripe, body: any, lang: SetupLang) {
     }
     const label = priceLabelFor({ unitAmount: amount, currency }, extraCurrency && extraAmount !== null ? { unitAmount: extraAmount, currency: extraCurrency } : null);
     out[tier] = { id: price.id, label, reused: price === existing };
-    env.push(`STRIPE_PLUS_${TIER_PRODUCT[tier].env}_PRICE_ID=${price.id}`);
-    env.push(`NEXT_PUBLIC_PLUS_${TIER_PRODUCT[tier].env}_PRICE_LABEL=${label}`);
   }
-  return { prices: out, env, renamed };
+  // Web si nové ceny najde sám podle lookup_key (lib/plusPrices.ts) - do Vercelu se nic nekopíruje.
+  // Tahle instance serveru hned, ostatní do 5 minut.
+  forgetPlusPrices();
+  return { prices: out, env: [] as string[], renamed };
 }
 
 /** Webhook Kine: nový (vrátí podpisový klíč), nebo doplnění událostí u existujícího. */

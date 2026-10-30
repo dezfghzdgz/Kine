@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PAYMENTS_ENABLED } from '@/lib/payments';
 import { supabaseServer } from '@/lib/supabaseServer';
-import { allPriceLabels, anyTierAvailable, hasClipsPlus, hasKinePlus, normalizePlan, FREE_CLIP_MAX_SECONDS, PLUS_CLIP_MAX_SECONDS } from '@/lib/plus';
+import { allPriceLabels, anyTierAvailable, formatPlusAmount, hasClipsPlus, hasKinePlus, normalizePlan, shownPriceFromLabel, FREE_CLIP_MAX_SECONDS, PLUS_CLIP_MAX_SECONDS, type PaidTier } from '@/lib/plus';
+import { getPlusPrices, shownCurrencyFor, shownLabels } from '@/lib/plusPrices';
 import { sweepProcessing } from '@/lib/markVideoReady';
 import { outdatedAppResponse } from '@/lib/desktopGate';
 import { generatedUsername } from '@/lib/ensureProfile';
@@ -44,7 +45,20 @@ export async function GET(req: NextRequest) {
   const clipsPlus = !outdated && hasClipsPlus(profile?.plan, profile?.plan_until);
   const kinePlus = !outdated && hasKinePlus(profile?.plan, profile?.plan_until);
   // Placení zatím neběží (lib/payments.ts): nic se nedá koupit - appka místo odkazu ukáže "Připravujeme".
-  const prices = PAYMENTS_ENABLED ? allPriceLabels() : { kine: null, clips: null, all: null };
+  // Ceny ze Stripe jen v eurech / dolarech (lib/plusPrices.ts); když Stripe neodpoví, eurová část popisku z Vercelu.
+  let prices: Record<PaidTier, string | null> = { kine: null, clips: null, all: null };
+  let available = false;
+  if (PAYMENTS_ENABLED) {
+    const live = await getPlusPrices();
+    if (live.ok) {
+      prices = shownLabels(live, shownCurrencyFor(req.headers.get('x-vercel-ip-country')), (cents, cur) => formatPlusAmount(cents, cur, 'en'));
+      available = Object.values(live.tiers).some(Boolean);
+    } else {
+      const env = allPriceLabels();
+      prices = { kine: shownPriceFromLabel(env.kine), clips: shownPriceFromLabel(env.clips), all: shownPriceFromLabel(env.all) };
+      available = anyTierAvailable();
+    }
+  }
   // Appka se ptá při startu a občas - dobrá chvíle dodělat videa, která
   // po nahrání z appky zůstala viset jako "processing" (viz markVideoReady).
   await sweepProcessing();
@@ -60,7 +74,7 @@ export async function GET(req: NextRequest) {
     kinePlus,
     maxClipSeconds: clipsPlus ? PLUS_CLIP_MAX_SECONDS : FREE_CLIP_MAX_SECONDS,
     /** Dá se něco koupit? (je nastavená aspoň jedna cena u Stripe) */
-    plusAvailable: PAYMENTS_ENABLED && anyTierAvailable(),
+    plusAvailable: available,
     prices,
     /** Starší appky: cena "Plus" = varianta s klipy. */
     plusPriceLabel: prices.clips ?? prices.all,

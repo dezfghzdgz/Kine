@@ -696,8 +696,9 @@ export default function SparksCard({
         )}
         {native && active && buffering && !needsTap && !userPaused && <KineLoader size="sm" delayed label={t('loading')} className="spark-loader" />}
         {showPlayIcon && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: 44, color: '#fff' }}>▶</span>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+            {/* Znak ▶ z písma kreslí každý systém jinak (Windows jako emoji) a není uprostřed - kolečko z CSS. */}
+            <span className="play-circle" aria-hidden="true" />
           </div>
         )}
         {native && active && soundBlocked && (

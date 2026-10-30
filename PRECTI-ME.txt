@@ -1,3 +1,51 @@
+KINE web: ceny jen v eurech, atraktivnější /plus s poděkováním po nákupu, rychlejší náhledy,
+nové Podmínky a Pravidla, opravy a zabezpečení plateb
+(dodávka kine-0132-2026-10-30)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0132.zip do kořene repa Kine, nahraj. Žádná migrace ani nová proměnná.
+2. Ceny v eurech: www.playkine.com/admin/stripe -> „Vytvořit ceny ve Stripe“ (EUR + USD je
+   předvyplněné). Hotovo - web je začne ukazovat a prodávat sám do pár minut, do Vercelu
+   nic nekopíruješ. (Do té doby web ukazuje eurovou část starých cen, koruny už nikde.)
+3. Kontrola: STRIPE_WEBHOOK_SECRET musí být ve Vercelu celý (whsec_…). Bez něj webhook
+   teď schválně nic nepřijme - dřív by šlo podvrhnout „zaplaceno“.
+
+CO JE NOVÉ
+- /plus: ceny ze Stripe jen v € (v USA $), nikdy Kč. Místo technické tabulky 4 dlaždice
+  „Co přidá Plus“ (3×, PLUS, Samo, 5 min) + pruh „Vždy zdarma“; celá tabulka je pod
+  „Porovnat všechny funkce“. Po zaplacení okno „Děkujeme!“ s tím, co člověk dostal.
+- Předplatitel Kine Plus má u loga malé „PLUS“. Verze BETA 0.0986.
+- Home: náhled po najetí startuje rychleji (kratší prodleva, hls.js se chystá dopředu,
+  manifest se stahuje hned při najetí); kolečko ▶ se přes hrající náhled neukazuje
+  a trojúhelník je opticky uprostřed (i ve Sparks a u klávesových zkratek).
+- Podmínky používání (19 článků) a Pravidla komunity (20 článků) přepsané jako právní
+  dokument: číslované odstavce, „Ve zkratce“, obsah. České právo, odstoupení do 14 dnů
+  se vzorem, reklamace, ČOI, nařízení EU o digitálních službách (oznámení, odůvodnění,
+  odvolání do 6 měsíců). Svoboda projevu zůstává základ. (Nejsem právník - před větším
+  růstem je dobré nechat to projít advokátem.)
+- Konec videa: když už nejsou nová videa, nabídnou se dávno viděná (štítek „Zhlédnuto“) -
+  nabídka už nezůstane prázdná.
+- Sdílet: bez „Vložit na web“. Cizí profil: jen vystavené odznaky (žádné „+N“).
+  Zvoneček u odběru i Sdílet se u kraje okna otevřou doleva (nevyjedou z okna).
+- Pole komentáře: smajlík a + jako stejné ikony v jednom rámečku (bez oválů).
+- Nastavení: nový oddíl Přehrávání (kvalita videa + náhledy po najetí) - pryč ze Vzhledu.
+  Hotové motivy mají náhled přes celou kartu (bez světlého proužku u okraje).
+- Barva appky: i ztlumené plochy (--brand-soft) se barví podle zvolené barvy a barva
+  se nastaví hned při načtení (žádné tyrkysové bliknutí).
+- Příspěvky: počty lajků přes count (dřív max 1000 a stahovaly se všechny řádky).
+
+ZABEZPEČENÍ (nezávislá kontrola plateb)
+- Webhook bez celého STRIPE_WEBHOOK_SECRET nic nepřijme (dřív šlo podepsat prázdným klíčem).
+- Smazání účtu nejdřív zruší předplatná u Stripe (Kine Plus i členství) - dřív se strhávalo dál.
+  Když zrušení selže, účet se nesmaže a ukáže se hláška (dřív odhlásilo i při chybě).
+- Spor / vrácení platby členství: tvůrci se jeho podíl vezme zpět (jako u podpor).
+- Členství: stav vždy přímo ze Stripe (staré události ho nevrátí), druhé souběžné členství
+  u stejného tvůrce nejde koupit, ověření id tvůrce, zablokovaný tvůrce nic nepřijme.
+- Dary: jen zaplacené; nejvýš 6 pokusů za 10 min z jedné adresy (zkoušení kradených karet).
+- Chyby ze Stripe se do prohlížeče posílají bez id účtů a klíčů. Connect: dvojklik
+  nezaloží dva účty.
+
 KINE web: Kine Plus v eurech (+ dolary pro USA), přehlednější srovnání na /plus, Podpořit Kine
 pro všechny, Super díky pod videi a peníze pro tvůrce připravené k zapnutí
 (dodávka kine-0131-2026-10-30)

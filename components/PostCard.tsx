@@ -137,11 +137,20 @@ export default function PostCard({
   }
 
   async function loadReactions() {
-    const { data } = await supabase.from('post_reactions').select('user_id, reaction').eq('post_id', post.id);
-    setLikeCount((data ?? []).filter((r) => r.reaction === 'like').length);
-    setDislikeCount((data ?? []).filter((r) => r.reaction === 'dislike').length);
-    const mine = (data ?? []).find((r) => r.user_id === userId);
-    setMyReaction((mine?.reaction as 'like' | 'dislike') ?? null);
+    // Počty přes count (dřív se stahovaly všechny řádky reakcí - u oblíbeného příspěvku tisíce
+    // a databáze jich navíc vrací nejvýš 1000, takže počet nad 1000 nebyl správně) + jen moje reakce.
+    const counted = (reaction: 'like' | 'dislike') =>
+      supabase.from('post_reactions').select('*', { count: 'exact', head: true }).eq('post_id', post.id).eq('reaction', reaction);
+    const [likes, dislikes, mine] = await Promise.all([
+      counted('like'),
+      counted('dislike'),
+      userId
+        ? supabase.from('post_reactions').select('reaction').eq('post_id', post.id).eq('user_id', userId).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    setLikeCount(likes.count ?? 0);
+    setDislikeCount(dislikes.count ?? 0);
+    setMyReaction(((mine.data as { reaction?: string } | null)?.reaction as 'like' | 'dislike') ?? null);
   }
 
   async function react(reaction: 'like' | 'dislike') {

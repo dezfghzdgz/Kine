@@ -1,11 +1,11 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
-import { allPriceLabels, hasPlus, normalizePlan, splitPriceLabel, type PaidTier } from '@/lib/plus';
+import { allPriceLabels, formatPlusAmount, hasPlus, normalizePlan, shownPriceFromLabel, type PaidTier, type ShownCurrency } from '@/lib/plus';
 import { PAYMENTS_ENABLED } from '@/lib/payments';
 import ComingSoon from '@/components/ComingSoon';
 import { operatorLine } from '@/lib/operator';
@@ -16,19 +16,27 @@ import { operatorLine } from '@/lib/operator';
  *  automatické nahrávání, klipy až 5 minut) a obojí. Základ zůstává zdarma
  *  a bez omezení.
  *
- * Stránka je stavěná jako nabídka pro zákazníka: krátký titulek s tím, co
- * člověk dostane, tři karty s cenou a výhodami (obojí zvýrazněné jako
- * nejvýhodnější), srovnávací tabulka se základem zdarma a odpovědi na
- * otázky, které si lidi kladou před zaplacením. Ceny přicházejí
- * z prostředí (NEXT_PUBLIC_PLUS_*_PRICE_LABEL); bez nich je varianta
- * "Brzy" - nic se nevymýšlí.
+ * Stránka je stavěná jako nabídka pro zákazníka: krátký titulek, tři karty
+ * s cenou (obojí zvýrazněné jako nejvýhodnější), čtyři dlaždice „co Plus
+ * přidá“ s velkými čísly a pruh „vždy zdarma“ - podrobná tabulka je až pod
+ * rozbalením, ať stránka na první pohled nevypadá složitě.
+ *
+ * Ceny jsou rovnou ze Stripe (/api/plus/prices, lib/plusPrices.ts) a jen
+ * v eurech, v USA v dolarech - koruny se neukazují nikdy. Než se načtou
+ * (nebo když Stripe neodpoví), poslouží eurová část starého popisku
+ * z Vercelu; bez ceny je varianta „Brzy“ - nic se nevymýšlí.
  *
  * Platba přes Stripe (předplatné). Že proběhla, ví až webhook - proto se
  * po návratu s ?ok=1 chvíli může ukazovat ještě "free"; stránka se pár
  * sekund doptává. Změna varianty a zrušení jde přes portál Stripe.
  */
+
+type LivePrices = { enabled: true; ok: boolean; currency: ShownCurrency; tiers: Record<PaidTier, { eur: number | null; usd: number | null } | null> };
+
+const ICON = { width: 22, height: 22, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
+
 function TierIcon({ tier }: { tier: PaidTier }) {
-  const common = { width: 26, height: 26, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
+  const common = { ...ICON, width: 26, height: 26 };
   if (tier === 'kine') {
     // odznak
     return (
@@ -54,6 +62,40 @@ function TierIcon({ tier }: { tier: PaidTier }) {
   );
 }
 
+/** Ikony dlaždic „co Plus přidá“. */
+function HighlightIcon({ kind }: { kind: 'upload' | 'badge' | 'auto' | 'clip' }) {
+  if (kind === 'upload') {
+    return (
+      <svg {...ICON}>
+        <path d="M12 16V4M7 9l5-5 5 5" />
+        <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+      </svg>
+    );
+  }
+  if (kind === 'badge') {
+    return (
+      <svg {...ICON}>
+        <path d="M12 3l2.4 1.8 3-.2.9 2.9 2.4 1.8-1 2.8 1 2.8-2.4 1.8-.9 2.9-3-.2L12 21l-2.4-1.8-3 .2-.9-2.9-2.4-1.8 1-2.8-1-2.8 2.4-1.8.9-2.9 3 .2z" />
+        <path d="M9 12.2l2 2 4-4.2" />
+      </svg>
+    );
+  }
+  if (kind === 'auto') {
+    return (
+      <svg {...ICON}>
+        <path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4 4 0 0 1-1 7.9" />
+        <path d="M12 13v8M9 16l3-3 3 3" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...ICON}>
+      <circle cx="12" cy="13" r="8" />
+      <path d="M12 9v4l2.5 2.5M9.5 2.5h5" />
+    </svg>
+  );
+}
+
 function Check({ off = false }: { off?: boolean }) {
   if (off) return <span className="plus-cell-off" aria-label="–">–</span>;
   return (
@@ -70,8 +112,13 @@ function PlusPageInner() {
   const [me, setMe] = useState<{ plan: string | null; planUntil: string | null; loggedIn: boolean } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<{ text: string; detail: string | null } | null>(null);
-  // Placení zatím neběží (lib/payments.ts): bez cen jsou karty "Připravujeme" a nic se nekupuje.
-  const prices = PAYMENTS_ENABLED ? allPriceLabels() : { kine: null, clips: null, all: null };
+  // Ceny ze Stripe (eura / dolary); do načtení náhradní eurová část popisku z Vercelu.
+  const [live, setLive] = useState<LivePrices | null>(null);
+  const [liveDone, setLiveDone] = useState(!PAYMENTS_ENABLED);
+  // Poděkování po zaplacení - jakmile webhook předplatné zapíše (jednou za návrat ze Stripe).
+  const [thanksOpen, setThanksOpen] = useState(false);
+  const thanksShown = useRef(false);
+  const envLabels = PAYMENTS_ENABLED ? allPriceLabels() : { kine: null, clips: null, all: null };
 
   async function load() {
     const { data } = await supabase.auth.getUser();
@@ -91,6 +138,35 @@ function PlusPageInner() {
     return () => timers.forEach(clearTimeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [justPaid]);
+
+  useEffect(() => {
+    if (!PAYMENTS_ENABLED) return;
+    let alive = true;
+    fetch('/api/plus/prices')
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((d) => {
+        if (!alive) return;
+        if (d?.enabled && d.ok && d.tiers) setLive(d as LivePrices);
+        setLiveDone(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /** Dá se varianta koupit a za kolik (jen € / $). */
+  const offer = (tier: PaidTier): { available: boolean; price: string | null } => {
+    if (!PAYMENTS_ENABLED) return { available: false, price: null };
+    if (live) {
+      const a = live.tiers[tier];
+      if (!a) return { available: false, price: null };
+      const cur: ShownCurrency | null = a[live.currency] ? live.currency : a.eur ? 'eur' : a.usd ? 'usd' : null;
+      return { available: true, price: cur ? formatPlusAmount(a[cur] as number, cur, lang) : null };
+    }
+    const label = envLabels[tier];
+    return { available: !!label, price: shownPriceFromLabel(label, lang) };
+  };
 
   async function call(path: string, tier?: PaidTier) {
     setBusy(tier ?? 'portal');
@@ -140,11 +216,36 @@ function PlusPageInner() {
 
   const owns = (tier: PaidTier) => active && (plan === tier || plan === 'all' || plan === 'plus');
 
-  // Tlačítko podle stavu: nepřihlášený -> přihlásit, moje -> ✓, jinak koupit (nebo "Brzy").
-  const cta = (tier: PaidTier, price: string | null) => {
+  // Po návratu ze Stripe (?ok=1) a zapsaném předplatném: okno s poděkováním a s tím, co teď člověk má.
+  useEffect(() => {
+    if (!justPaid || !active || thanksShown.current) return;
+    thanksShown.current = true;
+    setThanksOpen(true);
+    try {
+      // Obnovení stránky ani sdílený odkaz poděkování znovu neukáže.
+      const url = new URL(window.location.href);
+      url.searchParams.delete('ok');
+      window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+    } catch {
+      // jen kosmetika adresy
+    }
+  }, [justPaid, active]);
+  useEffect(() => {
+    if (!thanksOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setThanksOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [thanksOpen]);
+  const boughtTier: PaidTier = plan === 'kine' || plan === 'clips' ? plan : 'all';
+  const boughtPerks = tiers.find((x) => x.tier === boughtTier)?.perks ?? [];
+
+  // Tlačítko podle stavu: nepřihlášený -> přihlásit, moje -> ✓, jinak koupit (nebo nic, když varianta není).
+  const cta = (tier: PaidTier) => {
     if (owns(tier)) return <span className="plus-mine">✓ {t('plusCurrent')}</span>;
-    // Bez ceny (Stripe ještě není nastavený) říká "Brzy" už cenovka - tlačítko by to jen opakovalo.
-    if (!price) return null;
+    const { available, price } = offer(tier);
+    if (!available) return null;
     if (me && !me.loggedIn) {
       return (
         <Link href="/login?next=/plus" className="reaction-btn plus-cta">
@@ -153,15 +254,26 @@ function PlusPageInner() {
       );
     }
     if (active) return null;
+    // „Pořídit · €2.49 / měsíc“; bez známé částky jen „Pořídit“ (formát klíče je všude „X · {price}“).
+    const label = price ? t('plusChoose').replace('{price}', `${price} ${t('plusMonthly')}`) : t('plusChoose').split(' · ')[0];
     return (
       <button type="button" className="plus-cta" onClick={() => call('/api/plus/checkout', tier)} disabled={busy !== null}>
-        {busy === tier ? t('loading') : t('plusChoose').replace('{price}', `${splitPriceLabel(price).main} ${t('plusMonthly')}`)}
+        {busy === tier ? t('loading') : label}
       </button>
     );
   };
 
-  // Srovnání po skupinách - jen věci, které Kine opravdu dělá. Sloupce: Zdarma, Kine Plus, Klipy Plus, obojí.
-  const priceCell = (tier: PaidTier) => (prices[tier] ? splitPriceLabel(prices[tier] as string).main : '–');
+  // Co Plus přidá - čtyři dlaždice s velkým číslem; u každé, ke které variantě patří.
+  const highlights: { kind: 'upload' | 'badge' | 'auto' | 'clip'; value: string; label: string; sub: string; tier: string }[] = [
+    { kind: 'upload', value: '3×', label: t('plusHlUpload'), sub: t('plusHlUploadSub'), tier: t('plusTierKine') },
+    { kind: 'badge', value: 'PLUS', label: t('plusHlBadge'), sub: t('plusHlBadgeSub'), tier: t('plusTierKine') },
+    { kind: 'auto', value: t('plusHlAutoValue'), label: t('plusHlAuto'), sub: t('plusHlAutoSub'), tier: t('plusTierClips') },
+    { kind: 'clip', value: '5 min', label: t('plusHlClip'), sub: t('plusHlClipSub'), tier: t('plusTierClips') },
+  ];
+  const alwaysFree = [t('plusHlFree1'), t('plusHlFree2'), t('plusHlFree3'), t('plusHlFree4')];
+
+  // Podrobné srovnání po skupinách (pod rozbalením) - jen věci, které Kine opravdu dělá.
+  const priceCell = (tier: PaidTier) => offer(tier).price ?? '–';
   const groups: { title: string; rows: { label: string; cells: (boolean | string)[] }[] }[] = [
     {
       title: t('plusCmpGroupWatch'),
@@ -233,9 +345,45 @@ function PlusPageInner() {
       )}
       {me?.loggedIn && !active && justPaid && <p className="panel" style={{ margin: '0 0 14px', color: 'var(--text-dim)' }}>{t('plusWaitingPayment')}</p>}
 
+      {thanksOpen && (
+        <div className="plus-thanks-backdrop" onClick={() => setThanksOpen(false)}>
+          <div className="panel plus-thanks" role="dialog" aria-modal="true" aria-labelledby="plus-thanks-title" onClick={(e) => e.stopPropagation()}>
+            <div className="plus-thanks-burst" aria-hidden="true">
+              {Array.from({ length: 16 }, (_, i) => (
+                <i key={i} style={{ ['--i' as string]: i } as React.CSSProperties} />
+              ))}
+            </div>
+            <span className="plus-thanks-icon">
+              <TierIcon tier={boughtTier} />
+            </span>
+            <span className="plus-eyebrow" style={{ marginBottom: 8 }}>PLUS</span>
+            <h2 id="plus-thanks-title">{t('plusThanksTitle')}</h2>
+            <p className="plus-thanks-text">{t('plusThanksText').replace('{plan}', planName(plan))}</p>
+            <ul className="plus-perks plus-thanks-perks">
+              {boughtPerks.map((p) => (
+                <li key={p}>
+                  <Check />
+                  <span>{p}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="plus-thanks-actions">
+              <Link href="/" className="plus-cta plus-thanks-go" onClick={() => setThanksOpen(false)}>
+                {t('plusThanksContinue')}
+              </Link>
+              {boughtTier !== 'kine' && (
+                <Link href="/download" className="reaction-btn plus-thanks-app" onClick={() => setThanksOpen(false)}>
+                  {t('desktopAppLink')}
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="plus-grid">
         {tiers.map(({ tier, title, sub, perks, featured }) => {
-          const price = prices[tier];
+          const { available, price } = offer(tier);
           const mine = owns(tier);
           return (
             <div key={tier} className={`panel plus-card ${featured ? 'featured' : ''} ${mine ? 'mine' : ''}`}>
@@ -252,12 +400,12 @@ function PlusPageInner() {
               <div className="plus-price">
                 {price ? (
                   <>
-                    {/* Popisek z Vercelu je bez období („59 Kč (2,49 €)“) - období v jazyce webu. */}
-                    <span className="plus-price-value">{splitPriceLabel(price).main}</span>
+                    <span className="plus-price-value">{price}</span>
                     <span className="plus-price-per">{t('plusMonthly')}</span>
-                    {splitPriceLabel(price).extra && <span className="plus-price-alt">({splitPriceLabel(price).extra})</span>}
                   </>
-                ) : (
+                ) : !liveDone ? (
+                  <span className="plus-price-skeleton" aria-hidden="true" />
+                ) : available ? null : (
                   <span className="plus-price-soon">{t('plusNotAvailable')}</span>
                 )}
               </div>
@@ -269,7 +417,7 @@ function PlusPageInner() {
                   </li>
                 ))}
               </ul>
-              <div className="plus-card-foot">{cta(tier, price)}</div>
+              <div className="plus-card-foot">{cta(tier)}</div>
             </div>
           );
         })}
@@ -287,9 +435,42 @@ function PlusPageInner() {
         </div>
       )}
 
-      <section className="panel plus-compare">
-        <p className="panel-heading" style={{ marginBottom: 4 }}>{t('plusCompareTitle')}</p>
-        <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-dim)' }}>{t('plusCompareText')}</p>
+      <section className="plus-hl" aria-labelledby="plus-hl-title">
+        <div className="plus-hl-head">
+          <h2 id="plus-hl-title">{t('plusHlTitle')}</h2>
+          <p>{t('plusHlText')}</p>
+        </div>
+        <div className="plus-hl-grid">
+          {highlights.map((h) => (
+            <div key={h.kind} className="plus-hl-tile">
+              <div className="plus-hl-top">
+                <span className="plus-hl-icon">
+                  <HighlightIcon kind={h.kind} />
+                </span>
+                <span className="plus-hl-chip">{h.tier}</span>
+              </div>
+              <span className={`plus-hl-value${h.kind === 'badge' ? ' is-badge' : ''}`}>{h.value}</span>
+              <span className="plus-hl-label">{h.label}</span>
+              <span className="plus-hl-sub">{h.sub}</span>
+            </div>
+          ))}
+        </div>
+        <div className="plus-free-strip">
+          <strong>{t('plusHlFree')}</strong>
+          {alwaysFree.map((item) => (
+            <span key={item}>
+              <Check />
+              {item}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      {/* Celé srovnání pro ty, kdo chtějí detaily - schované, ať stránka nepůsobí složitě. */}
+      <details className="plus-compare-details">
+        <summary>
+          <span>{t('plusCompareAll')}</span>
+        </summary>
         <div className="plus-table-wrap">
           <table className="plus-table">
             <thead>
@@ -343,7 +524,7 @@ function PlusPageInner() {
             )}
           </table>
         </div>
-      </section>
+      </details>
 
       {/* Jednorázový dar místo předplatného (stránka /donate) - až když běží placení. */}
       {PAYMENTS_ENABLED && (

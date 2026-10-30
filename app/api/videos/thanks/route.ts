@@ -10,7 +10,7 @@ import { activeBan, loadChatSettings } from '@/lib/liveChatModeration';
 import { keyMode } from '@/lib/stripeSetup';
 import { cleanTipMessage, formatTipAmount, parseTipCurrency, tipAmountCents, tipFeeCents, tipFeePercent } from '@/lib/liveTips';
 import { tipTarget } from '@/lib/liveTipsServer';
-import { paymentAllowedNow, TEST_MODE_OFF } from '@/lib/paymentsServer';
+import { paymentAllowedNow, publicError, TEST_MODE_OFF } from '@/lib/paymentsServer';
 
 export const dynamic = 'force-dynamic';
 
@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
     // Bez migrace supabase-migration-super-diky.sql chybí sloupec video_id.
     const missingColumn = /video_id/i.test(insert.error?.message ?? '');
     return NextResponse.json(
-      { error: missingColumn ? 'Super díky ještě nejsou v databázi zapnuté.' : (insert.error?.message ?? 'Super díky se nepodařilo založit.'), code: missingColumn ? 'unavailable' : 'failed' },
+      { error: missingColumn ? 'Super díky ještě nejsou v databázi zapnuté.' : publicError(insert.error, 'Super díky se nepodařilo založit.', 'Kine Super Thanks'), code: missingColumn ? 'unavailable' : 'failed' },
       { status: missingColumn ? 503 : 500 }
     );
   }
@@ -212,7 +212,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ url: session.url, amount: formatTipAmount(amountCents, currency, 'en') });
   } catch (err: any) {
     await supabaseServer.from('live_tips').update({ status: 'failed' }).eq('id', tipId);
-    return NextResponse.json({ error: err?.message ?? 'Platbu se nepodařilo založit.', code: 'failed' }, { status: 502 });
+    return NextResponse.json({ error: publicError(err, 'Platbu se nepodařilo založit.', 'Kine Super Thanks'), code: 'failed' }, { status: 502 });
   }
 }
 
@@ -234,6 +234,6 @@ export async function PATCH(req: NextRequest) {
   }
   if (!owner && !staff) return NextResponse.json({ error: 'Tohle může jen tvůrce videa nebo moderátor.' }, { status: 403 });
   const { error } = await supabaseServer.from('live_tips').update({ hidden_at: body?.hidden === false ? null : new Date().toISOString() }).eq('id', id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: publicError(error, 'Nepodařilo se uložit.', 'Kine Super Thanks') }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

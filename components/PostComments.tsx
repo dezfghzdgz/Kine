@@ -110,17 +110,20 @@ export default function PostComments({ postId, ownerId, onCommentAdded }: { post
   return (
     <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'var(--panel-raised)', border: '1px solid var(--border)', borderRadius: 8 }}>
+        <div className="composer">
           <input
             type="text"
+            className="composer-input"
             placeholder={t('writeComment')}
+            aria-label={t('writeComment')}
             value={text}
             onChange={(e) => setText(e.target.value)}
             maxLength={2000}
-            style={{ flex: 1, minWidth: 0, border: 'none', background: 'none' }}
           />
-          <EmojiPicker onSelect={(emoji) => setText((v) => v + emoji)} />
-          <AttachmentPicker onSelect={setImageFile} />
+          <span className="composer-tools">
+            <EmojiPicker onSelect={(emoji) => setText((v) => v + emoji)} />
+            <AttachmentPicker onSelect={setImageFile} />
+          </span>
         </div>
         {imageFile && (
           <p style={{ fontSize: 11.5, color: 'var(--text-faint)', margin: 0 }}>

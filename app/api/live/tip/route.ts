@@ -9,7 +9,7 @@ import { checkChatMessage, containsLink } from '@/lib/liveChatRules';
 import { activeBan, loadChatSettings } from '@/lib/liveChatModeration';
 import { cleanTipMessage, formatTipAmount, parseTipCurrency, tipAmountCents, tipFeeCents, tipFeePercent } from '@/lib/liveTips';
 import { tipTarget } from '@/lib/liveTipsServer';
-import { paymentAllowedNow, TEST_MODE_OFF } from '@/lib/paymentsServer';
+import { paymentAllowedNow, publicError, TEST_MODE_OFF } from '@/lib/paymentsServer';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
     .insert({ channel_id: channelId, user_id: user.id, amount_cents: amountCents, currency, fee_cents: feeCents, message, status: 'pending' })
     .select('id')
     .single();
-  if (error || !tip) return NextResponse.json({ error: error?.message ?? 'Podporu se nepodařilo založit.' }, { status: 500 });
+  if (error || !tip) return NextResponse.json({ error: publicError(error, 'Podporu se nepodařilo založit.', 'Kine tip') }, { status: 500 });
 
   const siteUrl = siteUrlFrom(req);
   try {
@@ -112,6 +112,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ url: session.url, amount: formatTipAmount(amountCents, currency, 'cs') });
   } catch (err: any) {
     await supabaseServer.from('live_tips').update({ status: 'failed' }).eq('id', tip.id);
-    return NextResponse.json({ error: err?.message ?? 'Platbu se nepodařilo založit.' }, { status: 500 });
+    return NextResponse.json({ error: publicError(err, 'Platbu se nepodařilo založit.', 'Kine tip') }, { status: 500 });
   }
 }

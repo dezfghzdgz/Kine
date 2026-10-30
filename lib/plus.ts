@@ -70,6 +70,56 @@ export function splitPriceLabel(label: string): { main: string; extra: string | 
   return m && m[1].trim() ? { main: m[1].trim(), extra: m[2].trim() } : { main: clean, extra: null };
 }
 
+/** Jazyk webu -> formát čísel a měny (eura a dolary se píšou podle zvyklostí jazyka). */
+const MONEY_LOCALE: Record<string, string> = { cs: 'cs-CZ', sk: 'sk-SK', en: 'en-IE', de: 'de-DE', es: 'es-ES', fr: 'fr-FR', pl: 'pl-PL', uk: 'uk-UA' };
+
+/** Ceny Kine Plus se ukazují jen v eurech nebo dolarech - koruny nikdy (rozhodnutí: Kine je mezinárodní). */
+export type ShownCurrency = 'eur' | 'usd';
+
+/** 249 + 'eur' -> „€2.49“ (en) / „2,49 €“ (cs); 300 -> „€3“. */
+export function formatPlusAmount(cents: number, currency: string, lang = 'en'): string {
+  const cur = currency.toUpperCase();
+  const value = cents / 100;
+  const locale = cur === 'USD' && lang === 'en' ? 'en-US' : MONEY_LOCALE[lang] ?? 'en-IE';
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: cur,
+      currencyDisplay: 'narrowSymbol',
+      minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return `${value.toFixed(2)} ${cur}`;
+  }
+}
+
+/** „2,49 €“ / „€2.49“ / „$2.99“ / „2.49 EUR“ -> { cents, currency }; koruny a nesmysl -> null. */
+export function parseShownAmount(text: string): { cents: number; currency: ShownCurrency } | null {
+  const t = text.trim();
+  if (/kč|czk/i.test(t)) return null;
+  const currency: ShownCurrency | null = /€|\beur\b/i.test(t) ? 'eur' : /\$|\busd\b/i.test(t) ? 'usd' : null;
+  const num = /(\d{1,5})(?:[.,](\d{1,2}))?/.exec(t);
+  if (!currency || !num) return null;
+  const cents = Number(num[1]) * 100 + (num[2] ? Number(num[2].padEnd(2, '0')) : 0);
+  return cents > 0 ? { cents, currency } : null;
+}
+
+/**
+ * Náhradní cena ze starého popisku ve Vercelu (když se ceny ze Stripe nedají
+ * načíst): jen eurová nebo dolarová část - „59 Kč (2,49 €)“ -> „€2.49“.
+ * Popisek jen v korunách -> null (koruny se neukazují).
+ */
+export function shownPriceFromLabel(label: string | null | undefined, lang = 'en'): string | null {
+  if (!label) return null;
+  const { main, extra } = splitPriceLabel(label);
+  for (const part of [main, extra]) {
+    const parsed = part ? parseShownAmount(part) : null;
+    if (parsed) return formatPlusAmount(parsed.cents, parsed.currency, lang);
+  }
+  return null;
+}
+
 /** Cena, jak se ukazuje lidem - text z prostředí (bez období), ať jde měnit bez nasazení kódu. */
 export function tierPriceLabel(tier: PaidTier): string | null {
   const byTier: Record<PaidTier, string | undefined> = {

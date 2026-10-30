@@ -22,16 +22,16 @@ export default function AttachmentPicker({ onSelect }: { onSelect: (fileOrUrl: F
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+      {/* Ikona + (ne znak z písma - ten sedí každému systému jinak a nebyl srovnaný se smajlíkem). */}
       <button
         type="button"
+        className={`composer-icon-btn${open ? ' is-open' : ''}`}
         onClick={() => setOpen((v) => !v)}
-        style={{
-          background: 'none', border: 'none', color: 'var(--text-faint)', padding: '0 10px',
-          cursor: 'pointer', fontSize: 20, lineHeight: 1, transform: open ? 'rotate(45deg)' : 'none',
-          transition: 'transform 0.15s ease',
-        }}
+        aria-label={`${t('postPhotoTab')} / GIF`}
+        aria-expanded={open}
+        title={`${t('postPhotoTab')} / GIF`}
       >
-        +
+        <UiIcon name="plus" size={19} />
       </button>
 
       {open && (

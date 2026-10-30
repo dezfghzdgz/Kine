@@ -30,10 +30,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Chybí podpis.' }, { status: 400 });
   }
 
+  // trim: mezera / nový řádek na konci hodnoty z Vercelu by jinak shodil každé ověření.
+  const secret = (process.env.STRIPE_WEBHOOK_SECRET ?? '').trim();
+  // Bez klíče by knihovna Stripe ověřila i podpis prázdným klíčem - kdokoliv by si
+  // mohl „zaplatit“ podvrženou událostí (třeba na náhledovém nasazení bez klíče).
+  if (!/^whsec_[A-Za-z0-9]{20,}$/.test(secret)) {
+    console.error('Kine: STRIPE_WEBHOOK_SECRET chybí nebo je neúplný - webhook nic nepřijme.');
+    return NextResponse.json({ error: 'Webhook není nastavený.' }, { status: 500 });
+  }
+
   let event;
   try {
-    // trim: mezera / nový řádek na konci hodnoty z Vercelu by jinak shodil každé ověření.
-    event = stripeServer.webhooks.constructEvent(body, signature, (process.env.STRIPE_WEBHOOK_SECRET ?? '').trim());
+    event = stripeServer.webhooks.constructEvent(body, signature, secret);
   } catch (err: any) {
     return NextResponse.json({ error: `Ověření podpisu selhalo: ${err.message}` }, { status: 400 });
   }
@@ -53,7 +61,8 @@ export async function POST(req: NextRequest) {
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as any;
 
-    if (session.mode === 'payment') {
+    // Jen zaplacený dar (platba převodem apod. přijde až s async_payment_succeeded - ta se tu nezapisuje).
+    if (session.mode === 'payment' && session.payment_status === 'paid') {
       // Jednorázový dar appky. Stripe může stejnou událost poslat víckrát - dar se zapíše jen jednou.
       const userId = session.metadata?.userId;
       const amountTotal = session.amount_total ? session.amount_total / 100 : 0;
@@ -117,18 +126,28 @@ export async function POST(req: NextRequest) {
         if (error) return retryLater(error.message);
       }
     } else if (session.mode === 'subscription') {
-      // Vzniklo nové aktivní předplatné konkrétního tvůrce.
+      // Vzniklo nové předplatné konkrétního tvůrce. Stav přímo od Stripe (ne z události) -
+      // opakovaná starší událost by jinak zrušené členství znovu „aktivovala“.
       const subscriberId = session.metadata?.subscriberId;
       const creatorId = session.metadata?.creatorId;
 
-      if (subscriberId && creatorId) {
+      if (subscriberId && creatorId && session.subscription) {
+        let sub: any;
+        try {
+          sub = await stripeServer.subscriptions.retrieve(session.subscription);
+        } catch (e: any) {
+          if (e?.statusCode === 404 || e?.code === 'resource_missing') sub = { id: session.subscription, status: 'canceled' };
+          else return retryLater(`Stripe: ${e?.message ?? 'předplatné nejde načíst'}`);
+        }
+        const periodEnd = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end ?? null;
         const { error } = await supabaseServer.from('channel_subscriptions').upsert(
           {
             subscriber_id: subscriberId,
             creator_id: creatorId,
-            status: 'active',
-            stripe_subscription_id: session.subscription,
+            status: membershipStatus(sub.status),
+            stripe_subscription_id: sub.id ?? session.subscription,
             stripe_customer_id: session.customer,
+            current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
           },
           { onConflict: 'subscriber_id,creator_id' }
         );
@@ -154,16 +173,16 @@ export async function POST(req: NextRequest) {
       .eq('plan_stripe_subscription_id', sub.id);
     if (error) return retryLater(error.message);
   } else if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
-    const sub = event.data.object as any;
-    // Členství u tvůrce: aktivní / zkušební = člen, nezaplacené čeká (past_due), cokoliv jiného
-    // (zrušené, nezaplacené po všech pokusech, pozastavené, nedokončené) = konec.
-    const status = event.type === 'customer.subscription.deleted'
-      ? 'canceled'
-      : sub.status === 'active' || sub.status === 'trialing'
-        ? 'active'
-        : sub.status === 'past_due'
-          ? 'past_due'
-          : 'canceled';
+    // Členství u tvůrce: aktuální stav od Stripe (události chodí i mimo pořadí - starší
+    // „aktivní“ po „zrušeno“ by jinak členství vrátila natrvalo).
+    let sub: any = event.data.object as any;
+    try {
+      sub = await stripeServer.subscriptions.retrieve(sub.id);
+    } catch (e: any) {
+      if (e?.statusCode === 404 || e?.code === 'resource_missing') sub = { ...sub, status: 'canceled' };
+      else return retryLater(`Stripe: ${e?.message ?? 'předplatné nejde načíst'}`);
+    }
+    const status = membershipStatus(sub.status);
     // Novější verze API Stripe mají konec období u položky předplatného, ne u předplatného.
     const periodEnd = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end ?? null;
 
@@ -225,7 +244,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (event.type === 'charge.refunded') {
-    // Vrácená podpora / Super díky (celá částka): zmizí a tvůrci se peníze vezmou zpět.
+    // Vrácená podpora / Super díky / platba členství (celá částka): tvůrci se peníze vezmou zpět.
     const charge = event.data.object as any;
     if (charge?.refunded === true) await reverseTipPayment(charge, 'refund');
   }
@@ -241,19 +260,34 @@ export async function POST(req: NextRequest) {
  */
 async function reverseTipPayment(charge: any, why: 'dispute' | 'refund'): Promise<void> {
   const paymentIntent = typeof charge?.payment_intent === 'string' ? charge.payment_intent : charge?.payment_intent?.id;
-  if (!paymentIntent) return;
-  const { data, error } = await supabaseServer.from('live_tips').select('id, status').eq('stripe_payment_intent', paymentIntent).maybeSingle();
-  if (error || !data) return; // není to podpora (nebo podpory nejsou v databázi)
-  const tip = data as { id: number; status: string };
-  if (tip.status !== 'refunded') await supabaseServer.from('live_tips').update({ status: 'refunded' }).eq('id', tip.id);
+  let tipId: number | null = null;
+  if (paymentIntent) {
+    const { data, error } = await supabaseServer.from('live_tips').select('id, status').eq('stripe_payment_intent', paymentIntent).maybeSingle();
+    if (!error && data) {
+      const tip = data as { id: number; status: string };
+      tipId = tip.id;
+      if (tip.status !== 'refunded') await supabaseServer.from('live_tips').update({ status: 'refunded' }).eq('id', tip.id);
+    }
+  }
+  // Peníze, které šly tvůrci (destination charge) - podpory, Super díky i platby
+  // předplatného kanálu. Kine Plus a dary převod na tvůrce nemají, tady nic.
   const transfer = typeof charge?.transfer === 'string' ? charge.transfer : charge?.transfer?.id;
   if (!transfer) return;
   try {
-    await stripeServer.transfers.createReversal(transfer, { metadata: { reason: why, tipId: String(tip.id) } }, { idempotencyKey: `kine-tip-reversal-${transfer}` });
+    await stripeServer.transfers.createReversal(
+      transfer,
+      { metadata: { reason: why, ...(tipId !== null ? { tipId: String(tipId) } : { charge: String(charge?.id ?? '') }) } },
+      { idempotencyKey: `kine-tip-reversal-${transfer}` }
+    );
   } catch (e: any) {
-    // Už vrácené (třeba ručně ve Stripe), nebo tvůrce nemá na účtu dost - jen záznam.
-    console.warn(`Kine: peníze z podpory ${tip.id} se nepodařilo vzít tvůrci zpět (${why}): ${e?.message ?? e}`);
+    // Už vrácené (třeba ručně ve Stripe nebo při vrácení s reverse_transfer), nebo tvůrce nemá na účtu dost - jen záznam.
+    console.warn(`Kine: peníze z platby ${tipId ?? charge?.id ?? '?'} se nepodařilo vzít tvůrci zpět (${why}): ${e?.message ?? e}`);
   }
+}
+
+/** Stav členství u tvůrce podle Stripe: aktivní / zkušební = člen, nezaplacené čeká, jinak konec. */
+function membershipStatus(status: unknown): 'active' | 'past_due' | 'canceled' {
+  return status === 'active' || status === 'trialing' ? 'active' : status === 'past_due' ? 'past_due' : 'canceled';
 }
 
 /**

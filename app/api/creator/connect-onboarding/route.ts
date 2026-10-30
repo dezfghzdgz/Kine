@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { publicError } from '@/lib/paymentsServer';
 import { CREATOR_PAYMENTS_ENABLED, CREATOR_PAYMENTS_OFF } from '@/lib/payments';
 import { stripeServer } from '@/lib/stripeServer';
 import { supabaseServer } from '@/lib/supabaseServer';
@@ -38,7 +39,8 @@ export async function POST(req: NextRequest) {
         // Výplaty tvůrci jednou za měsíc (1. den): Stripe Connect účtuje Kine poplatek za každý
         // měsíc s výplatou a za každou výplatu - po kouskách každý den by to sežralo provizi.
         settings: { payouts: { schedule: { interval: 'monthly', monthly_anchor: 1 } } },
-      });
+      // Dvojklik / dvě okna: jeden účet u Stripe, ne dva (Stripe vrátí ten samý).
+      }, { idempotencyKey: `kine-connect-${userData.user.id}` });
       accountId = account.id;
       await supabaseServer.from('profiles').update({ stripe_account_id: accountId }).eq('id', userData.user.id);
     }
@@ -57,6 +59,6 @@ export async function POST(req: NextRequest) {
     // Appka teď vrátí konkrétní chybu ze Stripe (třeba "Connect ještě
     // není na tvém účtu zapnutý"), místo aby appka spadla bez odpovědi -
     // přesně tohle způsobovalo to "Processing..." navždy.
-    return NextResponse.json({ error: err.message ?? 'Něco se pokazilo.' }, { status: 500 });
+    return NextResponse.json({ error: publicError(err, 'Něco se pokazilo.', 'Kine Connect') }, { status: 500 });
   }
 }

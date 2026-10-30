@@ -11,6 +11,7 @@ import { UploadProvider } from '@/lib/uploadManager';
 import './globals.css';
 import { SITE_URL } from '@/lib/linkPreview';
 import { APPEARANCE_BOOT_SCRIPT } from '@/lib/appearance';
+import { BRAND_BOOT_SCRIPT } from '@/lib/brandColor';
 import { NETWORK_HINTS_BOOT_SCRIPT } from '@/lib/networkHints';
 
 const siteUrl = SITE_URL;
@@ -109,6 +110,7 @@ export default function RootLayout({
       <head>
         {/* Uložený vzhled (motiv, sklo, světlo kolem videa) hned při načtení - bez přebliknutí. */}
         <script dangerouslySetInnerHTML={{ __html: APPEARANCE_BOOT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: BRAND_BOOT_SCRIPT }} />
         {/* Spojení se servery se naváže hned (lib/networkHints.ts): databáze (každá stránka
             si o data říká hned po načtení) a Cloudflare (náhledy, video). Na mobilních
             datech to je klidně půl vteřiny na každý server. */}

@@ -20,6 +20,8 @@ import CaptionsOverlay from '@/components/CaptionsOverlay';
 import ReportModal from '@/components/ReportModal';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import PlusBadge from '@/components/PlusBadge';
+import { PauseIcon, PlayIcon } from '@/components/MusicIcons';
+import { dropdownSide } from '@/lib/dropdownSide';
 import Toast, { ToastType } from '@/components/Toast';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -46,7 +48,6 @@ import VideoCard from '@/components/VideoCard';
 import { formatDuration } from '@/lib/homeRecommendation';
 import { decideMiniPlayer, digitSeekTarget } from '@/lib/miniPlayer';
 import { resolvePlaybackId } from '@/lib/playbackToken';
-import { embedCode } from '@/lib/embed';
 import ClipPanel from '@/components/ClipPanel';
 import LiveChat from '@/components/LiveChat';
 import ChatReplay from '@/components/ChatReplay';
@@ -58,7 +59,7 @@ import AmbientCanvas from '@/components/AmbientCanvas';
 import { useAppearance } from '@/lib/useAppearance';
 import { attachVod, canPlayVodNatively, mediaPlayer, reportSlowVideo, type VodHandle } from '@/lib/vodPlayer';
 import type { PlaybackMode } from '@/lib/netQuality';
-import { rankUpNext, seenLocally, unseenFirst } from '@/lib/upNext';
+import { seenOrderLocally, unseenFirst, upNextWithFallback } from '@/lib/upNext';
 import { filterHidden, loadHiddenContent, NOTHING_HIDDEN, type HiddenContent } from '@/lib/hiddenContent';
 import { chooseEngine, shouldReportSlowStart, statsReport, vodVerdict, type QualityLevel } from '@/lib/vodPlayerCore';
 import { customerCodeFromUrl, manifestUrl } from '@/lib/streamSource';
@@ -147,6 +148,7 @@ function WatchPageInner() {
   const keyHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playlistScrolledForRef = useRef<string | null>(null);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const shareWrapRef = useRef<HTMLDivElement>(null);
   const [reportOpen, setReportOpen] = useState(false);
   // Klipy (lib/clips.ts): panel na vystřižení, hotové klipy z tohoto videa,
   // a u klipu odkaz na původní video + kdo ho vystřihl.
@@ -1405,11 +1407,17 @@ function WatchPageInner() {
     setInWatchLater(watchLaterResult.inWatchLater);
 
     const currentIsSpark = isSpark(data);
-    const seen = new Set<string>([...seenAndHidden.seen, ...seenLocally()]);
+    // Zhlédnutá od nejnovějšího: historie na účtu, pak paměť prohlížeče.
+    const seenOrder = [...seenAndHidden.seen, ...seenOrderLocally()];
+    const seen = new Set<string>(seenOrder);
     const matchingFormat = filterHidden(others ?? [], seenAndHidden.hidden).filter((v: any) => isSpark(v) === currentIsSpark);
-    // Vedle videa nezhlédnutá napřed; po konci videa jen nezhlédnutá (lib/upNext.ts).
+    // Vedle videa nezhlédnutá napřed; po konci videa nezhlédnutá, a když nejsou, aspoň dávno viděná (lib/upNext.ts).
     setOtherVideos(unseenFirst(matchingFormat, seen).slice(0, 24));
-    setUpNextPool(rankUpNext(matchingFormat, data, seen).slice(0, 12));
+    setUpNextPool(
+      upNextWithFallback(matchingFormat, data, seenOrder)
+        .slice(0, 12)
+        .map((v: any) => (seen.has(v.id) ? { ...v, __seen: true } : v))
+    );
 
     // Klipy z tohoto videa a původ, když je tohle samo klip. Bez migrace
     // (supabase-migration-klipy.sql) sloupec chybí a dotaz vrátí chybu -
@@ -1512,18 +1520,6 @@ function WatchPageInner() {
   async function shareMoment() {
     const seconds = Math.floor(playerRef.current?.currentTime ?? 0);
     await shareUrl(`${window.location.origin}/watch/${videoId}?t=${seconds}`);
-  }
-
-  /** Kód iframe pro cizí web (lib/embed.ts) - jen u veřejného videa, jinde by přehrávač neměl co hrát. */
-  async function copyEmbedCode() {
-    setShareMenuOpen(false);
-    const code = embedCode(videoId, { width: video?.width, height: video?.height, title: video?.title });
-    try {
-      await navigator.clipboard.writeText(code);
-      setToast({ message: t('embedCodeCopied'), type: 'success' });
-    } catch {
-      setToast({ message: code, type: 'error' });
-    }
   }
 
   async function toggleWatchLater() {
@@ -1759,7 +1755,14 @@ function WatchPageInner() {
                       // key se mění s každým stiskem, takže React prvek nasadí znovu
                       // a animace se rozjede od začátku i při rychlém mačkání.
                       <div key={keyHint.nonce} className="player-key-hint" aria-live="polite">
-                        {keyHint.text}
+                        {/* Přehrát / pauza jako ikona - znak ▶ z písma kreslí Windows jako emoji a mimo střed. */}
+                        {keyHint.text === '▶' ? (
+                          <PlayIcon size={22} />
+                        ) : keyHint.text === '❚❚' ? (
+                          <PauseIcon size={22} />
+                        ) : (
+                          keyHint.text
+                        )}
                       </div>
                     )}
                     {/* Než se obraz rozjede: náhled videa (ne černá plocha) a kolečko. */}
@@ -1875,6 +1878,7 @@ function WatchPageInner() {
                                 <span className="player-upnext-thumb">
                                   {v.thumbnail_url && <Image src={v.thumbnail_url} alt="" fill sizes="(max-width: 700px) 45vw, 340px" style={{ objectFit: 'cover' }} />}
                                   {v.duration_seconds ? <span className="player-upnext-duration">{formatDuration(v.duration_seconds)}</span> : null}
+                                  {v.__seen ? <span className="player-upnext-seen">{t('upNextSeenBadge')}</span> : null}
                                 </span>
                                 <span className="player-upnext-title">{v.title}</span>
                               </button>
@@ -2137,17 +2141,24 @@ function WatchPageInner() {
           {video.profiles?.id && (
             <VideoThanksButton videoId={video.id} channelId={video.profiles.id} channelName={creatorName} isOwner={ownerView} loggedIn={!!userId} />
           )}
-          <div style={{ position: 'relative' }}>
+          <div ref={shareWrapRef} style={{ position: 'relative' }}>
             <button className="reaction-btn" onClick={() => setShareMenuOpen((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <ShareIcon size={16} /> {t('share')}
             </button>
             {shareMenuOpen && (
-              <div className="profile-dropdown" style={{ bottom: 'auto', top: 'calc(100% + 8px)', left: 0, width: 200 }}>
+              <div
+                className="profile-dropdown"
+                style={{
+                  bottom: 'auto',
+                  top: 'calc(100% + 8px)',
+                  width: 200,
+                  maxWidth: 'calc(100vw - 16px)',
+                  // U pravého okraje okna se otevře doleva (lib/dropdownSide.ts).
+                  ...(dropdownSide(shareWrapRef.current, 200) === 'right' ? { left: 'auto', right: 0 } : { left: 0, right: 'auto' }),
+                }}
+              >
                 <button className="profile-dropdown-item" onClick={shareVideo}>{t('shareVideo')}</button>
                 <button className="profile-dropdown-item" onClick={shareMoment}>{t('shareMoment')}</button>
-                {video.visibility === 'public' && video.status === 'ready' && (
-                  <button className="profile-dropdown-item" onClick={copyEmbedCode}>{t('shareEmbed')}</button>
-                )}
               </div>
             )}
           </div>

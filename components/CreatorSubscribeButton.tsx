@@ -19,6 +19,7 @@ function CreatorSubscribeButtonInner({ creatorId }: { creatorId: string }) {
   const [price, setPrice] = useState<number | null>(null);
   const [subscribed, setSubscribed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
 
   useEffect(() => {
     load();
@@ -56,15 +57,25 @@ function CreatorSubscribeButtonInner({ creatorId }: { creatorId: string }) {
       return;
     }
     setLoading(true);
+    setFailed(null);
     const { data: sessionData } = await supabase.auth.getSession();
     const res = await fetch('/api/creator/subscribe-checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionData.session?.access_token}` },
       body: JSON.stringify({ creatorId }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     setLoading(false);
-    if (data.url) window.location.href = data.url;
+    if (data.url) {
+      window.location.href = data.url;
+      return;
+    }
+    // Dřív se při chybě nestalo nic - teď aspoň hláška (a „už jsi členem“ rovnou ✓).
+    if (data.code === 'already-member') {
+      setSubscribed(true);
+      return;
+    }
+    setFailed(data.code === 'test-mode' ? t('payErrTesting') : t('plusFailed'));
   }
 
   if (!price || userId === creatorId) return null;
@@ -78,8 +89,15 @@ function CreatorSubscribeButtonInner({ creatorId }: { creatorId: string }) {
   }
 
   return (
-    <button onClick={handleSubscribe} disabled={loading} style={{ background: '#f5a623', color: '#0a0a0b' }}>
-      {loading ? t('processing') : `${t('joinChannelButton')} · ${price} €/${t('perMonth')}`}
-    </button>
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 4 }}>
+      <button onClick={handleSubscribe} disabled={loading} style={{ background: '#f5a623', color: '#0a0a0b' }}>
+        {loading ? t('processing') : `${t('joinChannelButton')} · ${price} €/${t('perMonth')}`}
+      </button>
+      {failed && (
+        <span className="error-text" role="alert" style={{ fontSize: 12 }}>
+          {failed}
+        </span>
+      )}
+    </span>
   );
 }

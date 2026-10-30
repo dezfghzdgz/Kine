@@ -55,10 +55,12 @@ async function stillFrame(file: Blob, maxSide: number): Promise<Blob | null> {
  * (#appearance, #earnings…), takže odkazy z nabídky a odjinud vedou rovnou
  * na místo. Vysvětlení jsou pod otazníčky.
  */
-type Section = 'profile' | 'appearance' | 'home' | 'earnings' | 'account';
+type Section = 'profile' | 'appearance' | 'playback' | 'home' | 'earnings' | 'account';
 const SECTIONS: { id: Section; icon: UiIconName; key: DictKey }[] = [
   { id: 'profile', icon: 'user', key: 'settingsSecProfile' },
   { id: 'appearance', icon: 'palette', key: 'appearanceHeading' },
+  // Kvalita videa a náhledy po najetí - přehrávání, ne vzhled (dřív byly ve Vzhledu).
+  { id: 'playback', icon: 'play', key: 'playbackHeading' },
   { id: 'home', icon: 'home', key: 'settingsSecHome' },
   { id: 'earnings', icon: 'coins', key: 'settingsSecEarnings' },
   { id: 'account', icon: 'shield', key: 'settingsSecAccount' },
@@ -358,10 +360,19 @@ export default function SettingsPage() {
   async function handleDeleteAccount() {
     setConfirmDeleteAccount(false);
     const { data: sessionData } = await supabase.auth.getSession();
-    await fetch('/api/account/delete', {
+    const res = await fetch('/api/account/delete', {
       method: 'POST',
       headers: { Authorization: `Bearer ${sessionData.session?.access_token}` },
-    });
+    }).catch(() => null);
+    // Dřív se odhlásilo i při chybě - člověk si myslel, že účet je smazaný, a nebyl.
+    if (!res?.ok) {
+      const body = await res?.json().catch(() => ({}));
+      setToast({
+        message: body?.code === 'subscription-cancel-failed' ? t('accountDeleteSubscriptionFailed') : typeof body?.error === 'string' ? body.error : t('settingsSaveFailed'),
+        type: 'error',
+      });
+      return;
+    }
     await supabase.auth.signOut();
     router.push('/');
   }
@@ -443,13 +454,10 @@ export default function SettingsPage() {
       </nav>
 
       {/* Vzhled: motiv, sklo, pozadí, průhlednost, světlo kolem videa, barva. */}
-      {section === 'appearance' && (
-        <>
-          <AppearanceSettings />
-          {/* Kvalita videa na datech (lib/netQuality.ts) - patří k zařízení jako vzhled. */}
-          <PlaybackSettings />
-        </>
-      )}
+      {section === 'appearance' && <AppearanceSettings />}
+
+      {/* Přehrávání: kvalita videa podle připojení (lib/netQuality.ts) a náhledy po najetí. */}
+      {section === 'playback' && <PlaybackSettings />}
 
       {section === 'profile' && (
         <form onSubmit={handleSaveProfile} className="settings-stack">

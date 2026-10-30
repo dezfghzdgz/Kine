@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { deleteStreamVideo, isCloudflareUid, processCloudflareCleanup, queueCloudflareDelete } from '@/lib/cloudflareVideos';
 import { deleteLiveInput } from '@/lib/liveStream';
+import { cancelStripeSubscriptionsOf } from '@/lib/stripeCancel';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -15,6 +16,10 @@ export const maxDuration = 60;
  * Videa se mažou přes frontu (cloudflare_cleanup): kanál se stovkami videí
  * by se za minutu, kterou má server na odpověď, smazat nestihl. Co nestihne
  * teď, dodělá úklid.
+ *
+ * Úplně napřed se zruší předplatná u Stripe (lib/stripeCancel.ts) - dřív se
+ * po smazání účtu z karty strhávalo dál. Když zrušení selže, účet se nesmaže
+ * (jinak by člověk platil za smazaný účet a neměl jak to zrušit).
  */
 export async function POST(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '').trim();
@@ -22,6 +27,17 @@ export async function POST(req: NextRequest) {
   const { data: userData, error: userError } = await supabaseServer.auth.getUser(token);
   if (userError || !userData.user) return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });
   const userId = userData.user.id;
+
+  const cancel = await cancelStripeSubscriptionsOf(userId);
+  if (!cancel.ok) {
+    return NextResponse.json(
+      {
+        error: 'Předplatné u Stripe se nepodařilo zrušit, účet proto zatím zůstává. Zkus to za chvíli znovu, nebo napiš na kinesupport@gmail.com.',
+        code: 'subscription-cancel-failed',
+      },
+      { status: 502 }
+    );
+  }
 
   const [{ data: videos }, tickets, input] = await Promise.all([
     supabaseServer.from('videos').select('cloudflare_video_id').eq('owner_id', userId).limit(10000),

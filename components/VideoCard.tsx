@@ -16,8 +16,49 @@ import { preloadHls } from '@/lib/hlsAttach';
 import { rememberStreamCode } from '@/lib/networkHints';
 import { previewsAllowed } from '@/lib/netQuality';
 
-const HOVER_DELAY_MS = 150;
+/**
+ * Prodleva po najetí, než se náhled začne stahovat: jen tolik, aby se nespouštěl
+ * u každé karty, přes kterou myš jen přejede (nebo která při scrollu projede pod ní).
+ * Zbytek času do rozjezdu je síť - proto se manifest i hls.js chystají dopředu (níž).
+ */
+const HOVER_DELAY_MS = 80;
 const SOUND_PREF_KEY = 'kine-preview-sound-enabled';
+
+/**
+ * hls.js (knihovna, která v Chrome / Edge / Opeře přehrává HLS) se na počítači
+ * s myší stáhne v klidu hned po načtení stránky - dřív se stahovala až při
+ * prvním najetí a první náhled se kvůli tomu rozjížděl o dost déle.
+ */
+let hlsWarmScheduled = false;
+function warmHlsOnce() {
+  if (hlsWarmScheduled || typeof window === 'undefined') return;
+  hlsWarmScheduled = true;
+  try {
+    if (!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches || !previewsAllowed()) return;
+  } catch {
+    return;
+  }
+  const run = () => void preloadHls();
+  const idle = (window as any).requestIdleCallback as ((cb: () => void, opts?: { timeout: number }) => number) | undefined;
+  if (typeof idle === 'function') idle(run, { timeout: 4000 });
+  else setTimeout(run, 2000);
+}
+
+/**
+ * Manifest videa (malý textový soubor) se začne stahovat hned při najetí -
+ * souběžně s prodlevou. Cloudflare ho tak má připravený, než si o něj řekne
+ * přehrávač. Každé video jen jednou za návštěvu stránky.
+ */
+const warmedManifests = new Set<string>();
+function warmManifest(url: string) {
+  if (warmedManifests.has(url) || warmedManifests.size >= 300) return;
+  warmedManifests.add(url);
+  fetch(url, { mode: 'cors', credentials: 'omit', priority: 'high' } as RequestInit)
+    .then((r) => r.text())
+    .catch(() => {
+      // Nevadí - přehrávač si manifest stáhne sám.
+    });
+}
 
 function getSoundPref() {
   if (typeof window === 'undefined') return false;
@@ -152,6 +193,7 @@ function VideoCard({
   // spojení se serverem videí naváže hned při načtení stránky (lib/networkHints.ts).
   useEffect(() => {
     rememberStreamCode(customerCodeFromUrl(video.thumbnail_url));
+    warmHlsOnce();
   }, [video.thumbnail_url]);
 
   function startHover() {
@@ -164,8 +206,10 @@ function VideoCard({
     // tokenem (lib/streamProtection.ts) - náhled po najetí by skončil
     // chybou Cloudflare. Bez viditelnosti v datech se bere jako veřejné.
     if (video.visibility && video.visibility !== 'public') return;
-    // hls.js se začne stahovat hned (než uběhne prodleva) - náhled i stránka videa se pak rozjedou dřív.
+    // hls.js a manifest se začnou stahovat hned (než uběhne prodleva) - náhled i stránka videa se pak rozjedou dřív.
     void preloadHls();
+    warmManifest(manifestUrl(video.cloudflare_video_id, customerCodeFromUrl(video.thumbnail_url)));
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     hoverTimerRef.current = setTimeout(() => setPreviewing(true), HOVER_DELAY_MS);
   }
 
@@ -238,7 +282,8 @@ function VideoCard({
       }}
     >
       <Link href={href} className="video-card-link">
-        <div className={isSparks ? 'video-thumb video-thumb-vertical' : 'video-thumb'}>
+        {/* is-previewing: náhled se chystá / hraje - kolečko ▶ se neukazuje (nepřekrývá video). */}
+        <div className={`${isSparks ? 'video-thumb video-thumb-vertical' : 'video-thumb'}${previewing ? ' is-previewing' : ''}`}>
           {/* U vlastního přehrávače obrázek zůstává pod videem (žádné černé bliknutí, než se video rozjede). */}
           {video.thumbnail_url && (!previewing || nativePreview) && (
             <Image src={video.thumbnail_url} alt={video.title} width={320} height={180} priority={priority} />

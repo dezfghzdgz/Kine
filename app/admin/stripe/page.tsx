@@ -82,7 +82,6 @@ export default function AdminStripePage() {
   const [amounts, setAmounts] = useState<Record<string, string>>(() => Object.fromEntries(TIERS.map((x) => [x.tier, x.eur])));
   const [usdAmounts, setUsdAmounts] = useState<Record<string, string>>(() => Object.fromEntries(TIERS.map((x) => [x.tier, x.usd])));
   const [withUsd, setWithUsd] = useState(true);
-  const [priceEnv, setPriceEnv] = useState<string[]>([]);
   const [priceNote, setPriceNote] = useState<string | null>(null);
   const [webhookEnv, setWebhookEnv] = useState<string[]>([]);
   const [webhookNote, setWebhookNote] = useState<string | null>(null);
@@ -131,14 +130,21 @@ export default function AdminStripePage() {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error ?? tx('Nepodařilo se.', 'Failed.'));
       if (action === 'create-prices') {
-        setPriceEnv(body.env ?? []);
         setPriceNote(
-          body.renamed > 0
-            ? tx(
-                `Produkty u Stripe mají teď anglické názvy a popisy (${body.renamed}×) - zákazníci je vidí na platební stránce.`,
-                `The Stripe products now have English names and descriptions (${body.renamed}×) - customers see them on the payment page.`
-              )
-            : null
+          [
+            tx(
+              'Hotovo - ceny jsou ve Stripe. Web je začne ukazovat a prodávat sám (do pár minut); do Vercelu nic kopírovat nemusíš.',
+              'Done - the prices are at Stripe. The site starts showing and selling them by itself (within a few minutes); nothing to copy to Vercel.'
+            ),
+            body.renamed > 0
+              ? tx(
+                  `Produkty u Stripe mají teď anglické názvy a popisy (${body.renamed}×) - zákazníci je vidí na platební stránce.`,
+                  `The Stripe products now have English names and descriptions (${body.renamed}×) - customers see them on the payment page.`
+                )
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' ')
         );
       } else {
         setWebhookEnv(body.env ?? []);
@@ -220,8 +226,8 @@ export default function AdminStripePage() {
             <p className="panel-heading" style={{ marginTop: 0 }}>{tx('1. Ceny předplatného (měsíční)', '1. Subscription prices (monthly)')}</p>
             <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--text-dim)' }}>
               {tx(
-                'Založí ve Stripe tři produkty s měsíční cenou. Stejná částka podruhé nic nezdvojí (jen opraví názvy produktů); nová částka platí pro nové předplatitele.',
-                'Creates three products with a monthly price at Stripe. The same amount again duplicates nothing (it only fixes the product names); a new amount applies to new subscribers.'
+                'Založí ve Stripe tři produkty s měsíční cenou v eurech (a dolary pro USA). Web je pak používá sám - nic se nekopíruje do Vercelu. Stejná částka podruhé nic nezdvojí; nová částka platí pro nové předplatitele.',
+                'Creates three products with a monthly price in euros (and dollars for the USA) at Stripe. The site then uses them by itself - nothing is copied to Vercel. The same amount again duplicates nothing; a new amount applies to new subscribers.'
               )}
             </p>
             {TIERS.map((x) => (
@@ -246,8 +252,7 @@ export default function AdminStripePage() {
             <button type="button" disabled={busy !== null} onClick={() => act('create-prices')}>
               {busy === 'create-prices' ? tx('Zakládám…', 'Creating…') : tx('Vytvořit ceny ve Stripe', 'Create prices at Stripe')}
             </button>
-            {priceNote && <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--text-dim)' }}>{priceNote}</p>}
-            <EnvBlock lines={priceEnv} note={tx('Tyhle řádky dej do Vercelu (každý zvlášť: název = hodnota):', 'Put these lines into Vercel (each one separately: name = value):')} {...copy} />
+            {priceNote && <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--brand)' }}>{priceNote}</p>}
           </div>
 
           <div className="panel" style={{ marginTop: 12 }}>

@@ -554,17 +554,20 @@ export default function CommentSection({
             <p style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 18 }}>{t('commentsDisabledNote')}</p>
           ) : (
           <form onSubmit={(e) => postComment(e)} style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18 }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'var(--panel-raised)', border: '1px solid var(--border)', borderRadius: 8 }}>
+            <div className="composer">
               <input
                 type="text"
+                className="composer-input"
                 placeholder={t('writeComment')}
+                aria-label={t('writeComment')}
                 maxLength={2000}
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
-                style={{ flex: 1, minWidth: 0, border: 'none', background: 'none' }}
               />
-              <EmojiPicker onSelect={(emoji) => setNewComment((v) => v + emoji)} />
-              <AttachmentPicker onSelect={setNewCommentImage} />
+              <span className="composer-tools">
+                <EmojiPicker onSelect={(emoji) => setNewComment((v) => v + emoji)} />
+                <AttachmentPicker onSelect={setNewCommentImage} />
+              </span>
             </div>
             {newCommentImage && (
               <p style={{ fontSize: 11.5, color: 'var(--text-faint)', margin: 0 }}>
@@ -608,15 +611,19 @@ export default function CommentSection({
 
                 {replyingTo === c.id && (
                   <form onSubmit={(e) => postComment(e, c.id)} className="comment-reply-form">
-                    <input
-                      type="text"
-                      placeholder={t('replyPlaceholder')}
-                      value={replyText}
-                      onChange={(e) => setReplyText(e.target.value)}
-                      style={{ flex: 1, minWidth: 0 }}
-                      autoFocus
-                    />
-                    <EmojiPicker onSelect={(emoji) => setReplyText((v) => v + emoji)} />
+                    <div className="composer composer-grow">
+                      <input
+                        type="text"
+                        className="composer-input"
+                        placeholder={t('replyPlaceholder')}
+                        aria-label={t('replyPlaceholder')}
+                        maxLength={2000}
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        autoFocus
+                      />
+                      <EmojiPicker onSelect={(emoji) => setReplyText((v) => v + emoji)} />
+                    </div>
                     <button type="submit" disabled={posting}>{t('postComment')}</button>
                     {postError && <p className="error-text" style={{ fontSize: 12.5 }}>{postError}</p>}
                   </form>

@@ -8,7 +8,9 @@
  *    paměti prohlížeče (funguje i bez přihlášení);
  *  - příbuzná napřed: stejná kategorie, stejný tvůrce; jinak nejnovější;
  *  - v seznamu vedle videa nezhlédnutá napřed, zhlédnutá až za nimi.
- * Když už divák viděl všechno, po konci se nenabídne nic (žádné opakování).
+ * Když nových videí není dost, doplní se ta, která divák viděl nejdávněji
+ * (označená „Zhlédnuto“) - nabídka po konci tak nikdy nezůstane prázdná
+ * (dřív se pak neukázalo nic a vypadalo to jako chyba).
  * Fronta a další video z playlistu mají přednost dál - ty si vybral sám.
  *
  * Čisté funkce (bez prohlížeče) mají test: tests/upNext.test.mjs.
@@ -36,6 +38,29 @@ export function rankUpNext<T extends UpNextCandidate>(candidates: readonly T[], 
   return fresh
     .sort((a, b) => score(b.video) - score(a.video) || a.index - b.index)
     .map(({ video }) => video);
+}
+
+/**
+ * Po konci videa: nezhlédnutá napřed (rankUpNext); když jich je méně než `want`,
+ * doplní zhlédnutá - nejdéle neviděná napřed. `seenOrder` = id zhlédnutých od
+ * nejnovějšího (historie na účtu, pak paměť prohlížeče).
+ */
+export function upNextWithFallback<T extends UpNextCandidate>(candidates: readonly T[], current: CurrentVideo, seenOrder: readonly string[], want = 2): T[] {
+  const seen = new Set(seenOrder);
+  const fresh = rankUpNext(candidates, current, seen);
+  if (fresh.length >= want) return fresh;
+  const recency = new Map<string, number>();
+  seenOrder.forEach((id, i) => {
+    if (!recency.has(id)) recency.set(id, i);
+  });
+  const taken = new Set(fresh.map((v) => v.id));
+  const older = candidates
+    .map((video, index) => ({ video, index }))
+    .filter(({ video }) => !!video && !!video.id && video.id !== current.id && !taken.has(video.id))
+    // Větší pořadí v seznamu zhlédnutých = viděné dávněji -> dřív.
+    .sort((a, b) => (recency.get(b.video.id) ?? -1) - (recency.get(a.video.id) ?? -1) || a.index - b.index)
+    .map(({ video }) => video);
+  return [...fresh, ...older];
 }
 
 /** Seznam vedle videa: nezhlédnutá napřed, zhlédnutá za nimi (jinak pořadí beze změny). */
@@ -83,4 +108,10 @@ export function rememberSeen(id: string): void {
 export function seenLocally(): Set<string> {
   if (typeof window === 'undefined') return new Set();
   return new Set(readSeen());
+}
+
+/** Zhlédnutá videa v prohlížeči od nejnovějšího (pro doplnění nabídky po konci). */
+export function seenOrderLocally(): string[] {
+  if (typeof window === 'undefined') return [];
+  return readSeen();
 }

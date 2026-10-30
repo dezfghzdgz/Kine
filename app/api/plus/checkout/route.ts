@@ -2,17 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PAYMENTS_ENABLED, PAYMENTS_OFF } from '@/lib/payments';
 import { stripeServer } from '@/lib/stripeServer';
 import { supabaseServer } from '@/lib/supabaseServer';
-import { hasPlus, isPaidTier, tierStripePriceId } from '@/lib/plus';
+import { hasPlus, isPaidTier } from '@/lib/plus';
+import { forgetPlusPrices, tierPriceIdForCheckout } from '@/lib/plusPrices';
 import { siteUrlFrom } from '@/lib/siteUrl';
 import { checkoutTexts } from '@/lib/plusCheckout';
-import { paymentAllowedNow, TEST_MODE_OFF } from '@/lib/paymentsServer';
+import { paymentAllowedNow, publicError, TEST_MODE_OFF } from '@/lib/paymentsServer';
 import { stripeMissing } from '@/lib/stripeSetup';
 
 /**
  * Koupě předplatného: založí u Stripe předplatné (Checkout) a pošle
  * uživatele na platební stránku. Tři varianty (lib/plus.ts), každá má
- * vlastní cenu ve Stripe: STRIPE_PLUS_KINE_PRICE_ID, STRIPE_PLUS_CLIPS_PRICE_ID,
- * STRIPE_PLUS_ALL_PRICE_ID (Stripe dashboard -> Product catalog -> cena, měsíční).
+ * vlastní měsíční cenu ve Stripe - bere se ta, kterou ukazuje /plus
+ * (lib/plusPrices.ts: ceny v EUR/USD z /admin/stripe, jinak STRIPE_PLUS_*_PRICE_ID).
  *
  * Tělo: { tier: 'kine' | 'clips' | 'all', lang?: jazyk webu (texty na platební stránce) }
  *
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const tier = isPaidTier(body?.tier) ? body.tier : 'all';
-  const priceId = tierStripePriceId(tier);
+  const { priceId, fromStripe } = await tierPriceIdForCheckout(tier);
   if (!priceId) {
     return NextResponse.json({ error: 'Tahle varianta předplatného se teprve připravuje.', code: 'not-configured' }, { status: 503 });
   }
@@ -118,6 +119,8 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ url: session.url });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? 'Stripe se nepodařilo zavolat.' }, { status: 502 });
+    // Cena se mezitím mohla u Stripe změnit (archivovaná) - příště ji načíst znovu.
+    if (fromStripe) forgetPlusPrices();
+    return NextResponse.json({ error: publicError(e, 'Stripe se nepodařilo zavolat.', 'Kine Plus checkout') }, { status: 502 });
   }
 }

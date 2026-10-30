@@ -16,6 +16,7 @@ import { isInDesktopApp } from '@/lib/desktopRelease';
 import { useLiveCount } from '@/lib/useLiveCount';
 import { PAYMENTS_ENABLED } from '@/lib/payments';
 import { ensureOwnProfile } from '@/lib/ensureProfile';
+import { hasKinePlus } from '@/lib/plus';
 import {
   FireIcon, SparkleIcon, DiceIcon,
   CarIcon, PlaneIcon, FilmIcon, GamepadIcon, MusicIcon, ComedyIcon, BlogIcon,
@@ -107,6 +108,8 @@ export default function Sidebar() {
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [user, setUser] = useState<{ id: string; username: string; avatar_url: string | null } | null>(null);
   const [ratingMode, setRatingMode] = useState<'stars' | 'like_dislike'>('like_dislike');
+  // Předplatitel Kine Plus: u loga malé „Plus“ - ať je pořád vidět, že předplatné běží.
+  const [kinePlus, setKinePlus] = useState(false);
   const [loading, setLoading] = useState(true);
   // Běží web v okně appky Kine do PC? (až po načtení v prohlížeči, ať se server a klient shodnou)
   const [inDesktopApp, setInDesktopApp] = useState(false);
@@ -133,14 +136,23 @@ export default function Sidebar() {
     const { data: authData } = await supabase.auth.getUser();
     if (!authData.user) {
       setUser(null);
+      setKinePlus(false);
       setLoading(false);
       return;
     }
-    const { data: profile, error: profileError } = await supabase
+    let { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('username, avatar_url, rating_mode')
+      .select('username, avatar_url, rating_mode, plan, plan_until')
       .eq('id', authData.user.id)
       .single();
+    // Bez migrace předplatného (sloupce plan) - načíst aspoň zbytek.
+    if (profileError && profileError.code !== 'PGRST116') {
+      ({ data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('username, avatar_url, rating_mode')
+        .eq('id', authData.user.id)
+        .single());
+    }
 
     // Přihlášený bez profilu (registrace s potvrzením e-mailu - odkaz z e-mailu vede
     // rovnou sem, ne přes přihlášení): profil se dotvoří a jde se do průvodce.
@@ -161,6 +173,7 @@ export default function Sidebar() {
       avatar_url: profile?.avatar_url ?? null,
     });
     setRatingMode((profile?.rating_mode as 'stars' | 'like_dislike') ?? 'like_dislike');
+    setKinePlus(hasKinePlus((profile as any)?.plan, (profile as any)?.plan_until));
     setLoading(false);
   }
 
@@ -169,7 +182,12 @@ export default function Sidebar() {
     <aside className="sidebar">
       <div className="sidebar-logo-row">
         <BrandLogo className="sidebar-logo" />
-        <span style={{ fontSize: 10, color: 'var(--text-faint)', marginLeft: 6, fontWeight: 600 }}>BETA0.092</span>
+        {kinePlus && (
+          <Link href="/plus" className="logo-plus-mark" title="Kine Plus">
+            Plus
+          </Link>
+        )}
+        <span className="sidebar-beta">BETA 0.0986</span>
       </div>
       <nav className="sidebar-nav" style={{ flex: 1 }}>
         {baseLinks(t).map(({ href, label, icon: Icon }) => {
@@ -394,6 +412,11 @@ export default function Sidebar() {
          <div className="mobile-drawer-scroll">
           <div className="sidebar-logo-row">
             <BrandLogo className="sidebar-logo" onNavigate={closeMobileNav} />
+            {kinePlus && (
+              <Link href="/plus" className="logo-plus-mark" title="Kine Plus" onClick={closeMobileNav}>
+                Plus
+              </Link>
+            )}
           </div>
           <div className="sidebar-divider" />
 

@@ -24,10 +24,10 @@ import UiIcon from './UiIcon';
  *
  * Na kanálu jsou nejvýš tři - ty, které si majitel vybral (jako v Clash
  * Royale), dokud nevybral, tři nejvýraznější. Barva podle stupně: bronz,
- * stříbro, zlato, platina, diamant. "+N" a tužka otevřou sbírku: majitel
- * v ní vidí všechny řady (získané i zamčené, s postupem) a vybírá, které
- * ukáže - i speciální a vlastní odznaky od týmu Kine. U cizího kanálu je
- * sbírka jen ke čtení a jen s tím, co dotyčný opravdu má. Majitel navíc
+ * stříbro, zlato, platina, diamant. "+N" a tužka otevřou sbírku (jen
+ * majitel): vidí v ní všechny řady (získané i zamčené, s postupem) a vybírá,
+ * které ukáže - i speciální a vlastní odznaky od týmu Kine. Návštěvník cizího
+ * kanálu vidí jen vystavené odznaky - žádné „+N“ ani sbírku. Majitel navíc
  * vidí, který odznak má nejblíž.
  */
 export default function ChannelBadges({
@@ -57,6 +57,18 @@ export default function ChannelBadges({
   }, [openOnLoad]);
 
   if (earned.length === 0 && !next && !own) return null;
+  // Cizí kanál: jen odznaky, které si majitel vystavil - bez „+N“ a bez celé sbírky
+  // (kolik má odznaků celkem, je jeho věc; dřív to návštěvník viděl).
+  if (!own) {
+    if (shown.length === 0) return null;
+    return (
+      <div className="channel-badges" aria-label={t('badgesLabel')}>
+        {shown.map((b) => (
+          <BadgePill key={b.id} badge={b} label={text.of(b).label} tip={text.of(b).tip} />
+        ))}
+      </div>
+    );
+  }
   const hidden = earned.length - shown.length;
 
   return (

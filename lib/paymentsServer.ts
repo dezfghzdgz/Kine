@@ -20,3 +20,38 @@ export async function paymentAllowedNow(userId: string | null | undefined): Prom
 
 /** Odpověď platebních cest, dokud se platby zkouší (testovací klíč) a neplatí správce. */
 export const TEST_MODE_OFF = { error: 'Platby na Kine právě zkoušíme - za chvíli to půjde.', comingSoon: true, code: 'test-mode' } as const;
+
+/**
+ * Chyba pro prohlížeč: zpráva Stripe / databáze bez id účtů, zákazníků a klíčů
+ * (acct_…, cus_…, sk_…), zkrácená. Celá zpráva jde jen do logu serveru (Vercel).
+ */
+export function publicError(e: unknown, fallback: string, where = 'Kine'): string {
+  const raw = String((e as { message?: unknown } | null)?.message ?? '').trim();
+  if (!raw) return fallback;
+  console.error(`${where}:`, raw);
+  return raw
+    .replace(/\b(acct|cus|sub|pi|ch|price|prod|cs_live|cs_test|whsec|sk_live|sk_test|rk_live|rk_test)_[A-Za-z0-9]+/g, '$1_…')
+    .slice(0, 220);
+}
+
+/**
+ * Jednoduchá brzda na adresu (v paměti instance serveru): kolik pokusů za okno.
+ * Proti zkoušení kradených karet přes anonymní dary - víc instancí ji obejde
+ * jen částečně, hlavní ochranu má Stripe (Radar); tohle ubere nejhrubší nápor.
+ */
+const recentAttempts = new Map<string, number[]>();
+export function allowAttempt(key: string, limit: number, windowMs: number, now = Date.now()): boolean {
+  const list = (recentAttempts.get(key) ?? []).filter((t) => now - t < windowMs);
+  if (list.length >= limit) {
+    recentAttempts.set(key, list);
+    return false;
+  }
+  list.push(now);
+  recentAttempts.set(key, list);
+  // Paměť nesmí růst donekonečna.
+  if (recentAttempts.size > 5000) {
+    for (const [k, v] of recentAttempts) if (!v.some((t) => now - t < windowMs)) recentAttempts.delete(k);
+  }
+  return true;
+}
+

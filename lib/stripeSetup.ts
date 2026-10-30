@@ -174,7 +174,14 @@ export type SetupFacts = {
   probe?: { status: number | null; location?: string | null; error?: string | null } | null;
   /** Události, které Stripe za poslední týden nedoručil (null = nevíme). */
   failedDeliveries?: { count: number; latestType: string | null; latestAt: number | null } | null;
-  prices: Record<'kine' | 'clips' | 'all', { id: string | null; problems: string[]; label: string | null }>;
+  /**
+   * Ceny variant. sells = za co web opravdu prodává (lib/plusPrices.ts; null = nic,
+   * bez klíče = nevíme a platí starší kontrola popisku z Vercelu).
+   */
+  prices: Record<
+    'kine' | 'clips' | 'all',
+    { id: string | null; problems: string[]; label: string | null; sells?: { currency: string; eur: number | null; usd: number | null } | null }
+  >;
   portalDefault: boolean | null;
   /** Smí zákazník v portálu přejít na jinou variantu? (null = nevíme) */
   portalSwitching?: boolean | null;
@@ -192,6 +199,36 @@ export const RECOMMENDED_STORAGE_HOURS = 5;
 function withPeriod(label: string, per: string): string {
   const m = /^(.*?)\s*\(([^()]+)\)\s*$/.exec(label);
   return m && m[1].trim() ? `${m[1].trim()} ${per} (${m[2].trim()})` : `${label} ${per}`;
+}
+
+/**
+ * Kontrola ceny, za kterou web prodává: eura (a dolary pro USA) = hotovo;
+ * cena v korunách (starší z Vercelu) = předělat tlačítkem „Vytvořit ceny ve Stripe“.
+ */
+function soldPriceCheck(tier: string, name: string, sells: { currency: string; eur: number | null; usd: number | null } | null, lang: SetupLang): SetupCheck {
+  const tx = (cs: string, en: string) => (lang === 'en' ? en : cs);
+  const title = tx(`Cena ${name}`, `Price ${name}`);
+  if (!sells) {
+    return {
+      id: `price-${tier}`,
+      ok: null,
+      title,
+      detail: tx('Bez ceny se varianta nedá koupit (ukáže „Brzy“) - vytvoř ceny tlačítkem níž.', 'Without a price this plan cannot be bought (shows “Soon”) - create the prices with the button below.'),
+    };
+  }
+  const shown = [sells.eur ? formatAmount(sells.eur, 'eur') : null, sells.usd ? `${tx('v USA', 'in the USA')} ${formatAmount(sells.usd, 'usd')}` : null].filter(Boolean).join(' · ');
+  const inEuroOrDollars = sells.currency === 'eur' || sells.currency === 'usd';
+  return {
+    id: `price-${tier}`,
+    ok: inEuroOrDollars,
+    title,
+    detail: inEuroOrDollars
+      ? `${shown} ${tx('/ měsíc', '/ month')}`
+      : tx(
+          `Starší cena v korunách${shown ? ` (na webu ukazuje ${shown})` : ''} - Češi by platili v Kč. Klikni níž na „Vytvořit ceny ve Stripe“ (EUR + USD); web je začne používat sám do pár minut, do Vercelu nic nekopíruj.`,
+          `Older price in CZK${shown ? ` (the site shows ${shown})` : ''} - Czech customers would pay in CZK. Click “Create prices at Stripe” below (EUR + USD); the site switches to them by itself within a few minutes, nothing to copy to Vercel.`
+        ),
+  };
 }
 
 /** Seznam kontrol pro stránku (pořadí = pořadí kroků v návodu). Texty česky, nebo anglicky (lang 'en'). */
@@ -313,6 +350,10 @@ export function evaluateSetup(f: SetupFacts, lang: SetupLang = 'cs'): SetupCheck
   for (const tier of ['kine', 'clips', 'all'] as const) {
     const p = f.prices[tier];
     const name = tier === 'kine' ? 'Kine Plus' : tier === 'clips' ? tx('Klipy Plus', 'Clips Plus') : tx('Kine Plus + Klipy', 'Kine Plus + Clips');
+    if (p.sells !== undefined && (p.sells || p.problems.length === 0)) {
+      checks.push(soldPriceCheck(tier, name, p.sells ?? null, lang));
+      continue;
+    }
     checks.push({
       id: `price-${tier}`,
       ok: p.id ? p.problems.length === 0 && !!p.label : null,

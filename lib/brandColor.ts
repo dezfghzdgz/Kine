@@ -23,12 +23,32 @@ export function hexToRgbTriplet(hex: string | null | undefined): string | null {
   return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
 }
 
-/** Nastaví --brand i --brand-rgb na <html>. Bez rozložitelné barvy nechá --brand-rgb být. */
+/** Ztlumená barva appky pro plochy a prstence (--brand-soft): "163, 79, 247" -> "rgba(163, 79, 247, 0.16)". */
+export function brandSoftFrom(rgb: string): string {
+  return `rgba(${rgb}, 0.16)`;
+}
+
+/**
+ * Nastaví --brand, --brand-rgb a --brand-soft na <html>. Bez rozložitelné barvy
+ * nechá složky být. --brand-soft dřív zůstávala tyrkysová i u jiné barvy appky
+ * (zvýrazněné tlačítko na /plus, odznaky, prstence) - vypadalo to nedotaženě.
+ */
 export function applyBrandToDocument(color: string) {
   if (typeof document === 'undefined') return;
   const root = document.documentElement.style;
   root.setProperty('--brand', color);
   const rgb = hexToRgbTriplet(color);
-  if (rgb) root.setProperty('--brand-rgb', rgb);
-  else root.removeProperty('--brand-rgb');
+  if (rgb) {
+    root.setProperty('--brand-rgb', rgb);
+    root.setProperty('--brand-soft', brandSoftFrom(rgb));
+  } else {
+    root.removeProperty('--brand-rgb');
+    root.removeProperty('--brand-soft');
+  }
 }
+
+/**
+ * Skript do <head>: barva appky z minula hned při načtení - dřív stránka
+ * na okamžik blikla výchozí tyrkysovou, než se barva nastavila z JavaScriptu.
+ */
+export const BRAND_BOOT_SCRIPT = `(function(){try{var c=localStorage.getItem('kine-brand-color');if(!c||!/^#[0-9a-f]{3,8}$/i.test(c))return;var r=document.documentElement.style;r.setProperty('--brand',c);var h=c.slice(1);if(h.length<6)h=h.slice(0,3).split('').map(function(x){return x+x}).join('');h=h.slice(0,6);var n=parseInt(h,16);var t=((n>>16)&255)+', '+((n>>8)&255)+', '+(n&255);r.setProperty('--brand-rgb',t);r.setProperty('--brand-soft','rgba('+t+', 0.16)')}catch(e){}})();`;

@@ -353,7 +353,8 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
         capLevelToPlayerSize: true,
         // Hustý displej telefonu (3x): v plné kvalitě video ostré i na něm (dřív strop 2x = na
         // telefonu ~480p i na rychlém připojení); v lehkém režimu 2x (o dost míň dat).
-        maxDevicePixelRatio: mode === 'light' ? 2 : 3,
+        // Náhled po najetí (bez měření) v malé kartě: 1,5x - menší první kus = rychlejší rozjezd.
+        maxDevicePixelRatio: !measure ? 1.5 : mode === 'light' ? 2 : 3,
         maxBufferLength: bufferAhead,
         maxMaxBufferLength: bufferCap,
         backBufferLength: options.backBuffer ?? 30,

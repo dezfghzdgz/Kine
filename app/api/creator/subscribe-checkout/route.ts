@@ -21,20 +21,44 @@ export async function POST(req: NextRequest) {
   // Testovací klíč Stripe: zkouší jen správce (lib/paymentsServer.ts).
   if (!(await paymentAllowedNow(userData.user.id))) return NextResponse.json(TEST_MODE_OFF, { status: 503 });
 
-  const { creatorId } = await req.json();
-  if (!creatorId) return NextResponse.json({ error: 'Chybí creatorId.' }, { status: 400 });
+  const body = await req.json().catch(() => ({}));
+  // Id tvůrce jen jako UUID malými písmeny - jinak by „ABC…“ obešlo kontrolu „sám sebe“.
+  const creatorId = typeof body?.creatorId === 'string' ? body.creatorId.trim().toLowerCase() : '';
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(creatorId)) {
+    return NextResponse.json({ error: 'Chybí creatorId.' }, { status: 400 });
+  }
   if (creatorId === userData.user.id) return NextResponse.json({ error: 'Sám sebe si předplatit nemůžeš.' }, { status: 400 });
 
-  // select('*') - payouts_suspended je až s migrací moderátorských rolí.
+  // select('*') - payouts_suspended a is_banned jsou až s migrací moderátorských rolí.
   const { data: creatorRow } = await supabaseServer.from('profiles').select('*').eq('id', creatorId).single();
-  const creator = creatorRow as { stripe_account_id?: string | null; stripe_onboarding_complete?: boolean | null; subscription_stripe_price_id?: string | null; username?: string | null; payouts_suspended?: boolean | null } | null;
+  const creator = creatorRow as {
+    stripe_account_id?: string | null;
+    stripe_onboarding_complete?: boolean | null;
+    subscription_stripe_price_id?: string | null;
+    username?: string | null;
+    payouts_suspended?: boolean | null;
+    is_banned?: boolean | null;
+  } | null;
 
-  if (!creator?.stripe_onboarding_complete || !creator.subscription_stripe_price_id) {
+  if (!creator?.stripe_onboarding_complete || !creator.subscription_stripe_price_id || !creator.stripe_account_id) {
     return NextResponse.json({ error: 'Tenhle tvůrce ještě předplatné nenastavil.' }, { status: 400 });
   }
-  // Moderátor tvůrci pozastavil výdělky (sankce) - nové předplatné nejde.
-  if (creator.payouts_suspended === true) {
+  // Moderátor tvůrci pozastavil výdělky (sankce) nebo účet zablokoval - nové předplatné nejde.
+  if (creator.payouts_suspended === true || creator.is_banned === true) {
     return NextResponse.json({ error: 'Tenhle tvůrce teď předplatné nepřijímá.', code: 'disabled' }, { status: 400 });
+  }
+
+  // Druhé souběžné členství u téhož tvůrce by se platilo dvakrát (a to první by
+  // přestalo být vidět) - kdo už členem je, další nekupuje.
+  const { data: existing } = await supabaseServer
+    .from('channel_subscriptions')
+    .select('status')
+    .eq('subscriber_id', userData.user.id)
+    .eq('creator_id', creatorId)
+    .maybeSingle();
+  const existingStatus = (existing as { status?: string } | null)?.status;
+  if (existingStatus === 'active' || existingStatus === 'past_due') {
+    return NextResponse.json({ error: 'Členem už jsi.', code: 'already-member' }, { status: 409 });
   }
 
   const siteUrl = siteUrlFrom(req);
@@ -54,7 +78,11 @@ export async function POST(req: NextRequest) {
     cancel_url: `${siteUrl}/channel/${creatorId}`,
   };
 
-  const session = await stripeServer.checkout.sessions.create(sessionParams);
-
-  return NextResponse.json({ url: session.url });
+  try {
+    const session = await stripeServer.checkout.sessions.create(sessionParams);
+    return NextResponse.json({ url: session.url });
+  } catch (e: any) {
+    console.error('Kine: předplatné kanálu - Stripe:', e?.message ?? e);
+    return NextResponse.json({ error: 'Platbu se nepodařilo připravit. Zkus to za chvíli znovu.' }, { status: 502 });
+  }
 }

@@ -44,6 +44,15 @@ test('všechno zhlédnuté = nic se nenabídne (žádné opakování starých)',
   assert.deepEqual(u.rankUpNext(list, current, new Set(['a', 'b', 'c', 'd', 'e'])), []);
 });
 
+test('po konci: málo nových -> doplní nejdéle neviděná (nabídka nikdy prázdná)', () => {
+  // Zhlédnutá od nejnovějšího: e (právě), a, d, b, c (nejdávněji).
+  const order = ['e', 'a', 'd', 'b', 'c'];
+  assert.deepEqual(u.upNextWithFallback(list, current, order).map((v) => v.id), ['c', 'b', 'd', 'a', 'e'], 'všechno viděné: nejdávněji viděné napřed');
+  assert.deepEqual(u.upNextWithFallback(list, current, ['a', 'b', 'c', 'd']).slice(0, 2).map((v) => v.id), ['e', 'd'], 'jedno nové + nejdávněji viděné');
+  assert.deepEqual(u.upNextWithFallback(list, current, ['a']).map((v) => v.id), ['c', 'b', 'd', 'e'], 'nových dost - zhlédnutá se nepřidávají');
+  assert.ok(!u.upNextWithFallback(list, current, order).some((v) => v.id === 'now'), 'nikdy to samé video');
+});
+
 test('seznam vedle videa: nezhlédnutá napřed, zhlédnutá za nimi', () => {
   assert.deepEqual(u.unseenFirst(list.filter((v) => v.id !== 'now'), new Set(['a', 'c'])).map((v) => v.id), ['b', 'd', 'e', 'a', 'c']);
 });

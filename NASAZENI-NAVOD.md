@@ -97,12 +97,15 @@ Nejdřív všechno v testovacím režimu (klíč `sk_test_…`), pak to samé na
 3. **Na webu `/admin/stripe`** (jen admin, v menu „Platby (Stripe)“):
    - „Vytvořit ceny ve Stripe“ (předvyplněné doporučené ceny v eurech: Kine Plus
      €2.49, Clips Plus €2.99, Kine Plus + Clips €3.99; pro USA v dolarech
-     $2.99 / $3.49 / $4.49) → vypíše `STRIPE_PLUS_KINE_PRICE_ID`,
-     `STRIPE_PLUS_CLIPS_PRICE_ID`, `STRIPE_PLUS_ALL_PRICE_ID` a popisky
-     `NEXT_PUBLIC_PLUS_…_PRICE_LABEL` (např. `€2.49 ($2.99)`)
+     $2.99 / $3.49 / $4.49). Web si ceny najde ve Stripe sám (do pár minut) -
+     do Vercelu se nic nekopíruje. Starší `STRIPE_PLUS_*_PRICE_ID`
+     a `NEXT_PUBLIC_PLUS_…_PRICE_LABEL` můžou zůstat (jsou jen záloha), nebo je smaž.
+     Na webu se ceny ukazují jen v eurech (v USA v dolarech), koruny nikdy.
    - „Vytvořit / opravit webhook“ → vypíše `STRIPE_WEBHOOK_SECRET` (ukáže se
-     jen jednou)
-   - všechny řádky do Vercelu → **Redeploy**; stránka pak ukáže, co ještě chybí
+     jen jednou) → do Vercelu → **Redeploy**. Bez něj webhook nic nepřijme
+     (ochrana proti podvrženým platbám).
+   - Kdyby na platební stránce Stripe Čech viděl ceny v Kč: to je přepočet Stripe
+     („Adaptive Pricing“) - vypnout jde ve Stripe → Settings → Payments.
 4. **Zapnutí:** `NEXT_PUBLIC_PAYMENTS=1` → **Redeploy**. Zkus koupi na `/plus`
    testovací kartou `4242 4242 4242 4242` (libovolné budoucí datum a CVC).
 5. **Peníze pro tvůrce** (předplatné kanálu, podpory ve vysílání, Super díky

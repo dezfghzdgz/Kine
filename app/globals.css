@@ -624,7 +624,7 @@ select:focus-visible {
   height: 100%;
   object-fit: cover;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.12s ease;
   pointer-events: none;
 }
 
@@ -657,11 +657,12 @@ select:focus-visible {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 4px 16px rgba(0, 0, 0, 0.45);
-  /* Trojúhelník je posunutý o dva pixely doprava - opticky vystředěný,
-     ne matematicky. Vystředěný na pixel vypadá, že táhne doleva. */
+  /* Trojúhelník má těžiště přesně uprostřed obrázku (vrcholy 9/9/18 -> 12) - to je
+     opticky střed. Dřív byl obrázek navíc posunutý doprava (55 %) a trojúhelník
+     tak v kolečku viditelně ujížděl doprava. */
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff'%3E%3Cpath d='M9 6.5v11l9-5.5z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: 55% center;
+  background-position: center;
   background-size: 22px 22px;
   transform: scale(0.9);
   transition: transform var(--dur-2) var(--ease);
@@ -673,6 +674,25 @@ select:focus-visible {
 
 .video-card:hover .play-badge::after {
   transform: scale(1);
+}
+
+/* Náhled po najetí se chystá nebo hraje: kolečko ▶ ani ztmavení přes video nepatří. */
+.video-thumb.is-previewing .play-badge,
+.video-card:hover .video-thumb.is-previewing .play-badge {
+  opacity: 0;
+  transition-duration: 0.1s;
+}
+
+/* Tlačítko přehrát přes video (Sparks po pauze) - stejné kolečko jako na kartách. */
+.play-circle {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(12, 12, 15, 0.55) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff'%3E%3Cpath d='M9 6.5v11l9-5.5z'/%3E%3C/svg%3E") no-repeat center / 28px 28px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 4px 16px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
 }
 
 .watch-progress-track {
@@ -1519,6 +1539,56 @@ a.comment-avatar {
   align-items: center;
 }
 
+/* Pole pro komentář: jeden zaoblený rámeček, v něm text a vpravo ikony (smajlík, +)
+   stejně velké a na jedné ose. Dřív měl text vlastní rámeček uvnitř rámečku a obě
+   ikony dostaly ze základního stylu tlačítek skleněný ovál - vypadalo to odbytě. */
+.composer {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 3px 5px 3px 3px;
+  border-radius: var(--radius-md);
+  background: var(--glass-fill, var(--panel-raised));
+  box-shadow: inset 0 1px 0 var(--glass-highlight, transparent), inset 0 0 0 1px var(--glass-line, var(--border));
+  transition: box-shadow var(--dur-2) var(--ease);
+}
+.composer:focus-within {
+  box-shadow: inset 0 1px 0 var(--glass-highlight, transparent), inset 0 0 0 1px var(--press-line, var(--text-dim)), 0 0 0 3px var(--press-ring, transparent);
+}
+.composer-grow { flex: 1; }
+.composer .composer-input,
+.composer .composer-input:hover,
+.composer .composer-input:focus {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+  padding: 9px 10px;
+}
+.composer-icon-btn {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  line-height: 0;
+}
+.composer-icon-btn:hover:not(:disabled) { color: var(--text); background: rgba(127, 127, 127, 0.14); }
+.composer-icon-btn[aria-expanded='true'] { color: var(--brand); background: var(--brand-soft); }
+.composer-icon-btn svg { display: block; transition: transform var(--dur-2) var(--ease); }
+.composer-icon-btn.is-open svg { transform: rotate(45deg); }
+.composer-tools { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+
 @media (max-width: 600px) {
   .comment-row.comment-reply,
   .comment-replies-toggle,
@@ -1838,6 +1908,33 @@ html[data-theme="gray"] {
   justify-content: space-between;
   height: 32px;
 }
+
+.sidebar-beta {
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-left: 6px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Předplatitel Kine Plus: malé „PLUS“ hned za logem (jako „Premium“ u YouTube) -
+   pořád vidět, že předplatné běží. margin-right: auto drží značku u loga. */
+.logo-plus-mark {
+  align-self: flex-start;
+  margin: 3px auto 0 4px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  line-height: 1.35;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--brand);
+  background: var(--brand-soft);
+  box-shadow: inset 0 0 0 1px rgba(var(--brand-rgb), 0.35);
+}
+.logo-plus-mark:hover { color: var(--text); }
 
 .sidebar-search-row {
   margin-top: 14px;
@@ -3073,6 +3170,9 @@ button.top-bar-search-everywhere:hover:not(:disabled) {
   pointer-events: none;
   animation: key-hint-fade 0.9s ease forwards;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 @keyframes key-hint-fade {
@@ -5453,6 +5553,19 @@ body.has-music-bar .upload-bar {
   font-variant-numeric: tabular-nums;
 }
 
+/* Doplněné už zhlédnuté video (nových nebylo dost) - ať je vidět, že není nové. */
+.player-upnext-seen {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.72);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .player-upnext-title {
   font-size: clamp(11px, 1.7vw, 13px);
   font-weight: 600;
@@ -6673,6 +6786,133 @@ input:focus, textarea:focus, select:focus {
   .plus-price-value { font-size: 26px; }
 }
 .plus-table tbody th { position: sticky; left: 0; background: var(--panel); }
+
+/* Cena se načítá ze Stripe - místo ní na chvíli tlumený pruh (žádné „Brzy“, které by probliklo). */
+.plus-price-skeleton {
+  display: inline-block; width: 120px; height: 30px; border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--panel-raised) 0%, rgba(var(--brand-rgb), 0.12) 50%, var(--panel-raised) 100%);
+  background-size: 200% 100%; animation: plus-skeleton 1.2s ease-in-out infinite;
+}
+@keyframes plus-skeleton { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .plus-price-skeleton { animation: none; } }
+
+/* Poděkování po zaplacení (okno nad stránkou /plus). */
+.plus-thanks-backdrop {
+  position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; padding: 16px;
+  background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  animation: plus-thanks-fade 0.25s ease both;
+}
+.plus-thanks {
+  position: relative; width: min(440px, 100%); max-height: calc(100dvh - 32px); overflow: auto;
+  margin: 0; padding: 30px 24px 22px; text-align: center; display: flex; flex-direction: column; align-items: center;
+  border-color: rgba(var(--brand-rgb), 0.5);
+  background: radial-gradient(120% 80% at 50% 0%, rgba(var(--brand-rgb), 0.2), transparent 60%), var(--panel);
+  box-shadow: 0 0 0 4px var(--brand-soft), 0 30px 80px rgba(0, 0, 0, 0.55);
+  animation: plus-thanks-pop 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.25) both;
+}
+.plus-thanks h2 { margin: 0 0 6px; font-size: 24px; letter-spacing: var(--track-tight); }
+.plus-thanks-text { margin: 0 0 16px; color: var(--text-dim); font-size: 14px; line-height: 1.55; }
+.plus-thanks-icon {
+  width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; margin-bottom: 12px;
+  color: var(--brand); background: var(--brand-soft); box-shadow: inset 0 0 0 1px rgba(var(--brand-rgb), 0.4), 0 10px 30px rgba(var(--brand-rgb), 0.25);
+}
+.plus-thanks-icon svg { width: 32px; height: 32px; }
+.plus-thanks-perks { text-align: left; align-self: stretch; margin-bottom: 18px; flex: none; }
+.plus-thanks-actions { display: flex; flex-direction: column; gap: 8px; align-self: stretch; }
+.plus-thanks-go { display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); color: #0a0a0b; background: var(--brand); }
+.plus-thanks-app { display: inline-flex; justify-content: center; text-decoration: none; }
+.plus-thanks-burst { position: absolute; left: 50%; top: 62px; width: 0; height: 0; pointer-events: none; }
+.plus-thanks-burst i {
+  position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 2px;
+  background: var(--brand); opacity: 0;
+  transform: rotate(calc(var(--i) * 22.5deg)) translateY(0);
+  animation: plus-thanks-burst 1.1s cubic-bezier(0.15, 0.8, 0.3, 1) 0.15s both;
+}
+.plus-thanks-burst i:nth-child(4n + 2) { background: #ffd166; border-radius: 50%; }
+.plus-thanks-burst i:nth-child(4n + 3) { background: #ef476f; }
+.plus-thanks-burst i:nth-child(4n) { background: #4cc9f0; border-radius: 50%; }
+@keyframes plus-thanks-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes plus-thanks-pop { from { opacity: 0; transform: translateY(14px) scale(0.94); } to { opacity: 1; transform: none; } }
+@keyframes plus-thanks-burst {
+  0% { opacity: 0; transform: rotate(calc(var(--i) * 22.5deg)) translateY(0) scale(0.6); }
+  15% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(calc(var(--i) * 22.5deg)) translateY(-96px) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plus-thanks-backdrop, .plus-thanks { animation: none; }
+  .plus-thanks-burst { display: none; }
+}
+
+/* Co Plus přidá - čtyři dlaždice s velkým číslem místo technické tabulky. */
+.plus-hl { margin-top: 30px; }
+.plus-hl-head { text-align: center; margin: 0 auto 16px; max-width: 560px; }
+.plus-hl-head h2 { margin: 0 0 6px; font-size: clamp(21px, 3vw, 27px); letter-spacing: var(--track-tight); line-height: 1.2; }
+.plus-hl-head p { margin: 0; color: var(--text-dim); font-size: 14px; line-height: 1.55; }
+.plus-hl-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.plus-hl-tile {
+  position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  padding: 16px 16px 18px; border-radius: var(--radius-lg); border: 1px solid var(--border);
+  background: radial-gradient(130% 100% at 0% 0%, rgba(var(--brand-rgb), 0.14) 0%, transparent 58%), var(--panel);
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+.plus-hl-tile:hover { transform: translateY(-2px); border-color: rgba(var(--brand-rgb), 0.45); }
+.plus-hl-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.plus-hl-icon {
+  flex: none; width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
+  color: var(--brand); background: var(--brand-soft); box-shadow: inset 0 0 0 1px rgba(var(--brand-rgb), 0.3);
+}
+.plus-hl-chip {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; font-weight: 600; color: var(--text-dim); padding: 3px 9px;
+  border-radius: var(--radius-pill); border: 1px solid var(--border); background: var(--panel-raised);
+}
+.plus-hl-value {
+  font-size: 36px; font-weight: 800; line-height: 1.05; letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: linear-gradient(120deg, var(--text) 30%, var(--brand) 130%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.plus-hl-value.is-badge {
+  align-self: flex-start; margin: 4px 0 3px; padding: 3px 12px; border-radius: var(--radius-pill);
+  font-size: 22px; letter-spacing: 0.08em; line-height: 1.3;
+  background: var(--brand-soft); -webkit-text-fill-color: var(--brand); color: var(--brand);
+  box-shadow: inset 0 0 0 1px rgba(var(--brand-rgb), 0.4);
+}
+.plus-hl-label { margin-top: 4px; font-size: 15px; font-weight: 650; color: var(--text); letter-spacing: var(--track-snug); }
+.plus-hl-sub { font-size: 13px; line-height: 1.45; color: var(--text-dim); }
+.plus-free-strip {
+  margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 18px;
+  padding: 12px 16px; border-radius: var(--radius-md); border: 1px dashed var(--border);
+}
+.plus-free-strip strong { font-size: 13px; color: var(--text); }
+.plus-free-strip span { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); }
+.plus-free-strip .plus-check { color: var(--brand); width: 16px; height: 16px; }
+.plus-compare-details { margin-top: 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel); }
+.plus-compare-details > summary {
+  cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 12px 16px; font-size: 14px; font-weight: 600; color: var(--text-dim);
+}
+.plus-compare-details > summary::-webkit-details-marker { display: none; }
+.plus-compare-details > summary::after {
+  content: ''; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg); transition: transform 0.2s ease;
+}
+.plus-compare-details[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+.plus-compare-details > summary:hover { color: var(--text); }
+.plus-compare-details .plus-table-wrap { padding: 0 12px 12px; }
+@media (max-width: 900px) { .plus-hl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Telefon: dlaždice zůstávají 2 × 2 (pod sebou by byly zbytečně dlouhé), jen menší. */
+@media (max-width: 480px) {
+  .plus-hl-grid { gap: 8px; }
+  .plus-hl-tile { padding: 12px 12px 14px; }
+  .plus-hl-top { margin-bottom: 6px; }
+  .plus-hl-icon { width: 32px; height: 32px; border-radius: 10px; }
+  .plus-hl-chip { font-size: 10px; padding: 2px 7px; }
+  .plus-hl-value { font-size: 28px; }
+  .plus-hl-value.is-badge { font-size: 18px; padding: 2px 10px; }
+  .plus-hl-label { font-size: 14px; }
+  .plus-hl-sub { font-size: 12px; }
+}
 
 /* ---------- Živé vysílání (/live, /live/[id], řada Živě, chat) ---------- */
 
@@ -10772,6 +11012,55 @@ html[data-calm="1"] *:not([class*="spin"])::after {
   text-underline-offset: 2px;
 }
 
+/* Ve zkratce - shrnutí nahoře (závazný je celý text). */
+.legal-summary {
+  margin: 18px 0 8px;
+  padding: 14px 18px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(var(--brand-rgb), 0.35);
+  background: linear-gradient(180deg, rgba(var(--brand-rgb), 0.08), transparent 80%), var(--panel);
+}
+.legal-summary-title {
+  margin: 0 0 6px !important;
+  color: var(--text);
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.legal-summary ul { margin-bottom: 6px; }
+.legal-summary li { color: var(--text); }
+.legal-summary-note { margin: 0 !important; font-size: var(--fs-xs); color: var(--text-faint); }
+
+/* Obsah s odkazy na články. */
+.legal-toc {
+  margin: 14px 0 6px;
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+.legal-toc-title { margin: 0 0 6px !important; color: var(--text); font-weight: 700; font-size: var(--fs-sm); }
+.legal-toc ol { margin: 0; padding: 0; list-style: none; columns: 2 220px; column-gap: 24px; }
+.legal-toc li { margin: 0 0 4px; break-inside: avoid; font-size: var(--fs-sm); }
+.legal-toc a { color: var(--text-dim); text-decoration: none; }
+.legal-toc a:hover { color: var(--text); text-decoration: underline; }
+.legal-doc section { scroll-margin-top: 84px; }
+
+/* Číslované odstavce 1.1, 1.2… (čísla z data-num - ať sedí s odkazy v textu). */
+.legal-doc ol.legal-clauses { list-style: none; margin: 0 0 10px; padding-left: 0; }
+.legal-doc ol.legal-clauses > li { position: relative; padding-left: 46px; margin-bottom: 8px; }
+.legal-doc ol.legal-clauses > li::before {
+  content: attr(data-num);
+  position: absolute;
+  left: 0;
+  top: 0;
+  min-width: 38px;
+  color: var(--text-faint);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 .legal-footer {
   margin-top: 32px !important;
   padding-top: 14px;
@@ -11573,8 +11862,12 @@ html[data-theme="light"] .kine-pattern:not(.kine-pattern-custom):not(.kine-patte
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
-  padding: 6px;
+  gap: 0;
+  /* Náhled přes celou šířku karty (dřív v rámečku s 6px okrajem): při
+     zlomkovém měřítku Windows (125 %) prosvítal vedle tmavého náhledu
+     světlý proužek pozadí karty. */
+  padding: 0;
+  overflow: hidden;
   border-radius: var(--radius-md, 12px);
   background: var(--panel-raised);
   border: 1px solid var(--border);
@@ -11589,10 +11882,12 @@ html[data-theme="light"] .kine-pattern:not(.kine-pattern-custom):not(.kine-patte
   border-color: var(--text-faint);
 }
 .appearance-preset-preview {
-  height: 46px;
-  border-radius: 8px;
+  height: 52px;
+  border-radius: 0;
   position: relative;
   overflow: hidden;
+  /* Bez mezery mezi náhledem a okrajem karty i při zaokrouhlování pixelů. */
+  margin: -1px -1px 0;
 }
 .appearance-preset-preview i {
   position: absolute;
@@ -11602,8 +11897,8 @@ html[data-theme="light"] .kine-pattern:not(.kine-pattern-custom):not(.kine-patte
   height: 8px;
   border-radius: 999px;
 }
-.appearance-preset span {
-  padding: 0 4px 2px;
+.appearance-preset > span:last-child {
+  padding: 8px 10px 9px;
 }
 
 /* ---------- Příspěvky a ankety (components/PostCard.tsx, PostComposer.tsx) ---------- */

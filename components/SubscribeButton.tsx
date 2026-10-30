@@ -1,10 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
+import { dropdownSide, type DropdownSide } from '@/lib/dropdownSide';
 import { BellIcon } from './ReactionIcons';
+
+const BELL_MENU_WIDTH = 230;
 
 export default function SubscribeButton({ channelId }: { channelId: string }) {
   const router = useRouter();
@@ -13,12 +16,36 @@ export default function SubscribeButton({ channelId }: { channelId: string }) {
   const [subscribed, setSubscribed] = useState(false);
   const [notifyNewVideos, setNotifyNewVideos] = useState(true);
   const [bellMenuOpen, setBellMenuOpen] = useState(false);
+  // Nabídka zvonečku se otevře doleva, když by doprava vyjela z okna (velké okno, celá obrazovka).
+  const [bellSide, setBellSide] = useState<DropdownSide>('left');
+  const bellWrapRef = useRef<HTMLDivElement>(null);
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     load();
   }, [channelId]);
+
+  // Otevřená nabídka: strana podle místa v okně; zavře se kliknutím vedle nebo Esc.
+  useEffect(() => {
+    if (!bellMenuOpen) return;
+    const place = () => setBellSide(dropdownSide(bellWrapRef.current, BELL_MENU_WIDTH));
+    place();
+    const onDown = (e: MouseEvent) => {
+      if (bellWrapRef.current && !bellWrapRef.current.contains(e.target as Node)) setBellMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBellMenuOpen(false);
+    };
+    window.addEventListener('resize', place);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('resize', place);
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [bellMenuOpen]);
 
   async function load() {
     const { data: authData } = await supabase.auth.getUser();
@@ -99,9 +126,12 @@ export default function SubscribeButton({ channelId }: { channelId: string }) {
       </button>
 
       {subscribed && (
-        <div style={{ position: 'relative' }}>
+        <div ref={bellWrapRef} style={{ position: 'relative' }}>
           <button
             onClick={() => setBellMenuOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={bellMenuOpen}
+            aria-label={t('notifyAllNewVideos')}
             style={{
               background: 'var(--panel-raised)', color: 'var(--text)', border: '1px solid var(--border)',
               width: 40, height: 40, borderRadius: '50%', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -110,7 +140,17 @@ export default function SubscribeButton({ channelId }: { channelId: string }) {
             <BellIcon muted={!notifyNewVideos} size={17} />
           </button>
           {bellMenuOpen && (
-            <div className="profile-dropdown" style={{ width: 220, top: 'calc(100% + 8px)', bottom: 'auto' }}>
+            <div
+              className="profile-dropdown"
+              role="menu"
+              style={{
+                width: BELL_MENU_WIDTH,
+                maxWidth: 'calc(100vw - 16px)',
+                top: 'calc(100% + 8px)',
+                bottom: 'auto',
+                ...(bellSide === 'right' ? { left: 'auto', right: 0 } : { left: 0, right: 'auto' }),
+              }}
+            >
               <button
                 className="profile-dropdown-item"
                 onClick={() => { toggleNotify(); if (!notifyNewVideos) setBellMenuOpen(false); }}
