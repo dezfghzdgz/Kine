@@ -1,3 +1,73 @@
+KINE web: push oznámení na telefon a počítač, ochrana proti botům při registraci,
+hlídač nákladů ve správě, stránky her (sledování her, hra u videí a přenosů)
+(dodávka kine-0134-2026-10-31)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0134.zip do kořene repa Kine, nahraj.
+2. Supabase -> SQL Editor -> spusť supabase-migration-push-hry-naklady.sql (celý, jde
+   pouštět opakovaně). Na konci tři sloupce push / hry / naklady - všechno true = hotovo.
+3. PUSH OZNÁMENÍ: www.playkine.com/admin/push -> „Vygenerovat klíče“ -> oba zkopíruj do
+   Vercelu (Settings -> Environment Variables, Production): NEXT_PUBLIC_VAPID_PUBLIC_KEY
+   a VAPID_PRIVATE_KEY -> Deployments -> Redeploy. Pak Nastavení -> Oznámení -> Zapnout
+   a „Poslat zkušební“. Klíče generuj jen jednou (nové klíče = všichni zapínají znovu).
+4. OCHRANA PROTI BOTŮM (Cloudflare Turnstile), v tomhle pořadí:
+   a) Cloudflare -> Turnstile -> Add widget: název Kine, hostname playkine.com
+      a www.playkine.com, režim Managed -> Create. Zkopíruj Site Key a Secret Key.
+   b) Vercel: NEXT_PUBLIC_TURNSTILE_SITE_KEY = Site Key -> Redeploy.
+   c) Zkus na webu registraci / přihlášení (musí projít).
+   d) Teprve pak Supabase -> Project Settings -> Authentication -> Bot and Abuse
+      Protection -> Enable CAPTCHA protection -> Cloudflare Turnstile -> Secret Key -> Save.
+   POZOR: od kroku d) nejde v appce Kine do PC přihlášení e-mailem a heslem (Supabase
+   chce ověření i tam). „Přihlásit přes prohlížeč“ v appce funguje dál, telefon taky.
+   Když to nechceš, krok d) zatím vynech - widget na webu nic nerozbije.
+5. Hlídač nákladů: www.playkine.com/admin/costs. Volitelně v Cloudflare API tokenu
+   (CLOUDFLARE_STREAM_API_TOKEN) přidej oprávnění Account Analytics: Read - pak ukáže
+   i přehrané minuty. Limity a hranice jdou změnit proměnnými (viz .env.example).
+
+CO JE NOVÉ
+- Push oznámení (vlastní, bez placené služby): telefon / počítač pípne, i když Kine
+  není otevřené - kanál začal vysílat, nové video nebo příspěvek (jen kanály se
+  zvonečkem), odpověď na komentář, pozvánka ke spolupráci, podpora a Super díky
+  tvůrci, varování nákladů správcům. Zapíná se na klik (Nastavení -> Oznámení, nebo
+  nabídka ve zvonečku), každé zařízení zvlášť; v nastavení jde vybrat, co chodí.
+  Texty v jazyce zařízení. Na iPhonu jen s Kine přidaným na plochu (až budeš chtít
+  PWA, doplním).
+- Ochrana proti botům: neviditelné ověření Cloudflare Turnstile u registrace, přihlášení
+  a zapomenutého hesla (okénko se ukáže jen podezřelým). Hlídá ho přímo Supabase -
+  bot ho neobejde ani voláním API napřímo. Bez klíče se nic nemění.
+- Hlídač nákladů (Admin -> Náklady): úložiště videí u Cloudflare (kolik z předplacených
+  minut), přehrané minuty po dnech, odhad ceny za měsíc, živé přenosy, nahrávání za
+  24 h, kdo nahrává / vysílá nejvíc, databáze a obrázky Supabase proti limitu Free.
+  Jednou denně kontrola - když se něco blíží limitu nebo je nával, přijde ti oznámení
+  (i push).
+- Hry: stránka Hry v menu - sledované hry, co se teď vysílá, co se hraje (videa za 30
+  dní), katalog 90 her podle žánru s hledáním. Stránka hry: kdo ji teď vysílá, oblíbená
+  a nejnovější videa a Sparks, Sledovat hru (počet sledujících), Nahrát klip z této hry,
+  podobné hry.
+  Kde všude se hra ukáže: štítek pod názvem videa, u přenosu a na kartách v Živě, filtr
+  her na stránce Živě, řada her v Prozkoumat -> Hry, karta hry ve výsledcích hledání
+  („cs2“, „minecraft“), odkaz na hashtagu hry. Videa ze sledovaných her jdou na hlavní
+  stránce výš s popiskem „Hra, kterou sleduješ“.
+  Jak se hra pozná: z hashtagů (appka Kine do PC je dává ke klipům sama, #cs2 i
+  #counterstrike2), při nahrávání výběr Hra (u kategorie Hry, s nabídkou „Je to
+  Minecraft? Vybrat“ podle názvu), v Upravit video, ve studiu vysílání; z appky do PC
+  podle názvu přenosu. Běžná slova (#rust, #mafia, #warzone) platí jen v kategorii Hry,
+  ať se mezi hry nepřimíchá programování nebo zprávy.
+- Ochrana osobních údajů doplněná o push oznámení a Turnstile; export dat obsahuje
+  sledované hry a zařízení s oznámeními (bez klíčů).
+
+ZABEZPEČENÍ
+- Push: adresy zařízení jen od push služeb prohlížečů (Google, Apple, Mozilla, Microsoft),
+  jinak server nikam neposílá. Obsah šifrovaný (RFC 8291). Text, který napsal jiný
+  uživatel, se na telefon nikdy neposílá - jen „Nový komentář od X“. Max 6 oznámení
+  o komentářích za 10 minut na člověka, každé oznámení odejde nejvýš jednou.
+- Prohlížeč nemůže zapisovat zařízení napřímo (jen server po kontrole), max 10 zařízení
+  na účet, zrušená zařízení se mažou samy.
+- Sledování her: max 100 her, brzda proti spamu; kdo co sleduje, nevidí nikdo jiný.
+- Náklady vidí jen správce (data čte jen server).
+
+
 KINE web: příspěvky jen pro členy a až 10 fotek, nenápadné novinky od kanálů na Home,
 nový vzhled Nahrát / Upravit video, statistiky živého vysílání, další zabezpečení
 (dodávka kine-0133-2026-10-30)

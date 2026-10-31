@@ -9,6 +9,8 @@ import { visibleNowFilter } from '@/lib/scheduling';
 import { formatDuration } from '@/lib/homeRecommendation';
 import VideoCard from '@/components/VideoCard';
 import { VideoBlockRow } from '@/components/SparksShelf';
+import GameChip from '@/components/GameChip';
+import { gameFromTag } from '@/lib/games';
 
 /**
  * Videa s hashtagem. Stejné karty jako všude jinde (náhled po najetí,
@@ -46,9 +48,18 @@ export default function HashtagPage() {
 
   if (loading) return <p style={{ color: 'var(--text-faint)' }}>{t('loading')}</p>;
 
+  // Hashtag hry (#cs2, #minecraft): odkaz na stránku hry - tam jsou všechny její hashtagy a přenosy.
+  const game = gameFromTag(tag);
+
   return (
     <div>
       <p className="section-title">#{tag}</p>
+      {game && (
+        <p className="hashtag-game-banner">
+          <span>{t('gameHashtagBanner')}</span>
+          <GameChip game={game} />
+        </p>
+      )}
       {videos.length === 0 ? (
         <p style={{ color: 'var(--text-faint)' }}>{t('hashtagEmptyNote')}</p>
       ) : (

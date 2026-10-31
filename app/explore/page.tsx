@@ -9,6 +9,7 @@ import { computeTrustRatingClient } from '@/lib/trustRatingClient';
 import { useLanguage } from '@/lib/i18n';
 import { useWatchProgress } from '@/lib/useWatchProgress';
 import { VideoBlockRow } from '@/components/SparksShelf';
+import GamesRail from '@/components/GamesRail';
 
 type Tab = 'popular' | 'trending' | 'newest' | 'shorts' | 'surprise';
 
@@ -150,6 +151,8 @@ function ExploreInner() {
           {t('popularDesc')}
         </p>
       )}
+      {/* Kategorie Hry: nahoře řada her - podle hry se hledá líp než v jedné velké hromadě. */}
+      {category === 'catGaming' && <GamesRail />}
       {tab === 'shorts' && (
         <p style={{ color: 'var(--text-faint)', fontSize: 13, marginTop: -14, marginBottom: 20 }}>
           {t('shortsDesc')}

@@ -10,7 +10,11 @@ import { autoCaptionLanguage, chaptersFromDescription, parseSubtitles, sanitizeC
 import ProfileImage from '@/components/ProfileImage';
 import { IMAGE_MAX_BYTES, imageUploadExt, imageUploadProblem, ownStoragePath, thumbnailPath } from '@/lib/imageUpload';
 import UiIcon from '@/components/UiIcon';
+import { flushPush } from '@/lib/pushClient';
 import { CharCount, StudioCard, StudioChoices } from '@/components/StudioParts';
+import GameSelect from '@/components/GameSelect';
+import { GAMING_CATEGORY, gameFromHashtags } from '@/lib/games';
+import { authHeaders } from '@/lib/authHeaders';
 
 // Na jednom videu se můžou podílet nejvýš 4 tvůrci - ten, kdo ho nahrál,
 // a k tomu tři spolutvůrci. Všichni čtyři se pak ukazují pod videem.
@@ -49,6 +53,10 @@ export default function EditVideoPage() {
   const [chaptersText, setChaptersText] = useState('');
   const [captionsText, setCaptionsText] = useState('');
   const [videoLanguage, setVideoLanguage] = useState<string | null>(null);
+  // Hra (lib/games.ts) - jen u videa v kategorii Hry; mění ji server (app/api/videos/game).
+  const [videoCategory, setVideoCategory] = useState<string | null>(null);
+  const [game, setGame] = useState('');
+  const [savedGame, setSavedGame] = useState('');
   const [videoReady, setVideoReady] = useState(false);
   const [autoCaptions, setAutoCaptions] = useState<'idle' | 'working' | 'unsupported' | 'error'>('idle');
   // Nový náhled (ještě neuložený) - ukáže se hned v kartě i v boku.
@@ -158,6 +166,7 @@ export default function EditVideoPage() {
     });
 
     if (notifyError) setCollabError(notifyError.message);
+    else flushPush();
 
     setCollabSearch('');
     setCollabResults([]);
@@ -236,6 +245,10 @@ export default function EditVideoPage() {
     setCaptionsText(toSrt(sanitizeCaptions(video.captions)));
     setVideoLanguage(video.language ?? null);
     setVideoReady(video.status === 'ready');
+    setVideoCategory(video.category ?? null);
+    const currentGame = gameFromHashtags(video.hashtags, video.category)?.slug ?? '';
+    setGame(currentGame);
+    setSavedGame(currentGame);
 
     const { data: myProfile } = await supabase.from('profiles').select('trailer_video_id').eq('id', authData.user.id).single();
     setIsTrailer(myProfile?.trailer_video_id === videoId);
@@ -379,6 +392,20 @@ export default function EditVideoPage() {
       return;
     }
 
+    // Hra: hashtagy mění server (z prohlížeče je upravit nejde).
+    if (videoCategory === GAMING_CATEGORY && game !== savedGame) {
+      const res = await fetch('/api/videos/game', {
+        method: 'POST',
+        headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId, game: game || null }),
+      }).catch(() => null);
+      if (!res?.ok) {
+        setToast({ message: t('gameSaveFailed'), type: 'error' });
+        return;
+      }
+      setSavedGame(game);
+    }
+
     if (previousThumbPath && newThumbnailUrl && !newThumbnailUrl.includes(previousThumbPath)) {
       await supabase.storage.from('thumbnails').remove([previousThumbPath]).then(
         () => undefined,
@@ -449,6 +476,14 @@ export default function EditVideoPage() {
               <CharCount value={description} max={5000} />
             </div>
           </StudioCard>
+
+          {videoCategory === GAMING_CATEGORY && (
+            <StudioCard icon="gamepad" title={t('gameLabel')} hint={t('gameHint')}>
+              <div className="studio-field">
+                <GameSelect id="edit-game" value={game} onChange={setGame} />
+              </div>
+            </StudioCard>
+          )}
 
           <StudioCard icon="image" title={t('thumbnailImageLabel')}>
             <div className="studio-thumb">

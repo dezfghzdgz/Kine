@@ -9,6 +9,7 @@ import UiIcon, { type UiIconName } from './UiIcon';
 import { NOTIFICATIONS_REFRESH_EVENT } from './BadgeWatcher';
 import { badgeNotificationText } from '@/lib/badgeText';
 import { safeInternalLink } from '@/lib/safeLink';
+import PushOffer from './PushOffer';
 
 type Notification = {
   id: string;
@@ -351,6 +352,8 @@ export default function NotificationBell({ mobileTrigger = false, onNavigate }: 
 
       {open && (
         <div className="profile-dropdown notification-list-dropdown" style={{ width: 300, maxHeight: 360, overflowY: 'auto' }}>
+          {/* Oznámení i mimo Kine (push) - nabídka, dokud se člověk nerozhodne. */}
+          <PushOffer />
           {/* Hlavička nahoře (i při dlouhém seznamu): přečíst vše, smazat vše - dřív bylo mazání až úplně dole pod oznámeními. */}
           {notifications.length > 0 && (
             <div className="notification-list-head">

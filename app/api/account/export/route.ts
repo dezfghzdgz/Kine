@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   const userId = userData.user.id;
 
-  const [profile, videos, comments, playlists, posts, subscriptions, watchHistory] = await Promise.all([
+  const [profile, videos, comments, playlists, posts, subscriptions, watchHistory, gameFollows, pushSettings, pushDevices] = await Promise.all([
     supabaseServer.from('profiles').select('*').eq('id', userId).single(),
     supabaseServer.from('videos').select('*').eq('owner_id', userId),
     supabaseServer.from('comments').select('*').eq('user_id', userId),
@@ -26,6 +26,11 @@ export async function POST(req: NextRequest) {
     supabaseServer.from('posts').select('*').eq('owner_id', userId),
     supabaseServer.from('subscriptions').select('*').eq('subscriber_id', userId),
     supabaseServer.from('watch_history').select('*').eq('user_id', userId),
+    // Sledované hry a push oznámení (supabase-migration-push-hry-naklady.sql; bez ní prázdné).
+    supabaseServer.from('game_follows').select('game, created_at').eq('user_id', userId),
+    supabaseServer.from('push_settings').select('live, uploads, replies, earnings, updated_at').eq('user_id', userId).maybeSingle(),
+    // Zařízení s oznámeními: bez šifrovacích klíčů, adresa jen jako služba (Google, Apple, Mozilla...).
+    supabaseServer.from('push_subscriptions').select('endpoint, lang, user_agent, created_at, last_ok_at').eq('user_id', userId),
   ]);
 
   const exportData = {
@@ -38,6 +43,17 @@ export async function POST(req: NextRequest) {
     posts: posts.data ?? [],
     subscriptions: subscriptions.data ?? [],
     watch_history: watchHistory.data ?? [],
+    followed_games: gameFollows.data ?? [],
+    push_settings: pushSettings.data ?? null,
+    push_devices: (pushDevices.data ?? []).map((d: { endpoint: string; lang: string; user_agent: string | null; created_at: string; last_ok_at: string | null }) => {
+      let service = '';
+      try {
+        service = new URL(d.endpoint).hostname;
+      } catch {
+        /* nic */
+      }
+      return { service, lang: d.lang, user_agent: d.user_agent, created_at: d.created_at, last_ok_at: d.last_ok_at };
+    }),
   };
 
   return NextResponse.json(exportData);

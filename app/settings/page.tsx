@@ -18,6 +18,7 @@ import ProfileImage from '@/components/ProfileImage';
 import ComingSoon from '@/components/ComingSoon';
 import { CREATOR_PAYMENTS_ENABLED } from '@/lib/payments';
 import { homePostsEnabled, setHomePostsEnabled } from '@/lib/homePosts';
+import PushSettings from '@/components/PushSettings';
 import {
   PROFILE_IMAGE_MAX_BYTES,
   STILL_MAX_SIDE,
@@ -56,13 +57,15 @@ async function stillFrame(file: Blob, maxSide: number): Promise<Blob | null> {
  * (#appearance, #earnings…), takže odkazy z nabídky a odjinud vedou rovnou
  * na místo. Vysvětlení jsou pod otazníčky.
  */
-type Section = 'profile' | 'appearance' | 'playback' | 'home' | 'earnings' | 'account';
+type Section = 'profile' | 'appearance' | 'playback' | 'home' | 'notifications' | 'earnings' | 'account';
 const SECTIONS: { id: Section; icon: UiIconName; key: DictKey }[] = [
   { id: 'profile', icon: 'user', key: 'settingsSecProfile' },
   { id: 'appearance', icon: 'palette', key: 'appearanceHeading' },
   // Kvalita videa a náhledy po najetí - přehrávání, ne vzhled (dřív byly ve Vzhledu).
   { id: 'playback', icon: 'play', key: 'playbackHeading' },
   { id: 'home', icon: 'home', key: 'settingsSecHome' },
+  // Push oznámení na telefon / počítač (components/PushSettings.tsx).
+  { id: 'notifications', icon: 'bell', key: 'settingsSecNotifications' },
   { id: 'earnings', icon: 'coins', key: 'settingsSecEarnings' },
   { id: 'account', icon: 'shield', key: 'settingsSecAccount' },
 ];
@@ -609,6 +612,8 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {section === 'notifications' && <PushSettings userId={userId} />}
 
       {section === 'earnings' && (
         <div className="panel" id="earnings">

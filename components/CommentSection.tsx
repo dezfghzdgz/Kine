@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
+import { flushPush } from '@/lib/pushClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
@@ -307,6 +308,8 @@ export default function CommentSection({
         link: `/watch/${videoId}`,
       });
     }
+    // Oznámení i na telefon / počítač příjemce (push, lib/pushClient.ts).
+    flushPush();
 
     if (parentId) {
       setReplyText('');

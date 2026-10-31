@@ -9,6 +9,8 @@ import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { authHeaders, cacheableUrl } from '@/lib/authHeaders';
 import { channelRoom, liveElapsed } from '@/lib/liveChat';
 import { categoryLabel } from '@/lib/categories';
+import { gameBySlug } from '@/lib/games';
+import GameChip from '@/components/GameChip';
 import LiveChat from '@/components/LiveChat';
 import LiveTipDialog from '@/components/LiveTipDialog';
 import SubscribeButton from '@/components/SubscribeButton';
@@ -41,6 +43,8 @@ type Status = {
     title: string;
     description: string;
     category: string | null;
+    /** Hra (lib/games.ts - slug); starší server ji neposílá. */
+    game?: string | null;
     startedAt: string | null;
     endedAt: string | null;
     /** null = přehrávač zatím nejde (Cloudflare přenos ještě nepotvrdil). */
@@ -176,6 +180,7 @@ export default function LivePage() {
   }
 
   const stream = status.stream;
+  const liveGame = gameBySlug(stream?.game);
   const isOwner = viewerId === profile.id;
   // Každé vysílání má svůj chat: během vysílání zprávy od jeho začátku, po konci nový chat.
   const chatProps = {
@@ -333,8 +338,13 @@ export default function LivePage() {
             </span>
           )}
           {stream?.startedAt && <span>{liveElapsed(stream.startedAt, now)}</span>}
-          {stream?.category && <span> · {categoryLabel(stream.category, t)}</span>}
+          {stream?.category && !liveGame && <span> · {categoryLabel(stream.category, t)}</span>}
         </p>
+        {liveGame && (
+          <p className="live-game-row">
+            <GameChip game={liveGame} />
+          </p>
+        )}
         {channelRow}
         {stream?.description && (
           <div className="panel" style={{ marginTop: 14 }}>

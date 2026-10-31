@@ -26,6 +26,15 @@ export async function isStaffUser(userId: string | null | undefined): Promise<bo
   return data?.role === 'moderator' || data?.role === 'admin' || data?.is_admin === true;
 }
 
+/** Správce Kine (is_admin, nebo role admin) - jen ten smí do Adminu (náklady, push, Stripe). */
+export async function isAdminUser(userId: string | null | undefined): Promise<boolean> {
+  if (!userId) return false;
+  const full = await supabaseServer.from('profiles').select('role, is_admin').eq('id', userId).maybeSingle();
+  let data = full.data as { role?: string | null; is_admin?: boolean | null } | null;
+  if (full.error) data = ((await supabaseServer.from('profiles').select('is_admin').eq('id', userId).maybeSingle()).data as any) ?? null;
+  return data?.role === 'admin' || data?.is_admin === true;
+}
+
 /** Chybí tabulka (migrace ještě neproběhla)? Postgres 42P01, PostgREST PGRST205. */
 export function isMissingTable(error: { code?: string; message?: string } | null | undefined): boolean {
   if (!error) return false;

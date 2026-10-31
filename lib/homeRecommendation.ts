@@ -36,6 +36,22 @@ export function formatDuration(seconds: number | null) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+/** Hashtagy sledovaných her (lib/games.ts - gameTagSets); slabé platí jen v kategorii Hry. */
+export type FollowedGameTags = { gameStrong?: Set<string>; gameWeak?: Set<string> };
+
+/** Je video ze hry, kterou divák sleduje (/game/[slug] - Sledovat)? */
+export function fromFollowedGame(video: any, ctx: FollowedGameTags): boolean {
+  if (!ctx.gameStrong?.size && !ctx.gameWeak?.size) return false;
+  const tags: unknown[] = Array.isArray(video?.hashtags) ? video.hashtags : [];
+  const gaming = video?.category === 'catGaming';
+  return tags.some((raw) => {
+    if (typeof raw !== 'string') return false;
+    // Stejně jako lib/games.ts - normalizeGameTag ("Counter-Strike" -> "counterstrike").
+    const h = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30);
+    return !!ctx.gameStrong?.has(h) || (gaming && !!ctx.gameWeak?.has(h));
+  });
+}
+
 // Appka tady videím počítá "skóre", podle kterého se pak řadí - není to
 // čistě podle data nahrání. Zohledňuje: čerstvost videa, jestli je to od
 // odebíraného kanálu, jestli sedí kategorie/hashtagy k tomu, co uživatel
@@ -49,7 +65,7 @@ export function scoreVideo(
     watchedIds: Set<string>;
     topCategories: Set<string>;
     topHashtags: Set<string>;
-  }
+  } & FollowedGameTags
 ) {
   const ageDays = (Date.now() - new Date(video.created_at).getTime()) / (1000 * 60 * 60 * 24);
   const recencyScore = Math.exp(-ageDays / 10) * 40;
@@ -61,10 +77,13 @@ export function scoreVideo(
   const hashtagMatches = (video.hashtags ?? []).filter((h: string) => ctx.topHashtags.has(h)).length;
   const hashtagBonus = Math.min(hashtagMatches * 6, 18);
 
+  // Hra, kterou divák sám sleduje - silnější signál než "hashtag z historie", slabší než odběr.
+  const gameBonus = fromFollowedGame(video, ctx) ? 25 : 0;
+
   const watchedPenalty = ctx.watchedIds.has(video.id) ? -50 : 0;
   const jitter = Math.random() * 10;
 
-  return recencyScore + popularityScore + subscriptionBonus + categoryBonus + hashtagBonus + watchedPenalty + jitter;
+  return recencyScore + popularityScore + subscriptionBonus + categoryBonus + hashtagBonus + gameBonus + watchedPenalty + jitter;
 }
 
 /**
@@ -79,7 +98,7 @@ export function scoreVideo(
  * penalizace za zhlédnuté), takže popisek říká pravdu o tom, proč je
  * video tak vysoko.
  */
-export type RecommendReason = 'reasonSubscribed' | 'reasonInterests' | 'reasonHashtags' | 'reasonNew' | 'reasonPopular';
+export type RecommendReason = 'reasonSubscribed' | 'reasonGame' | 'reasonInterests' | 'reasonHashtags' | 'reasonNew' | 'reasonPopular';
 
 export function explainVideo(
   video: any,
@@ -87,10 +106,11 @@ export function explainVideo(
     subscribedIds: Set<string>;
     topCategories: Set<string>;
     topHashtags: Set<string>;
-  },
+  } & FollowedGameTags,
   now: number = Date.now()
 ): RecommendReason | null {
   if (video.owner_id && ctx.subscribedIds.has(video.owner_id)) return 'reasonSubscribed';
+  if (fromFollowedGame(video, ctx)) return 'reasonGame';
 
   const category = video.category && ctx.topCategories.has(video.category) ? 20 : 0;
   const hashtagMatches = (video.hashtags ?? []).filter((h: string) => ctx.topHashtags.has(h)).length;

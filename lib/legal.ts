@@ -39,6 +39,8 @@ export const RULES_UPDATED = { cs: '30. října 2026', en: '30 October 2026' };
 export const LEGAL_UPDATED = RULES_UPDATED;
 /** Podmínky a ochrana údajů: účinnost posledního znění. */
 export const TERMS_UPDATED = { cs: '30. října 2026', en: '30 October 2026' };
+/** Ochrana osobních údajů: push oznámení, ochrana proti botům, sledované hry (0134). */
+export const PRIVACY_UPDATED = { cs: '31. října 2026', en: '31 October 2026' };
 
 const OPERATOR_CS = operatorLine('cs');
 const OPERATOR_EN = operatorLine('en');
@@ -886,7 +888,8 @@ export const PRIVACY: LegalDoc = {
         items: [
           `Účet: e-mail, uživatelské a zobrazované jméno, datum registrace, souhlas s pravidly. Heslo vidí jen přihlašovací služba (Supabase) a jen v zašifrované podobě - my ho neznáme.`,
           `Profil: profilovka, banner, popis, odkazy, barva kanálu.`,
-          `Co na Kine děláš: nahraná videa a Sparks (s názvy, popisy, náhledy a titulky), příspěvky, komentáře, hodnocení, odběry, playlisty, historie sledování a místo, kde ses ve videu zastavil, živá vysílání a zprávy v chatu, oznámení.`,
+          `Co na Kine děláš: nahraná videa a Sparks (s názvy, popisy, náhledy a titulky), příspěvky, komentáře, hodnocení, odběry, sledované hry, playlisty, historie sledování a místo, kde ses ve videu zastavil, živá vysílání a zprávy v chatu, oznámení.`,
+          `Oznámení na telefon a počítač (jen když si je zapneš): adresa tvého zařízení u push služby prohlížeče (Google, Apple, Mozilla nebo Microsoft), jazyk, typ prohlížeče a co ti má chodit. Obsah oznámení je šifrovaný - push služba ho nepřečte. Vypneš je v Nastavení → Oznámení; zařízení, které oznámení zruší, smažeme.`,
           `Platby: probíhají přes Stripe. My vidíme jen co a kdy jsi zaplatil, stav předplatného a označení zákazníka u Stripe - čísla karet nevidíme. U podpor, Super díky a předplatného kanálu vidí tvůrce tvé jméno, částku a vzkaz; vzkazy u podpor a Super díky jsou veřejné.`,
           `Technické údaje: IP adresa (u zhlédnutí - aby nešlo nafukovat čísla - a kvůli bezpečnosti a omezení zneužití), přibližná země podle IP adresy (jen k zobrazení ceny ve správné měně, neukládá se), typ zařízení a prohlížeče, hlášení chyb (co se pokazilo, na jaké stránce, na jakém zařízení) a nastavení uložená v tvém prohlížeči (vzhled, jazyk, hlasitost).`,
           `Aplikace Kine do PC a Kine Clipper: klipy a nahrávky zůstávají na tvém počítači. Na Kine jde jen to, co nahraješ (nebo automatické nahrávání, pokud si ho zapneš), a to, co je potřeba ke spojení s účtem. Protokol pro řešení potíží zůstává u tebe - pošleš ho jen ty sám.`,
@@ -907,7 +910,8 @@ export const PRIVACY: LegalDoc = {
         heading: `Kdo údaje vidí`,
         items: [
           `Ostatní uživatelé vidí to, co je veřejné: jméno, profil, veřejná videa, komentáře, zprávy v chatu, vystavené odznaky.`,
-          `Naši dodavatelé, kteří pro nás údaje zpracovávají: Supabase (databáze, přihlášení, obrázky), Cloudflare (ukládání a přehrávání videí a vysílání, automatické titulky, stahování aplikací), Vercel (provoz webu), Stripe (platby a výplaty tvůrcům), GitHub (stahování a aktualizace aplikací) a Google (e-mail podpory, když nám napíšeš).`,
+          `Naši dodavatelé, kteří pro nás údaje zpracovávají: Supabase (databáze, přihlášení, obrázky), Cloudflare (ukládání a přehrávání videí a vysílání, automatické titulky, stahování aplikací a ochrana proti botům při registraci a přihlášení - Turnstile, který kvůli tomu vyhodnotí technické údaje o prohlížeči), Vercel (provoz webu), Stripe (platby a výplaty tvůrcům), GitHub (stahování a aktualizace aplikací) a Google (e-mail podpory, když nám napíšeš).`,
+          `Push služby prohlížečů (Google, Apple, Mozilla, Microsoft) doručují oznámení na tvoje zařízení, když si je zapneš - dostanou jen šifrovanou zprávu.`,
           `Úřady jen tehdy, když to vyžaduje zákon (například oznámení zneužívání dětí).`,
         ],
       },
@@ -952,7 +956,7 @@ export const PRIVACY: LegalDoc = {
         ],
       },
     ],
-    footer: `Tenhle dokument budeme upravovat, když se Kine změní; o podstatných změnách dáme vědět. Kontakt: ${LEGAL_CONTACT}. Poslední změna: ${TERMS_UPDATED.cs}.`,
+    footer: `Tenhle dokument budeme upravovat, když se Kine změní; o podstatných změnách dáme vědět. Kontakt: ${LEGAL_CONTACT}. Poslední změna: ${PRIVACY_UPDATED.cs}.`,
   },
   en: {
     title: `Privacy Policy`,
@@ -966,7 +970,8 @@ export const PRIVACY: LegalDoc = {
         items: [
           `Account: email, username and display name, sign-up date, agreement to the rules. Your password is only seen by the login service (Supabase) and only in encrypted form - we don't know it.`,
           `Profile: profile picture, banner, bio, links, channel colour.`,
-          `What you do on Kine: uploaded videos and Sparks (with titles, descriptions, thumbnails and captions), posts, comments, ratings, subscriptions, playlists, watch history and where you stopped in a video, live streams and chat messages, notifications.`,
+          `What you do on Kine: uploaded videos and Sparks (with titles, descriptions, thumbnails and captions), posts, comments, ratings, subscriptions, followed games, playlists, watch history and where you stopped in a video, live streams and chat messages, notifications.`,
+          `Phone and computer notifications (only if you turn them on): your device's address at your browser's push service (Google, Apple, Mozilla or Microsoft), language, browser type and what you want to be notified about. Notification content is encrypted - the push service can't read it. Turn them off in Settings → Notifications; we delete devices that cancel notifications.`,
           `Payments: handled by Stripe. We only see what you paid and when, your subscription status and your Stripe customer reference - we don't see card numbers. For tips, Super Thanks and channel memberships, the creator sees your name, the amount and your message; messages attached to tips and Super Thanks are public.`,
           `Technical data: IP address (for views - so numbers can't be inflated - and for security and abuse prevention), approximate country based on your IP address (only to show prices in the right currency, not stored), device and browser type, error reports (what went wrong, on which page, on what device) and settings stored in your browser (appearance, language, volume).`,
           `Kine for PC and Kine Clipper: clips and recordings stay on your computer. Only what you upload (or automatic uploading, if you turn it on) and what is needed to connect the app to your account goes to Kine. The troubleshooting log stays with you - only you can send it.`,
@@ -987,7 +992,8 @@ export const PRIVACY: LegalDoc = {
         heading: `Who sees the data`,
         items: [
           `Other users see what is public: your name, profile, public videos, comments, chat messages, showcased badges.`,
-          `Our providers who process data for us: Supabase (database, login, images), Cloudflare (storing and playing videos and streams, automatic captions, app downloads), Vercel (running the website), Stripe (payments and creator payouts), GitHub (app downloads and updates) and Google (support email, when you write to us).`,
+          `Our providers who process data for us: Supabase (database, login, images), Cloudflare (storing and playing videos and streams, automatic captions, app downloads and bot protection at sign-up and login - Turnstile, which evaluates technical browser data for this), Vercel (running the website), Stripe (payments and creator payouts), GitHub (app downloads and updates) and Google (support email, when you write to us).`,
+          `Browser push services (Google, Apple, Mozilla, Microsoft) deliver notifications to your devices if you turn them on - they only receive an encrypted message.`,
           `Authorities only when the law requires it (for example reporting child abuse).`,
         ],
       },
@@ -1032,6 +1038,6 @@ export const PRIVACY: LegalDoc = {
         ],
       },
     ],
-    footer: `We will update this document when Kine changes and will let you know about significant changes. Contact: ${LEGAL_CONTACT}. Last updated: ${TERMS_UPDATED.en}.`,
+    footer: `We will update this document when Kine changes and will let you know about significant changes. Contact: ${LEGAL_CONTACT}. Last updated: ${PRIVACY_UPDATED.en}.`,
   },
 };

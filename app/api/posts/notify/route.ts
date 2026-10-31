@@ -4,6 +4,8 @@ import { userFromRequest } from '@/lib/apiUser';
 import { notifyNewPost } from '@/lib/postNotify';
 
 export const dynamic = 'force-dynamic';
+// Oznámení odběratelům posílá i na telefony (push) - smí běžet déle.
+export const maxDuration = 60;
 
 /** Oznámení jen u čerstvého příspěvku (appka ho posílá hned po zveřejnění). */
 const FRESH_MS = 10 * 60 * 1000;

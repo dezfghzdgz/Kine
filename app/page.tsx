@@ -14,6 +14,8 @@ import ContinueWatching from '@/components/ContinueWatching';
 import LiveNowRow from '@/components/LiveNowRow';
 import HomePostsShelf from '@/components/HomePostsShelf';
 import { scoreVideo, explainVideo, buildBlocks, formatDuration, FEED_BATCH, WATCHED_HISTORY_LIMIT } from '@/lib/homeRecommendation';
+import { gameTagSets } from '@/lib/games';
+import { loadFollowedGames } from '@/lib/gamesData';
 import type { Block } from '@/lib/homeRecommendation';
 import { loadHiddenContent, filterHidden, clearHiddenContent, NOTHING_HIDDEN } from '@/lib/hiddenContent';
 import type { HiddenContent } from '@/lib/hiddenContent';
@@ -38,6 +40,9 @@ type FeedContext = {
   watchedIds: Set<string>;
   topCategories: Set<string>;
   topHashtags: Set<string>;
+  /** Hashtagy her, které divák sleduje (lib/games.ts - gameTagSets). */
+  gameStrong: Set<string>;
+  gameWeak: Set<string>;
   /**
    * Čas načtení stránky. Drží okno videí na místě: bez něj by video nahrané
    * mezitím posunulo všechna ostatní o jedno dolů a při donačítání by se
@@ -269,9 +274,10 @@ export default function HomePage() {
     let preference: 'short' | 'long' = 'long';
     let disableShorts = false;
     let hidden: HiddenContent = NOTHING_HIDDEN;
+    let gameSets = { strong: new Set<string>(), weak: new Set<string>() };
 
     if (user) {
-      const [{ data: profile }, { data: subs }, { data: watched }, { data: recentHistory }, loadedHidden] =
+      const [{ data: profile }, { data: subs }, { data: watched }, { data: recentHistory }, loadedHidden, followedGames] =
         await Promise.all([
           supabase.from('profiles').select('content_preference, disable_shorts').eq('id', user.id).single(),
           supabase.from('subscriptions').select('channel_id').eq('subscriber_id', user.id),
@@ -291,7 +297,10 @@ export default function HomePage() {
             .order('watched_at', { ascending: false })
             .limit(30),
           loadHiddenContent(user.id),
+          // Sledované hry (/game/[slug]); bez migrace nebo při chybě prostě žádné.
+          loadFollowedGames(),
         ]);
+      gameSets = gameTagSets(followedGames);
 
       preference = (profile?.content_preference as 'short' | 'long') ?? 'long';
       disableShorts = !!profile?.disable_shorts;
@@ -322,6 +331,8 @@ export default function HomePage() {
       watchedIds,
       topCategories,
       topHashtags,
+      gameStrong: gameSets.strong,
+      gameWeak: gameSets.weak,
       cutoff,
     };
 

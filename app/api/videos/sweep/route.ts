@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sweepProcessing } from '@/lib/markVideoReady';
 import { sweepNudity } from '@/lib/nudityScan';
+import { costAlertCheck } from '@/lib/costs';
 
 export const dynamic = 'force-dynamic';
 // Kontrola obsahu starších videí potřebuje pár desítek sekund (model běží na procesoru).
@@ -12,8 +13,8 @@ let lastOpenForce = 0;
 
 /**
  * Úklid na zavolání (viz lib/markVideoReady.ts, sweepProcessing): zaseklá
- * videa, nedokončená nahrávání, fronta mazání u Cloudflare, limity vysílání
- * a staré nezveřejněné záznamy. Pouští ho denně cron z vercel.json a jde
+ * videa, nedokončená nahrávání, fronta mazání u Cloudflare, limity vysílání,
+ * staré nezveřejněné záznamy a kontrola nákladů (lib/costs.ts). Pouští ho denně cron z vercel.json a jde
  * ho zavolat i ručně: otevřít /api/videos/sweep v prohlížeči.
  *
  * Když je na Vercelu nastavená proměnná CRON_SECRET, Vercel ji posílá
@@ -35,5 +36,7 @@ export async function GET(req: NextRequest) {
   // Nezkontrolovaná videa (nahraná před zapnutím kontroly nahoty) - po pár kouscích.
   // Bez ověřeného cronu nejvýš jednou za 5 minut, ať se tudy nedá pálit výkon serveru.
   const nudityChecked = await sweepNudity({ max: 6, budgetMs: 40_000, force: !!secret }).catch(() => 0);
-  return NextResponse.json({ ...result, nudityChecked }, { headers: { 'Cache-Control': 'no-store' } });
+  // Hlídač nákladů (lib/costs.ts): když něco hoří, správce dostane oznámení - jen při důkladném úklidu.
+  const costAlerts = force ? await costAlertCheck().catch(() => 0) : 0;
+  return NextResponse.json({ ...result, nudityChecked, costAlerts }, { headers: { 'Cache-Control': 'no-store' } });
 }

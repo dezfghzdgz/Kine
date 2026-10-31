@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { listenForPushResubscribe, syncPush } from '@/lib/pushClient';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
@@ -85,7 +86,7 @@ let ensuringProfile: Promise<boolean> | null = null;
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const { isModerator, isAdmin } = useUserRole();
   const [exploreOpen, setExploreOpen] = useState(false);
   const { open: mobileNavOpen, close: closeMobileNav } = useMobileNav();
@@ -116,6 +117,15 @@ export default function Sidebar() {
   useEffect(() => {
     setInDesktopApp(isInDesktopApp());
   }, []);
+
+  // Push oznámení (lib/pushClient.ts): obnovit přihlášení u serveru (jednou za den)
+  // a poslouchat, když prohlížeč adresu pro oznámení změní.
+  const signedInId = user?.id ?? null;
+  useEffect(() => {
+    if (!signedInId) return;
+    void syncPush(lang);
+    return listenForPushResubscribe(lang);
+  }, [signedInId, lang]);
 
   useEffect(() => {
     loadUser();
@@ -247,6 +257,11 @@ export default function Sidebar() {
             </span>
           )}
         </Link>
+        {/* Hry: klipy, videa a přenosy podle hry (app/games, lib/games.ts). */}
+        <Link href="/games" className={`sidebar-link ${pathname === '/games' || pathname.startsWith('/game/') ? 'active' : ''}`}>
+          <GamesNavIcon />
+          {t('navGames')}
+        </Link>
 
         {user && (
           <>
@@ -316,6 +331,19 @@ export default function Sidebar() {
           <Link href="/admin/stripe" className={`sidebar-link ${pathname === '/admin/stripe' ? 'active' : ''}`}>
             <UiIcon name="coins" size={20} />
             {t('stripeSetupLabel')}
+          </Link>
+        )}
+        {/* Hlídač nákladů (Cloudflare, Supabase) a nastavení push oznámení. */}
+        {isAdmin && (
+          <Link href="/admin/costs" className={`sidebar-link ${pathname === '/admin/costs' ? 'active' : ''}`}>
+            <UiIcon name="chart" size={20} />
+            {t('costsAdminLabel')}
+          </Link>
+        )}
+        {isAdmin && (
+          <Link href="/admin/push" className={`sidebar-link ${pathname === '/admin/push' ? 'active' : ''}`}>
+            <UiIcon name="bell" size={20} />
+            {t('pushAdminLabel')}
           </Link>
         )}
         {/* Odznaky spravuje celý tým Kine - moderátor i správce. */}
@@ -469,6 +497,10 @@ export default function Sidebar() {
             {t('navLive')}
             {liveCount > 0 && <span className="sidebar-live-count">{liveCount}</span>}
           </Link>
+          <Link href="/games" className="sidebar-link" onClick={closeMobileNav}>
+            <GamesNavIcon />
+            {t('navGames')}
+          </Link>
 
           {user && (
             <>
@@ -548,6 +580,18 @@ export default function Sidebar() {
             <Link href="/admin/stripe" className="sidebar-link" onClick={closeMobileNav}>
               <UiIcon name="coins" size={20} />
               {t('stripeSetupLabel')}
+            </Link>
+          )}
+          {isAdmin && (
+            <Link href="/admin/costs" className="sidebar-link" onClick={closeMobileNav}>
+              <UiIcon name="chart" size={20} />
+              {t('costsAdminLabel')}
+            </Link>
+          )}
+          {isAdmin && (
+            <Link href="/admin/push" className="sidebar-link" onClick={closeMobileNav}>
+              <UiIcon name="bell" size={20} />
+              {t('pushAdminLabel')}
             </Link>
           )}
           {(isAdmin || isModerator) && (
@@ -647,6 +691,17 @@ function AboutIcon() {
 }
 
 /** Živě: anténa s vlnami. */
+function GamesNavIcon() {
+  return (
+    <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M7.5 7h9a4.5 4.5 0 0 1 4.4 5.4l-.7 3.3a2.6 2.6 0 0 1-4.5 1.2L14.4 15H9.6l-1.3 1.9a2.6 2.6 0 0 1-4.5-1.2l-.7-3.3A4.5 4.5 0 0 1 7.5 7z" />
+      <path d="M7.5 10v3M6 11.5h3" />
+      <circle cx="15.5" cy="10.6" r="0.6" fill="currentColor" stroke="none" />
+      <circle cx="17.3" cy="12.6" r="0.6" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 function LiveNowIcon() {
   return (
     <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">

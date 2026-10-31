@@ -171,3 +171,32 @@ to prober s účetní.
    smaž u každého běhu artefakt (Artifacts → koš) a ve Studiu (Živě) si nech vygenerovat
    nový klíč pro vysílání - stará záloha ho obsahovala.
 
+
+## 10. Push oznámení, ochrana proti botům, náklady a hry (migrace)
+
+1. **Supabase → SQL Editor** → spusť `supabase-migration-push-hry-naklady.sql` (celý; jde
+   pouštět opakovaně). Na konci tři sloupce `push`, `hry`, `naklady` - `true` = hotovo.
+2. **Push oznámení:** `www.playkine.com/admin/push` → **Vygenerovat klíče** (vzniknou
+   v tvém prohlížeči, soukromý klíč neprojde serverem). Do Vercelu (Settings →
+   Environment Variables, Production) vlož `NEXT_PUBLIC_VAPID_PUBLIC_KEY`
+   a `VAPID_PRIVATE_KEY` → Deployments → **Redeploy**. Pak Nastavení → Oznámení →
+   Zapnout → Poslat zkušební. Klíče už neměň - nové klíče = všichni si oznámení
+   zapínají znovu. Na iPhonu/iPadu chodí oznámení jen z Kine přidaného na plochu.
+3. **Ochrana proti botům (Cloudflare Turnstile)** - v tomhle pořadí, jinak se nikdo
+   nepřihlásí:
+   1. Cloudflare → **Turnstile** → **Add widget**: název Kine, hostname `playkine.com`
+      a `www.playkine.com`, režim **Managed** → Create. Zkopíruj **Site Key**
+      a **Secret Key**.
+   2. Vercel: `NEXT_PUBLIC_TURNSTILE_SITE_KEY` = Site Key → **Redeploy**.
+   3. Vyzkoušej registraci a přihlášení na webu.
+   4. Supabase → Project Settings → Authentication → **Bot and Abuse Protection** →
+      **Enable CAPTCHA protection** → Cloudflare Turnstile → Secret Key → Save.
+   - Od bodu 4 nejde v appce Kine do PC přihlášení e-mailem a heslem - jen
+     „Přihlásit přes prohlížeč“ (telefon používá prohlížeč vždycky, tam se nic nemění).
+4. **Náklady:** `www.playkine.com/admin/costs`. Přehrané minuty ukáže, až má token
+   `CLOUDFLARE_STREAM_API_TOKEN` v Cloudflare navíc oprávnění **Account Analytics: Read**
+   (My Profile → API Tokens → token Kine → Edit). Kontrola běží jednou denně s úklidem
+   videí (cron) a při potížích pošle správcům oznámení. Hranice a limity jdou změnit
+   proměnnými `COST_ALERT_*`, `SUPABASE_*_LIMIT_*`, `CF_STREAM_*` (viz `.env.example`).
+5. **Hry** fungují po migraci samy (stránka Hry v menu). Bez migrace jde všechno kromě
+   tlačítka Sledovat hru a výběru hry ve studiu vysílání.

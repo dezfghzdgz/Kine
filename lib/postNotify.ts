@@ -1,4 +1,5 @@
 import { supabaseServer } from './supabaseServer';
+import { insertedIds, pushNotificationsByIds } from './pushSend';
 
 /** Kolik příspěvků jednoho kanálu za 24 hodin smí poslat oznámení (víc je spam do zvonečků). */
 export const POST_NOTIFY_PER_DAY = 5;
@@ -62,10 +63,14 @@ export async function notifyNewPost(post: { id: string; owner_id: string; conten
   const rows = recipients.map((r) => ({ user_id: r.subscriber_id, type: 'new_post', message, link: `/post/${post.id}` }));
   // Po dávkách - kanál s tisíci odběrateli nesmí narazit na strop jednoho dotazu.
   let sent = 0;
+  const ids: string[] = [];
   for (let i = 0; i < rows.length; i += 500) {
-    const { error } = await supabaseServer.from('notifications').insert(rows.slice(i, i + 500));
+    const { data, error } = await supabaseServer.from('notifications').insert(rows.slice(i, i + 500)).select('id');
     if (error) break;
+    ids.push(...insertedIds(data));
     sent += Math.min(500, rows.length - i);
   }
+  // I na telefon / počítač (push) - kdo si oznámení zapnul (lib/pushSend.ts).
+  await pushNotificationsByIds(ids);
   return { ok: true, sent };
 }

@@ -25,3 +25,19 @@ export function videoCountLabel(count: number, lang: Lang, t: (key: any) => stri
 
   return t(key).replace('{count}', String(count));
 }
+
+/**
+ * Totéž pro cokoli jiného: klíče `${base}One` / `${base}Few` / `${base}Many`
+ * s {count} (např. gameFollowersOne - "1 sledující", Few - "2 sledující",
+ * Many - "5 sledujících").
+ */
+export function countLabel(count: number, lang: Lang, t: (key: any) => string, base: string): string {
+  let rule: Intl.LDMLPluralRule = 'other';
+  try {
+    rule = new Intl.PluralRules(DATE_LOCALES[lang]).select(count);
+  } catch {
+    // Obecný tvar.
+  }
+  const key = rule === 'one' ? `${base}One` : rule === 'few' ? `${base}Few` : `${base}Many`;
+  return t(key).replace('{count}', new Intl.NumberFormat(DATE_LOCALES[lang]).format(count));
+}

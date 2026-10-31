@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabaseClient';
 import FieldHint from '@/components/FieldHint';
 import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { CATEGORY_KEYS } from '@/lib/categories';
+import { GAMING_CATEGORY, gameBySlug, gameFromHashtags, gameFromText, isGameSlug, withGameTag } from '@/lib/games';
+import GameSelect from '@/components/GameSelect';
 import { useUploadCommands, useUploadState } from '@/lib/uploadManager';
 import ProfileImage from '@/components/ProfileImage';
 import UploadQuota from '@/components/UploadQuota';
@@ -67,6 +69,8 @@ export default function UploadPage() {
   const [isArtistic, setIsArtistic] = useState(false);
   const [language, setLanguage] = useState('cs');
   const [category, setCategory] = useState('');
+  // Hra (lib/games.ts) - jen u kategorie Hry; přidá k videu hashtag hry (stránka hry, sledující).
+  const [game, setGame] = useState('');
   const [playlists, setPlaylists] = useState<{ id: string; title: string }[]>([]);
   const [selectedPlaylists, setSelectedPlaylists] = useState<string[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
@@ -74,6 +78,21 @@ export default function UploadPage() {
   const [collabSearch, setCollabSearch] = useState('');
   const [collabResults, setCollabResults] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
   const [collabError, setCollabError] = useState<string | null>(null);
+
+  // Ze stránky hry ("Nahrát klip z této hry" - /upload?game=minecraft): kategorie Hry a ta hra.
+  useEffect(() => {
+    const preset = new URLSearchParams(window.location.search).get('game');
+    if (isGameSlug(preset)) {
+      setCategory(GAMING_CATEGORY);
+      setGame(preset);
+    }
+  }, []);
+
+  /** Hashtagy k uložení: s hlavním hashtagem vybrané hry (jen u kategorie Hry). */
+  function hashtagsToSave(): string[] {
+    const tags = parseHashtags(hashtagsInput);
+    return category === GAMING_CATEGORY && game ? withGameTag(tags, game) : tags;
+  }
 
   async function searchCollaborators(query: string) {
     setCollabSearch(query);
@@ -283,7 +302,7 @@ export default function UploadPage() {
         thumbnailFile: null,
         title: name.trim() || f.name,
         description: '',
-        hashtags: parseHashtags(hashtagsInput),
+        hashtags: hashtagsToSave(),
         madeForKids,
         hasPaidPromotion: false,
         isAiGenerated,
@@ -318,7 +337,7 @@ export default function UploadPage() {
       thumbnailFile,
       title,
       description,
-      hashtags: parseHashtags(hashtagsInput),
+      hashtags: hashtagsToSave(),
       madeForKids,
       hasPaidPromotion,
       isAiGenerated,
@@ -357,6 +376,26 @@ export default function UploadPage() {
 
   // Náhled videa a vlastního náhledu - v boku stránky v obou krocích.
   const tags = parseHashtags(hashtagsInput);
+  const gaming = category === GAMING_CATEGORY;
+  const chosenGame = gaming ? gameBySlug(game) : null;
+  // Hra, kterou to nejspíš je (hashtag nebo název) - nabídne se jedním klepnutím, nevybírá se sama.
+  const suggestedGame = gaming && !game ? gameFromHashtags(tags, GAMING_CATEGORY) ?? gameFromText(title) : null;
+  const gameField = (id: string) =>
+    gaming ? (
+      <div className="studio-field">
+        <label htmlFor={id}>
+          {t('gameLabel')}
+          <FieldHint text={t('gameHint')} />
+        </label>
+        <GameSelect id={id} value={game} onChange={setGame} />
+        {suggestedGame && (
+          <button type="button" className="game-suggest" onClick={() => setGame(suggestedGame.slug)}>
+            <UiIcon name="gamepad" size={14} />
+            {t('gameSuggest').replace('{game}', suggestedGame.name)}
+          </button>
+        )}
+      </div>
+    ) : null;
   const preview = (
     <div className="studio-preview">
       <div className="studio-preview-media">
@@ -384,9 +423,9 @@ export default function UploadPage() {
         {videoDuration ? <span className="studio-preview-duration">{formatDuration(videoDuration)}</span> : null}
       </div>
       <p className={`studio-preview-title${title.trim() ? '' : ' empty'}`}>{title.trim() || t('studioTitlePlaceholder')}</p>
-      {(category || tags.length > 0) && (
+      {(category || tags.length > 0 || chosenGame) && (
         <p className="studio-preview-meta">
-          {[category ? t(category as (typeof CATEGORY_KEYS)[number]) : null, ...tags.slice(0, 3).map((h) => `#${h}`)].filter(Boolean).join(' · ')}
+          {[category ? t(category as (typeof CATEGORY_KEYS)[number]) : null, chosenGame?.name ?? null, ...tags.slice(0, 3).map((h) => `#${h}`)].filter(Boolean).join(' · ')}
         </p>
       )}
     </div>
@@ -466,6 +505,7 @@ export default function UploadPage() {
               </select>
             </div>
           </div>
+          {gameField('bulk-game')}
           <div className="studio-field">
             <label>{t('whoCanSeeVideo')}</label>
             <StudioChoices
@@ -659,6 +699,7 @@ export default function UploadPage() {
                   </select>
                 </div>
               </div>
+              {gameField('up-game')}
             </StudioCard>
 
             {playlists.length > 0 && (

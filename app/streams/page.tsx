@@ -8,6 +8,7 @@ import { authHeaders, cacheableUrl } from '@/lib/authHeaders';
 import { useUserRole } from '@/lib/useUserRole';
 import { announceLiveCount } from '@/lib/useLiveCount';
 import { categoryLabel, isCategoryKey } from '@/lib/categories';
+import { gameBySlug, isGameSlug } from '@/lib/games';
 import { LiveCard, recentLiveList, rememberLiveList, type LiveItem } from '@/components/LiveNowRow';
 
 type Sort = 'foryou' | 'viewers' | 'newest' | 'small';
@@ -136,6 +137,11 @@ function StreamsInner() {
     const c = params.get('category');
     return isCategoryKey(c) ? c : null;
   });
+  // Hra (/streams?game=counter-strike-2 - odkaz ze stránky hry).
+  const [game, setGame] = useState<string | null>(() => {
+    const g = params.get('game');
+    return isGameSlug(g) ? g : null;
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -237,13 +243,17 @@ function StreamsInner() {
   }, [staffNow]);
 
   // Volby v adrese - odkaz jde poslat ("koukni, kdo hraje hry").
-  function choose(next: { sort?: Sort; category?: string | null }) {
+  function choose(next: { sort?: Sort; category?: string | null; game?: string | null }) {
     const s = next.sort ?? sort;
     const c = next.category === undefined ? category : next.category;
+    // Hra patří ke kategorii Hry - jiná kategorie ji zruší.
+    const g = next.game === undefined ? (next.category !== undefined && next.category !== 'catGaming' ? null : game) : next.game;
     setSort(s);
     setCategory(c);
+    setGame(g);
     const q = new URLSearchParams();
     if (c) q.set('category', c);
+    if (g) q.set('game', g);
     if (s !== 'foryou') q.set('sort', s);
     router.replace(q.toString() ? `/streams?${q}` : '/streams', { scroll: false });
   }
@@ -254,8 +264,15 @@ function StreamsInner() {
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
   }, [streams]);
 
+  // Hry, které se teď vysílají (čipy pod kategoriemi) - jen když nějaká je.
+  const games = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const s of streams ?? []) if (s.game && gameBySlug(s.game)) counts.set(s.game, (counts.get(s.game) ?? 0) + 1);
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [streams]);
+
   const shown = useMemo(() => {
-    const list = (streams ?? []).filter((s) => !category || s.category === category);
+    const list = (streams ?? []).filter((s) => (!category || s.category === category) && (!game || s.game === game));
     if (sort === 'viewers') {
       return list
         .map((s, i) => ({ s, i }))
@@ -272,7 +289,7 @@ function StreamsInner() {
       return list.filter((s) => (s.viewers ?? 0) <= SMALL_MAX_VIEWERS).sort((a, b) => key(a) - key(b));
     }
     return list;
-  }, [streams, category, sort]);
+  }, [streams, category, game, sort]);
 
   const sortLabel: Record<Sort, string> = {
     foryou: t('streamsSortForYou'),
@@ -319,6 +336,23 @@ function StreamsInner() {
               ))}
             </div>
           )}
+          {(games.length > 0 || game) && (
+            <div className="search-filter-group streams-games" role="radiogroup" aria-label={t('navGames')}>
+              <button type="button" role="radio" aria-checked={!game} className={`search-chip ${!game ? 'active' : ''}`} onClick={() => choose({ game: null })}>
+                {t('gamesAll')}
+              </button>
+              {games.map(([slug, count]) => (
+                <button key={slug} type="button" role="radio" aria-checked={game === slug} className={`search-chip ${game === slug ? 'active' : ''}`} onClick={() => choose({ game: slug })}>
+                  {gameBySlug(slug)?.name} <span className="streams-chip-count">{count}</span>
+                </button>
+              ))}
+              {game && !games.some(([slug]) => slug === game) && (
+                <button type="button" role="radio" aria-checked className="search-chip active" onClick={() => choose({ game: null })}>
+                  {gameBySlug(game)?.name} <span className="streams-chip-count">0</span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -352,7 +386,7 @@ function StreamsInner() {
         <div className="streams-empty panel">
           <p className="streams-empty-title">{t('streamsEmptyCategory')}</p>
           <div className="streams-empty-actions">
-            <button type="button" className="streams-btn" onClick={() => choose({ category: null })}>
+            <button type="button" className="streams-btn" onClick={() => choose({ category: null, game: null })}>
               {t('streamsShowAll')}
             </button>
           </div>

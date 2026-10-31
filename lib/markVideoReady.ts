@@ -2,6 +2,7 @@ import { supabaseServer } from './supabaseServer';
 import { shouldBeProtected, syncVideoProtection } from './streamProtection';
 import { requestAutoCaptions, sweepCaptions } from './autoCaptions';
 import { runInBackground } from './background';
+import { insertedIds, pushNotificationsByIds } from './pushSend';
 import { isCloudflareUid, processCloudflareCleanup, streamApiUrl } from './cloudflareVideos';
 import { expireTickets, markTicketFailed } from './uploadTickets';
 import { isKineVideoId } from './videoRef';
@@ -127,14 +128,19 @@ export async function notifySubscribers(video: { id: string; owner_id: string; t
 
   if (!subs || subs.length === 0) return;
 
-  await supabaseServer.from('notifications').insert(
-    subs.map((s: any) => ({
-      user_id: s.subscriber_id,
-      type: 'new_video',
-      message: `Nové video: "${video.title}"`,
-      link: `/watch/${video.id}`,
-    }))
-  );
+  const { data: inserted } = await supabaseServer
+    .from('notifications')
+    .insert(
+      subs.map((s: any) => ({
+        user_id: s.subscriber_id,
+        type: 'new_video',
+        message: `Nové video: "${video.title}"`,
+        link: `/watch/${video.id}`,
+      }))
+    )
+    .select('id');
+  // I na telefon / počítač (push) - kdo si oznámení zapnul (lib/pushSend.ts).
+  runInBackground(pushNotificationsByIds(insertedIds(inserted)), 'push - nové video');
 }
 
 /**

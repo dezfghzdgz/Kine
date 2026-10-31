@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { flushPush } from './pushClient';
 import { supabase } from './supabaseClient';
 import { uploadResumable } from './tusUpload';
 import { uploadEtaSeconds } from './uploadEta';
@@ -423,6 +424,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
             if (notifyError) failed.push(c.username);
           })
         );
+        // Pozvánky i na telefon / počítač spolutvůrců (push).
+        flushPush();
       }
 
       uprav({ phase: 'processing' });

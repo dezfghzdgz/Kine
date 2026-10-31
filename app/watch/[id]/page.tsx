@@ -67,6 +67,8 @@ import { preloadHls, supportsNativeHls } from '@/lib/hlsAttach';
 import PlaybackStats, { bufferedAhead } from '@/components/PlaybackStats';
 import { VideoBlockRow } from '@/components/SparksShelf';
 import ProfileImage from '@/components/ProfileImage';
+import GameChip from '@/components/GameChip';
+import { gameFromHashtags } from '@/lib/games';
 
 const THEATER_KEY = 'kine-theater';
 const AUTOPLAY_KEY = 'kine-autoplay';
@@ -1631,6 +1633,8 @@ function WatchPageInner() {
   const premiereChat = !!video.is_premiere && premiereAt > 0 && clock < premiereAt + ((video.duration_seconds ?? 0) + 30 * 60) * 1000;
 
   const creatorName = video.profiles?.display_name ?? video.profiles?.username ?? t('unknownCreator');
+  // Hra videa podle hashtagů (lib/games.ts) - štítek pod názvem vede na stránku hry.
+  const videoGame = gameFromHashtags(video.hashtags, video.category);
   // Kapitoly zadané při nahrání, jinak z popisu ("0:00 Úvod" po řádcích) - lib/captions.ts.
   const chapters: { time: number; title: string }[] = effectiveChapters(video);
   const frameId = video.playback_id ?? video.cloudflare_video_id;
@@ -2048,6 +2052,11 @@ function WatchPageInner() {
           </div>
         )}
         <h1 className="video-title">{video.title}</h1>
+        {videoGame && (
+          <div className="video-game-row">
+            <GameChip game={videoGame} />
+          </div>
+        )}
         {chapters.length > 0 && !premiereWaiting && (
           <div className="chapter-list">
             <button type="button" className="chapter-list-toggle" onClick={() => setChaptersOpen((v) => !v)} aria-expanded={chaptersOpen}>

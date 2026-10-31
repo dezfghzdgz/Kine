@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { ensureOwnProfile } from '@/lib/ensureProfile';
 import Toast, { ToastType } from '@/components/Toast';
 import { useLanguage } from '@/lib/i18n';
+import Turnstile, { TURNSTILE_SITE_KEY, isCaptchaError, type TurnstileHandle } from '@/components/Turnstile';
 
 const LOCK_DURATION_MINUTES = 15;
 
@@ -18,6 +19,9 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  // Ochrana proti botům (components/Turnstile.tsx) - token na jeden pokus.
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const turnstile = useRef<TurnstileHandle>(null);
 
   // Volá appce vlastní API pro hlídání pokusů o přihlášení. Pokud tohle
   // API z jakéhokoliv důvodu selže (ještě neproběhla SQL migrace, výpadek
@@ -41,6 +45,10 @@ export default function LoginPage() {
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (TURNSTILE_SITE_KEY && !captchaToken) {
+      setError(t('captchaWait'));
+      return;
+    }
     setLoading(true);
 
     try {
@@ -58,7 +66,16 @@ export default function LoginPage() {
       const { data, error: loginError } = await supabase.auth.signInWithPassword({
         email,
         password,
+        ...(captchaToken ? { options: { captchaToken } } : {}),
       });
+      turnstile.current?.reset();
+
+      // Ověření proti botům nevyšlo - to není špatné heslo, nepočítá se do zámku.
+      if (loginError && isCaptchaError(loginError.message)) {
+        setError(t('captchaFailed'));
+        setLoading(false);
+        return;
+      }
 
       // Účet s nepotvrzeným e-mailem (Supabase -> Confirm email): heslo je dobře,
       // jen chybí kliknutí na odkaz - nepočítá se jako špatný pokus.
@@ -158,6 +175,7 @@ export default function LoginPage() {
           required
         />
         {error && <p className="error-text">{error}</p>}
+        <Turnstile ref={turnstile} action="login" onToken={setCaptchaToken} />
         <button type="submit" disabled={loading}>
           {loading ? t('signingIn') : t('login')}
         </button>

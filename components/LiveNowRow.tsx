@@ -8,11 +8,15 @@ import { authHeaders, cacheableUrl } from '@/lib/authHeaders';
 import { announceLiveCount } from '@/lib/useLiveCount';
 import VerifiedBadge from './VerifiedBadge';
 import ProfileImage from './ProfileImage';
+import GameChip from './GameChip';
+import { gameBySlug } from '@/lib/games';
 
 export type LiveItem = {
   ownerId: string;
   title: string;
   category?: string | null;
+  /** Hra přenosu (lib/games.ts - slug); starší server ji neposílá. */
+  game?: string | null;
   startedAt: string | null;
   videoUid: string | null;
   /** Vlastní náhled přenosu (studio / appka); jinak snímek z vysílání. */
@@ -136,11 +140,13 @@ export default function LiveNowRow() {
 }
 
 /** Karta přenosu: náhled (vlastní, nebo každou minutu nový snímek), LIVE, diváci, jak dlouho běží, kanál. */
-export function LiveCard({ item, now, showCategory = false }: { item: LiveItem; now: number; showCategory?: boolean }) {
+export function LiveCard({ item, now, showCategory = false, showGame = true }: { item: LiveItem; now: number; showCategory?: boolean; showGame?: boolean }) {
   const { t } = useLanguage();
   const [thumbFailed, setThumbFailed] = useState(false);
   const [customFailed, setCustomFailed] = useState(false);
   const name = item.profile.displayName || item.profile.username;
+  // Na stránce hry je hra jasná - štítek tam nepřidává nic.
+  const game = showGame ? gameBySlug(item.game) : null;
   // Vlastní náhled tvůrce; jinak snímek z běžícího přenosu od Cloudflare (každou minutu nový);
   // když nejde ani ten, zůstane avatar na tmavém pozadí.
   const custom = item.thumbnailUrl && !customFailed ? item.thumbnailUrl : null;
@@ -177,7 +183,12 @@ export function LiveCard({ item, now, showCategory = false }: { item: LiveItem; 
             <VerifiedBadge tier={item.profile.verificationTier as any} />
             {item.followed && <span className="live-card-followed"> · {t('streamsFollowed')}</span>}
           </p>
-          {showCategory && item.category && <span className="live-card-category">{t(item.category as any)}</span>}
+          {/* Hra je přesnější než kategorie ("Counter-Strike 2" místo "Hry"); karta je odkaz, štítek jen text. */}
+          {game ? (
+            <GameChip game={game} plain className="live-card-game" />
+          ) : (
+            showCategory && item.category && <span className="live-card-category">{t(item.category as any)}</span>
+          )}
           {item.hidden && (
             <span className="live-card-hidden" title={t('liveHiddenWhy')}>
               {item.hidden === 'moderation' ? t('liveHiddenModeration') : item.hidden === 'banned' ? t('liveHiddenBanned') : t('liveHiddenShadowBan')}

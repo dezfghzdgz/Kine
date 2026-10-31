@@ -1,6 +1,7 @@
 import { supabaseServer } from './supabaseServer';
 import { channelRoom } from './liveChat';
 import { formatTipAmount } from './liveTips';
+import { insertedIds, pushNotificationsByIds } from './pushSend';
 
 /**
  * Podpory ve vysílání - serverová část (logika a limity v lib/liveTips.ts).
@@ -68,12 +69,17 @@ export async function recordLiveTip(session: any): Promise<{ ok: true } | { ok: 
       who = p?.display_name || p?.username || who;
     }
     const sum = formatTipAmount(tip.amount_cents, tip.currency, 'cs');
-    await supabaseServer.from('notifications').insert({
-      user_id: tip.channel_id,
-      type: 'donation',
-      message: `💛 Super díky ${sum} od ${who}${message ? `: „${message.slice(0, 120)}“` : ''}`,
-      link: tip.video_id ? `/watch/${tip.video_id}` : '/channel-stats',
-    });
+    const { data: thanksRow } = await supabaseServer
+      .from('notifications')
+      .insert({
+        user_id: tip.channel_id,
+        type: 'donation',
+        message: `💛 Super díky ${sum} od ${who}${message ? `: „${message.slice(0, 120)}“` : ''}`,
+        link: tip.video_id ? `/watch/${tip.video_id}` : '/channel-stats',
+      })
+      .select('id');
+    // I na telefon tvůrce (push), když si to zapnul (lib/pushSend.ts).
+    await pushNotificationsByIds(insertedIds(thanksRow));
     return { ok: true };
   }
 
@@ -109,11 +115,15 @@ export async function recordLiveTip(session: any): Promise<{ ok: true } | { ok: 
     name = who?.display_name || who?.username || name;
   }
   const amount = formatTipAmount(tip.amount_cents, tip.currency, 'cs');
-  await supabaseServer.from('notifications').insert({
-    user_id: tip.channel_id,
-    type: 'donation',
-    message: `💛 Podpora ${amount} od ${name}${message ? `: „${message.slice(0, 120)}“` : ''}`,
-    link: '/live',
-  });
+  const { data: tipRow } = await supabaseServer
+    .from('notifications')
+    .insert({
+      user_id: tip.channel_id,
+      type: 'donation',
+      message: `💛 Podpora ${amount} od ${name}${message ? `: „${message.slice(0, 120)}“` : ''}`,
+      link: '/live',
+    })
+    .select('id');
+  await pushNotificationsByIds(insertedIds(tipRow));
   return { ok: true };
 }

@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { CATEGORY_KEYS } from '@/lib/categories';
+import { GAMING_CATEGORY } from '@/lib/games';
+import GameSelect from '@/components/GameSelect';
 import { channelRoom, liveElapsed } from '@/lib/liveChat';
 import LiveChat from '@/components/LiveChat';
 import ChatEmoteManager from '@/components/ChatEmoteManager';
@@ -27,6 +29,8 @@ type Setup = {
     title: string;
     description: string;
     category: string | null;
+    /** Hra (lib/games.ts - slug); starší server ji neposílá. */
+    game?: string | null;
     live: boolean;
     startedAt: string | null;
     endedAt: string | null;
@@ -86,6 +90,7 @@ export default function LiveStudioPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<string>('catGaming');
+  const [game, setGame] = useState<string>('');
   const [savingDetails, setSavingDetails] = useState(false);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [publishing, setPublishing] = useState<{ uid: string; title: string; visibility: 'public' | 'subscribers' | 'private' } | null>(null);
@@ -146,6 +151,7 @@ export default function LiveStudioPage() {
         setTitle(body.stream.title ?? '');
         setDescription(body.stream.description ?? '');
         if (body.stream.category) setCategory(body.stream.category);
+        setGame(body.stream.game ?? '');
       }
     } catch (e) {
       setLoadError((e as Error).message);
@@ -227,7 +233,8 @@ export default function LiveStudioPage() {
     e.preventDefault();
     setSavingDetails(true);
     try {
-      const body = await api('/api/live/me', { method: 'POST', body: JSON.stringify({ action: 'details', title, description, category }) });
+      // Hra jen u kategorie Hry (jinak se smaže - u vaření nedává smysl).
+      const body = await api('/api/live/me', { method: 'POST', body: JSON.stringify({ action: 'details', title, description, category, game: category === GAMING_CATEGORY ? game || null : null }) });
       setupWriteRef.current += 1;
       setSetup((s) => (s ? { ...s, stream: body.stream } : s));
       detailsTouchedRef.current = false;
@@ -503,6 +510,19 @@ export default function LiveStudioPage() {
                   ))}
                 </select>
               </label>
+              {category === GAMING_CATEGORY && (
+                <label className="live-field">
+                  <span>{t('gameLabel')}</span>
+                  <GameSelect
+                    value={game}
+                    onChange={(slug) => {
+                      detailsTouchedRef.current = true;
+                      setGame(slug);
+                    }}
+                  />
+                  <span className="live-field-hint">{t('gameLiveHint')}</span>
+                </label>
+              )}
               <div>
                 <button type="submit" disabled={savingDetails}>
                   {t('saveChanges')}

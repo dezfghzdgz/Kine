@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabaseServer';
 import { isMissingTable, userFromRequest } from '@/lib/apiUser';
 import { appLiveSignal, createLiveInput, deleteLiveInput, liveConfigured, publicLive, syncLiveStreams, type LiveStreamRow } from '@/lib/liveStream';
 import { CATEGORY_KEYS } from '@/lib/categories';
+import { gameFromText, isGameSlug } from '@/lib/games';
 import { parseRecordingVisibility } from '@/lib/liveRecording';
 import { runInBackground } from '@/lib/background';
 import { liveHiddenNow } from '@/lib/nudityRules';
@@ -131,7 +132,16 @@ export async function POST(req: NextRequest) {
     }
     const wantsRecording = body?.recordingVisibility !== undefined;
     if (wantsRecording) patch.recording_visibility = parseRecordingVisibility(body.recordingVisibility);
+    // Hra (lib/games.ts): studio ji posílá rovnou; appka do PC jen název - ten je bez vlastního
+    // názvu jméno hry ("Counter-Strike 2"), tak se hra pozná z něj (jinak žádná, ať nevisí stará).
+    if (body?.game !== undefined) patch.game = isGameSlug(body.game) ? body.game : null;
+    else if (body?.title !== undefined) patch.game = gameFromText(patch.title)?.slug ?? null;
     let { data, error } = await supabaseServer.from('live_streams').update(patch).eq('owner_id', user.id).select('*').maybeSingle();
+    if (error && 'game' in patch && /\bgame\b/.test(error.message ?? '')) {
+      // Bez migrace supabase-migration-push-hry-naklady.sql (sloupec game chybí): zbytek se uloží.
+      delete patch.game;
+      ({ data, error } = await supabaseServer.from('live_streams').update(patch).eq('owner_id', user.id).select('*').maybeSingle());
+    }
     let recordingAutoSupported = true;
     if (error && wantsRecording && /recording_visibility/.test(error.message ?? '')) {
       // Bez migrace supabase-migration-zive-2.sql: název a popis se uloží, automatické zveřejnění záznamu ne.

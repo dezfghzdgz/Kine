@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
+import Turnstile, { TURNSTILE_SITE_KEY, isCaptchaError, type TurnstileHandle } from '@/components/Turnstile';
 
 /**
  * Zapomenuté heslo: Supabase pošle e-mail s odkazem na /reset-password.
@@ -16,22 +17,31 @@ export default function ForgotPasswordPage() {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Ochrana proti botům (components/Turnstile.tsx) - token na jeden pokus.
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const turnstile = useRef<TurnstileHandle>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (TURNSTILE_SITE_KEY && !captchaToken) {
+      setError(t('captchaWait'));
+      return;
+    }
     setLoading(true);
 
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: `${window.location.origin}/reset-password`,
+      ...(captchaToken ? { captchaToken } : {}),
     });
+    turnstile.current?.reset();
 
     setLoading(false);
 
     if (resetError) {
       // Supabase pustí jeden e-mail za minutu - ať je jasné proč (ne anglická hláška ze serveru).
       const tooFast = resetError.status === 429 || /rate|seconds|security purposes|too many/i.test(resetError.message ?? '');
-      setError(tooFast ? t('forgotPwTooFast') : t('forgotPwFailed'));
+      setError(isCaptchaError(resetError.message) ? t('captchaFailed') : tooFast ? t('forgotPwTooFast') : t('forgotPwFailed'));
       return;
     }
     setSent(true);
@@ -72,6 +82,7 @@ export default function ForgotPasswordPage() {
               {error}
             </p>
           )}
+          <Turnstile ref={turnstile} action="reset" onToken={setCaptchaToken} />
           <button type="submit" disabled={loading}>
             {loading ? t('forgotPwSending') : t('forgotPwSend')}
           </button>

@@ -15,6 +15,8 @@ import { chatSessionSince } from './liveChat';
 import { logLiveEvent, secondsSince } from './liveEvents';
 import { liveHiddenNow } from './nudityRules';
 import { runInBackground } from './background';
+import { insertedIds, pushNotificationsByIds } from './pushSend';
+import { liveGameSlug } from './games';
 
 export { appPingFresh, appSignalTrusted, APP_PING_FRESH_MS, APP_UNCONFIRMED_MAX_MS } from './liveSignal';
 
@@ -61,6 +63,8 @@ export type LiveStreamRow = {
   stopped_video_uid?: string | null;
   /** Poslední změna řádku (appka při každém hlášení) - srovnání podle ní pozná, že jeho údaje už neplatí. */
   updated_at?: string | null;
+  /** Hra přenosu (lib/games.ts - slug). Sloupec je z migrace supabase-migration-push-hry-naklady.sql. */
+  game?: string | null;
 };
 
 /** Nejvýš jednou za tolik se Cloudflare ptá, kdo vysílá. */
@@ -1033,14 +1037,19 @@ async function notifyGoingLive(row: LiveStreamRow, videoUid: string): Promise<vo
   if (profile?.is_banned || profile?.is_shadow_banned) return;
   const name = profile?.display_name || profile?.username || 'Kanál';
   const title = row.title?.trim();
-  await supabaseServer.from('notifications').insert(
-    subs.map((s: any) => ({
-      user_id: s.subscriber_id,
-      type: 'live',
-      message: title ? `🔴 ${name} je živě: ${title}` : `🔴 ${name} je živě`,
-      link: `/live/${row.owner_id}`,
-    }))
-  );
+  const { data: inserted } = await supabaseServer
+    .from('notifications')
+    .insert(
+      subs.map((s: any) => ({
+        user_id: s.subscriber_id,
+        type: 'live',
+        message: title ? `🔴 ${name} je živě: ${title}` : `🔴 ${name} je živě`,
+        link: `/live/${row.owner_id}`,
+      }))
+    )
+    .select('id');
+  // I na telefon / počítač (push) - kdo si oznámení zapnul (lib/pushSend.ts).
+  runInBackground(pushNotificationsByIds(insertedIds(inserted)), 'push - je živě');
 }
 
 /** Veřejné údaje o přenosu pro stránky (bez klíče). */
@@ -1062,6 +1071,8 @@ export type PublicLive = {
   chatSince: string | null;
   /** Vlastní náhled přenosu; null = snímek z vysílání od Cloudflare. */
   thumbnailUrl: string | null;
+  /** Hra (lib/games.ts - slug): nastavená ve studiu, z appky podle názvu; null = žádná. */
+  game: string | null;
 };
 
 export async function publicLive(row: LiveStreamRow): Promise<PublicLive> {
@@ -1069,6 +1080,7 @@ export async function publicLive(row: LiveStreamRow): Promise<PublicLive> {
   return {
     chatSince: chatSessionSince({ live: row.is_live, startedAt: row.started_at, endedAt: row.ended_at }),
     thumbnailUrl: typeof row.thumbnail_url === 'string' && /^https:\/\//.test(row.thumbnail_url) ? row.thumbnail_url : null,
+    game: liveGameSlug(row),
     ownerId: row.owner_id,
     live: row.is_live,
     title: row.title,

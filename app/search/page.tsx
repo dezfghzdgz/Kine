@@ -3,6 +3,7 @@ import { computeTrustRating } from '@/lib/trustRating';
 import SearchResults from '@/components/SearchResults';
 import { applySearchFilters, filtersActive, parseSearchFilters, type SearchFilters } from '@/lib/searchFilters';
 import { isSpark } from '@/lib/videoBlocks';
+import { gameFromText, searchGames } from '@/lib/games';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,20 @@ const CARD_FIELDS =
  * neproběhla (funkce chybí), spadne to na staré "název obsahuje" - hledá
  * hůř, ale hledá.
  */
+/**
+ * Hry k hledanému (karta nahoře - odkaz na stránku hry): přesný název nebo
+ * hashtag ("cs2"), začátek názvu ("mine"), nebo hra v delším dotazu
+ * ("minecraft survival"). Nejvýš tři.
+ */
+function matchingGames(query: string): string[] {
+  const slugs = searchGames(query, 6)
+    .filter((m) => m.score >= 2)
+    .map((m) => m.game.slug);
+  const inText = gameFromText(query);
+  if (inText && !slugs.includes(inText.slug)) slugs.unshift(inText.slug);
+  return slugs.slice(0, 3);
+}
+
 /** "%" a "_" jsou v LIKE zástupné znaky - hledaný text se bere doslova. */
 function escapeLike(text: string): string {
   return text.replace(/[\\%_]/g, (c) => `\\${c}`);
@@ -119,6 +134,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Recor
     <SearchResults
       query={query}
       videos={videos}
+      games={filters.type === 'all' ? matchingGames(query) : []}
       creators={filters.type === 'all' ? creators : []}
       recommended={recommended}
       filters={filters}

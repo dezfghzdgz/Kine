@@ -8,6 +8,7 @@ import { formatDuration } from '@/lib/homeRecommendation';
 import { DEFAULT_FILTERS, OPEN_SEARCH_FILTERS_EVENT, searchHref, type SearchFilters } from '@/lib/searchFilters';
 import UiIcon from './UiIcon';
 import ProfileImage from './ProfileImage';
+import { GENRE_KEYS, gameBySlug, gameMonogram } from '@/lib/games';
 
 /**
  * Výsledky hledání (app/search/page.tsx).
@@ -26,6 +27,7 @@ import ProfileImage from './ProfileImage';
 export default function SearchResults({
   query,
   videos,
+  games = [],
   creators,
   recommended,
   filters = DEFAULT_FILTERS,
@@ -33,6 +35,8 @@ export default function SearchResults({
 }: {
   query: string;
   videos: any[];
+  /** Hry k hledanému (slugy, lib/games.ts). */
+  games?: string[];
   creators: any[];
   recommended: any[];
   filters?: SearchFilters;
@@ -98,6 +102,30 @@ export default function SearchResults({
           </button>
         </div>
       </div>
+
+      {games.length > 0 && (
+        <div className="search-games">
+          <p className="panel-heading">{t('navGames')}</p>
+          <div className="search-games-list">
+            {games.map((slug) => {
+              const g = gameBySlug(slug);
+              if (!g) return null;
+              return (
+                <Link key={slug} href={`/game/${slug}`} className="search-game" style={{ '--game-color': g.color } as React.CSSProperties} data-anim-scope>
+                  <span className="search-game-art" aria-hidden="true" data-len={gameMonogram(g).length}>
+                    {gameMonogram(g)}
+                  </span>
+                  <span className="search-game-text">
+                    <span className="search-game-name">{g.name}</span>
+                    <span className="search-game-genre">{t(GENRE_KEYS[g.genre] as any)}</span>
+                  </span>
+                  <UiIcon name="chevronRight" size={16} />
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {creators.length > 0 && (
         <div style={{ marginBottom: 32 }}>

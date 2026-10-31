@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import Toast, { ToastType } from '@/components/Toast';
 import { useLanguage } from '@/lib/i18n';
+import Turnstile, { TURNSTILE_SITE_KEY, isCaptchaError, type TurnstileHandle } from '@/components/Turnstile';
 import { validateUsername } from '@/lib/username';
 import UiIcon, { type UiIconName } from '@/components/UiIcon';
 
@@ -59,6 +60,10 @@ export default function SignupPage() {
 
   const usernameProblem = username.trim() ? validateUsername(username) : null;
 
+  // Ochrana proti botům (components/Turnstile.tsx) - token na jeden pokus.
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const turnstile = useRef<TurnstileHandle>(null);
+
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -80,6 +85,11 @@ export default function SignupPage() {
       return;
     }
 
+    if (TURNSTILE_SITE_KEY && !captchaToken) {
+      setError(t('captchaWait'));
+      return;
+    }
+
     setLoading(true);
 
     const { data, error: signupError } = await supabase.auth.signUp({
@@ -87,11 +97,12 @@ export default function SignupPage() {
       password,
       // Vybrané jméno zůstane u účtu - se zapnutým potvrzením e-mailu profil
       // vznikne až po kliknutí na odkaz (lib/ensureProfile.ts).
-      options: { data: { username: username.trim() } },
+      options: { data: { username: username.trim() }, ...(captchaToken ? { captchaToken } : {}) },
     });
+    turnstile.current?.reset();
 
     if (signupError) {
-      setError(signupError.message);
+      setError(isCaptchaError(signupError.message) ? t('captchaFailed') : signupError.message);
       setToast({ message: t('signupFailed'), type: 'error' });
       setLoading(false);
       return;
@@ -221,6 +232,7 @@ export default function SignupPage() {
             </span>
           </label>
           {error && <p className="error-text">{error}</p>}
+          <Turnstile ref={turnstile} action="signup" onToken={setCaptchaToken} />
           <button type="submit" className="signup-submit" disabled={loading || nameFree === false}>
             {loading ? t('creatingAccount') : t('signUpButton')}
           </button>
