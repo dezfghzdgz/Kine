@@ -7,7 +7,7 @@
  *    divák ještě neviděl - podle historie na účtu (watch_history) i podle
  *    paměti prohlížeče (funguje i bez přihlášení);
  *  - příbuzná napřed: stejná kategorie, stejný tvůrce; jinak nejnovější;
- *  - v seznamu vedle videa nezhlédnutá napřed, zhlédnutá až za nimi.
+ *  - v seznamu vedle videa podobná napřed (rankRelated), zhlédnutá až za nezhlédnutými.
  * Když nových videí není dost, doplní se ta, která divák viděl nejdávněji
  * (označená „Zhlédnuto“) - nabídka po konci tak nikdy nezůstane prázdná
  * (dřív se pak neukázalo nic a vypadalo to jako chyba).
@@ -61,6 +61,46 @@ export function upNextWithFallback<T extends UpNextCandidate>(candidates: readon
     .sort((a, b) => (recency.get(b.video.id) ?? -1) - (recency.get(a.video.id) ?? -1) || a.index - b.index)
     .map(({ video }) => video);
   return [...fresh, ...older];
+}
+
+export type RelatedCandidate = UpNextCandidate & {
+  hashtags?: string[] | null;
+  views?: number | null;
+  created_at?: string | null;
+};
+
+/**
+ * Seznam vedle videa: podobná napřed. Dřív tu byla prostě nejnovější videa
+ * na Kine (jen nezhlédnutá napřed) - k videu o Minecraftu klidně recept.
+ * Teď: společné hashtagy, stejná kategorie a stejný tvůrce, k tomu trochu
+ * oblíbenost a čerstvost. Zhlédnutá až za nezhlédnutými; bez opakování.
+ */
+export function rankRelated<T extends RelatedCandidate>(
+  candidates: readonly T[],
+  current: CurrentVideo & { hashtags?: string[] | null },
+  seen: ReadonlySet<string>,
+  now: number = Date.now()
+): T[] {
+  const tags = new Set((Array.isArray(current.hashtags) ? current.hashtags : []).filter((h) => typeof h === 'string').map((h) => h.toLowerCase()));
+  const score = (v: T) => {
+    const shared = (Array.isArray(v.hashtags) ? v.hashtags : []).filter((h) => typeof h === 'string' && tags.has(h.toLowerCase())).length;
+    const related =
+      Math.min(3, shared) * 12 +
+      (current.category && v.category === current.category ? 10 : 0) +
+      (current.owner_id && v.owner_id === current.owner_id ? 8 : 0);
+    const popularity = Math.log10(Math.max(0, Number(v.views) || 0) + 1) * 3;
+    const ageDays = v.created_at ? (now - Date.parse(v.created_at)) / 86400000 : NaN;
+    const freshness = Number.isFinite(ageDays) && ageDays >= 0 ? Math.exp(-ageDays / 30) * 6 : 0;
+    return related + popularity + freshness;
+  };
+  const unique = new Map<string, { video: T; index: number; s: number; seen: boolean }>();
+  candidates.forEach((video, index) => {
+    if (!video?.id || video.id === current.id || unique.has(video.id)) return;
+    unique.set(video.id, { video, index, s: score(video), seen: seen.has(video.id) });
+  });
+  return [...unique.values()]
+    .sort((a, b) => Number(a.seen) - Number(b.seen) || b.s - a.s || a.index - b.index)
+    .map((x) => x.video);
 }
 
 /** Seznam vedle videa: nezhlédnutá napřed, zhlédnutá za nimi (jinak pořadí beze změny). */

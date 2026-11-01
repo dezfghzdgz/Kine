@@ -211,3 +211,14 @@ to prober s účetní.
    (Cloudflare Stream, záznam vysílání zapnutý automaticky) - klip se zkopíruje jako
    obyčejné video a počítá se do úložiště Cloudflare (30 s = půl minuty).
 3. Bez migrace: klip z přenosu funguje, raid / plánování / ankety ukážou „chybí migrace“.
+
+## 12. Doporučování, statistiky a úklid osobních údajů (migrace)
+
+1. **Supabase → SQL Editor** → spusť `supabase-migration-doporucovani-vykon.sql` (celý;
+   jde pouštět opakovaně). Na konci tři sloupce `doporucovani`, `statistiky`, `uklid` -
+   `true` = hotovo. Hned při spuštění spočítá kvalitu všech videí a uklidí staré IP adresy.
+2. Pak to běží samo s denním úklidem (`/api/videos/sweep`, cron z `vercel.json`):
+   kvalita videí (dokoukanost + hodnocení) pro hlavní stránku, IP adresy u zhlédnutí
+   starší 30 dní pryč, hlášení chyb po 30 dnech, IP pokusů o přihlášení po 2 dnech.
+3. Bez migrace: doporučování jede bez kvality, statistiky kanálu postaru (pomaleji)
+   a úklid se nedělá - Ochrana osobních údajů přitom slibuje 30 dní, tak ji pusť.

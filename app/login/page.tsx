@@ -10,6 +10,7 @@ import { useLanguage } from '@/lib/i18n';
 import AuthPitch from '@/components/AuthPitch';
 import UiIcon from '@/components/UiIcon';
 import Turnstile, { TURNSTILE_SITE_KEY, isCaptchaError, type TurnstileHandle } from '@/components/Turnstile';
+import { safeInternalLink } from '@/lib/safeLink';
 
 const LOCK_DURATION_MINUTES = 15;
 
@@ -136,8 +137,7 @@ export default function LoginPage() {
 
       // ?next=/connect?… - odkud přihlášení přišlo (třeba připojení počítače
       // z appky Kine do PC). Jen relativní cesta v rámci Kine, nikam ven.
-      const next = new URLSearchParams(window.location.search).get('next');
-      const safeNext = next && /^\/(?!\/)[\w\-./?=&%+]*$/.test(next) ? next : null;
+      const safeNext = safeInternalLink(new URLSearchParams(window.location.search).get('next'));
 
       setToast({ message: t('loginSuccess'), type: 'success' });
       setTimeout(() => {

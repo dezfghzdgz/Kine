@@ -11,6 +11,23 @@ export const dynamic = 'force-dynamic';
 /** Kolik různých cizích videí jde stáhnout za 24 hodin (každé stažení se u Cloudflare platí). */
 const DOWNLOADS_PER_DAY = Math.max(1, Number(process.env.DOWNLOADS_PER_DAY) || 30);
 
+/**
+ * Rozjeté přípravy souboru (uživatel:video) - do historie stažení se zapíše
+ * až hotový soubor, takže bez tohohle šlo skriptem nechat Cloudflare
+ * připravovat soubory ke stovkám cizích videí. Pojistka v paměti instance.
+ */
+const started = new Map<string, number>();
+const DAY_MS = 24 * 3600 * 1000;
+function alreadyPreparing(userId: string, videoId: string): boolean {
+  const seen = started.get(`${userId}:${videoId}`);
+  return !!seen && Date.now() - seen < DAY_MS;
+}
+function markPreparing(userId: string, videoId: string): void {
+  const now = Date.now();
+  started.set(`${userId}:${videoId}`, now);
+  if (started.size > 20000) for (const [k, at] of started) if (now - at >= DAY_MS) started.delete(k);
+}
+
 // Cloudflare Stream negeneruje MP4 ke stažení automaticky - musí se o něj
 // zvlášť požádat. První požadavek spustí generování (chvíli trvá), další
 // požadavky už jen ověří, jestli je hotové.
@@ -38,11 +55,11 @@ export async function POST(req: NextRequest) {
   // i cizí soukromé video.
   const { data: video } = await supabaseAsUser(token)
     .from('videos')
-    .select('id, visibility, owner_id')
+    .select('id, visibility, owner_id, status')
     .eq('cloudflare_video_id', cloudflareVideoId)
     .maybeSingle();
 
-  if (!video) {
+  if (!video || video.status !== 'ready') {
     return NextResponse.json({ error: 'Video nenalezeno nebo k němu nemáš přístup.' }, { status: 403 });
   }
 
@@ -60,6 +77,13 @@ export async function POST(req: NextRequest) {
     if (!recentError && rows.length >= DOWNLOADS_PER_DAY && !rows.some((r) => r.video_id === video.id)) {
       return NextResponse.json({ error: `Za 24 hodin jde stáhnout nejvýš ${DOWNLOADS_PER_DAY} videí. Zkus to prosím později.`, code: 'limit' }, { status: 429 });
     }
+    // Nové video (ne dotaz "už je hotovo?" na rozjeté): i přípravy souborů mají denní strop.
+    if (!alreadyPreparing(userData.user.id, video.id)) {
+      if (!allowRequest(`download-prepare:${userData.user.id}`, DOWNLOADS_PER_DAY * 2, DAY_MS)) {
+        return NextResponse.json({ error: `Za 24 hodin jde stáhnout nejvýš ${DOWNLOADS_PER_DAY} videí. Zkus to prosím později.`, code: 'limit' }, { status: 429 });
+      }
+      markPreparing(userData.user.id, video.id);
+    }
   }
 
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -74,7 +98,7 @@ export async function POST(req: NextRequest) {
   const data = await res.json().catch(() => ({ success: false }));
 
   if (!data.success) {
-    return NextResponse.json({ error: 'Cloudflare odmítl povolit stažení.', details: data.errors }, { status: 500 });
+    return NextResponse.json({ error: 'Cloudflare odmítl povolit stažení.' }, { status: 502 });
   }
 
   const mp4 = data.result?.default;

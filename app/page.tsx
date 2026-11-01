@@ -13,7 +13,8 @@ import VideoCard from '@/components/VideoCard';
 import ContinueWatching from '@/components/ContinueWatching';
 import LiveNowRow from '@/components/LiveNowRow';
 import HomePostsShelf from '@/components/HomePostsShelf';
-import { scoreVideo, explainVideo, buildBlocks, formatDuration, FEED_BATCH, WATCHED_HISTORY_LIMIT } from '@/lib/homeRecommendation';
+import { scoreVideo, explainVideo, buildBlocks, formatDuration, diversify, interestWeights, mergeCandidates, FEED_BATCH, WATCHED_HISTORY_LIMIT } from '@/lib/homeRecommendation';
+import { impressionsSnapshot, recordImpressions, clearImpression } from '@/lib/feedImpressions';
 import { gameTagSets } from '@/lib/games';
 import { loadFollowedGames } from '@/lib/gamesData';
 import type { Block } from '@/lib/homeRecommendation';
@@ -24,6 +25,13 @@ import { VideoBlockRow } from '@/components/SparksShelf';
 
 const VIDEO_COLUMNS =
   'id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, hashtags, owner_id, cloudflare_video_id, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username)';
+/** Navíc pro doporučování: jazyk videa a kvalita (videos.engagement z supabase-migration-doporucovani-vykon.sql). */
+const RANK_COLUMNS = `${VIDEO_COLUMNS}, language, engagement`;
+/** Bez migrace sloupec engagement chybí - pak se jede po staru (bez kvality), nic nespadne. */
+let rankColumns = true;
+function isMissingColumn(error: { code?: string; message?: string } | null | undefined): boolean {
+  return !!error && (error.code === '42703' || /column .* does not exist/i.test(error.message ?? ''));
+}
 
 // Kolik dávek za sebou smí vyjít naprázdno, než to appka vzdá. Když má divák
 // schovaný celý kanál, může se stát, že se z jedné dávky nedostane do feedu
@@ -40,6 +48,13 @@ type FeedContext = {
   watchedIds: Set<string>;
   topCategories: Set<string>;
   topHashtags: Set<string>;
+  /** Zájmy s vahou 0-1 (čerstvá zhlédnutí víc) - lib/homeRecommendation.ts interestWeights. */
+  categoryWeights: Map<string, number>;
+  hashtagWeights: Map<string, number>;
+  /** Jazyk webu - videa v něm dostanou přednost. */
+  lang: string;
+  /** Kolikrát divák kartu už viděl bez kliknutí (lib/feedImpressions.ts), zmrazené při načtení. */
+  impressions: (videoId: string) => number;
   /** Hashtagy her, které divák sleduje (lib/games.ts - gameTagSets). */
   gameStrong: Set<string>;
   gameWeak: Set<string>;
@@ -86,6 +101,7 @@ type FeedSnapshot = {
   ctx: FeedContext;
   offset: number;
   seenIds: string[];
+  pool: any[];
   scrollY: number;
 };
 
@@ -109,24 +125,71 @@ function freshSnapshot(): FeedSnapshot | null {
   return feedSnapshot;
 }
 
-/** Jedna dávka videí z databáze (od `from`, videa do `cutoff`). */
-function queryBatch(from: number, cutoff: string) {
+/** Veřejná hotová videa do `cutoff` (základ všech dotazů hlavní stránky). */
+function feedQuery(cutoff: string) {
   return supabase
     .from('videos')
-    .select(VIDEO_COLUMNS)
+    .select(rankColumns ? RANK_COLUMNS : VIDEO_COLUMNS)
     .eq('status', 'ready')
     .eq('visibility', 'public')
     .lte('created_at', cutoff)
-    .or(`scheduled_at.is.null,scheduled_at.lte.${cutoff},is_premiere.eq.true`)
+    .or(`scheduled_at.is.null,scheduled_at.lte.${cutoff},is_premiere.eq.true`);
+}
+
+/** Jedna dávka videí z databáze (od `from`, videa do `cutoff`). */
+function queryBatch(from: number, cutoff: string) {
+  return feedQuery(cutoff)
     .order('created_at', { ascending: false })
     .range(from, from + FEED_BATCH - 1);
 }
+
+const daysAgo = (cutoff: string, days: number) => new Date(Date.parse(cutoff) - days * 24 * 3600 * 1000).toISOString();
+
+/**
+ * Kandidáti mimo časovou osu. Feed jde jinak po dávkách od nejnovějšího -
+ * starší, ale skvělé video nebo video odebíraného kanálu z minulého týdne
+ * by se k divákovi dostalo, jen kdyby doscrolloval hodně hluboko.
+ *
+ * Zdroje: oblíbené za poslední týden, nejlépe hodnocené (dokoukanost a
+ * hodnocení) za 3 měsíce, odebírané kanály, nejsilnější zájem a sledované
+ * hry. Každý zdroj pár desítek videí; spadlý zdroj se tiše vynechá.
+ */
+async function loadCandidates(cutoff: string, who: { subscribedIds: Set<string>; topCategory: string | null; gameTags: string[] } | null): Promise<any[]> {
+  const sources: PromiseLike<{ data: any[] | null; error: any }>[] = [
+    feedQuery(cutoff).gte('created_at', daysAgo(cutoff, 7)).order('views', { ascending: false }).limit(24),
+  ];
+  if (rankColumns) {
+    sources.push(feedQuery(cutoff).gte('created_at', daysAgo(cutoff, 90)).not('engagement', 'is', null).order('engagement', { ascending: false }).limit(24));
+  }
+  if (who && who.subscribedIds.size > 0) {
+    // Adresa dotazu má limit délky - stačí 150 kanálů.
+    const ids = [...who.subscribedIds].slice(0, 150);
+    sources.push(feedQuery(cutoff).in('owner_id', ids).gte('created_at', daysAgo(cutoff, 45)).order('created_at', { ascending: false }).limit(36));
+  }
+  if (who?.topCategory) {
+    sources.push(feedQuery(cutoff).eq('category', who.topCategory).gte('created_at', daysAgo(cutoff, 120)).order('views', { ascending: false }).limit(24));
+  }
+  if (who && who.gameTags.length > 0) {
+    sources.push(feedQuery(cutoff).overlaps('hashtags', who.gameTags.slice(0, 20)).gte('created_at', daysAgo(cutoff, 60)).order('created_at', { ascending: false }).limit(18));
+  }
+  const results = await Promise.all(sources.map((q) => Promise.resolve(q).then((r) => r, () => ({ data: null, error: true }))));
+  if (rankColumns && results.some((r) => isMissingColumn(r.error))) {
+    // Migrace ještě není spuštěná - znovu bez nových sloupců.
+    rankColumns = false;
+    return loadCandidates(cutoff, who);
+  }
+  return mergeCandidates(results.map((r) => (r.error ? null : (r.data as any[]))));
+}
+
+/** Kolik kandidátů mimo časovou osu se přimíchá do jedné dávky (první dávka víc - je nejvíc vidět). */
+const POOL_FIRST = 16;
+const POOL_NEXT = 10;
 
 /** Kolik karet nahoře stáhne náhled hned a přednostně (to, co je vidět bez scrollování). */
 const PRIORITY_CARDS = 4;
 
 export default function HomePage() {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   // Feed z minula (návrat na stránku) - jen při prvním vykreslení.
   const restoredRef = useRef<FeedSnapshot | null | undefined>(undefined);
   if (restoredRef.current === undefined) restoredRef.current = freshSnapshot();
@@ -149,6 +212,10 @@ export default function HomePage() {
   const ctxRef = useRef<FeedContext | null>(restored?.ctx ?? null);
   const offsetRef = useRef(restored?.offset ?? 0);
   const seenIdsRef = useRef<Set<string>>(new Set(restored?.seenIds ?? []));
+  // Kandidáti mimo časovou osu (loadCandidates) - přimíchávají se do dávek.
+  const poolRef = useRef<any[]>(restored?.pool ?? []);
+  const poolPromiseRef = useRef<Promise<void> | null>(null);
+  const feedRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
   // Pro uložení feedu při odchodu ze stránky (úklid efektu vidí jen první vykreslení).
@@ -197,6 +264,8 @@ export default function HomePage() {
         ctxRef.current = null;
         offsetRef.current = 0;
         seenIdsRef.current = new Set();
+        poolRef.current = [];
+        poolPromiseRef.current = null;
         setBlocks(null);
         setProgressMap({});
         setHasMore(true);
@@ -223,6 +292,7 @@ export default function HomePage() {
         ctx: ctxRef.current,
         offset: offsetRef.current,
         seenIds: [...seenIdsRef.current],
+        pool: poolRef.current,
         scrollY: scrollYRef.current,
       };
     };
@@ -257,6 +327,67 @@ export default function HomePage() {
     return () => observer.disconnect();
   }, [hasMore, blocks]);
 
+  // Které karty divák opravdu viděl (aspoň napůl, přes vteřinu) - příště
+  // klesnou, když na ně neklikl (lib/feedImpressions.ts). Jedna karta se
+  // za návštěvu stránky započítá nejvýš jednou.
+  const impressionObserverRef = useRef<IntersectionObserver | null>(null);
+  const observedRef = useRef<WeakSet<Element>>(new WeakSet());
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return;
+    const timers = new Map<Element, number>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const el = entry.target as HTMLElement;
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+            if (timers.has(el)) continue;
+            timers.set(
+              el,
+              window.setTimeout(() => {
+                timers.delete(el);
+                observer.unobserve(el);
+                const id = el.dataset.vid;
+                if (id && !document.hidden) recordImpressions([id]);
+              }, 1000)
+            );
+          } else {
+            const timer = timers.get(el);
+            if (timer !== undefined) {
+              clearTimeout(timer);
+              timers.delete(el);
+            }
+          }
+        }
+      },
+      { threshold: [0.5] }
+    );
+    impressionObserverRef.current = observer;
+    return () => {
+      observer.disconnect();
+      timers.forEach((timer) => clearTimeout(timer));
+      impressionObserverRef.current = null;
+      observedRef.current = new WeakSet();
+    };
+  }, []);
+
+  useEffect(() => {
+    const observer = impressionObserverRef.current;
+    const root = feedRef.current;
+    if (!observer || !root) return;
+    root.querySelectorAll<HTMLElement>('[data-vid]').forEach((el) => {
+      if (observedRef.current.has(el)) return;
+      observedRef.current.add(el);
+      observer.observe(el);
+    });
+  }, [blocks]);
+
+  /** Klik na kartu = zájem; karta se nepenalizuje (lib/feedImpressions.ts). */
+  function onFeedClick(e: { target: EventTarget | null }) {
+    const card = (e.target as HTMLElement | null)?.closest?.('[data-vid]') as HTMLElement | null;
+    const id = card?.dataset.vid;
+    if (id) clearImpression(id);
+  }
+
   async function loadInitial() {
     // První dávka videí jde do databáze hned, souběžně s tím, co o divákovi
     // víme (odběry, historie...) - dřív čekala, až dorazí všechno ostatní.
@@ -271,6 +402,8 @@ export default function HomePage() {
     const watchedIds = new Set<string>();
     const topCategories = new Set<string>();
     const topHashtags = new Set<string>();
+    let categoryWeights = new Map<string, number>();
+    let hashtagWeights = new Map<string, number>();
     let preference: 'short' | 'long' = 'long';
     let disableShorts = false;
     let hidden: HiddenContent = NOTHING_HIDDEN;
@@ -295,7 +428,7 @@ export default function HomePage() {
             .select('video_id, watched_at, videos(category, hashtags)')
             .eq('user_id', user.id)
             .order('watched_at', { ascending: false })
-            .limit(30),
+            .limit(60),
           loadHiddenContent(user.id),
           // Sledované hry (/game/[slug]); bez migrace nebo při chybě prostě žádné.
           loadFollowedGames(),
@@ -309,20 +442,15 @@ export default function HomePage() {
       (subs ?? []).forEach((s: any) => subscribedIds.add(s.channel_id));
       (watched ?? []).forEach((w: any) => watchedIds.add(w.video_id));
 
-      const categoryCounts: Record<string, number> = {};
-      const hashtagCounts: Record<string, number> = {};
-      (recentHistory ?? []).forEach((h: any) => {
-        const cat = h.videos?.category;
-        if (cat) categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
-        (h.videos?.hashtags ?? []).forEach((tag: string) => {
-          hashtagCounts[tag] = (hashtagCounts[tag] ?? 0) + 1;
-        });
-      });
-      Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).forEach(([c]) => topCategories.add(c));
-      Object.entries(hashtagCounts).sort((a, b) => b[1] - a[1]).slice(0, 8).forEach(([h]) => topHashtags.add(h));
+      // Zájmy s vahou: co divák sledoval nedávno, váží víc než to, co sledoval před měsícem.
+      const weights = interestWeights((recentHistory ?? []).map((h: any) => ({ category: h.videos?.category ?? null, hashtags: h.videos?.hashtags ?? [] })));
+      categoryWeights = weights.categories;
+      hashtagWeights = weights.hashtags;
+      [...categoryWeights.keys()].slice(0, 3).forEach((c) => topCategories.add(c));
+      [...hashtagWeights.keys()].slice(0, 8).forEach((h) => topHashtags.add(h));
     }
 
-    ctxRef.current = {
+    const ctx: FeedContext = {
       userId: user?.id ?? null,
       preference,
       disableShorts,
@@ -331,10 +459,27 @@ export default function HomePage() {
       watchedIds,
       topCategories,
       topHashtags,
+      categoryWeights,
+      hashtagWeights,
+      lang,
+      impressions: impressionsSnapshot(),
       gameStrong: gameSets.strong,
       gameWeak: gameSets.weak,
       cutoff,
     };
+    ctxRef.current = ctx;
+
+    // Kandidáti mimo časovou osu. První dávka na ně počká nanejvýš chvilku -
+    // na pomalém připojení se feed ukáže hned a kandidáti přijdou do dalších dávek.
+    poolRef.current = [];
+    const pool = loadCandidates(cutoff, user ? { subscribedIds, topCategory: [...categoryWeights.keys()][0] ?? null, gameTags: [...gameSets.strong] } : null)
+      .then((items) => {
+        if (ctxRef.current !== ctx) return;
+        poolRef.current = mergeCandidates([poolRef.current, items.filter((v: any) => !watchedIds.has(v.id))], seenIdsRef.current);
+      })
+      .catch(() => undefined);
+    poolPromiseRef.current = pool;
+    await Promise.race([pool, new Promise((resolve) => setTimeout(resolve, 700))]);
 
     await fetchBatch(true, firstBatch);
   }
@@ -359,8 +504,13 @@ export default function HomePage() {
       while (emptyBatches < MAX_EMPTY_BATCHES) {
         const from = offsetRef.current;
         // První dávka už mohla odejít dřív (loadInitial) - jinak teď.
-        const { data, error } = await (early ?? queryBatch(from, ctx.cutoff));
+        let { data, error } = await (early ?? queryBatch(from, ctx.cutoff));
         early = null;
+        if (error && rankColumns && isMissingColumn(error)) {
+          // Bez migrace (sloupec engagement) - stejná dávka po staru.
+          rankColumns = false;
+          ({ data, error } = await queryBatch(from, ctx.cutoff));
+        }
 
         // Chyba se tu dřív zahazovala a pokračovalo se s prázdným polem.
         // Supabase u spadlého spojení nevyhodí výjimku, jen vrátí data:
@@ -377,7 +527,10 @@ export default function HomePage() {
         const reachedEnd = rows.length < FEED_BATCH;
         if (reachedEnd) setHasMore(false);
 
-        const batch = applyFilters(rows, ctx);
+        // Přimíchat kandidáty mimo časovou osu (oblíbené, odebírané, zájmy...).
+        // Na konci seznamu jdou ven všichni zbylí, ať žádný nepropadne.
+        const extra = takeFromPool(ctx, reachedEnd ? Infinity : isFirst ? POOL_FIRST : POOL_NEXT);
+        const batch = applyFilters(mergeCandidates([rows, extra]), ctx);
 
         if (isFirst) {
           hiddenSoFar += countHidden(rows, ctx);
@@ -410,6 +563,21 @@ export default function HomePage() {
     } finally {
       loadingRef.current = false;
     }
+  }
+
+  /** Vezme z kandidátů až `count` videí, která na stránce ještě nebyla. */
+  function takeFromPool(ctx: FeedContext, count: number): any[] {
+    if (count <= 0 || poolRef.current.length === 0) return [];
+    const fresh = poolRef.current.filter((v: any) => !seenIdsRef.current.has(v.id));
+    // Nejlepší kandidáty napřed (bez náhody v pořadí výběru by vyhrávaly pořád stejné).
+    const ranked = fresh
+      .map((v: any) => ({ v, s: scoreVideo(v, ctx) }))
+      .sort((a, b) => b.s - a.s)
+      .map((x) => x.v);
+    const taken = ranked.slice(0, count);
+    const takenIds = new Set(taken.map((v: any) => v.id));
+    poolRef.current = fresh.filter((v: any) => !takenIds.has(v.id));
+    return taken;
   }
 
   function applyFilters(rows: any[], ctx: FeedContext) {
@@ -445,7 +613,11 @@ export default function HomePage() {
   function appendBatch(batch: any[], ctx: FeedContext) {
     batch.forEach((v: any) => seenIdsRef.current.add(v.id));
 
-    const scored = [...batch].sort((a, b) => scoreVideo(b, ctx) - scoreVideo(a, ctx));
+    // Skóre jednou na video (v něm je kousek náhody - počítat ho při každém
+    // porovnání v řazení dávalo pokaždé jiné číslo a řazení bylo napůl náhodné).
+    // Pak rozmanitost: stejný kanál za sebou postupně ztrácí body.
+    const scores = new Map<string, number>(batch.map((v: any) => [v.id, scoreVideo(v, ctx)]));
+    const scored = diversify(batch, (v: any) => scores.get(v.id) ?? 0);
     const sparksVideos = scored.filter(isSpark);
     const longVideos = scored.filter((v: any) => !isSpark(v));
     const nextBlocks = buildBlocks(longVideos, sparksVideos, ctx.preference);
@@ -521,6 +693,8 @@ export default function HomePage() {
     feedSnapshot = null;
     offsetRef.current = 0;
     seenIdsRef.current = new Set();
+    poolRef.current = [];
+    poolPromiseRef.current = null;
     setHiddenCount(0);
     setBlocks(null);
     setEmpty(false);
@@ -611,6 +785,7 @@ export default function HomePage() {
       <p className="section-title">{t('recommendedForYouHeading')}</p>
       {notices}
 
+      <div ref={feedRef} className="home-feed" onClickCapture={onFeedClick} onAuxClickCapture={onFeedClick}>
       {blocks.map((block, i) => (
         <Fragment key={i}>
           {/* Novinky od odebíraných kanálů: jedna nenápadná řada pod prvním blokem videí (lib/homePosts.ts). */}
@@ -631,6 +806,7 @@ export default function HomePage() {
           </VideoBlockRow>
         </Fragment>
       ))}
+      </div>
       {/* Jen jeden blok videí: řada novinek pod ním. */}
       {blocks.length === 1 && <HomePostsShelf />}
 

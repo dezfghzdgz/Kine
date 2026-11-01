@@ -13,11 +13,13 @@ import UiIcon from '@/components/UiIcon';
 import EmptyState from '@/components/EmptyState';
 import { formatTime } from '@/lib/playerControls';
 import { isSpark } from '@/lib/videoBlocks';
+import { authHeaders } from '@/lib/authHeaders';
 
 type Tab = 'all' | 'videos' | 'sparks' | 'clips';
+type Visibility = 'public' | 'subscribers' | 'private';
 
 /** Co seznam potřebuje; bez novějších sloupců (klipy, plánování) se načte základ. */
-const FIELDS = 'id, title, thumbnail_url, views, status, visibility, width, height, duration_seconds, created_at, scheduled_at, is_premiere, clipped_by';
+const FIELDS = 'id, title, thumbnail_url, views, status, visibility, width, height, duration_seconds, created_at, scheduled_at, is_premiere, clipped_by, pending_collab_visibility';
 const BASIC_FIELDS = 'id, title, thumbnail_url, views, status, visibility, width, height, duration_seconds, created_at';
 
 async function fetchMine(ownerId: string): Promise<any[]> {
@@ -44,6 +46,11 @@ function YourVideosPageInner() {
   const [confirmVideoId, setConfirmVideoId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('all');
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  // Hromadné úpravy: výběr víc videí naráz (viditelnost, smazání).
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   useEffect(() => {
     load();
@@ -152,6 +159,93 @@ function YourVideosPageInner() {
     }
   }
 
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function stopSelecting() {
+    setSelecting(false);
+    setSelected(new Set());
+  }
+
+  /**
+   * Viditelnost víc videí naráz. Videa čekající na spolutvůrce (jsou dočasně
+   * soukromá) se přeskočí - změnu by stejně přepsalo přijetí pozvánky. Pak se
+   * srovná ochrana podepsanými adresami (jako po uložení jednoho videa).
+   */
+  async function bulkVisibility(visibility: Visibility) {
+    const ids = videos.filter((v) => selected.has(v.id) && !v.pending_collab_visibility && v.visibility !== visibility).map((v) => v.id);
+    if (ids.length === 0) {
+      stopSelecting();
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      const { data, error } = await supabase.from('videos').update({ visibility }).in('id', ids).select('id, visibility');
+      if (error) throw error;
+      const changed = ((data ?? []) as { id: string; visibility: string }[]).filter((r) => r.visibility === visibility).length;
+      const headers = await authHeaders();
+      if ('Authorization' in headers) {
+        await fetch('/api/videos/protect', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ all: true }),
+        }).catch(() => null);
+      }
+      const { data: authData } = await supabase.auth.getUser();
+      if (authData.user) setVideos(await fetchMine(authData.user.id));
+      setToast(
+        changed === ids.length
+          ? { message: t('yvBulkDone').replace('{n}', String(changed)), type: 'success' }
+          : { message: t('yvBulkPartial').replace('{ok}', String(changed)).replace('{n}', String(ids.length)), type: 'error' }
+      );
+      stopSelecting();
+    } catch {
+      setToast({ message: t('yvBulkPartial').replace('{ok}', '0').replace('{n}', String(ids.length)), type: 'error' });
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  /** Smazání víc videí - po jednom přes server (ten ověří vlastnictví a uklidí Cloudflare). */
+  async function bulkDelete() {
+    setConfirmBulkDelete(false);
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    const headers = await authHeaders();
+    let ok = 0;
+    const gone = new Set<string>();
+    for (const videoId of ids) {
+      try {
+        const res = await fetch('/api/videos/delete', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId }),
+        });
+        if (res.ok) {
+          ok++;
+          gone.add(videoId);
+        }
+      } catch {
+        /* započítá se jako nepovedené */
+      }
+    }
+    setVideos((prev) => prev.filter((v) => !gone.has(v.id)));
+    setToast(
+      ok === ids.length
+        ? { message: t('yvBulkDone').replace('{n}', String(ok)), type: 'success' }
+        : { message: t('yvBulkPartial').replace('{ok}', String(ok)).replace('{n}', String(ids.length)), type: 'error' }
+    );
+    setBulkBusy(false);
+    stopSelecting();
+  }
+
   const counts = useMemo(
     () => ({
       all: videos.length,
@@ -200,6 +294,9 @@ function YourVideosPageInner() {
           </p>
         </div>
         <div className="yv-head-actions">
+          <button type="button" className={`yv-ghost-btn${selecting ? ' active' : ''}`} aria-pressed={selecting} onClick={() => (selecting ? stopSelecting() : setSelecting(true))}>
+            <UiIcon name="check" size={15} /> {selecting ? t('cancel') : t('yvSelect')}
+          </button>
           <Link href="/channel-stats" className="yv-ghost-btn">
             <UiIcon name="chart" size={15} /> {t('channelStatsTitle')}
           </Link>
@@ -217,6 +314,35 @@ function YourVideosPageInner() {
         ))}
       </div>
 
+      {selecting && (
+        <div className="yv-bulk-bar" role="toolbar" aria-label={t('yvSelectedCount').replace('{n}', String(selected.size))}>
+          <label className="yv-bulk-all">
+            <input
+              type="checkbox"
+              checked={filtered.length > 0 && filtered.every((v: any) => selected.has(v.id))}
+              onChange={(e) => setSelected(e.target.checked ? new Set(filtered.map((v: any) => v.id)) : new Set())}
+            />
+            {t('yvSelectAll')}
+          </label>
+          <span className="yv-bulk-count">{t('yvSelectedCount').replace('{n}', String(selected.size))}</span>
+          <span className="yv-bulk-actions">
+            <span className="yv-bulk-label">{t('yvBulkVisibility')}:</span>
+            <button type="button" className="yv-action" disabled={bulkBusy || selected.size === 0} onClick={() => bulkVisibility('public')} title={t('shortVisibilityPublic')} aria-label={t('shortVisibilityPublic')}>
+              <UiIcon name="globe" size={14} /> <span>{t('shortVisibilityPublic')}</span>
+            </button>
+            <button type="button" className="yv-action" disabled={bulkBusy || selected.size === 0} onClick={() => bulkVisibility('subscribers')} title={t('shortVisibilitySubscribers')} aria-label={t('shortVisibilitySubscribers')}>
+              <UiIcon name="users" size={14} /> <span>{t('shortVisibilitySubscribers')}</span>
+            </button>
+            <button type="button" className="yv-action" disabled={bulkBusy || selected.size === 0} onClick={() => bulkVisibility('private')} title={t('shortVisibilityPrivate')} aria-label={t('shortVisibilityPrivate')}>
+              <UiIcon name="lock" size={14} /> <span>{t('shortVisibilityPrivate')}</span>
+            </button>
+            <button type="button" className="yv-action danger" disabled={bulkBusy || selected.size === 0} onClick={() => setConfirmBulkDelete(true)} title={t('yvBulkDelete')} aria-label={t('yvBulkDelete')}>
+              {bulkBusy ? <span className="spin" aria-hidden="true" /> : <UiIcon name="trash" size={14} />} <span>{t('yvBulkDelete')}</span>
+            </button>
+          </span>
+        </div>
+      )}
+
       {query && filtered.length === 0 && <ScopedSearchEmpty query={rawQuery} />}
       {!query && filtered.length === 0 && <EmptyState compact icon={tab === 'sparks' ? 'bolt' : tab === 'clips' ? 'scissors' : 'film'} title={t('yvTabEmpty')} />}
 
@@ -225,7 +351,16 @@ function YourVideosPageInner() {
           const spark = isSpark(video);
           const scheduled = video.scheduled_at && Date.parse(video.scheduled_at) > Date.now() ? video.scheduled_at : null;
           return (
-            <li key={video.id} className="yv-row">
+            <li key={video.id} className={`yv-row${selecting ? ' selecting' : ''}${selected.has(video.id) ? ' selected' : ''}`}>
+              {selecting && (
+                <input
+                  type="checkbox"
+                  className="yv-check"
+                  checked={selected.has(video.id)}
+                  onChange={() => toggleSelected(video.id)}
+                  aria-label={`${t('yvSelectVideo')}: ${video.title || '—'}`}
+                />
+              )}
               <Link href={`/watch/${video.id}`} className={`yv-thumb${spark ? ' spark' : ''}`} tabIndex={-1} aria-hidden="true">
                 {video.thumbnail_url ? <img src={video.thumbnail_url} alt="" loading="lazy" decoding="async" /> : <UiIcon name="film" size={20} />}
                 {video.duration_seconds ? <span className="yv-duration">{formatTime(video.duration_seconds)}</span> : null}
@@ -294,6 +429,10 @@ function YourVideosPageInner() {
           );
         })}
       </ul>
+
+      {confirmBulkDelete && (
+        <ConfirmDialog message={t('yvBulkConfirmDelete').replace('{n}', String(selected.size))} onConfirm={() => void bulkDelete()} onCancel={() => setConfirmBulkDelete(false)} />
+      )}
 
       {confirmVideoId && (
         <ConfirmDialog

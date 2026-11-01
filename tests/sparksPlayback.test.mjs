@@ -104,5 +104,19 @@ test('dvojité klepnutí = líbí se; nikdy nic nebere ani nepřepisuje hvězdi�
   assert.ok(s.SPARK_DOUBLE_TAP_MS >= 200 && s.SPARK_DOUBLE_TAP_MS <= 350);
 });
 
+test('malinký náhled: Cloudflare zmenší na 48 px, vlastní náhled tvůrce ne', () => {
+  assert.equal(s.sparkTinyPoster({ cloudflare_video_id: 'abc' }), 'https://videodelivery.net/abc/thumbnails/thumbnail.jpg?height=48');
+  assert.equal(
+    s.sparkTinyPoster({ thumbnail_url: 'https://customer-x.cloudflarestream.com/abc/thumbnails/thumbnail.jpg?time=2s&height=720' }),
+    'https://customer-x.cloudflarestream.com/abc/thumbnails/thumbnail.jpg?time=2s&height=48'
+  );
+  assert.equal(
+    s.sparkTinyPoster({ thumbnail_url: 'https://customer-x.cloudflarestream.com/abc/thumbnails/thumbnail.jpg?height=720&time=2s' }),
+    'https://customer-x.cloudflarestream.com/abc/thumbnails/thumbnail.jpg?time=2s&height=48'
+  );
+  assert.equal(s.sparkTinyPoster({ thumbnail_url: 'https://xyz.supabase.co/storage/v1/object/public/thumbnails/u/1.jpg', cloudflare_video_id: 'abc' }), null);
+  assert.equal(s.sparkTinyPoster({}), null);
+});
+
 console.log(`\n${prosly} prošlo, ${padly} spadlo`);
 if (padly > 0) process.exit(1);

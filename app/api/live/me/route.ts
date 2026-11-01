@@ -10,6 +10,7 @@ import { liveHiddenNow } from '@/lib/nudityRules';
 import { liveMaxHours, recordingKeepDays, reenableIfCooledDown } from '@/lib/liveLimits';
 import { outdatedAppResponse } from '@/lib/desktopGate';
 import { sampleLiveSession } from '@/lib/liveStats';
+import { allowRequest, tooManyRequests } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 // Na pozadí může běžet kontrola obsahu (lib/nudityScan.ts) - funkce smí doběhnout až minutu.
@@ -76,6 +77,11 @@ export async function POST(req: NextRequest) {
 
   // Appka (Kine Clipper) hlásí, že vysílá: hned se ukáže jako živé a dozví se, jestli ji Cloudflare vidí.
   if (action === 'started' || action === 'ping' || action === 'stopped') {
+    // Appka hlásí každých 15 s; každé hlášení může stát dotazy na Cloudflare API
+    // (limit pro celý účet Kine) - skript, který by hlásil dokola, se zabrzdí.
+    if (!allowRequest(`live-signal:${user.id}`, 24, 60_000) || (action === 'started' && !allowRequest(`live-started:${user.id}`, 6, 60_000))) {
+      return tooManyRequests(15);
+    }
     // Zablokovaný účet nevysílá - ani pokračováním přenosu, který začal před zablokováním.
     if (action !== 'stopped') {
       const { data: profile } = await supabaseServer.from('profiles').select('is_banned').eq('id', user.id).maybeSingle();

@@ -37,14 +37,16 @@ export async function POST(req: NextRequest) {
   // Vidí divák video? Stejná pravidla jako všude (RLS).
   const { data: video } = await supabaseAsUser(token)
     .from('videos')
-    .select('id, owner_id, title, description, cloudflare_video_id, duration_seconds, visibility, status, category, language, made_for_kids, hashtags, width, height')
+    .select('id, owner_id, title, description, cloudflare_video_id, duration_seconds, visibility, status, category, language, made_for_kids, hashtags, width, height, scheduled_at, is_premiere')
     .eq('id', videoId)
     .maybeSingle();
 
   if (!video || !video.cloudflare_video_id) {
     return NextResponse.json({ error: 'Video nenalezeno nebo k němu nemáš přístup.' }, { status: 403 });
   }
-  if (video.visibility !== 'public' || video.status !== 'ready') {
+  // Naplánované video (i premiéra) ještě nevyšlo - klip by ho zveřejnil dřív než tvůrce.
+  const notYet = !!video.scheduled_at && Date.parse(video.scheduled_at) > Date.now();
+  if (video.visibility !== 'public' || video.status !== 'ready' || notYet) {
     return NextResponse.json({ error: 'Klip jde vystřihnout jen z veřejného, hotového videa.', code: 'not-public' }, { status: 400 });
   }
 

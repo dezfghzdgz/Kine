@@ -23,6 +23,7 @@ import {
   afterPlayRejected,
   doubleTapScore,
   sparkPoster,
+  sparkTinyPoster,
   type SparkEngine,
 } from '@/lib/sparksPlayback';
 import { bufferedAhead } from './PlaybackStats';
@@ -89,6 +90,9 @@ export default function SparksCard({
   const [vod, setVod] = useState<VodHandle | null>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const [buffering, setBuffering] = useState(false);
+  // Video na řadě už ukazuje obraz? Do té doby (a u karet mimo řadu) je přes něj náhled -
+  // na pomalé síti dřív při rolování svítila černá plocha, než se video rozjelo.
+  const [frameShown, setFrameShown] = useState(false);
   const [userPaused, setUserPaused] = useState(false);
   const userPausedRef = useRef(false);
   // Prohlížeč nepustil video vůbec (ani potichu) - čeká se na klepnutí.
@@ -189,6 +193,7 @@ export default function SparksCard({
     const handle = vod;
     if (!native || !el || !handle) return;
     if (!active) {
+      setFrameShown(false);
       handle.setBufferAhead(SPARK_PRELOAD_BUFFER_S, SPARK_PRELOAD_BUFFER_S);
       el.pause();
       try {
@@ -257,6 +262,25 @@ export default function SparksCard({
     if (!native || !el || !active) return;
     // Rozjelo se už? Do té doby se o zastavení stará rozjezd (zkouší to znovu).
     let started = false;
+    let alive = true;
+    let revealTimer = 0;
+    // Náhled přes video zmizí až s prvním opravdu vykresleným snímkem
+    // (requestVideoFrameCallback) - "playing" občas přijde o chvilku dřív
+    // a na slabé wifi pak problikla černá. Pojistka 600 ms.
+    const revealFrame = () => {
+      const rvfc = (el as HTMLVideoElement & { requestVideoFrameCallback?: (cb: () => void) => number }).requestVideoFrameCallback;
+      if (typeof rvfc !== 'function') {
+        setFrameShown(true);
+        return;
+      }
+      rvfc.call(el, () => {
+        if (alive) setFrameShown(true);
+      });
+      window.clearTimeout(revealTimer);
+      revealTimer = window.setTimeout(() => {
+        if (alive) setFrameShown(true);
+      }, 600);
+    };
     const onPlay = () => {
       userPausedRef.current = false;
       setUserPaused(false);
@@ -265,6 +289,7 @@ export default function SparksCard({
     const onPlaying = () => {
       started = true;
       setBuffering(false);
+      revealFrame();
       onStartedRef.current?.();
     };
     // Zastavené zvenku (tlačítko na sluchátkách, systém, obnova přehrávače po chybě):
@@ -283,6 +308,8 @@ export default function SparksCard({
     el.addEventListener('volumechange', onVolume);
     if (!el.paused && el.readyState >= 3) onPlaying();
     return () => {
+      alive = false;
+      window.clearTimeout(revealTimer);
       el.removeEventListener('play', onPlay);
       el.removeEventListener('playing', onPlaying);
       el.removeEventListener('pause', onPause);
@@ -662,6 +689,9 @@ export default function SparksCard({
 
   const creatorName = video.profiles?.display_name ?? video.profiles?.username ?? t('unknownCreator');
   const poster = near ? sparkPoster(video, light) : null;
+  // Malinký náhled (pár kB) - je tu hned i na slabé wifi, než dorazí ten velký.
+  const tinyPoster = near ? sparkTinyPoster(video) : null;
+  const coverVisible = native && near && !!poster && !(active && frameShown);
   const showPlayIcon = active && (native ? userPaused || needsTap : paused);
 
   return (
@@ -693,6 +723,13 @@ export default function SparksCard({
           <img className="spark-poster" src={poster} alt="" decoding="async" />
         ) : (
           <div style={{ width: '100%', height: '100%', background: '#0a0a0b' }} />
+        )}
+        {/* Přes video, dokud neukáže první snímek: malinký náhled (hned) a pod ním přijde velký. */}
+        {native && near && tinyPoster && (
+          <img className={`spark-poster-tiny${coverVisible ? '' : ' is-hidden'}`} src={tinyPoster} alt="" aria-hidden="true" decoding="async" />
+        )}
+        {native && near && poster && (
+          <img className={`spark-poster spark-poster-cover${coverVisible ? '' : ' is-hidden'}`} src={poster} alt="" aria-hidden="true" decoding="async" />
         )}
         {native && active && buffering && !needsTap && !userPaused && <KineLoader size="sm" delayed label={t('loading')} className="spark-loader" />}
         {showPlayIcon && (

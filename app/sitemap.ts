@@ -19,6 +19,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .select('id, created_at')
     .eq('status', 'ready')
     .eq('visibility', 'public')
+    // Naplánované video do mapy webu až po vydání (premiéra s odpočtem hned).
+    .or(`scheduled_at.is.null,scheduled_at.lte.${new Date().toISOString()},is_premiere.eq.true`)
     .order('created_at', { ascending: false })
     .limit(500);
 

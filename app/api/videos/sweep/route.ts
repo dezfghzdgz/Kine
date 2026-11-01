@@ -3,6 +3,7 @@ import { sweepProcessing } from '@/lib/markVideoReady';
 import { sweepNudity } from '@/lib/nudityScan';
 import { costAlertCheck } from '@/lib/costs';
 import { sweepLiveExtras } from '@/lib/liveScheduleServer';
+import { sweepMaintenance } from '@/lib/maintenance';
 
 export const dynamic = 'force-dynamic';
 // Kontrola obsahu starších videí potřebuje pár desítek sekund (model běží na procesoru).
@@ -15,7 +16,8 @@ let lastOpenForce = 0;
 /**
  * Úklid na zavolání (viz lib/markVideoReady.ts, sweepProcessing): zaseklá
  * videa, nedokončená nahrávání, fronta mazání u Cloudflare, limity vysílání,
- * staré nezveřejněné záznamy, kontrola nákladů (lib/costs.ts) a staré plány / ankety vysílání. Pouští ho denně cron z vercel.json a jde
+ * staré nezveřejněné záznamy, kontrola nákladů (lib/costs.ts), staré plány / ankety vysílání,
+ * kvalita videí pro doporučování a úklid starých IP adres (lib/maintenance.ts). Pouští ho denně cron z vercel.json a jde
  * ho zavolat i ručně: otevřít /api/videos/sweep v prohlížeči.
  *
  * Když je na Vercelu nastavená proměnná CRON_SECRET, Vercel ji posílá
@@ -40,9 +42,11 @@ export async function GET(req: NextRequest) {
   const costAlerts = force ? await costAlertCheck().catch(() => 0) : 0;
   // Propadlé plány vysílání, staré ankety, raidy a připomenutí (lib/liveScheduleServer.ts).
   if (force) await sweepLiveExtras().catch(() => undefined);
+  // Kvalita videí pro doporučování a úklid osobních údajů (lib/maintenance.ts).
+  const maintenance = force ? await sweepMaintenance().catch(() => null) : null;
   // Nezkontrolovaná videa (nahraná před zapnutím kontroly nahoty) - po pár kouscích, jen do zbytku
   // času funkce (60 s). Bez ověřeného cronu nejvýš jednou za 5 minut, ať se tudy nedá pálit výkon serveru.
   const left = Math.max(5_000, Math.min(40_000, 50_000 - (Date.now() - started)));
   const nudityChecked = await sweepNudity({ max: 6, budgetMs: left, force: !!secret }).catch(() => 0);
-  return NextResponse.json({ ...result, nudityChecked, costAlerts }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ ...result, nudityChecked, costAlerts, maintenance }, { headers: { 'Cache-Control': 'no-store' } });
 }

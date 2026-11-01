@@ -1,8 +1,9 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { chooseNext, choosePrevious, planPreload, planSwap, type Slot, type SlotIndex, type Slots } from './musicSlots';
-import { attachHls, preloadHls, supportsNativeHls, type Detach } from './hlsAttach';
+import { attachHls, preloadHls, setLowVideo, supportsNativeHls, type Detach } from './hlsAttach';
 import { chooseEngineKind, companionCorrection, customerCodeFromUrl, manifestUrl, type EngineKind } from './streamSource';
 
 /**
@@ -69,7 +70,12 @@ export type MusicTrack = {
 
 export type RepeatMode = 'off' | 'one' | 'all';
 
-/** Kam se má obraz přehrávače promítnout, v souřadnicích okna. */
+/**
+ * Kam se má obraz přehrávače promítnout - v souřadnicích DOKUMENTU (ne okna).
+ * Obraz pak při rolování jede se stránkou sám (position: absolute v <body>),
+ * bez přepočítávání při každém pohybu - dřív se tu při rolování překreslovalo
+ * šedesátkrát za vteřinu a obraz za stránkou viditelně cukal.
+ */
 export type EngineRect = { top: number; left: number; width: number; height: number };
 
 const REPEAT_KEY = 'kine-music-repeat';
@@ -229,6 +235,14 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const [stageId, setStageId] = useState<string | null>(null);
   const [videoTakeover, setVideoTakeoverState] = useState(false);
   const [engineRect, setEngineRect] = useState<EngineRect | null>(null);
+  // Přehrávače žijí přímo v <body> (portál): obraz promítnutý na stránku videa má
+  // souřadnice dokumentu a při rolování jede se stránkou sám. Na serveru nic.
+  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
+  const engineVisibleRef = useRef(false);
+  engineVisibleRef.current = engineRect !== null;
+  useEffect(() => {
+    setPortalHost(document.body);
+  }, []);
 
   const track = slots[active].track;
 
@@ -420,6 +434,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       });
 
       const url = manifestUrl(slot.track.cloudflareId, customerCodeRef.current);
+      // Dokud obraz není vidět, stačí nejnižší kvalita (efekt níž ji při přepnutí na Video uvolní).
+      setLowVideo(el, !(i === activeRef.current && engineVisibleRef.current && kindRef.current === 'video'));
       detachRefs.current[i] = attachHls(el, url, {
         onReady: () => {
           // Skladba se rozjede jen tehdy, když zvuk nedrží obyčejné video.
@@ -466,8 +482,21 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     companionDetachRef.current = attachHls(el, manifestUrl(current.cloudflareId, customerCodeRef.current));
   }, []);
 
+  const engineOn = engineRect !== null;
+
+  // Obraz se stahuje v plné kvalitě jen tehdy, když je vidět (hudba přepnutá na Video).
+  // Na obal, jinde na webu a u dopředu načítané skladby stačí nejnižší - šetří data i pásmo.
   useEffect(() => {
-    if (kind !== 'audio' || !engineRect) return;
+    playersRef.current.forEach((p, i) => setLowVideo(p, !(i === active && engineOn && kind === 'video')));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, engineOn, kind, slots[0].key, slots[1].key]);
+
+  useEffect(() => {
+    if (kind !== 'audio' || !engineOn) return;
+    // Kdy se naposledy skákalo. Dřív se při každé čtvrtvteřině, kdy obraz
+    // ještě nestihl načíst, skočilo znovu - na pomalejší síti tak obraz
+    // nikdy nedohnal zvuk a jen cukal ("po přepnutí na video to blbne").
+    let lastSeekAt = 0;
     const interval = setInterval(() => {
       const companion = companionRef.current;
       const audio = playersRef.current[activeRef.current];
@@ -477,14 +506,29 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         if (!companion.paused) companion.pause();
         return;
       }
+      // Obraz se ještě načítá nebo právě skáče - počkat, další skok by ho jen vrátil na začátek.
+      if (companion.seeking || companion.readyState < 2) return;
       if (companion.paused) companion.play().catch(() => { /* bez obrazu, zvuk hraje dál */ });
 
       const fix = companionCorrection(audio.currentTime, companion.currentTime);
-      if (fix.seekTo !== null) companion.currentTime = fix.seekTo;
+      if (fix.seekTo !== null) {
+        const now = Date.now();
+        if (now - lastSeekAt > 2000) {
+          lastSeekAt = now;
+          // Kousek dopředu - než se obraz po skoku rozjede, zvuk mezitím poodejde.
+          companion.currentTime = Math.min(fix.seekTo + 0.25, Number.isFinite(companion.duration) ? companion.duration : fix.seekTo + 0.25);
+          companion.playbackRate = 1;
+          return;
+        }
+        // Těsně po skoku jen dorovnávat rychlostí.
+        const rate = companion.currentTime > audio.currentTime ? 0.94 : 1.06;
+        if (companion.playbackRate !== rate) companion.playbackRate = rate;
+        return;
+      }
       if (companion.playbackRate !== fix.rate) companion.playbackRate = fix.rate;
     }, 250);
     return () => clearInterval(interval);
-  }, [kind, engineRect]);
+  }, [kind, engineOn]);
 
   /**
    * Rozjezd po výměně slotů.
@@ -664,7 +708,16 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         setStageId(videoId);
       },
       showEngineOver(rect) {
-        setEngineRect(rect);
+        // Jen skutečná změna (ne každé hlášení stejného místa) - každá změna překreslí přehrávač.
+        setEngineRect((prev) => {
+          if (!rect || !prev) return rect;
+          const same =
+            Math.abs(prev.top - rect.top) < 0.5 &&
+            Math.abs(prev.left - rect.left) < 0.5 &&
+            Math.abs(prev.width - rect.width) < 0.5 &&
+            Math.abs(prev.height - rect.height) < 0.5;
+          return same ? prev : rect;
+        });
       },
     }),
     [activePlayer, pickNext, goToTrack]
@@ -800,39 +853,47 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     <CommandsContext.Provider value={commands}>
       <StateContext.Provider value={state}>
         {children}
-        {slots.map((slot, i) => {
-          if (!slot.track) return null;
-          const onscreen = i === active && engineRect !== null && kind === 'video';
-          const props = {
-            // Nová skladba = nový prvek. Klíč slotu se mění s každou skladbou,
-            // takže React nikdy nepřepisuje zdroj běžícímu prvku.
-            key: slot.key,
-            ref: i === 0 ? bindSlot0 : bindSlot1,
-            className: onscreen ? 'music-engine-frame music-engine-frame-onscreen' : 'music-engine-frame',
-            style: onscreen && engineRect
-              ? { top: engineRect.top, left: engineRect.left, width: engineRect.width, height: engineRect.height }
-              : undefined,
-            preload: 'auto' as const,
-            // Zvuk a start řídí napojení (bindSlot), ne atributy - ty jen
-            // říkají, jak prvek vzniká: hrající, nebo tichý dopředu načtený.
-            muted: slot.muted ?? false,
-            title: slot.track.title,
-          };
-          return kind === 'audio' ? <audio {...props} /> : <video {...props} playsInline />;
-        })}
-        {/* Safari: <audio> hraje, obraz promítá tichý společník (viz bindCompanion). */}
-        {kind === 'audio' && engineRect && track && (
-          <video
-            key={`companion-${track.id}`}
-            ref={bindCompanion}
-            className="music-engine-frame music-engine-frame-onscreen"
-            style={{ top: engineRect.top, left: engineRect.left, width: engineRect.width, height: engineRect.height }}
-            muted
-            playsInline
-            preload="auto"
-            aria-hidden="true"
-          />
-        )}
+        {portalHost &&
+          createPortal(
+            <>
+              {slots.map((slot, i) => {
+                if (!slot.track) return null;
+                const onscreen = i === active && engineRect !== null && kind === 'video';
+                const props = {
+                  // Nová skladba = nový prvek. Klíč slotu se mění s každou skladbou,
+                  // takže React nikdy nepřepisuje zdroj běžícímu prvku.
+                  key: slot.key,
+                  ref: i === 0 ? bindSlot0 : bindSlot1,
+                  className: onscreen ? 'music-engine-frame music-engine-frame-onscreen' : 'music-engine-frame',
+                  style: onscreen && engineRect
+                    ? { top: engineRect.top, left: engineRect.left, width: engineRect.width, height: engineRect.height }
+                    : undefined,
+                  preload: 'auto' as const,
+                  // Zvuk a start řídí napojení (bindSlot), ne atributy - ty jen
+                  // říkají, jak prvek vzniká: hrající, nebo tichý dopředu načtený.
+                  muted: slot.muted ?? false,
+                  title: slot.track.title,
+                };
+                // Obal skladby jako plakát: po přepnutí na Video je místo černé hned obrázek.
+                return kind === 'audio' ? <audio {...props} /> : <video {...props} playsInline poster={slot.track.thumbnail ?? undefined} />;
+              })}
+              {/* Safari: <audio> hraje, obraz promítá tichý společník (viz bindCompanion). */}
+              {kind === 'audio' && engineRect && track && (
+                <video
+                  key={`companion-${track.id}`}
+                  ref={bindCompanion}
+                  className="music-engine-frame music-engine-frame-onscreen"
+                  style={{ top: engineRect.top, left: engineRect.left, width: engineRect.width, height: engineRect.height }}
+                  poster={track.thumbnail ?? undefined}
+                  muted
+                  playsInline
+                  preload="auto"
+                  aria-hidden="true"
+                />
+              )}
+            </>,
+            portalHost
+          )}
       </StateContext.Provider>
     </CommandsContext.Provider>
   );

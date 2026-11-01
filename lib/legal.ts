@@ -39,7 +39,7 @@ export const RULES_UPDATED = { cs: '30. října 2026', en: '30 October 2026' };
 export const LEGAL_UPDATED = RULES_UPDATED;
 /** Podmínky a ochrana údajů: účinnost posledního znění. */
 export const TERMS_UPDATED = { cs: '30. října 2026', en: '30 October 2026' };
-/** Ochrana osobních údajů: ankety v chatu, připomenutí vysílání, klipy z vysílání, raidy (0137). */
+/** Ochrana osobních údajů: ankety v chatu, připomenutí vysílání, klipy z vysílání, raidy (0137); konkrétní doby uchování (0138). */
 export const PRIVACY_UPDATED = { cs: '1. listopadu 2026', en: '1 November 2026' };
 
 const OPERATOR_CS = operatorLine('cs');
@@ -926,7 +926,7 @@ export const PRIVACY: LegalDoc = {
         items: [
           `Údaje účtu a tvůj obsah po dobu, kdy máš účet. Po smazání účtu je smažeme (a zrušíme tvá předplatná u Stripe); ze záloh zmizí během několika týdnů.`,
           `Doklady o platbách tak dlouho, jak ukládají účetní a daňové předpisy.`,
-          `Hlášení chyb a záznamy zhlédnutí jen po dobu, kterou potřebujeme k jejich účelu.`,
+          `IP adresu u zhlédnutí smažeme po 30 dnech (samotné zhlédnutí zůstane bez ní - kvůli statistikám kanálu), hlášení chyb po 30 dnech a IP adresy pokusů o přihlášení po 2 dnech.`,
         ],
       },
       {
@@ -1008,7 +1008,7 @@ export const PRIVACY: LegalDoc = {
         items: [
           `Account data and your content for as long as you have an account. When you delete your account we delete them (and cancel your Stripe subscriptions); they disappear from backups within a few weeks.`,
           `Payment records for as long as accounting and tax laws require.`,
-          `Error reports and view logs only for as long as we need them for their purpose.`,
+          `We delete the IP address stored with a view after 30 days (the view itself stays, without it, for channel statistics), error reports after 30 days and the IP addresses of sign-in attempts after 2 days.`,
         ],
       },
       {

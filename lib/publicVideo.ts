@@ -30,6 +30,13 @@ export type PublicVideo = {
   owner: { username: string | null; display_name: string | null } | null;
 };
 
+/** Vyšlo už video? Naplánované bez premiéry až v čase vydání; premiéra (odpočet) se ukazuje dopředu. */
+export function isReleased(video: { scheduled_at?: string | null; is_premiere?: boolean | null }, now = Date.now()): boolean {
+  if (!video.scheduled_at || video.is_premiere) return true;
+  const at = Date.parse(video.scheduled_at);
+  return !Number.isFinite(at) || at <= now;
+}
+
 function firstOf<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
   return value ?? null;
@@ -42,11 +49,14 @@ export const loadPublicVideo = cache(async (id: string, revalidate?: number): Pr
       .from('videos')
       // Jeden doslovný řetězec, ne skládaný: Supabase z textu výběru odvozuje
       // typ řádku a ze skládaného odvodí "chybu" (na tom už jednou spadl build).
-      .select('id, title, description, thumbnail_url, cloudflare_video_id, width, height, duration_seconds, views, created_at, owner_id, made_for_kids, hashtags, visibility, status, profiles!videos_owner_id_fkey(username, display_name)')
+      .select('id, title, description, thumbnail_url, cloudflare_video_id, width, height, duration_seconds, views, created_at, owner_id, made_for_kids, hashtags, visibility, status, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username, display_name)')
       .eq('id', id)
       .maybeSingle();
 
     if (!data || data.status !== 'ready' || data.visibility !== 'public') return null;
+    // Naplánované video (ne premiéra s odpočtem) ještě nevyšlo - náhled odkazu,
+    // vložený přehrávač ani oEmbed ho nesmí prozradit (ani název) před vydáním.
+    if (!isReleased(data as { scheduled_at?: string | null; is_premiere?: boolean | null })) return null;
     const row = data as any;
     return {
       id: row.id,

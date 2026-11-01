@@ -70,6 +70,8 @@ export type LiveStreamRow = {
 
 /** Nejvýš jednou za tolik se Cloudflare ptá, kdo vysílá. */
 const SYNC_THROTTLE_MS = 12 * 1000;
+/** Vynucené srovnání (začátek vysílání) nejdřív tolik po minulém. */
+const FORCE_SYNC_MIN_MS = 3 * 1000;
 /** Nový přenos do půl hodiny po posledním oznámení se odběratelům znovu nehlásí (výpadek, restart OBS). */
 const RENOTIFY_AFTER_MS = 30 * 60 * 1000;
 
@@ -553,6 +555,9 @@ export async function syncLiveStreams(options: { force?: boolean } = {}): Promis
   const now = Date.now();
   if (!options.force && now - lastSyncAt < SYNC_THROTTLE_MS) return;
   if (syncing) return syncing;
+  // I vynucené srovnání nejvýš jednou za pár vteřin - jinak by šlo opakovaným
+  // "začal jsem vysílat" zasypat Cloudflare API (limit platí pro celý účet Kine).
+  if (options.force && now - lastSyncAt < FORCE_SYNC_MIN_MS) return;
   lastSyncAt = now;
   syncing = (async () => {
     let running: any[] = [];

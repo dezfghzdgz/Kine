@@ -50,6 +50,31 @@ export function preloadHls(): Promise<any> {
   return hlsLoading;
 }
 
+/** hls.js u napojených prvků (kvůli omezení kvality obrazu) a prvky, které mají mít obraz co nejlevnější. */
+const instances = new WeakMap<HTMLMediaElement, any>();
+const lowVideo = new WeakSet<HTMLMediaElement>();
+
+/**
+ * Obraz v nejnižší kvalitě (true), nebo zase podle sítě (false).
+ *
+ * Hudba na obal (obraz není vidět) a dopředu načítaná další skladba
+ * nepotřebují 1080p - stahovalo by se několikanásobně víc dat jen pro zvuk.
+ * Na pomalé síti to navíc bralo pásmo tomu, co je opravdu vidět. Platí pro
+ * hls.js; Safari (nativní HLS) si kvalitu řídí samo.
+ */
+export function setLowVideo(el: HTMLMediaElement | null | undefined, low: boolean): void {
+  if (!el) return;
+  if (low) lowVideo.add(el);
+  else lowVideo.delete(el);
+  const hls = instances.get(el);
+  if (!hls) return;
+  try {
+    hls.autoLevelCapping = low ? 0 : -1;
+  } catch {
+    /* zničené mezitím */
+  }
+}
+
 export type AttachOptions = {
   /** Přehrávání nejde a nepůjde (hls.js chybí, nebo osudová chyba). */
   onFatal?: (why: string) => void;
@@ -88,7 +113,11 @@ export function attachHls(el: HTMLMediaElement, url: string, options: AttachOpti
       // telefonu; dopředu si hls.js bere výchozích 30 s.
       backBufferLength: 30,
       enableWorker: true,
+      // Obraz nikdy větší, než je vidět (malé okno / telefon = menší kvalita, méně dat).
+      capLevelToPlayerSize: true,
     });
+    instances.set(el, hls);
+    if (lowVideo.has(el)) hls.autoLevelCapping = 0;
     hls.on(Hls.Events.ERROR, (_event: unknown, data: any) => {
       if (!data?.fatal) return;
       // Standardní záchrana z dokumentace hls.js: síť zkusit znovu, chybu
@@ -109,6 +138,7 @@ export function attachHls(el: HTMLMediaElement, url: string, options: AttachOpti
 
   return () => {
     cancelled = true;
+    if (instances.get(el) === hls) instances.delete(el);
     try { hls?.destroy(); } catch { /* už zničené */ }
     hls = null;
   };

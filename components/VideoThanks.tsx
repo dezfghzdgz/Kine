@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { authHeaders } from '@/lib/authHeaders';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
 import { formatTipAmount } from '@/lib/liveTips';
 import { CREATOR_PAYMENTS_ENABLED } from '@/lib/payments';
@@ -57,12 +58,29 @@ function useThanks(videoId: string) {
   return { data, reload };
 }
 
-/** Tlačítko „Super díky“ v řadě u videa - jen když tvůrce může peníze přijímat a nejde o vlastní video. */
+/**
+ * Tlačítko „Super díky“ v řadě u videa - jen když tvůrce může peníze přijímat
+ * a nejde o vlastní video. Tvůrce u vlastního videa tlačítko nevidí (sám sobě
+ * neposílá) - když ale ještě nemá propojené výplaty, uvidí odkaz „Zapnout
+ * Super díky“ do Nastavení → Výdělky (dřív nebylo poznat, proč tlačítko chybí).
+ */
 export function VideoThanksButton({ videoId, channelId, channelName, isOwner, loggedIn }: { videoId: string; channelId: string; channelName: string; isOwner: boolean; loggedIn: boolean }) {
   const { t } = useLanguage();
   const { data } = useThanks(videoId);
   const [open, setOpen] = useState(false);
-  if (!CREATOR_PAYMENTS_ENABLED || isOwner || !data?.enabled || !data.canReceive) return null;
+  if (!CREATOR_PAYMENTS_ENABLED || !data?.enabled) return null;
+  if (isOwner) {
+    if (data.canReceive) return null;
+    return (
+      <Link href="/settings#earnings" className="reaction-btn thanks-btn thanks-setup" title={t('superThanksSetupHint')} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M12 20.5s-7-4.35-7-10.05A4.2 4.2 0 0 1 12 7.9a4.2 4.2 0 0 1 7 2.55c0 5.7-7 10.05-7 10.05Z" />
+        </svg>
+        {t('superThanksSetup')}
+      </Link>
+    );
+  }
+  if (!data.canReceive) return null;
   return (
     <>
       <button type="button" className="reaction-btn thanks-btn" onClick={() => setOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

@@ -4,55 +4,30 @@ import { useMemo, useState } from 'react';
 import UiIcon from './UiIcon';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useLanguage, type Lang } from '@/lib/i18n';
+import { cumulativeSeries, type SeriesRange, type TimePoint } from '@/lib/statSeries';
 
-type Range = 'all' | 'year' | 'month' | 'week';
+type Range = SeriesRange;
 
 const DATE_LOCALES: Record<Lang, string> = {
   cs: 'cs-CZ', en: 'en-US', de: 'de-DE', sk: 'sk-SK',
   es: 'es-ES', pl: 'pl-PL', fr: 'fr-FR', uk: 'uk-UA',
 };
 
-function rangeStartDate(range: Range, earliest: Date): Date {
-  const now = new Date();
-  if (range === 'week') return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  if (range === 'month') return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  if (range === 'year') return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-  return earliest;
-}
-
-function buildSeries(timestamps: Date[], range: Range, locale: string, todayLabel: string) {
-  if (timestamps.length === 0) return [];
-  const sorted = [...timestamps].sort((a, b) => a.getTime() - b.getTime());
-  const earliest = sorted[0];
-  const start = rangeStartDate(range, earliest);
-  const now = new Date();
-
-  const bucketDays = range === 'week' ? 1 : range === 'month' ? 1 : range === 'year' ? 7 : 30;
-  const points: { date: string; count: number }[] = [];
-
-  let cursor = new Date(start);
-  while (cursor <= now) {
-    const cumulativeCount = sorted.filter((t) => t <= cursor).length;
-    points.push({
-      date: cursor.toLocaleDateString(locale, { day: 'numeric', month: 'short' }),
-      count: cumulativeCount,
-    });
-    cursor = new Date(cursor.getTime() + bucketDays * 24 * 60 * 60 * 1000);
-  }
-
-  const finalCount = sorted.filter((t) => t <= now).length;
-  points.push({ date: todayLabel, count: finalCount });
-
-  return points;
+function buildSeries(points: TimePoint[], range: Range, locale: string, todayLabel: string) {
+  return cumulativeSeries(points, range).map((p) => ({
+    date: p.isNow ? todayLabel : new Date(p.t).toLocaleDateString(locale, { day: 'numeric', month: 'short' }),
+    count: p.count,
+  }));
 }
 
 export default function StatChartModal({
   title,
-  timestamps,
+  points,
   onClose,
 }: {
   title: string;
-  timestamps: Date[];
+  /** Události v čase s vahou (lib/statSeries.ts). */
+  points: TimePoint[];
   onClose: () => void;
 }) {
   const { t, lang } = useLanguage();
@@ -64,8 +39,8 @@ export default function StatChartModal({
     week: t('rangeWeek'),
   };
   const data = useMemo(
-    () => buildSeries(timestamps, range, DATE_LOCALES[lang], t('todayLabel')),
-    [timestamps, range, lang]
+    () => buildSeries(points, range, DATE_LOCALES[lang], t('todayLabel')),
+    [points, range, lang]
   );
 
   return (
@@ -101,7 +76,7 @@ export default function StatChartModal({
         </div>
 
         <div style={{ width: '100%', height: 260, marginTop: 16 }}>
-          {timestamps.length === 0 ? (
+          {points.length === 0 ? (
             <p style={{ color: 'var(--text-faint)', textAlign: 'center', paddingTop: 80 }}>
               {t('noChartDataYet')}
             </p>

@@ -13,6 +13,8 @@ import { syncVideoProtection } from '@/lib/streamProtection';
  * Kromě toho video zůstalo navždy soukromé, když se pozvaný neozval; teď se
  * viditelnost vrátí, jakmile na potvrzení nikdo další nečeká.
  */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get('Authorization');
   const token = authHeader?.replace('Bearer ', '');
@@ -21,30 +23,34 @@ export async function POST(req: NextRequest) {
   const { data: userData } = await supabaseServer.auth.getUser(token);
   if (!userData.user) return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });
 
-  const { videoId, accept } = await req.json();
-  if (!videoId) return NextResponse.json({ error: 'Chybí videoId.' }, { status: 400 });
+  const body = await req.json().catch(() => null);
+  const videoId = typeof body?.videoId === 'string' ? body.videoId.toLowerCase() : '';
+  const accept = body?.accept === true;
+  if (!UUID.test(videoId)) return NextResponse.json({ error: 'Chybí videoId.' }, { status: 400 });
 
-  if (accept) {
-    const { error } = await supabaseServer
-      .from('video_collaborators')
-      .update({ status: 'accepted' })
-      .eq('video_id', videoId)
-      .eq('profile_id', userData.user.id);
+  // Jen vlastní čekající pozvánka. Dřív se viditelnost videa "uvolňovala"
+  // i po volání s cizím videem, ke kterému volající žádnou pozvánku neměl.
+  const { data: rows, error } = accept
+    ? await supabaseServer
+        .from('video_collaborators')
+        .update({ status: 'accepted' })
+        .eq('video_id', videoId)
+        .eq('profile_id', userData.user.id)
+        .eq('status', 'pending')
+        .select('video_id')
+    : await supabaseServer
+        .from('video_collaborators')
+        .delete()
+        .eq('video_id', videoId)
+        .eq('profile_id', userData.user.id)
+        .select('video_id');
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  } else {
-    const { error } = await supabaseServer
-      .from('video_collaborators')
-      .delete()
-      .eq('video_id', videoId)
-      .eq('profile_id', userData.user.id);
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  }
+  if (error) return NextResponse.json({ error: 'Odpověď se nepodařilo uložit.' }, { status: 400 });
+  if (!rows || rows.length === 0) return NextResponse.json({ error: 'Pozvánka nenalezena.' }, { status: 404 });
 
   await releaseVisibilityIfEveryoneAnswered(videoId);
 
-  return NextResponse.json({ ok: true, accepted: !!accept });
+  return NextResponse.json({ ok: true, accepted: accept });
 }
 
 /**

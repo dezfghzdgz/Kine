@@ -276,8 +276,9 @@ export default function NotificationBell({ mobileTrigger = false, onNavigate }: 
       });
 
       // Když se odpověď neuloží, pozvánka musí zůstat viset - dřív zmizela
-      // tak jako tak a spolupráce tiše propadla.
-      if (!res.ok) {
+      // tak jako tak a spolupráce tiše propadla. 404 = pozvánka už vyřízená
+      // (odpověď z jiného zařízení, tvůrce ji zrušil) - oznámení pak jen zmizí.
+      if (!res.ok && res.status !== 404) {
         const body = await res.json().catch(() => ({}));
         setCollabErrors((prev) => ({
           ...prev,

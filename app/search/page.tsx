@@ -109,6 +109,7 @@ async function searchAll(query: string, minRating: number | null, filters: Searc
       .select(CARD_FIELDS)
       .eq('status', 'ready')
       .eq('visibility', 'public')
+      .or(`scheduled_at.is.null,scheduled_at.lte.${new Date().toISOString()},is_premiere.eq.true`)
       .order('views', { ascending: false })
       .limit(12);
     recommended = rec ?? [];

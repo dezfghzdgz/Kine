@@ -17,18 +17,12 @@ import { CREATOR_PAYMENTS_ENABLED } from '@/lib/payments';
 const StatChartModal = dynamic(() => import('@/components/StatChartModal'), { ssr: false });
 const RatingChartModal = dynamic(() => import('@/components/RatingChartModal'), { ssr: false });
 
-/** Kolik událostí (odběrů, zhlédnutí...) přibylo za posledních `days` dní. */
-function recentCount(dates: readonly Date[], days = 28, now = Date.now()): number {
-  const since = now - days * 24 * 3600 * 1000;
-  let n = 0;
-  for (const d of dates) if (d.getTime() >= since) n += 1;
-  return n;
-}
 import StarDistribution from '@/components/StarDistribution';
 import StatsBarList, { type BarItem } from '@/components/StatsBarList';
 import StatsHeatmap from '@/components/StatsHeatmap';
 import StatsVideoTable, { formatWatchTime, type VideoStatsRow } from '@/components/StatsVideoTable';
 import { viewSourceLabelKey } from '@/lib/viewSource';
+import { pointsFromDaily, pointsFromDates, recentTotal, type TimePoint } from '@/lib/statSeries';
 import {
   effectiveCreatorPercent, nextTierFor, PARTNER_STATUS_LABELS, type PartnerStatus,
 } from '@/lib/revenueShare';
@@ -88,6 +82,86 @@ async function loadAllViews(videoIds: string[]): Promise<ViewLogRow[]> {
   return rows;
 }
 
+/** Zhlédnutí sečtená: po dnech (graf), den x hodina (mřížka) a podle zdroje. */
+type ViewSummary = { total: number; daily: TimePoint[]; heatmap: number[][]; sources: Record<string, number> };
+
+/**
+ * Souhrn zhlédnutí z databáze (creator_views_summary, supabase-migration-doporucovani-vykon.sql):
+ * jeden dotaz se součty místo stahování každého zhlédnutí zvlášť. Bez migrace null.
+ */
+async function loadViewSummary(videoIds: string[]): Promise<ViewSummary | null> {
+  let tz = 'UTC';
+  try {
+    tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    /* starý prohlížeč - UTC */
+  }
+  const { data, error } = await supabase.rpc('creator_views_summary', { video_ids: videoIds, p_tz: tz });
+  if (error || !data || typeof data !== 'object') return null;
+  const body = data as { total?: unknown; daily?: unknown; heatmap?: unknown; sources?: unknown };
+  const heatmap = emptyHeatmap();
+  for (const row of Array.isArray(body.heatmap) ? body.heatmap : []) {
+    if (!Array.isArray(row)) continue;
+    const [dow, hour, n] = row.map(Number);
+    if (dow >= 1 && dow <= 7 && hour >= 0 && hour <= 23 && n > 0) heatmap[dow - 1][hour] += n;
+  }
+  const sources: Record<string, number> = {};
+  for (const row of Array.isArray(body.sources) ? body.sources : []) {
+    if (!Array.isArray(row)) continue;
+    const key = typeof row[0] === 'string' && row[0] ? row[0] : 'unknown';
+    const n = Number(row[1]);
+    if (n > 0) sources[key] = (sources[key] ?? 0) + n;
+  }
+  return { total: Number(body.total) || 0, daily: pointsFromDaily(body.daily), heatmap, sources };
+}
+
+/** Bez migrace postaru: všechna zhlédnutí po tisících a součty v prohlížeči. */
+async function viewSummaryFromRows(videoIds: string[]): Promise<ViewSummary> {
+  const rows = await loadAllViews(videoIds);
+  const heatmap = emptyHeatmap();
+  const sources: Record<string, number> = {};
+  for (const v of rows) {
+    const d = new Date(v.viewed_at);
+    // getDay(): neděle = 0, u nás začíná týden pondělkem
+    if (Number.isFinite(d.getTime())) heatmap[(d.getDay() + 6) % 7][d.getHours()]++;
+    const key = v.source ?? 'unknown';
+    sources[key] = (sources[key] ?? 0) + 1;
+  }
+  return { total: rows.length, daily: pointsFromDates(rows.map((v) => v.viewed_at)), heatmap, sources };
+}
+
+type ReactionRow = { video_id: string; reaction: string; score: number | null; created_at: string };
+
+/**
+ * Všechna hodnocení videí kanálu. Supabase vrátí na dotaz nanejvýš tisíc
+ * řádků - dřív se tak u kanálu s víc hodnoceními tiše počítalo jen z prvního
+ * tisíce. Teď po stránkách a po skupinách videí (dlouhý seznam id by
+ * nepřelezl limit délky adresy).
+ */
+async function loadAllReactions(videoIds: string[]): Promise<ReactionRow[]> {
+  const rows: ReactionRow[] = [];
+  for (let i = 0; i < videoIds.length; i += 150) {
+    const ids = videoIds.slice(i, i + 150);
+    for (let page = 0; page < 200; page++) {
+      const from = page * VIEWS_PAGE_SIZE;
+      const { data, error } = await supabase
+        .from('video_reactions')
+        .select('video_id, reaction, score, created_at')
+        .in('video_id', ids)
+        // Jednoznačné pořadí (stejný čas u víc hodnocení) - jinak by stránkování řádky přeskakovalo nebo zdvojovalo.
+        .order('created_at', { ascending: true })
+        .order('video_id', { ascending: true })
+        .order('user_id', { ascending: true })
+        .range(from, from + VIEWS_PAGE_SIZE - 1);
+      if (error) break;
+      const batch = (data ?? []) as ReactionRow[];
+      rows.push(...batch);
+      if (batch.length < VIEWS_PAGE_SIZE) break;
+    }
+  }
+  return rows;
+}
+
 type ChartKey = 'subscribers' | 'views' | 'videos' | 'likes' | 'dislikes';
 
 const TIER_MULTIPLIER: Record<string, number> = {
@@ -119,7 +193,7 @@ export default function ChannelStatsPage() {
   const [allVideos, setAllVideos] = useState<any[]>([]);
   const [videoSearch, setVideoSearch] = useState('');
   const [videoSort, setVideoSort] = useState<'newest' | 'views'>('newest');
-  const [timestamps, setTimestamps] = useState<Record<ChartKey, Date[]>>({
+  const [timestamps, setTimestamps] = useState<Record<ChartKey, TimePoint[]>>({
     subscribers: [], views: [], videos: [], likes: [], dislikes: [],
   });
   const [openChart, setOpenChart] = useState<ChartKey | null>(null);
@@ -220,9 +294,9 @@ export default function ChannelStatsPage() {
 
     let totalLikes = 0;
     let totalDislikes = 0;
-    let likeTimestamps: Date[] = [];
-    let dislikeTimestamps: Date[] = [];
-    let viewTimestamps: Date[] = [];
+    let likeTimestamps: TimePoint[] = [];
+    let dislikeTimestamps: TimePoint[] = [];
+    let viewTimestamps: TimePoint[] = [];
     let avgRating: number | null = null;
     // Reakce na vlastních videích (bez spolupráce) - rating se ukáže hned, přesný přepočet doběhne potom.
     let ownReactionTotal = 0;
@@ -232,12 +306,10 @@ export default function ChannelStatsPage() {
       // Jeden dotaz na reakce pro celou stránku - dřív se ta samá tabulka
       // tahala dvakrát za sebou. Zhlédnutí, komentáře i souhrny za video jdou
       // souběžně s ním (dřív jedno po druhém).
-      const [{ data: reactions }, viewsLog, { count: commentCount }, [{ data: perVideo, error: perVideoError }, { data: viewerCount }]] = await Promise.all([
-        supabase.from('video_reactions').select('video_id, reaction, score, created_at').in('video_id', videoIds),
-        // Zdroj zhlédnutí přidává samostatná migrace. Když ještě neproběhla,
-        // dotaz se sloupcem "source" skončí chybou - v tom případě si appka
-        // vezme aspoň časy zhlédnutí, ať se kvůli tomu nerozbije celá stránka.
-        loadAllViews(videoIds),
+      const [reactions, viewSummary, { count: commentCount }, [{ data: perVideo, error: perVideoError }, { data: viewerCount }]] = await Promise.all([
+        loadAllReactions(videoIds),
+        // Souhrn zhlédnutí z databáze; bez migrace postaru (každé zhlédnutí zvlášť).
+        loadViewSummary(videoIds).then((summary) => summary ?? viewSummaryFromRows(videoIds)),
         supabase.from('comments').select('*', { count: 'exact', head: true }).in('video_id', videoIds),
         // Doba sledování, dokoukanost a počty komentářů u jednotlivých videí.
         //
@@ -258,37 +330,26 @@ export default function ChannelStatsPage() {
 
       totalLikes = (reactions ?? []).filter((r) => r.reaction === 'like').length;
       totalDislikes = (reactions ?? []).filter((r) => r.reaction === 'dislike').length;
-      likeTimestamps = (reactions ?? []).filter((r) => r.reaction === 'like').map((r) => new Date(r.created_at));
-      dislikeTimestamps = (reactions ?? []).filter((r) => r.reaction === 'dislike').map((r) => new Date(r.created_at));
+      likeTimestamps = pointsFromDates((reactions ?? []).filter((r) => r.reaction === 'like').map((r) => r.created_at));
+      dislikeTimestamps = pointsFromDates((reactions ?? []).filter((r) => r.reaction === 'dislike').map((r) => r.created_at));
 
       if (reactions && reactions.length > 0) {
         avgRating = reactions.reduce((sum, r) => sum + (r.score ?? 3), 0) / reactions.length;
       }
 
-      viewTimestamps = viewsLog.map((v) => new Date(v.viewed_at));
+      viewTimestamps = viewSummary.daily;
 
       // Odkud diváci přišli
-      const sourceCounts: Record<string, number> = {};
-      viewsLog.forEach((v) => {
-        const key = v.source ?? 'unknown';
-        sourceCounts[key] = (sourceCounts[key] ?? 0) + 1;
-      });
       setViewSources(
-        Object.entries(sourceCounts).map(([key, value]) => ({
+        Object.entries(viewSummary.sources).map(([key, value]) => ({
           key,
           labelKey: viewSourceLabelKey(key),
           value,
         }))
       );
 
-      // Kdy se lidi dívají - mřížka den v týdnu x hodina
-      const heatmap = emptyHeatmap();
-      viewsLog.forEach((v) => {
-        const d = new Date(v.viewed_at);
-        // getDay(): neděle = 0, u nás začíná týden pondělkem
-        heatmap[(d.getDay() + 6) % 7][d.getHours()]++;
-      });
-      setWatchHeatmap(heatmap);
+      // Kdy se lidi dívají - mřížka den v týdnu x hodina (pondělí = první řádek)
+      setWatchHeatmap(viewSummary.heatmap);
 
       setTotalComments(commentCount ?? 0);
 
@@ -390,9 +451,9 @@ export default function ChannelStatsPage() {
     setRequestStatus(lastRequest?.status ?? null);
 
     setTimestamps({
-      subscribers: (subs ?? []).map((s) => new Date(s.created_at)),
+      subscribers: pointsFromDates((subs ?? []).map((s) => s.created_at)),
       views: viewTimestamps,
-      videos: (videos ?? []).map((v) => new Date(v.created_at)),
+      videos: pointsFromDates((videos ?? []).map((v) => v.created_at)),
       likes: likeTimestamps,
       dislikes: dislikeTimestamps,
     });
@@ -484,7 +545,7 @@ export default function ChannelStatsPage() {
       {/* Hlavní čísla: ikona, číslo, za posledních 28 dní a klik = graf v čase. */}
       <div className="stats-kpis">
         {cards.map((card) => {
-          const recent = recentCount(timestamps[card.key]);
+          const recent = recentTotal(timestamps[card.key]);
           return (
             <button key={card.key} type="button" className="panel stats-kpi" onClick={() => setOpenChart(card.key)} title={chartTitles[card.key]}>
               <span className="stats-kpi-icon" style={{ color: card.tone, background: `color-mix(in srgb, ${card.tone} 16%, transparent)` }} aria-hidden="true">
@@ -883,7 +944,7 @@ export default function ChannelStatsPage() {
       {openChart && (
         <StatChartModal
           title={chartTitles[openChart]}
-          timestamps={timestamps[openChart]}
+          points={timestamps[openChart]}
           onClose={() => setOpenChart(null)}
         />
       )}

@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
+import { safeInternalLink } from '@/lib/safeLink';
 
 /**
  * Přihlášení webu v okně appky Kine do PC - opačný směr než /connect.
@@ -21,8 +22,11 @@ import { useLanguage } from '@/lib/i18n';
  * dál. `next` smí být jen cesta na tomhle webu (žádné cizí adresy).
  */
 function safeNext(raw: string | null): string {
-  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/connect')) return '/';
-  return raw;
+  // "/\cizi.web" nebo "/<tab>/cizi.web" začínají lomítkem, ale prohlížeč je otevře
+  // jako cizí web - stejné pravidlo jako u odkazů z oznámení (lib/safeLink.ts).
+  const link = safeInternalLink(raw);
+  if (!link || link.startsWith('/connect')) return '/';
+  return link;
 }
 
 function ConnectAppInner() {

@@ -1,3 +1,53 @@
+KINE web: lepší doporučování, rychlejší statistiky, hromadné úpravy videí, hudba bez
+sekání, Sparks bez černé obrazovky, bezpečnost a úklid osobních údajů
+(dodávka kine-0138-2026-11-01)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0138.zip. Otevři vzniklou složku a do GitHubu přetáhni její OBSAH
+   (složky app, components, lib, tests a soubory) - ne složku samotnou.
+2. Supabase -> SQL Editor -> spusť supabase-migration-doporucovani-vykon.sql (celý, jde
+   pouštět opakovaně). Na konci tři sloupce doporucovani / statistiky / uklid - všechno
+   true = hotovo. Žádná nová proměnná ve Vercelu.
+3. Na GitHubu pořád zbývá smazat (sestavení projde i bez toho): složku kine-web-0135
+   (otevřít -> ⋯ vpravo nahoře -> Delete directory -> Commit) a soubory CTI-ME.txt,
+   kine-web-live.patch, supabase-migration-zarizeni-chyby-jmena.sql,
+   components/SearchBar.tsx, app/tests/playerStart.test.mjs, app/admin/live/page.tsx
+   a app/api/admin/live/route.ts (stará diagnostika vysílání). Seznam je i ve
+   stav-souboru.json ("smazat").
+
+CO JE NOVÉ
+- Doporučování (Domů): kromě nejnovějších videí se do každé dávky přimíchají oblíbená
+  za týden, nejlépe hodnocená (jak moc je lidi dokoukávají a hodnotí - počítá se denně),
+  videa odebíraných kanálů, nejsilnější zájem a sledované hry. Čerstvé zájmy váží víc,
+  videa v jazyce diváka dostanou přednost, nové video s pár zhlédnutími dostane šanci.
+  Jeden kanál nezaplní celou stránku. Karta, kterou divák viděl a neklikl, příště
+  klesne (pamatuje si to jen prohlížeč) - feed se neopakuje.
+- Podobná videa u přehrávače: dřív prostě nejnovější videa na Kine, teď podobná
+  (stejné hashtagy, kategorie, tvůrce), zhlédnutá až na konci.
+- Sparks na slabé wifi: místo černé obrazovky hned malý náhled, pak velký, video
+  překryje až první opravdu vykreslený snímek.
+- Hudba: přepnutí obal -> video už neblbne a scroll nahoru/dolů nesekal (obraz se
+  posouvá se stránkou sám, bez přepočítávání); skrytý obraz hudby se stahuje
+  v nejnižší kvalitě (šetří data), na slabé síti se zvuk a obraz nepřetahují.
+- Vaše videa: tlačítko Vybrat - víc videí naráz změníš na veřejné / pro odběratele /
+  soukromé nebo smažeš.
+- Super díky: tlačítko se ukáže, jen když běží peníze pro tvůrce (Vercel
+  NEXT_PUBLIC_CREATOR_PAYMENTS=1) a tvůrce má propojené výplaty (Nastavení ->
+  Výdělky). Na vlastním videu ho tvůrce nevidí - teď místo něj odkaz „Zapnout Super
+  díky“, dokud výplaty nepropojí. Zkoušej z druhého účtu na cizím videu.
+- Statistiky kanálu: zhlédnutí sčítá databáze (jeden dotaz místo stovek u velkého
+  kanálu), hodnocení se už nepočítají jen z prvních 1000.
+- Úklid osobních údajů (denně): IP adresa u zhlédnutí po 30 dnech pryč (zhlédnutí
+  zůstane pro statistiky), hlášení chyb po 30 dnech, IP pokusů o přihlášení po 2 dnech.
+  Ochrana osobních údajů to teď říká konkrétně.
+- Bezpečnost: naplánované video (ne premiéra) se před vydáním neprozradí v mapě webu,
+  náhledu odkazu, vloženém přehrávači, podobných videích ani hledání a nejde z něj
+  udělat klip; odpověď na spolupráci jen na vlastní pozvánku; odkaz po přihlášení
+  (?next=) nepustí na cizí web; brzdy proti zahlcení u hlášení vysílání z appky,
+  stahování, ochrany videí, hlášení chyb, ceny předplatného a odznaků; tvůrce si
+  nenafoukne „kvalitu“ videa sledováním vlastního videa.
+
 KINE web: klip z živého přenosu, raid, plánované vysílání s „Připomenout“, ankety
 v chatu, hry jen v Explore → Hry, nový vzhled Přihlášení a Vašich videí, bezpečnost
 (dodávka kine-0137-2026-11-01)

@@ -45,7 +45,7 @@ import { isTvMode } from '@/lib/tvMode';
 import { detectDeviceClass } from '@/lib/deviceClass';
 import { fetchAllRows, fetchByIds } from '@/lib/loadAll';
 import VideoCard from '@/components/VideoCard';
-import { formatDuration } from '@/lib/homeRecommendation';
+import { formatDuration, mergeCandidates } from '@/lib/homeRecommendation';
 import { decideMiniPlayer, digitSeekTarget } from '@/lib/miniPlayer';
 import { resolvePlaybackId } from '@/lib/playbackToken';
 import ClipPanel from '@/components/ClipPanel';
@@ -59,7 +59,7 @@ import AmbientCanvas from '@/components/AmbientCanvas';
 import { useAppearance } from '@/lib/useAppearance';
 import { attachVod, canPlayVodNatively, mediaPlayer, reportSlowVideo, type VodHandle } from '@/lib/vodPlayer';
 import type { PlaybackMode } from '@/lib/netQuality';
-import { seenOrderLocally, unseenFirst, upNextWithFallback } from '@/lib/upNext';
+import { seenOrderLocally, rankRelated, upNextWithFallback } from '@/lib/upNext';
 import { filterHidden, loadHiddenContent, NOTHING_HIDDEN, type HiddenContent } from '@/lib/hiddenContent';
 import { chooseEngine, shouldReportSlowStart, statsReport, vodVerdict, type QualityLevel } from '@/lib/vodPlayerCore';
 import { customerCodeFromUrl, manifestUrl } from '@/lib/streamSource';
@@ -76,6 +76,37 @@ const AUTOPLAY_KEY = 'kine-autoplay';
 const CAPTIONS_KEY = 'kine-captions';
 
 const MUSIC_VIEW_KEY = 'kine-music-view';
+
+const RELATED_COLUMNS =
+  'id, title, thumbnail_url, views, width, height, duration_seconds, category, hashtags, created_at, owner_id, cloudflare_video_id, profiles!videos_owner_id_fkey(username)';
+
+/**
+ * Kandidáti na „podobná videa“ vedle přehrávače (a po konci videa). Jen
+ * veřejná hotová videa, která už vyšla - naplánované video (scheduled_at
+ * v budoucnu) se dřív v seznamu objevilo dřív, než ho tvůrce vydal.
+ * Spadlý zdroj se tiše vynechá.
+ */
+async function relatedCandidates(current: { id: string; owner_id?: string | null; category?: string | null; hashtags?: string[] | null }): Promise<{ data: any[] }> {
+  const now = new Date().toISOString();
+  const base = () =>
+    supabase
+      .from('videos')
+      .select(RELATED_COLUMNS)
+      .eq('status', 'ready')
+      .eq('visibility', 'public')
+      .neq('id', current.id)
+      .or(`scheduled_at.is.null,scheduled_at.lte.${now},is_premiere.eq.true`);
+  const tags = (Array.isArray(current.hashtags) ? current.hashtags : []).filter((h) => typeof h === 'string' && h).slice(0, 10);
+  const sources = [
+    base().order('created_at', { ascending: false }).limit(60),
+    current.owner_id ? base().eq('owner_id', current.owner_id).order('created_at', { ascending: false }).limit(12) : null,
+    current.category ? base().eq('category', current.category).order('views', { ascending: false }).limit(30) : null,
+    tags.length > 0 ? base().overlaps('hashtags', tags).order('views', { ascending: false }).limit(30) : null,
+  ];
+  const results = await Promise.all(sources.map((q) => (q ? Promise.resolve(q).then((r) => r, () => null) : null)));
+  // Pořadí zdrojů nevadí - seřadí to rankRelated; tady jen bez opakování.
+  return { data: mergeCandidates(results.map((r) => (r && !r.error ? (r.data as any[]) : null))) };
+}
 
 function formatChapterTime(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -1367,14 +1398,9 @@ function WatchPageInner() {
         .select('profiles(id, username, avatar_url)')
         .eq('video_id', videoId)
         .eq('status', 'accepted'),
-      supabase
-        .from('videos')
-        .select('id, title, thumbnail_url, views, width, height, duration_seconds, category, owner_id, cloudflare_video_id, profiles!videos_owner_id_fkey(username)')
-        .eq('status', 'ready')
-        .eq('visibility', 'public')
-        .neq('id', videoId)
-        .order('created_at', { ascending: false })
-        .limit(96),
+      // Kandidáti na „podobná videa“: nejnovější, od stejného tvůrce, ze stejné
+      // kategorie a se stejnými hashtagy - seřadí je rankRelated (lib/upNext.ts).
+      relatedCandidates(data),
       (async () => {
         const { data: authData } = await supabase.auth.getUser();
         if (!authData.user) return { inWatchLater: false };
@@ -1413,9 +1439,10 @@ function WatchPageInner() {
     // Zhlédnutá od nejnovějšího: historie na účtu, pak paměť prohlížeče.
     const seenOrder = [...seenAndHidden.seen, ...seenOrderLocally()];
     const seen = new Set<string>(seenOrder);
-    const matchingFormat = filterHidden(others ?? [], seenAndHidden.hidden).filter((v: any) => isSpark(v) === currentIsSpark);
-    // Vedle videa nezhlédnutá napřed; po konci videa nezhlédnutá, a když nejsou, aspoň dávno viděná (lib/upNext.ts).
-    setOtherVideos(unseenFirst(matchingFormat, seen).slice(0, 24));
+    // Podobná napřed, zhlédnutá za nezhlédnutými (lib/upNext.ts - rankRelated).
+    const matchingFormat = rankRelated(filterHidden(others ?? [], seenAndHidden.hidden).filter((v: any) => isSpark(v) === currentIsSpark), data, seen);
+    // Po konci videa nezhlédnutá (příbuzná napřed), a když nejsou, aspoň dávno viděná.
+    setOtherVideos(matchingFormat.slice(0, 24));
     setUpNextPool(
       upNextWithFallback(matchingFormat, data, seenOrder)
         .slice(0, 12)

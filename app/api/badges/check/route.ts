@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { userFromRequest } from '@/lib/apiUser';
 import { checkBadges } from '@/lib/badgeCheck';
+import { allowRequest, tooManyRequests } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,8 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   const user = await userFromRequest(req);
   if (!user) return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });
+  // Kontrola je desítka dotazů - prohlížeč se ptá po pár minutách, skript nesmí dokola.
+  if (!allowRequest(`badges-check:${user.id}`, 10, 60_000)) return tooManyRequests(60);
   const result = await checkBadges(user.id);
   if (!result.ok) return NextResponse.json({ ok: false, reason: result.reason });
   return NextResponse.json({ ok: true, fresh: result.fresh, first: result.first, total: result.total });

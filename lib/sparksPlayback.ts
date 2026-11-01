@@ -84,6 +84,25 @@ export function sparkPoster(video: { thumbnail_url?: string | null; cloudflare_v
 }
 
 /**
+ * Malinký náhled (výška 48 px, pár kB) - ukáže se hned, i na slabé wifi,
+ * než dorazí velký náhled a video. Prohlížeč ho roztáhne a rozmaže sám
+ * (žádný CSS filtr - ten by na starším telefonu brzdil rolování). Jen
+ * u náhledů od Cloudflare (umí zmenšení); vlastní náhled tvůrce ne.
+ */
+export function sparkTinyPoster(video: { thumbnail_url?: string | null; cloudflare_video_id?: string | null }): string | null {
+  const url = typeof video.thumbnail_url === 'string' ? video.thumbnail_url.trim() : '';
+  if (/^https:\/\//i.test(url)) {
+    if (/cloudflarestream\.com\/|videodelivery\.net\//i.test(url) && /\/thumbnails\/thumbnail\.jpg/i.test(url)) {
+      const base = url.replace(/([?&])height=\d+&?/i, '$1').replace(/[?&]$/, '');
+      return `${base}${base.includes('?') ? '&' : '?'}height=48`;
+    }
+    return null;
+  }
+  if (video.cloudflare_video_id) return `https://videodelivery.net/${encodeURIComponent(video.cloudflare_video_id)}/thumbnails/thumbnail.jpg?height=48`;
+  return null;
+}
+
+/**
  * Prohlížeč odmítl play(): co dál.
  *  - zákaz zvuku bez klepnutí (NotAllowedError, se zvukem) -> zkusit potichu,
  *  - zákaz i potichu (úsporný režim, nastavení prohlížeče) -> tlačítko Přehrát,

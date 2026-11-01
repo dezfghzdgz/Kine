@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabaseServer';
 import { sanitizeDeviceClass } from '@/lib/deviceClass';
 import { MAX_MESSAGE, MAX_STACK, MAX_URL } from '@/lib/errorReporter';
 import { allowRequest } from '@/lib/rateLimit';
+import { clientIp } from '@/lib/clientIp';
 import { createHash } from 'node:crypto';
 
 /**
@@ -20,8 +21,10 @@ import { createHash } from 'node:crypto';
  *
  * User agent si ale skript může měnit, proto navíc (jen v paměti serveru,
  * nikam se neukládá): nejvýš PER_IP_PER_MINUTE hlášení z jedné adresy
- * (otisk IP), celkový strop GLOBAL_PER_MINUTE na instanci a nejvýš 32 kB
- * na jedno hlášení - tabulku tak nejde zaplavit (místo v databázi = peníze).
+ * (otisk IP), stejná chyba nejvýš PER_FINGERPRINT_PER_HOUR za hodinu,
+ * celkové stropy GLOBAL_PER_MINUTE a GLOBAL_PER_DAY na instanci a nejvýš
+ * 32 kB na jedno hlášení - tabulku tak nejde zaplavit (místo v databázi =
+ * peníze). Starší než 30 dní maže denní úklid (lib/maintenance.ts).
  *
  * Odpovídá vždycky 204, i když se zápis nepovede: prohlížeč, který právě
  * hlásí chybu, nemá co dělat s další chybou od nás.
@@ -29,13 +32,20 @@ import { createHash } from 'node:crypto';
 
 const PER_CLIENT_PER_MINUTE = 30;
 const PER_IP_PER_MINUTE = 20;
-const GLOBAL_PER_MINUTE = 600;
+// Celkové stropy na instanci: hlášení má kolem 5 kB, víc by jen plnilo databázi
+// (místo = peníze). Stejná chyba se opakuje pořád dokola - stačí pár ukázek za hodinu.
+const GLOBAL_PER_MINUTE = 120;
+const GLOBAL_PER_DAY = 20_000;
+const PER_FINGERPRINT_PER_HOUR = 40;
 const MAX_BODY_BYTES = 32 * 1024;
 
-/** Krátký otisk IP adresy (jen klíč do paměti brzdy - adresa se nikam neukládá). */
+/**
+ * Krátký otisk IP adresy (jen klíč do paměti brzdy - adresa se nikam neukládá).
+ * IP od Vercelu (lib/clientIp.ts) - x-forwarded-for si skript může pokaždé
+ * poslat jiný a brzdu tak obejít.
+ */
 function ipKey(req: NextRequest): string {
-  const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || req.headers.get('x-real-ip') || 'unknown';
-  return createHash('sha256').update(ip).digest('base64url').slice(0, 16);
+  return createHash('sha256').update(clientIp(req.headers)).digest('base64url').slice(0, 16);
 }
 // perf = pomalé video (lib/vodPlayer.ts - reportSlowVideo): statistiky přehrávání místo zásobníku.
 const ALLOWED_KINDS = new Set(['error', 'rejection', 'perf']);
@@ -51,6 +61,7 @@ export async function POST(req: NextRequest) {
   if (Number(req.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) return new NextResponse(null, { status: 204 });
   if (!allowRequest(`client-errors:${ipKey(req)}`, PER_IP_PER_MINUTE, 60_000)) return new NextResponse(null, { status: 204 });
   if (!allowRequest('client-errors:all', GLOBAL_PER_MINUTE, 60_000)) return new NextResponse(null, { status: 204 });
+  if (!allowRequest('client-errors:day', GLOBAL_PER_DAY, 24 * 3600 * 1000)) return new NextResponse(null, { status: 204 });
   let data: any;
   try {
     // sendBeacon posílá Blob s application/json, fetch posílá JSON - obojí
@@ -66,6 +77,7 @@ export async function POST(req: NextRequest) {
   const fingerprint = cut(data?.fingerprint, 200);
   const kind = ALLOWED_KINDS.has(data?.kind) ? data.kind : null;
   if (!message || !fingerprint || !kind) return new NextResponse(null, { status: 204 });
+  if (!allowRequest(`client-errors:fp:${fingerprint}`, PER_FINGERPRINT_PER_HOUR, 3600 * 1000)) return new NextResponse(null, { status: 204 });
 
   const userAgent = cut(data?.userAgent, 300) ?? 'unknown';
   const minuteAgo = new Date(Date.now() - 60_000).toISOString();

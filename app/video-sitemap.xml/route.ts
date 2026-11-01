@@ -21,6 +21,8 @@ export async function GET() {
     .select('id, title, description, thumbnail_url, cloudflare_video_id, duration_seconds, views, created_at, made_for_kids, hashtags, owner_id, profiles!videos_owner_id_fkey(username, display_name)')
     .eq('status', 'ready')
     .eq('visibility', 'public')
+    // Naplánované video do mapy webu až po vydání (premiéra s odpočtem hned).
+    .or(`scheduled_at.is.null,scheduled_at.lte.${new Date().toISOString()},is_premiere.eq.true`)
     .order('created_at', { ascending: false })
     .limit(1000);
 

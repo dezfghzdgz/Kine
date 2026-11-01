@@ -271,6 +271,8 @@ function VideoCard({
     // a prohlížeče se u něj chovají různě.
     <div
       className="video-card video-card-interactive"
+      // Pro hlavní stránku: které karty divák viděl (lib/feedImpressions.ts).
+      data-vid={video.id}
       // Náhled jen po najetí MYŠÍ. Na telefonu se dřív spouštěl i dotykem - a protože
       // scrollování začíná dotykem na kartu, stahovalo se při projíždění feedu video
       // u každé karty, které se prst dotkl. Na mobilních datech to brzdilo všechno.
