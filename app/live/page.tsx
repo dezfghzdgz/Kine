@@ -20,6 +20,8 @@ import { PanelHeading, WithHelp } from '@/components/HelpTip';
 import FieldHint from '@/components/FieldHint';
 import UiIcon from '@/components/UiIcon';
 import { liveThumbnailJpeg } from '@/lib/liveThumbnail';
+import LiveRaidPanel from '@/components/LiveRaidPanel';
+import LiveSchedulePanel from '@/components/LiveSchedulePanel';
 
 type Setup = {
   configured: boolean;
@@ -468,6 +470,9 @@ export default function LiveStudioPage() {
               )}
             </div>
 
+            {/* Raid: na konci vysílání poslat diváky k někomu, kdo právě vysílá (jen během vysílání). */}
+            {stream?.live && <LiveRaidPanel token={token} userId={userId} live={!!stream.live} onToast={(message, type) => setToast({ message, type })} />}
+
             <form className="panel" onSubmit={saveDetails} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <PanelHeading icon="info" title={t('liveDetailsHeading')} />
               <label className="live-field">
@@ -566,6 +571,15 @@ export default function LiveStudioPage() {
                 </div>
               </div>
             </div>
+
+            {/* Plánované vysílání: odpočet s „Připomenout“ na kanálu a u přenosu. */}
+            <LiveSchedulePanel
+              token={token}
+              userId={userId}
+              defaultTitle={title}
+              game={category === GAMING_CATEGORY ? game || null : null}
+              onToast={(message, type) => setToast({ message, type })}
+            />
 
             <div className="panel">
               <PanelHeading icon="sliders" title={t('liveObsHeading')} />

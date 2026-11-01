@@ -55,7 +55,8 @@ begin
   -- Zpráva v chatu: obyčejná, nebo podpora (s částkou). Zapisuje jen server.
   execute 'alter table live_chat_messages add column if not exists kind text not null default ''chat''';
   execute 'alter table live_chat_messages drop constraint if exists live_chat_messages_kind_check';
-  execute 'alter table live_chat_messages add constraint live_chat_messages_kind_check check (kind in (''chat'', ''tip''))';
+  -- Druhy zpráv: obyčejná, podpora, raid a anketa (supabase-migration-zive-raid-plan-ankety.sql) - opakované spuštění je nesmí zúžit.
+  execute 'alter table live_chat_messages add constraint live_chat_messages_kind_check check (kind in (''chat'', ''tip'', ''raid'', ''poll''))';
   execute 'alter table live_chat_messages add column if not exists tip_amount_cents int';
   execute 'alter table live_chat_messages add column if not exists tip_currency text';
   execute 'alter table live_chat_messages drop constraint if exists live_chat_messages_tip_currency_check';

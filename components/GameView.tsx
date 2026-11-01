@@ -84,7 +84,7 @@ export default function GameView({ slug }: { slug: string }) {
         </div>
         <div className="game-hero-body">
           <p className="game-hero-kicker">
-            <Link href="/games">{t('navGames')}</Link>
+            <Link href="/explore?category=catGaming">{t('catGaming')}</Link>
             <span aria-hidden="true"> · </span>
             {t(GENRE_KEYS[game.genre] as any)}
           </p>

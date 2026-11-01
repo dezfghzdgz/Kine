@@ -1,19 +1,39 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
-import { useLanguage } from '@/lib/i18n';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { useSearchParams } from 'next/navigation';
 import { filterBySearch } from '@/lib/searchScope';
 import ScopedSearchEmpty from '@/components/ScopedSearchEmpty';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
-import Image from 'next/image';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { buildVideoBlocks } from '@/lib/videoBlocks';
-import { VideoBlockRow } from '@/components/SparksShelf';
+import Toast, { type ToastType } from '@/components/Toast';
+import UiIcon from '@/components/UiIcon';
+import EmptyState from '@/components/EmptyState';
+import { formatTime } from '@/lib/playerControls';
+import { isSpark } from '@/lib/videoBlocks';
 
+type Tab = 'all' | 'videos' | 'sparks' | 'clips';
+
+/** Co seznam potřebuje; bez novějších sloupců (klipy, plánování) se načte základ. */
+const FIELDS = 'id, title, thumbnail_url, views, status, visibility, width, height, duration_seconds, created_at, scheduled_at, is_premiere, clipped_by';
+const BASIC_FIELDS = 'id, title, thumbnail_url, views, status, visibility, width, height, duration_seconds, created_at';
+
+async function fetchMine(ownerId: string): Promise<any[]> {
+  const full = await supabase.from('videos').select(FIELDS).eq('owner_id', ownerId).order('created_at', { ascending: false });
+  if (!full.error) return full.data ?? [];
+  const basic = await supabase.from('videos').select(BASIC_FIELDS).eq('owner_id', ownerId).order('created_at', { ascending: false });
+  return basic.data ?? [];
+}
+
+/**
+ * Vaše videa - přehled obsahu kanálu jako ve studiu: záložky (videa, Sparks,
+ * klipy od diváků), řádky se stavem (zpracovává se, soukromé, naplánované),
+ * zhlédnutími a akcemi. Zpracovávaná videa se doptávají sama.
+ */
 function YourVideosPageInner() {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const searchParams = useSearchParams();
   const query = searchParams.get('q')?.toLowerCase() ?? '';
   // Hledání v knihovně (pole nahoře) - lib/searchScope.ts; původní text pro hlášku „nic tu není“.
@@ -22,9 +42,12 @@ function YourVideosPageInner() {
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmVideoId, setConfirmVideoId] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>('all');
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function load() {
@@ -33,13 +56,7 @@ function YourVideosPageInner() {
       setLoading(false);
       return;
     }
-    const { data } = await supabase
-      .from('videos')
-      .select('id, title, thumbnail_url, views, status, visibility, width, height, duration_seconds, created_at')
-      .eq('owner_id', authData.user.id)
-      .order('created_at', { ascending: false });
-
-    const list = data ?? [];
+    const list = await fetchMine(authData.user.id);
     setVideos(list);
     setLoading(false);
 
@@ -77,13 +94,8 @@ function YourVideosPageInner() {
   }
 
   /**
-   * Doptá se Cloudflare na videa, která se ještě zpracovávají.
-   *
-   * Video se do databáze zapíše jako "processing" a na "ready" ho přepne
-   * teprve někdo, kdo se Cloudflare zeptá. Dřív se to zkusilo jednou při
-   * otevření stránky - když Cloudflare zrovna nebyl hotový (u delšího
-   * videa skoro nikdy), zůstalo video viset a bylo potřeba stránku
-   * obnovovat ručně. Teď se to opakuje samo, dokud je co dodělávat.
+   * Doptá se Cloudflare na videa, která se ještě zpracovávají (na "ready" je
+   * přepne teprve někdo, kdo se zeptá). Opakuje se samo, dokud je co dodělávat.
    */
   async function doptejSeNaZpracovavana(list: any[], ownerId: string) {
     // Jen ta, co se ještě zpracovávají - nepovedené ("failed") už hotová nebudou.
@@ -99,23 +111,16 @@ function YourVideosPageInner() {
         }).catch(() => null)
       )
     );
-
-    const { data: refreshed } = await supabase
-      .from('videos')
-      .select('id, title, thumbnail_url, views, status, visibility, width, height, duration_seconds, created_at')
-      .eq('owner_id', ownerId)
-      .order('created_at', { ascending: false });
-
-    if (refreshed) setVideos(refreshed);
+    setVideos(await fetchMine(ownerId));
   }
 
-  // Dokud se něco zpracovává, ptá se stránka sama dokola - jinak by
-  // tvůrce musel obnovovat, dokud to Cloudflare nedodělá.
+  // Dokud se něco zpracovává, ptá se stránka sama dokola (jen když je karta vidět).
   useEffect(() => {
     const zpracovavana = videos.filter((v: any) => v.status === 'processing');
     if (zpracovavana.length === 0) return;
 
     const timer = setInterval(async () => {
+      if (document.visibilityState !== 'visible') return;
       const { data: authData } = await supabase.auth.getUser();
       if (!authData.user) return;
       await doptejSeNaZpracovavana(videos, authData.user.id);
@@ -126,89 +131,177 @@ function YourVideosPageInner() {
   }, [videos]);
 
   async function handleDelete(videoId: string) {
-
     setDeletingId(videoId);
-    const { data: sessionData } = await supabase.auth.getSession();
-
-    const res = await fetch('/api/videos/delete', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${sessionData.session?.access_token}`,
-      },
-      body: JSON.stringify({ videoId }),
-    });
-
-    if (res.ok) {
-      setVideos((prev) => prev.filter((v) => v.id !== videoId));
-    } else {
-      const data = await res.json();
-      alert('Smazání se nepovedlo: ' + data.error);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const res = await fetch('/api/videos/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionData.session?.access_token}` },
+        body: JSON.stringify({ videoId }),
+      });
+      if (res.ok) {
+        setVideos((prev) => prev.filter((v) => v.id !== videoId));
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setToast({ message: `${t('yvDeleteFailed')}${data?.error ? ` ${data.error}` : ''}`, type: 'error' });
+      }
+    } catch {
+      setToast({ message: t('yvDeleteFailed'), type: 'error' });
+    } finally {
+      setDeletingId(null);
     }
-    setDeletingId(null);
   }
+
+  const counts = useMemo(
+    () => ({
+      all: videos.length,
+      videos: videos.filter((v) => !isSpark(v) && !v.clipped_by).length,
+      sparks: videos.filter((v) => isSpark(v) && !v.clipped_by).length,
+      clips: videos.filter((v) => !!v.clipped_by).length,
+    }),
+    [videos]
+  );
+  const totalViews = useMemo(() => videos.reduce((s, v) => s + (Number(v.views) || 0), 0), [videos]);
 
   if (loading) return <p style={{ color: 'var(--text-faint)' }}>{t('loading')}</p>;
 
-  const filtered = filterBySearch(videos, query);
-
   if (videos.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: '80px 0', color: 'var(--text-faint)' }}>
-        <p>{t('noVideosUploadedYet')}</p>
-        <Link href="/upload" style={{ color: 'var(--text)' }}>{t('uploadFirstVideo')}</Link>
-      </div>
+      <EmptyState
+        icon="film"
+        title={t('noVideosUploadedYet')}
+        action={
+          <Link href="/upload" className="yv-upload-btn">
+            <UiIcon name="upload" size={15} /> {t('uploadFirstVideo')}
+          </Link>
+        }
+      />
     );
   }
 
+  const byTab = videos.filter((v) => (tab === 'all' ? true : tab === 'clips' ? !!v.clipped_by : tab === 'sparks' ? isSpark(v) && !v.clipped_by : !isSpark(v) && !v.clipped_by));
+  const filtered = filterBySearch(byTab, query);
+  const number = new Intl.NumberFormat(DATE_LOCALES[lang]);
+  const tabs: { key: Tab; label: string }[] = [
+    { key: 'all', label: t('yvTabAll') },
+    { key: 'videos', label: t('yvTabVideos') },
+    { key: 'sparks', label: t('yvTabSparks') },
+    ...(counts.clips > 0 ? [{ key: 'clips' as Tab, label: t('yvTabClips') }] : []),
+  ];
+
   return (
-    <div>
-      <p className="section-title">{t('yourVideosTitle')}</p>
+    <div className="yv-page">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <header className="yv-head">
+        <div>
+          <h1 className="yv-title">{t('yourVideosTitle')}</h1>
+          <p className="yv-sub">
+            {t('yvSummary').replace('{n}', number.format(videos.length)).replace('{views}', number.format(totalViews))}
+          </p>
+        </div>
+        <div className="yv-head-actions">
+          <Link href="/channel-stats" className="yv-ghost-btn">
+            <UiIcon name="chart" size={15} /> {t('channelStatsTitle')}
+          </Link>
+          <Link href="/upload" className="yv-upload-btn">
+            <UiIcon name="upload" size={15} /> {t('uploadVideo')}
+          </Link>
+        </div>
+      </header>
+
+      <div className="tab-row yv-tabs" role="tablist">
+        {tabs.map(({ key, label }) => (
+          <button key={key} type="button" role="tab" aria-selected={tab === key} className={`tab-btn ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)}>
+            {label} <span className="yv-tab-count">{counts[key]}</span>
+          </button>
+        ))}
+      </div>
+
       {query && filtered.length === 0 && <ScopedSearchEmpty query={rawQuery} />}
-      {buildVideoBlocks(filtered).map((block, bi) => (
-        <VideoBlockRow key={bi} type={block.type} style={{ marginBottom: 20 }}>
-          {block.items.map((video: any) => (
-            <div key={video.id} style={{ width: '100%' }}>
-              <Link href={`/watch/${video.id}`} className="video-card">
-                <div className={block.type === 'sparks' ? 'video-thumb video-thumb-vertical' : 'video-thumb'}>
-                  {video.thumbnail_url ? (
-                    <Image src={video.thumbnail_url} alt={video.title} width={320} height={180} />
-                  ) : null}
-                  <div className="play-badge">▶</div>
-                </div>
-                <p className="video-card-title">{video.title}</p>
-                <p className="video-card-meta">
-                  {video.status === 'ready' ? `${video.views} ${t('views')}` : video.status === 'failed' ? t('videoStatusFailed') : t('videoStatusProcessing')}
-                  {/* Neveřejné video ostatní nevidí - ať je to tady poznat (klipy z Clipperu jsou ve výchozím soukromé). */}
-                  {video.visibility === 'private' ? ` · ${t('shortVisibilityPrivate')}` : video.visibility === 'subscribers' ? ` · ${t('shortVisibilitySubscribers')}` : ''}
-                </p>
+      {!query && filtered.length === 0 && <EmptyState compact icon={tab === 'sparks' ? 'bolt' : tab === 'clips' ? 'scissors' : 'film'} title={t('yvTabEmpty')} />}
+
+      <ul className="yv-list">
+        {filtered.map((video: any) => {
+          const spark = isSpark(video);
+          const scheduled = video.scheduled_at && Date.parse(video.scheduled_at) > Date.now() ? video.scheduled_at : null;
+          return (
+            <li key={video.id} className="yv-row">
+              <Link href={`/watch/${video.id}`} className={`yv-thumb${spark ? ' spark' : ''}`} tabIndex={-1} aria-hidden="true">
+                {video.thumbnail_url ? <img src={video.thumbnail_url} alt="" loading="lazy" decoding="async" /> : <UiIcon name="film" size={20} />}
+                {video.duration_seconds ? <span className="yv-duration">{formatTime(video.duration_seconds)}</span> : null}
               </Link>
-              <div style={{ display: 'flex', gap: 6, marginTop: 8, width: '100%' }}>
-                <Link href={`/your-videos/${video.id}/edit`} style={{ flex: '1 1 0', minWidth: 0 }}>
-                  <button style={{ width: '100%', background: 'var(--panel-raised)', color: 'var(--text)', fontSize: 12 }}>
-                    {t('edit')}
-                  </button>
+              <div className="yv-info">
+                <Link href={`/watch/${video.id}`} className="yv-video-title">
+                  {video.title || '—'}
+                </Link>
+                <p className="yv-meta">
+                  {video.status === 'processing' ? (
+                    <span className="yv-badge processing">
+                      <span className="spin" aria-hidden="true" /> {t('videoStatusProcessing')}
+                    </span>
+                  ) : video.status === 'failed' ? (
+                    <span className="yv-badge failed">
+                      <UiIcon name="warning" size={12} /> {t('videoStatusFailed')}
+                    </span>
+                  ) : scheduled ? (
+                    <span className="yv-badge scheduled">
+                      <UiIcon name="calendar" size={12} />{' '}
+                      {t('yvScheduled').replace('{time}', new Date(scheduled).toLocaleString(DATE_LOCALES[lang], { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }))}
+                    </span>
+                  ) : (
+                    <span className={`yv-badge ${video.visibility === 'public' ? 'public' : 'private'}`}>
+                      <UiIcon name={video.visibility === 'public' ? 'globe' : video.visibility === 'subscribers' ? 'users' : 'lock'} size={12} />{' '}
+                      {video.visibility === 'private' ? t('shortVisibilityPrivate') : video.visibility === 'subscribers' ? t('shortVisibilitySubscribers') : t('shortVisibilityPublic')}
+                    </span>
+                  )}
+                  {spark && <span className="yv-badge kind">Sparks</span>}
+                  {video.clipped_by && (
+                    <span className="yv-badge kind">
+                      <UiIcon name="scissors" size={12} /> {t('yvClipBadge')}
+                    </span>
+                  )}
+                  <span className="yv-meta-text">
+                    {video.status === 'ready' && (
+                      <>
+                        <UiIcon name="eye" size={12} /> {number.format(video.views ?? 0)}
+                        {' · '}
+                      </>
+                    )}
+                    {new Date(video.created_at).toLocaleDateString(DATE_LOCALES[lang])}
+                  </span>
+                </p>
+              </div>
+              <div className="yv-actions">
+                <Link href={`/your-videos/${video.id}/edit`} className="yv-action" title={t('edit')} aria-label={t('edit')}>
+                  <UiIcon name="pencil" size={15} />
+                  <span>{t('edit')}</span>
+                </Link>
+                <Link href={`/watch/${video.id}`} className="yv-action icon-only" title={t('liveOpenVideo')} aria-label={t('liveOpenVideo')}>
+                  <UiIcon name="play" size={15} />
                 </Link>
                 <button
+                  type="button"
+                  className="yv-action icon-only danger"
                   onClick={() => setConfirmVideoId(video.id)}
                   disabled={deletingId === video.id}
-                  style={{
-                    flex: '1 1 0', minWidth: 0, background: 'var(--panel-raised)',
-                    color: '#ff6b6b', border: '1px solid var(--border)', fontSize: 12,
-                  }}
+                  title={t('deleteVideoBtn')}
+                  aria-label={t('deleteVideoBtn')}
                 >
-                  {deletingId === video.id ? t('deletingVideo') : t('deleteVideoBtn')}
+                  {deletingId === video.id ? <span className="spin" aria-hidden="true" /> : <UiIcon name="trash" size={15} />}
                 </button>
               </div>
-            </div>
-          ))}
-        </VideoBlockRow>
-      ))}
+            </li>
+          );
+        })}
+      </ul>
 
       {confirmVideoId && (
         <ConfirmDialog
           message={t('confirmDeleteVideo')}
-          onConfirm={() => { handleDelete(confirmVideoId); setConfirmVideoId(null); }}
+          onConfirm={() => {
+            handleDelete(confirmVideoId);
+            setConfirmVideoId(null);
+          }}
           onCancel={() => setConfirmVideoId(null)}
         />
       )}

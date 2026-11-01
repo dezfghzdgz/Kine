@@ -17,6 +17,7 @@ import { liveHiddenNow } from './nudityRules';
 import { runInBackground } from './background';
 import { insertedIds, pushNotificationsByIds } from './pushSend';
 import { liveGameSlug } from './games';
+import { takeReminders } from './liveScheduleServer';
 
 export { appPingFresh, appSignalTrusted, APP_PING_FRESH_MS, APP_UNCONFIRMED_MAX_MS } from './liveSignal';
 
@@ -1028,20 +1029,24 @@ async function notifyGoingLive(row: LiveStreamRow, videoUid: string): Promise<vo
     .select('owner_id');
   if (claim.error || !claim.data || claim.data.length === 0) return;
 
-  const [{ data: subs }, { data: profile }] = await Promise.all([
+  const [{ data: subs }, { data: profile }, reminded] = await Promise.all([
     supabaseServer.from('subscriptions').select('subscriber_id').eq('channel_id', row.owner_id).eq('notify_new_videos', true),
     supabaseServer.from('profiles').select('username, display_name, is_banned, is_shadow_banned').eq('id', row.owner_id).maybeSingle(),
+    // Kdo si u plánovaného vysílání dal „Připomenout“ (lib/liveScheduleServer.ts) - připomenutí se tím spotřebují.
+    takeReminders(row.owner_id).catch(() => [] as string[]),
   ]);
-  if (!subs || subs.length === 0) return;
   // Zablokovaný nebo shadow-banovaný kanál odběratelům nic nehlásí (klíč pro OBS mu dál funguje).
   if (profile?.is_banned || profile?.is_shadow_banned) return;
+  const recipients = new Set<string>([...(subs ?? []).map((s: any) => String(s.subscriber_id)), ...reminded]);
+  recipients.delete(row.owner_id);
+  if (recipients.size === 0) return;
   const name = profile?.display_name || profile?.username || 'Kanál';
   const title = row.title?.trim();
   const { data: inserted } = await supabaseServer
     .from('notifications')
     .insert(
-      subs.map((s: any) => ({
-        user_id: s.subscriber_id,
+      [...recipients].map((userId) => ({
+        user_id: userId,
         type: 'live',
         message: title ? `🔴 ${name} je živě: ${title}` : `🔴 ${name} je živě`,
         link: `/live/${row.owner_id}`,

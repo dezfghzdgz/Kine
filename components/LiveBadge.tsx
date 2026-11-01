@@ -4,14 +4,17 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
 import { authHeaders, cacheableUrl } from '@/lib/authHeaders';
+import LiveScheduleCard, { type LiveSchedule } from './LiveScheduleCard';
 
 /**
  * "● ŽIVĚ" u kanálu, který právě vysílá (odkaz na stránku přenosu).
- * Když kanál nevysílá nebo živé vysílání není zapnuté, nevykreslí nic.
+ * Když nevysílá, ale má naplánované vysílání, ukáže odpočet s „Připomenout“
+ * (withTitle - na kanálu). Jinak nevykreslí nic.
  */
 export default function LiveBadge({ channelId, withTitle = false }: { channelId: string; withTitle?: boolean }) {
   const { t } = useLanguage();
   const [live, setLive] = useState<{ title: string } | null>(null);
+  const [schedule, setSchedule] = useState<LiveSchedule | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -21,7 +24,9 @@ export default function LiveBadge({ channelId, withTitle = false }: { channelId:
         const headers = await authHeaders();
         const res = await fetch(cacheableUrl(`/api/live/status?channel=${encodeURIComponent(channelId)}`, headers), { cache: 'no-store', headers });
         const body = await res.json().catch(() => null);
-        if (!cancelled) setLive(body?.live ? { title: body.stream?.title ?? '' } : null);
+        if (cancelled) return;
+        setLive(body?.live ? { title: body.stream?.title ?? '' } : null);
+        setSchedule(!body?.live && body?.schedule?.startsAt ? body.schedule : null);
       } catch {
         if (!cancelled) setLive(null);
       }
@@ -42,7 +47,7 @@ export default function LiveBadge({ channelId, withTitle = false }: { channelId:
     };
   }, [channelId]);
 
-  if (!live) return null;
+  if (!live) return schedule && withTitle ? <LiveScheduleCard channelId={channelId} schedule={schedule} compact /> : null;
   return (
     <Link href={`/live/${channelId}`} className="live-banner">
       <span className="live-pill">● {t('liveBadge')}</span>

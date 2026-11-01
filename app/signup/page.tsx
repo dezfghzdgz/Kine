@@ -6,21 +6,15 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import Toast, { ToastType } from '@/components/Toast';
 import { useLanguage } from '@/lib/i18n';
+import AuthPitch from '@/components/AuthPitch';
 import Turnstile, { TURNSTILE_SITE_KEY, isCaptchaError, type TurnstileHandle } from '@/components/Turnstile';
 import { validateUsername } from '@/lib/username';
-import UiIcon, { type UiIconName } from '@/components/UiIcon';
+import UiIcon from '@/components/UiIcon';
 
 /** "%" a "_" jsou v ILIKE zástupné znaky - jméno se porovnává doslova (bez ohledu na velikost písmen, jako v databázi). */
 function escapeLike(text: string): string {
   return text.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
-
-const PITCH: { icon: UiIconName; title: 'signupPitchVideosTitle' | 'signupPitchLiveTitle' | 'signupPitchClipsTitle' | 'signupPitchFreeTitle'; text: 'signupPitchVideos' | 'signupPitchLive' | 'signupPitchClips' | 'signupPitchFree' }[] = [
-  { icon: 'film', title: 'signupPitchVideosTitle', text: 'signupPitchVideos' },
-  { icon: 'broadcast', title: 'signupPitchLiveTitle', text: 'signupPitchLive' },
-  { icon: 'gamepad', title: 'signupPitchClipsTitle', text: 'signupPitchClips' },
-  { icon: 'chat', title: 'signupPitchFreeTitle', text: 'signupPitchFree' },
-];
 
 export default function SignupPage() {
   const router = useRouter();
@@ -146,23 +140,7 @@ export default function SignupPage() {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <div className="signup">
         {/* Co Kine je - aby registrace nebyla jen formulář bez kontextu. */}
-        <aside className="signup-pitch">
-          <p className="signup-kicker">Kine</p>
-          <h2>{t('signupPitchTitle')}</h2>
-          <ul>
-            {PITCH.map((p) => (
-              <li key={p.icon}>
-                <span className="signup-pitch-icon" aria-hidden="true">
-                  <UiIcon name={p.icon} size={20} />
-                </span>
-                <span>
-                  <b>{t(p.title)}</b>
-                  <span>{t(p.text)}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </aside>
+        <AuthPitch />
 
         {confirmSentTo ? (
           <div className="signup-form" role="status">

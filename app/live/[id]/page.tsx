@@ -24,6 +24,9 @@ import UiIcon from '@/components/UiIcon';
 import LivePlayer from '@/components/LivePlayer';
 import { nextPlayerUrl } from '@/lib/livePlayback';
 import { CREATOR_PAYMENTS_ENABLED } from '@/lib/payments';
+import LiveClipButton from '@/components/LiveClipButton';
+import LiveRaidBanner, { type LiveRaid } from '@/components/LiveRaidBanner';
+import LiveScheduleCard, { type LiveSchedule } from '@/components/LiveScheduleCard';
 
 type Status = {
   enabled: boolean;
@@ -38,6 +41,10 @@ type Status = {
   lastRecording?: { id: string; title: string; thumbnailUrl: string | null } | null;
   /** Kolik lidí se teď dívá (Cloudflare, server si číslo pamatuje 30 s); null = zatím nevíme. */
   viewers?: number | null;
+  /** Mimo vysílání: plánované další (odpočet s „Připomenout“). Starší server ho neposílá. */
+  schedule?: LiveSchedule | null;
+  /** Raid: kanál poslal diváky jinam - po odpočtu se přesune (components/LiveRaidBanner.tsx). */
+  raid?: LiveRaid | null;
   profile: { id: string; username: string; display_name: string | null; avatar_url: string | null; verification_tier: string | null } | null;
   stream: {
     title: string;
@@ -90,6 +97,31 @@ export default function LivePage() {
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setViewerId(data.user?.id ?? null));
   }, []);
+
+  // Přišel s raidem (?raid=<kanál>): krátké přivítání se jménem kanálu, odkud přišel - jen když ten
+  // kanál opravdu právě poslal raid sem (odkaz s cizím ?raid= by jinak mohl "přivítat" čímkoli).
+  const [raidFrom, setRaidFrom] = useState<string | null>(null);
+  useEffect(() => {
+    const from = new URLSearchParams(window.location.search).get('raid');
+    if (!from || !/^[0-9a-f-]{36}$/i.test(from) || from.toLowerCase() === channelId.toLowerCase()) return;
+    window.history.replaceState(null, '', window.location.pathname);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(cacheableUrl(`/api/live/status?channel=${encodeURIComponent(from)}`, {}), { cache: 'no-store' });
+        const body = await res.json().catch(() => null);
+        const p = body?.profile as { username?: string | null; display_name?: string | null } | undefined;
+        if (!cancelled && body?.raid?.to?.id?.toLowerCase() === channelId.toLowerCase() && p) setRaidFrom(p.display_name || p.username || null);
+      } catch {
+        /* bez přivítání */
+      }
+    })();
+    const timer = setTimeout(() => setRaidFrom(null), 12000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [channelId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -207,6 +239,7 @@ export default function LivePage() {
             {t('liveStudioTitle')}
           </Link>
         )}
+        {status.live && !status.held && playerUrl && <LiveClipButton channelId={profile.id} loggedIn={!!viewerId} />}
         {!isOwner && status.live && status.tips?.enabled && CREATOR_PAYMENTS_ENABLED && (
           <button type="button" className="live-tip-btn" onClick={() => setTipOpen(true)}>
             💛 {t('tipButton')}
@@ -225,6 +258,15 @@ export default function LivePage() {
       )}
     </div>
   );
+
+  // Raid a přivítání po raidu - nahoře nad přehrávačem (i po konci vysílání).
+  const raidBanner = status.raid && !isOwner ? <LiveRaidBanner raid={status.raid} fromId={profile.id} fromName={name} /> : null;
+  const raidWelcome = raidFrom ? (
+    <div className="live-raid-welcome" role="status">
+      <UiIcon name="bolt" size={16} />
+      <span>{t('liveRaidArrived').replace('{name}', raidFrom)}</span>
+    </div>
+  ) : null;
 
   if (status.live && status.held) {
     return (
@@ -252,6 +294,8 @@ export default function LivePage() {
     return (
       <div className="live-layout">
         <div className="live-main">
+          {raidBanner}
+          {raidWelcome}
           <div className="player-wrap live-player live-connecting" style={{ aspectRatio: '16/9' }} role="status">
             <KineLoader />
             <p>{t('liveConnecting')}</p>
@@ -271,6 +315,8 @@ export default function LivePage() {
     return (
       <div className="live-layout">
         <div className="live-main">
+          {raidBanner}
+          {status.schedule && <LiveScheduleCard channelId={profile.id} schedule={status.schedule} own={isOwner} />}
           <div className="live-offline panel">
             <p className="live-offline-title">{t('liveOfflineTitle').replace('{name}', name)}</p>
             {stream?.endedAt && (
@@ -299,6 +345,8 @@ export default function LivePage() {
   return (
     <div className="live-layout">
       <div className="live-main">
+        {raidBanner}
+        {raidWelcome}
         {status.moderation?.hidden && (
           <div className="moderation-hold-note" role="status">
             <UiIcon name="warning" size={18} />

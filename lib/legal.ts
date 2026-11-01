@@ -39,8 +39,8 @@ export const RULES_UPDATED = { cs: '30. října 2026', en: '30 October 2026' };
 export const LEGAL_UPDATED = RULES_UPDATED;
 /** Podmínky a ochrana údajů: účinnost posledního znění. */
 export const TERMS_UPDATED = { cs: '30. října 2026', en: '30 October 2026' };
-/** Ochrana osobních údajů: push oznámení, ochrana proti botům, sledované hry (0134). */
-export const PRIVACY_UPDATED = { cs: '31. října 2026', en: '31 October 2026' };
+/** Ochrana osobních údajů: ankety v chatu, připomenutí vysílání, klipy z vysílání, raidy (0137). */
+export const PRIVACY_UPDATED = { cs: '1. listopadu 2026', en: '1 November 2026' };
 
 const OPERATOR_CS = operatorLine('cs');
 const OPERATOR_EN = operatorLine('en');
@@ -888,7 +888,7 @@ export const PRIVACY: LegalDoc = {
         items: [
           `Účet: e-mail, uživatelské a zobrazované jméno, datum registrace, souhlas s pravidly. Heslo vidí jen přihlašovací služba (Supabase) a jen v zašifrované podobě - my ho neznáme.`,
           `Profil: profilovka, banner, popis, odkazy, barva kanálu.`,
-          `Co na Kine děláš: nahraná videa a Sparks (s názvy, popisy, náhledy a titulky), příspěvky, komentáře, hodnocení, odběry, sledované hry, playlisty, historie sledování a místo, kde ses ve videu zastavil, živá vysílání a zprávy v chatu, oznámení.`,
+          `Co na Kine děláš: nahraná videa a Sparks (s názvy, popisy, náhledy a titulky), příspěvky, komentáře, hodnocení, odběry, sledované hry, playlisty, historie sledování a místo, kde ses ve videu zastavil, živá vysílání a zprávy v chatu, hlasy v anketách v chatu (kdo jak hlasoval, nikde neukazujeme), připomenutí vysílání, klipy z vysílání (u klipu je vidět, kdo ho udělal), raidy, oznámení.`,
           `Oznámení na telefon a počítač (jen když si je zapneš): adresa tvého zařízení u push služby prohlížeče (Google, Apple, Mozilla nebo Microsoft), jazyk, typ prohlížeče a co ti má chodit. Obsah oznámení je šifrovaný - push služba ho nepřečte. Vypneš je v Nastavení → Oznámení; zařízení, které oznámení zruší, smažeme.`,
           `Platby: probíhají přes Stripe. My vidíme jen co a kdy jsi zaplatil, stav předplatného a označení zákazníka u Stripe - čísla karet nevidíme. U podpor, Super díky a předplatného kanálu vidí tvůrce tvé jméno, částku a vzkaz; vzkazy u podpor a Super díky jsou veřejné.`,
           `Technické údaje: IP adresa (u zhlédnutí - aby nešlo nafukovat čísla - a kvůli bezpečnosti a omezení zneužití), přibližná země podle IP adresy (jen k zobrazení ceny ve správné měně, neukládá se), typ zařízení a prohlížeče, hlášení chyb (co se pokazilo, na jaké stránce, na jakém zařízení) a nastavení uložená v tvém prohlížeči (vzhled, jazyk, hlasitost).`,
@@ -970,7 +970,7 @@ export const PRIVACY: LegalDoc = {
         items: [
           `Account: email, username and display name, sign-up date, agreement to the rules. Your password is only seen by the login service (Supabase) and only in encrypted form - we don't know it.`,
           `Profile: profile picture, banner, bio, links, channel colour.`,
-          `What you do on Kine: uploaded videos and Sparks (with titles, descriptions, thumbnails and captions), posts, comments, ratings, subscriptions, followed games, playlists, watch history and where you stopped in a video, live streams and chat messages, notifications.`,
+          `What you do on Kine: uploaded videos and Sparks (with titles, descriptions, thumbnails and captions), posts, comments, ratings, subscriptions, followed games, playlists, watch history and where you stopped in a video, live streams and chat messages, votes in chat polls (we never show who voted for what), stream reminders, clips from streams (the clip shows who made it), raids, notifications.`,
           `Phone and computer notifications (only if you turn them on): your device's address at your browser's push service (Google, Apple, Mozilla or Microsoft), language, browser type and what you want to be notified about. Notification content is encrypted - the push service can't read it. Turn them off in Settings → Notifications; we delete devices that cancel notifications.`,
           `Payments: handled by Stripe. We only see what you paid and when, your subscription status and your Stripe customer reference - we don't see card numbers. For tips, Super Thanks and channel memberships, the creator sees your name, the amount and your message; messages attached to tips and Super Thanks are public.`,
           `Technical data: IP address (for views - so numbers can't be inflated - and for security and abuse prevention), approximate country based on your IP address (only to show prices in the right currency, not stored), device and browser type, error reports (what went wrong, on which page, on what device) and settings stored in your browser (appearance, language, volume).`,

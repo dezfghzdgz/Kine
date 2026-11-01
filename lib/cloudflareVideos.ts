@@ -113,6 +113,76 @@ export async function deleteOrQueue(uid: string, reason: string, exceptVideoId?:
   return outcome;
 }
 
+/**
+ * Opuštěné nahrání: kdo začne nahrávat a nedokončí (zavře stránku, spadne
+ * síť, zruší appku), tomu u Cloudflare zůstane "video" ve stavu Pending
+ * Upload (nebo Error) - bez názvu, napořád. Dokud odkaz platí, drží rezervu
+ * minut úložiště; potom jen dělá nepořádek v přehledu Stream.
+ * Hranice 25 hodin: lístek na nahrání platí 24 h (lib/uploadTickets.ts),
+ * starší nahrání už stejně nejde uložit.
+ */
+export const ABANDONED_UPLOAD_HOURS = 25;
+
+/** Video z výpisu Cloudflare: opuštěné nahrání (ne záznam vysílání, starší než hranice)? Vrací uid, nebo null. */
+export function abandonedUpload(v: any, now = Date.now()): string | null {
+  const uid = String(v?.uid ?? '');
+  if (!isCloudflareUid(uid) || v?.liveInput) return null;
+  const state = String(v?.status?.state ?? '');
+  if (state !== 'pendingupload' && state !== 'error') return null;
+  const created = Date.parse(String(v?.created ?? v?.uploaded ?? ''));
+  if (!Number.isFinite(created) || now - created < ABANDONED_UPLOAD_HOURS * 3600 * 1000) return null;
+  return uid;
+}
+
+/**
+ * Úklid opuštěných nahrání přímo podle Cloudflare (stav pendingupload / error,
+ * starší než ABANDONED_UPLOAD_HOURS, žádné video v databázi na ně neukazuje).
+ * Pojistka k lístkům (expireTickets): funguje i bez migrace lístků a uklidí
+ * i nahrání, ke kterým lístek není. Nejvýš `max` smazání / `budgetMs` naráz,
+ * nikdy nehodí chybu.
+ */
+export async function sweepAbandonedUploads(max = 60, budgetMs = 12_000): Promise<number> {
+  const cf = cloudflareStreamCreds();
+  if (!cf) return 0;
+  const started = Date.now();
+  const end = new Date(started - ABANDONED_UPLOAD_HOURS * 3600 * 1000).toISOString();
+  let deleted = 0;
+  try {
+    for (const state of ['pendingupload', 'error']) {
+      if (deleted >= max || Date.now() - started > budgetMs) break;
+      let list: unknown[] = [];
+      try {
+        const res = await fetch(streamApiUrl(cf.accountId, `?status=${state}&end=${encodeURIComponent(end)}&asc=true&limit=${Math.min(1000, max * 2)}`), {
+          headers: { Authorization: `Bearer ${cf.token}` },
+          cache: 'no-store',
+          signal: AbortSignal.timeout(15000),
+        });
+        const body = await res.json().catch(() => null);
+        if (!res.ok || !body?.success || !Array.isArray(body.result)) continue;
+        list = body.result;
+      } catch {
+        continue;
+      }
+      for (const v of list) {
+        if (deleted >= max || Date.now() - started > budgetMs) break;
+        const uid = abandonedUpload(v, started);
+        if (!uid || (await cloudflareUidInUse(uid))) continue;
+        const outcome = await deleteStreamVideo(uid);
+        if (outcome !== 'deleted' && outcome !== 'gone') continue;
+        deleted += 1;
+        // Lístek k nahrání (jestli je) dorovnat - nahrání už neexistuje.
+        await supabaseServer.from('upload_tickets').update({ status: 'expired' }).eq('cf_uid', uid).eq('status', 'pending').then(
+          () => undefined,
+          () => undefined
+        );
+      }
+    }
+  } catch {
+    // Úklid nesmí shodit dotaz, ze kterého se volá.
+  }
+  return deleted;
+}
+
 /** Úklid: zopakuje smazání z fronty (nejvýš `max` naráz). Nikdy nehodí chybu. */
 export async function processCloudflareCleanup(max = 10): Promise<number> {
   let done = 0;

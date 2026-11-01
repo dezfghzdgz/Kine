@@ -11,7 +11,8 @@ import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { buildVideoBlocks } from '@/lib/videoBlocks';
 import WatchCalendar, { dayKey } from '@/components/WatchCalendar';
-import UiIcon from '@/components/UiIcon';
+import UiIcon, { type UiIconName } from '@/components/UiIcon';
+import EmptyState from '@/components/EmptyState';
 import { videoCountLabel } from '@/lib/plural';
 import { VideoBlockRow } from '@/components/SparksShelf';
 
@@ -120,20 +121,20 @@ function ActivityPageInner() {
   // Každá reakce má vlastní složku - lajky zvlášť, dislajky zvlášť, a
   // v hvězdičkovém režimu zvlášť každá úroveň hvězd. U každé záložky je
   // rovnou vidět, kolik v ní videí je.
-  const TABS: { key: Tab; label: string }[] =
+  const TABS: { key: Tab; label: string; icon: UiIconName; count: number }[] =
     ratingMode === 'stars'
       ? [
-          { key: 'star5', label: `5★ (${count(5)})` },
-          { key: 'star4', label: `4★ (${count(4)})` },
-          { key: 'star3', label: `3★ (${count(3)})` },
-          { key: 'star2', label: `2★ (${count(2)})` },
-          { key: 'star1', label: `1★ (${count(1)})` },
-          { key: 'history', label: `\u{1F441} ${t('activityWatchedTab')} (${historyVideos.length})` },
+          { key: 'star5', label: '5★', icon: 'starFilled', count: count(5) },
+          { key: 'star4', label: '4★', icon: 'starFilled', count: count(4) },
+          { key: 'star3', label: '3★', icon: 'star', count: count(3) },
+          { key: 'star2', label: '2★', icon: 'star', count: count(2) },
+          { key: 'star1', label: '1★', icon: 'star', count: count(1) },
+          { key: 'history', label: t('activityWatchedTab'), icon: 'eye', count: historyVideos.length },
         ]
       : [
-          { key: 'liked', label: `\u{1F44D} ${t('activityLikedTab')} (${count(5)})` },
-          { key: 'disliked', label: `\u{1F44E} ${t('activityDislikedTab')} (${count(1)})` },
-          { key: 'history', label: `\u{1F441} ${t('activityWatchedTab')} (${historyVideos.length})` },
+          { key: 'liked', label: t('activityLikedTab'), icon: 'thumbUp', count: count(5) },
+          { key: 'disliked', label: t('activityDislikedTab'), icon: 'thumbUp', count: count(1) },
+          { key: 'history', label: t('activityWatchedTab'), icon: 'eye', count: historyVideos.length },
         ];
 
   const activeList: any[] =
@@ -224,13 +225,15 @@ function ActivityPageInner() {
       <p className="section-title">{t('yourActivityTitle')}</p>
 
       <div className="tab-row" style={{ marginBottom: 16, flexWrap: 'wrap' }}>
-        {TABS.map(({ key, label }) => (
+        {TABS.map(({ key, label, icon, count: n }) => (
           <button
             key={key}
-            className={`tab-btn ${tab === key ? 'active' : ''}`}
+            type="button"
+            className={`tab-btn activity-tab ${tab === key ? 'active' : ''}`}
             onClick={() => { setTab(key); if (key !== 'history') setSelectedDay(null); }}
           >
-            {label}
+            {ratingMode !== 'stars' || key === 'history' ? <UiIcon name={icon} size={14} className={key === 'disliked' ? 'flip-v' : undefined} /> : null}
+            {label} <span className="yv-tab-count">{n}</span>
           </button>
         ))}
       </div>
@@ -275,13 +278,11 @@ function ActivityPageInner() {
       {filtered.length === 0 && query ? (
         <ScopedSearchEmpty query={rawQuery} />
       ) : filtered.length === 0 ? (
-        <p style={{ color: 'var(--text-faint)' }}>
-          {tab === 'history'
-            ? selectedDay
-              ? t('activityNothingThatDay')
-              : t('activityHistoryEmpty')
-            : t('activityCategoryEmpty')}
-        </p>
+        <EmptyState
+          compact
+          icon={tab === 'history' ? 'eye' : tab === 'liked' || tab === 'disliked' ? 'thumbUp' : 'star'}
+          title={tab === 'history' ? (selectedDay ? t('activityNothingThatDay') : t('activityHistoryEmpty')) : t('activityCategoryEmpty')}
+        />
       ) : tab === 'history' ? (
         renderHistoryGroupedByDay(filtered)
       ) : (

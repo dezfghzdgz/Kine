@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
+import UiIcon from '@/components/UiIcon';
 
 /** Jak dlouho čekat na ověření odkazu z e-mailu, než se ukáže „odkaz vypršel“. */
 const VERIFY_TIMEOUT_MS = 6000;
@@ -69,12 +70,15 @@ export default function ResetPasswordPage() {
 
   if (!ready) {
     return (
-      <div className="form-container">
+      <div className="form-container auth-card">
         {expired ? (
           <>
+            <span className="auth-card-icon warn" aria-hidden="true">
+              <UiIcon name="timer" size={22} />
+            </span>
             <h1>{t('resetPwExpiredTitle')}</h1>
-            <p style={{ color: 'var(--text-dim)', fontSize: 14 }}>{t('resetPwExpired')}</p>
-            <Link href="/forgot-password">{t('resetPwRequestNew')}</Link>
+            <p className="auth-card-text">{t('resetPwExpired')}</p>
+            <Link href="/forgot-password" className="auth-card-back">{t('resetPwRequestNew')} →</Link>
           </>
         ) : (
           <p style={{ color: 'var(--text-faint)' }} role="status">
@@ -87,15 +91,21 @@ export default function ResetPasswordPage() {
 
   if (done) {
     return (
-      <div className="form-container">
+      <div className="form-container auth-card">
+        <span className="auth-card-icon ok" aria-hidden="true">
+          <UiIcon name="check" size={22} />
+        </span>
         <h1>{t('resetPwDoneTitle')}</h1>
-        <p style={{ color: 'var(--text-dim)' }}>{t('resetPwDoneText')}</p>
+        <p className="auth-card-text">{t('resetPwDoneText')}</p>
       </div>
     );
   }
 
   return (
-    <form className="form-container" onSubmit={handleSubmit}>
+    <form className="form-container auth-card" onSubmit={handleSubmit}>
+      <span className="auth-card-icon" aria-hidden="true">
+        <UiIcon name="lock" size={22} />
+      </span>
       <h1>{t('resetPwTitle')}</h1>
       <input
         type="password"

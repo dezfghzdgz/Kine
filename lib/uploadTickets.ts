@@ -81,7 +81,7 @@ export async function uploadUsage(userId: string): Promise<{ usage: UploadUsage;
     }
     return { usage: base, tickets: true };
   }
-  // Bez migrace: jako dřív - počítají se videa za posledních 24 hodin (bez klipů od diváků).
+  // Bez migrace: jako dřív - počítají se videa za posledních 24 hodin (bez klipů od diváků, i z vysílání).
   const since = Date.now() - 24 * 3600 * 1000;
   let rows: { duration_seconds: number | null; created_at: string }[] = [];
   const withoutClips = await supabaseServer
@@ -89,6 +89,7 @@ export async function uploadUsage(userId: string): Promise<{ usage: UploadUsage;
     .select('duration_seconds, created_at')
     .eq('owner_id', userId)
     .is('clipped_from_video_id', null)
+    .is('clipped_by', null)
     .limit(5000);
   if (!withoutClips.error) rows = (withoutClips.data as typeof rows) ?? [];
   else rows = (((await supabaseServer.from('videos').select('duration_seconds, created_at').eq('owner_id', userId).limit(5000)).data as typeof rows) ?? []);

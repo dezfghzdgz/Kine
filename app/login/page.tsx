@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabaseClient';
 import { ensureOwnProfile } from '@/lib/ensureProfile';
 import Toast, { ToastType } from '@/components/Toast';
 import { useLanguage } from '@/lib/i18n';
+import AuthPitch from '@/components/AuthPitch';
+import UiIcon from '@/components/UiIcon';
 import Turnstile, { TURNSTILE_SITE_KEY, isCaptchaError, type TurnstileHandle } from '@/components/Turnstile';
 
 const LOCK_DURATION_MINUTES = 15;
@@ -18,6 +20,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   // Ochrana proti botům (components/Turnstile.tsx) - token na jeden pokus.
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
@@ -158,34 +161,49 @@ export default function LoginPage() {
   return (
     <>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      <form className="form-container" onSubmit={handleLogin}>
-        <h1>{t('login')}</h1>
-        <input
-          type="email"
-          placeholder={t('email')}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <input
-          type="password"
-          placeholder={t('password')}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        {error && <p className="error-text">{error}</p>}
-        <Turnstile ref={turnstile} action="login" onToken={setCaptchaToken} />
-        <button type="submit" disabled={loading}>
-          {loading ? t('signingIn') : t('login')}
-        </button>
-        <p style={{ color: 'var(--text-dim)', fontSize: 14 }}>
-          {t('noAccount')} <Link href="/signup" style={{ color: 'var(--accent)' }}>{t('signup')}</Link>
-        </p>
-        <Link href="/forgot-password" style={{ color: 'var(--text-faint)', fontSize: 13 }}>
-          {t('forgotPassword')}
-        </Link>
-      </form>
+      <div className="signup auth-login">
+        <AuthPitch title={t('loginPitchTitle')} />
+        <form className="signup-form" onSubmit={handleLogin}>
+          <h1>{t('login')}</h1>
+          <p className="signup-hint auth-lead">{t('loginLead')}</p>
+          <input type="email" placeholder={t('email')} aria-label={t('email')} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
+          <div className="signup-password">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              placeholder={t('password')}
+              aria-label={t('password')}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+            <button
+              type="button"
+              className="signup-eye"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? t('signupHidePassword') : t('signupShowPassword')}
+              title={showPassword ? t('signupHidePassword') : t('signupShowPassword')}
+            >
+              <UiIcon name={showPassword ? 'lock' : 'eye'} size={16} />
+            </button>
+          </div>
+          <Link href="/forgot-password" className="auth-forgot">
+            {t('forgotPassword')}
+          </Link>
+          {error && (
+            <p className="error-text" role="alert">
+              {error}
+            </p>
+          )}
+          <Turnstile ref={turnstile} action="login" onToken={setCaptchaToken} />
+          <button type="submit" className="signup-submit" disabled={loading}>
+            {loading ? t('signingIn') : t('login')}
+          </button>
+          <p className="signup-login">
+            {t('noAccount')} <Link href="/signup">{t('signup')} →</Link>
+          </p>
+        </form>
+      </div>
     </>
   );
 }

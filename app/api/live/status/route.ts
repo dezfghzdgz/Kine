@@ -9,6 +9,8 @@ import { CREATOR_PAYMENTS_ENABLED } from '@/lib/payments';
 import { tipTarget } from '@/lib/liveTipsServer';
 import { tipFeePercent } from '@/lib/liveTips';
 import { peekLiveViewers, sampleLiveRow } from '@/lib/liveStats';
+import { raidActive } from '@/lib/liveRaid';
+import { channelSchedule, type ChannelSchedule } from '@/lib/liveScheduleServer';
 
 export const dynamic = 'force-dynamic';
 // Na pozadí může běžet kontrola obsahu (lib/nudityScan.ts) - funkce smí doběhnout až minutu.
@@ -51,6 +53,27 @@ async function latestRecording(channel: string): Promise<{ id: string; title: st
   recordingCache.set(channel, { at: Date.now(), value });
   if (recordingCache.size > 2000) recordingCache.clear();
   return value;
+}
+
+type RaidInfo = { at: string; to: { id: string; username: string | null; display_name: string | null; avatar_url: string | null } };
+
+/**
+ * Raid (app/api/live/raid): kanál právě poslal diváky jinam - stránka přenosu
+ * je tam za pár vteřin přesune. Cíl musí pořád být vidět (ne zablokovaný).
+ */
+async function raidInfo(row: LiveStreamRow): Promise<RaidInfo | null> {
+  const r = row as LiveStreamRow & { raid_to?: string | null; raid_at?: string | null };
+  if (!raidActive(r)) return null;
+  const [{ data }, { data: targetStream }] = await Promise.all([
+    supabaseServer.from('profiles').select('id, username, display_name, avatar_url, is_banned, is_shadow_banned').eq('id', r.raid_to!).maybeSingle(),
+    supabaseServer.from('live_streams').select('*').eq('owner_id', r.raid_to!).maybeSingle(),
+  ]);
+  const p = data as (RaidInfo['to'] & { is_banned?: boolean; is_shadow_banned?: boolean }) | null;
+  if (!p || p.is_banned || p.is_shadow_banned) return null;
+  // Cíl mezitím skončil, je skrytý kontrolou obsahu, nebo sám poslal raid dál - nikam nepřesouvat.
+  const t = targetStream as (LiveStreamRow & Record<string, any>) | null;
+  if (!t || !t.is_live || liveHiddenNow(t as any) || raidActive(t)) return null;
+  return { at: r.raid_at!, to: { id: p.id, username: p.username, display_name: p.display_name, avatar_url: p.avatar_url } };
 }
 
 /**
@@ -124,13 +147,18 @@ export async function GET(req: NextRequest) {
   // Podpory ve vysílání jsou placené - dokud placení neběží (lib/payments.ts), nejsou.
   const tips = stream.live && CREATOR_PAYMENTS_ENABLED ? { enabled: await tipsEnabled(channel), feePercent: tipFeePercent(process.env.LIVE_TIP_FEE_PERCENT) } : { enabled: false, feePercent: 0 };
   // Po vysílání: odkaz na záznam (když ho tvůrce zveřejnil) - kdo přišel pozdě, pustí si ho.
-  const lastRecording = stream.live ? null : await latestRecording(channel);
+  // Mimo vysílání i plán dalšího (odpočet s „Připomenout“), během vysílání a chvíli po něm raid.
+  const [lastRecording, schedule, raid] = await Promise.all([
+    stream.live ? Promise.resolve(null) : latestRecording(channel),
+    stream.live ? Promise.resolve(null as ChannelSchedule | null) : channelSchedule(channel).catch(() => null),
+    raidInfo(row as LiveStreamRow).catch(() => null),
+  ]);
   // Bez přihlášení je odpověď pro všechny stejná (stránka přenosu se ptá každých 6 s, odznak
   // u kanálu každých 30 s) - pár vteřin ji podrží CDN. Přihlášeným (majitel, tým Kine) vždy čerstvá.
   // Jen dotaz bez přihlášení s "anon=1" v adrese (lib/authHeaders.ts - cacheableUrl) - přihlášený má jinou adresu.
   const anonymous = !req.headers.get('authorization') && req.nextUrl.searchParams.get('anon') === '1';
   return NextResponse.json(
-    { enabled: true, live: stream.live, profile: publicProfile, stream, tips, lastRecording, viewers, ...(restricted ? { moderation: { hidden: false, restricted } } : {}) },
+    { enabled: true, live: stream.live, profile: publicProfile, stream, tips, lastRecording, viewers, schedule, raid, ...(restricted ? { moderation: { hidden: false, restricted } } : {}) },
     { headers: anonymous && !restricted ? { 'Cache-Control': 'public, s-maxage=3, stale-while-revalidate=5', Vary: 'Authorization' } : { 'Cache-Control': 'private, no-store' } }
   );
 }

@@ -3,7 +3,7 @@ import { shouldBeProtected, syncVideoProtection } from './streamProtection';
 import { requestAutoCaptions, sweepCaptions } from './autoCaptions';
 import { runInBackground } from './background';
 import { insertedIds, pushNotificationsByIds } from './pushSend';
-import { isCloudflareUid, processCloudflareCleanup, streamApiUrl } from './cloudflareVideos';
+import { isCloudflareUid, processCloudflareCleanup, streamApiUrl, sweepAbandonedUploads } from './cloudflareVideos';
 import { expireTickets, markTicketFailed } from './uploadTickets';
 import { isKineVideoId } from './videoRef';
 import { sweepOrder, uploadNeverFinished } from './videoProcessing';
@@ -81,6 +81,8 @@ export async function markVideoReady(
   const notify =
     video.visibility === 'public' &&
     !video.clipped_from_video_id &&
+    // Klip z živého vysílání (app/api/live/clip) nemá původní video, jen toho, kdo ho udělal.
+    !video.clipped_by &&
     !(video.scheduled_at && new Date(video.scheduled_at).getTime() > Date.now());
 
   // Nejdřív automatická kontrola nahoty a porna (lib/nudityScan.ts) - na
@@ -163,7 +165,7 @@ export async function sweepScheduled(max = 10): Promise<number> {
   if (error || !data) return 0;
   let sent = 0;
   for (const video of data) {
-    if (video.clipped_from_video_id) {
+    if (video.clipped_from_video_id || video.clipped_by) {
       await supabaseServer.from('videos').update({ subscribers_notified_at: new Date().toISOString() }).eq('id', video.id);
       continue;
     }
@@ -341,6 +343,8 @@ export async function sweepProcessing(options: { max?: number; force?: boolean }
       // Nedokončená nahrávání (lístek vypršel) a smazání u Cloudflare, která minule nevyšla.
       await expireTickets(options.force ? 20 : 3).catch(() => 0);
       await processCloudflareCleanup(options.force ? 20 : 3).catch(() => 0);
+      // Opuštěná nahrání přímo podle Cloudflare (Pending Upload bez videa na Kine) - jen v důkladném úklidu.
+      if (options.force) await sweepAbandonedUploads().catch(() => 0);
       // Vysílání: zablokované účty a nekonečné přenosy (lib/liveLimits.ts - sám si hlídá, jak často).
       await import('./liveLimits').then((m) => m.enforceLiveLimits({ force: options.force })).catch(() => undefined);
       // A na pozadí kontrola obsahu jednoho dvou starších videí (nejvýš jednou za 5 min).

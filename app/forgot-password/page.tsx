@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 import Turnstile, { TURNSTILE_SITE_KEY, isCaptchaError, type TurnstileHandle } from '@/components/Turnstile';
+import UiIcon from '@/components/UiIcon';
 
 /**
  * Zapomenuté heslo: Supabase pošle e-mail s odkazem na /reset-password.
@@ -48,12 +49,15 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <form className="form-container" onSubmit={handleSubmit}>
+    <form className="form-container auth-card" onSubmit={handleSubmit}>
+      <span className="auth-card-icon" aria-hidden="true">
+        <UiIcon name="lock" size={22} />
+      </span>
       <h1>{t('forgotPwTitle')}</h1>
 
       {sent ? (
         <>
-          <p style={{ color: 'var(--text-dim)', fontSize: 14 }}>{t('forgotPwSent')}</p>
+          <p className="auth-card-text">{t('forgotPwSent')}</p>
           <button
             type="button"
             className="secondary"
@@ -67,7 +71,7 @@ export default function ForgotPasswordPage() {
         </>
       ) : (
         <>
-          <p style={{ color: 'var(--text-dim)', fontSize: 14 }}>{t('forgotPwIntro')}</p>
+          <p className="auth-card-text">{t('forgotPwIntro')}</p>
           <input
             type="email"
             placeholder={t('email')}
@@ -89,7 +93,7 @@ export default function ForgotPasswordPage() {
         </>
       )}
 
-      <Link href="/login" style={{ color: 'var(--text-faint)', fontSize: 13 }}>
+      <Link href="/login" className="auth-card-back">
         ← {t('forgotPwBack')}
       </Link>
     </form>

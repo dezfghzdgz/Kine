@@ -10,6 +10,7 @@ import { announceLiveCount } from '@/lib/useLiveCount';
 import { categoryLabel, isCategoryKey } from '@/lib/categories';
 import { gameBySlug, isGameSlug } from '@/lib/games';
 import { LiveCard, recentLiveList, rememberLiveList, type LiveItem } from '@/components/LiveNowRow';
+import UpcomingStreams from '@/components/UpcomingStreams';
 
 type Sort = 'foryou' | 'viewers' | 'newest' | 'small';
 const SORTS: Sort[] = ['foryou', 'viewers', 'newest', 'small'];
@@ -398,6 +399,9 @@ function StreamsInner() {
           ))}
         </div>
       )}
+
+      {/* Plánovaná vysílání s odpočtem a „Připomenout“ (components/UpcomingStreams.tsx). */}
+      <UpcomingStreams />
 
       {diag && (
         <LiveDiagBox

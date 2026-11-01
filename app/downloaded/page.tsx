@@ -17,6 +17,7 @@ import { trackFromVideo } from '@/lib/musicQueue';
 import { PlayIcon } from '@/components/MusicIcons';
 import DownloadButton from '@/components/DownloadButton';
 import LoadFailed from '@/components/LoadFailed';
+import EmptyState from '@/components/EmptyState';
 
 type Filter = 'all' | 'music' | 'video';
 
@@ -129,10 +130,7 @@ function DownloadedPageInner() {
 
   if (videos.length === 0) {
     return (
-      <div className="auth-gate">
-        <p>{t('downloadedEmptyTitle')}</p>
-        <p style={{ fontSize: 13 }}>{t('downloadedEmptyNote')}</p>
-      </div>
+      <EmptyState icon="download" title={t('downloadedEmptyTitle')} text={t('downloadedEmptyNote')} />
     );
   }
 

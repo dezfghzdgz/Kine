@@ -30,6 +30,7 @@ import { SpeakerIcon } from './ReactionIcons';
 import { ChatBody, ChatName } from './ChatText';
 import ChatEmotePicker, { rememberRecent } from './ChatEmotePicker';
 import ChatEmoteManager from './ChatEmoteManager';
+import LivePollBox from './LivePollBox';
 
 type Message = {
   id: number;
@@ -140,6 +141,8 @@ export default function LiveChat({
   const [colorMenu, setColorMenu] = useState(false);
   const [myColor, setMyColor] = useState<string | null | undefined>(undefined);
   const [hiddenPin, setHiddenPin] = useState<number | null>(null);
+  // Nová anketa (jen streamer a moderátoři, jen chat živého vysílání).
+  const [pollComposer, setPollComposer] = useState(false);
   const [suggest, setSuggest] = useState<{ items: Suggestion[]; index: number; start: number } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -643,11 +646,44 @@ export default function LiveChat({
   if (s?.blockLinks) modes.push({ icon: 'link', label: t('liveChatModeLinks') });
   const pinned = rules?.pinned && rules.pinned.id !== hiddenPin ? rules.pinned : null;
   const manageEmotes = rules?.role === 'owner' || rules?.role === 'staff';
+  // Ankety a raidy jsou jen v chatu živého vysílání (ne u premiér).
+  const liveRoom = room.startsWith('channel:');
+  let pollHint: string | null = null;
+  for (let i = messages.length - 1; i >= 0 && liveRoom; i--) {
+    const id = messages[i].kind === 'poll' ? (messages[i].meta as { poll?: unknown } | null)?.poll : null;
+    if (typeof id === 'string') {
+      pollHint = id;
+      break;
+    }
+  }
+
+  /** Raid / nová anketa - řádek v chatu místo obyčejné zprávy (text v jazyce diváka). */
+  function eventLine(m: Message): { icon: UiIconName; text: string } | null {
+    if (m.kind === 'raid') {
+      const viewers = (m.meta as { raid?: { viewers?: unknown } } | null)?.raid?.viewers;
+      const name = m.profiles?.username ?? '—';
+      return {
+        icon: 'bolt',
+        text: typeof viewers === 'number' && viewers > 0 ? t('liveRaidChat').replace('{name}', name).replace('{n}', String(viewers)) : t('liveRaidChatNoCount').replace('{name}', name),
+      };
+    }
+    if (m.kind === 'poll') return { icon: 'poll', text: t('livePollChatLine').replace('{q}', m.body.replace(/^📊\s*/u, '')) };
+    return null;
+  }
 
   if (overlay) {
     return (
       <div className={`live-chat-overlay ${className}`} ref={listRef}>
+        {liveRoom && <LivePollBox room={room} canManage={false} loggedIn={false} pollHint={pollHint} overlay />}
         {messages.slice(-20).map((m) => {
+          const event = eventLine(m);
+          if (event) {
+            return (
+              <div key={m.id} className={`live-chat-overlay-msg event ${m.kind}`}>
+                <UiIcon name={event.icon} size={15} /> {event.text}
+              </div>
+            );
+          }
           const tip = tipLabel(m, lang);
           const meta = readChatMeta(m.meta);
           return (
@@ -759,6 +795,18 @@ export default function LiveChat({
             >
               ⧉
             </a>
+          )}
+          {mod && liveRoom && (
+            <button
+              type="button"
+              className={`live-chat-icon-btn ${pollComposer ? 'active' : ''}`}
+              onClick={() => setPollComposer((v) => !v)}
+              title={t('livePollNew')}
+              aria-label={t('livePollNew')}
+              aria-expanded={pollComposer}
+            >
+              <UiIcon name="poll" size={16} />
+            </button>
           )}
           {mod && (
             <button
@@ -896,11 +944,31 @@ export default function LiveChat({
         </div>
       )}
 
+      {liveRoom && (
+        <LivePollBox
+          room={room}
+          canManage={mod}
+          loggedIn={!!userId}
+          pollHint={pollHint}
+          composerOpen={pollComposer}
+          onComposerClose={() => setPollComposer(false)}
+        />
+      )}
+
       <div ref={listRef} className="live-chat-list" onScroll={onScroll} aria-live="polite">
         {note && <p className="live-chat-note">{note}</p>}
         {unavailable && <p className="live-chat-empty">{t('liveChatUnavailable')}</p>}
         {!unavailable && messages.length === 0 && <p className="live-chat-empty">{t('liveChatEmpty')}</p>}
         {messages.map((m) => {
+          const event = eventLine(m);
+          if (event) {
+            return (
+              <div key={m.id} className={`live-chat-event ${m.kind}`} data-anim-scope>
+                <UiIcon name={event.icon} size={15} />
+                <span>{event.text}</span>
+              </div>
+            );
+          }
           const own = m.user_id === userId;
           const tip = tipLabel(m, lang);
           const meta = readChatMeta(m.meta);

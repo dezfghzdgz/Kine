@@ -191,12 +191,23 @@ to prober s účetní.
    3. Vyzkoušej registraci a přihlášení na webu.
    4. Supabase → Project Settings → Authentication → **Bot and Abuse Protection** →
       **Enable CAPTCHA protection** → Cloudflare Turnstile → Secret Key → Save.
-   - Od bodu 4 nejde v appce Kine do PC přihlášení e-mailem a heslem - jen
-     „Přihlásit přes prohlížeč“ (telefon používá prohlížeč vždycky, tam se nic nemění).
+   - Appka Kine do PC se od verze 0.13.3 přihlašuje jen přes prohlížeč (heslo na webu),
+     takže jí bod 4 nevadí. Starší verze: přihlášení e-mailem a heslem po bodu 4 nejde,
+     „Připojit přes prohlížeč“ ano. Telefon používá prohlížeč vždycky.
 4. **Náklady:** `www.playkine.com/admin/costs`. Přehrané minuty ukáže, až má token
    `CLOUDFLARE_STREAM_API_TOKEN` v Cloudflare navíc oprávnění **Account Analytics: Read**
    (My Profile → API Tokens → token Kine → Edit). Kontrola běží jednou denně s úklidem
    videí (cron) a při potížích pošle správcům oznámení. Hranice a limity jdou změnit
    proměnnými `COST_ALERT_*`, `SUPABASE_*_LIMIT_*`, `CF_STREAM_*` (viz `.env.example`).
-5. **Hry** fungují po migraci samy (stránka Hry v menu). Bez migrace jde všechno kromě
-   tlačítka Sledovat hru a výběru hry ve studiu vysílání.
+5. **Hry** fungují po migraci samy (Explore → Hry, stránky jednotlivých her). Bez migrace
+   jde všechno kromě tlačítka Sledovat hru a výběru hry ve studiu vysílání.
+
+## 11. Klip z přenosu, raid, plánované vysílání a ankety v chatu (migrace)
+
+1. **Supabase → SQL Editor** → spusť `supabase-migration-zive-raid-plan-ankety.sql` (celý;
+   jde pouštět opakovaně). Na konci čtyři sloupce `chat`, `raid`, `plan`, `ankety` -
+   `true` = hotovo.
+2. Nic dalšího se nenastavuje. **Klip z přenosu** potřebuje jen to, co už vysílání má
+   (Cloudflare Stream, záznam vysílání zapnutý automaticky) - klip se zkopíruje jako
+   obyčejné video a počítá se do úložiště Cloudflare (30 s = půl minuty).
+3. Bez migrace: klip z přenosu funguje, raid / plánování / ankety ukážou „chybí migrace“.

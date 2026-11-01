@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import Toast, { ToastType } from '@/components/Toast';
 import { useLanguage } from '@/lib/i18n';
+import UiIcon from '@/components/UiIcon';
 
 export default function Verify2FAPage() {
   const router = useRouter();
@@ -67,15 +68,20 @@ export default function Verify2FAPage() {
   return (
     <>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      <form className="form-container" onSubmit={handleVerify}>
+      <form className="form-container auth-card" onSubmit={handleVerify}>
+        <span className="auth-card-icon" aria-hidden="true">
+          <UiIcon name="shield" size={22} />
+        </span>
         <h1>{t('twoFactorCodeTitle')}</h1>
-        <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 4 }}>
-          {t('enterEmailCodeNote')} {email}
+        <p className="auth-card-text">
+          {t('enterEmailCodeNote')} <b>{email}</b>
         </p>
         <input
           type="text"
           inputMode="numeric"
           placeholder="123456"
+          className="auth-code-input"
+          autoComplete="one-time-code"
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
           maxLength={6}
@@ -90,7 +96,7 @@ export default function Verify2FAPage() {
           type="button"
           onClick={handleResend}
           disabled={resending}
-          style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 13, textDecoration: 'underline', padding: 0 }}
+          className="auth-card-link"
         >
           {resending ? t('preparingLabel') : t('resendCodeButton')}
         </button>

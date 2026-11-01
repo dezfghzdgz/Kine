@@ -16113,3 +16113,1316 @@ button.game-suggest {
     transform: none;
   }
 }
+
+/* =====================================================================
+   0137: klip z přenosu, raid, plánované vysílání, ankety v chatu,
+   procházení her v Explore (bez samostatné záložky Hry)
+   ===================================================================== */
+
+/* Řada her v Explore → Hry: hledání v hlavičce místo odkazu na /games. */
+.games-rail-head {
+  align-items: center;
+}
+
+.games-rail-search {
+  min-width: 0;
+  width: min(260px, 52%);
+}
+
+.games-rail-search input {
+  padding: 7px 0;
+  font-size: var(--fs-sm);
+}
+
+.games-rail-empty {
+  margin: 4px 0 0;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+}
+
+/* Klip z živého vysílání */
+.live-clip {
+  position: relative;
+  display: inline-flex;
+}
+
+.live-clip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--panel-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+}
+
+.live-clip-btn:hover:not(:disabled) {
+  border-color: var(--text-faint);
+}
+
+.live-clip-note {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  width: max-content;
+  max-width: min(320px, 86vw);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  animation: liveChatIn 0.2s ease-out;
+}
+
+.live-clip-note.ok {
+  border-color: rgba(var(--brand-rgb), 0.6);
+}
+
+.live-clip-note.ok .ui-icon {
+  color: var(--brand);
+}
+
+.live-clip-note.ok a {
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.live-clip-note.error {
+  border-color: rgba(248, 113, 113, 0.6);
+  color: #fca5a5;
+}
+
+/* Raid - fialová jako na Twitchi, ať se nepere s barvou webu */
+.live-raid-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 12px 14px 15px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.24), rgba(236, 72, 153, 0.16));
+  border: 1px solid rgba(168, 85, 247, 0.55);
+  overflow: hidden;
+  animation: liveChatIn 0.25s ease-out;
+}
+
+.live-raid-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #a855f7;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.live-raid-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--panel-raised);
+  flex-shrink: 0;
+}
+
+.live-raid-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.live-raid-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.live-raid-title {
+  font-weight: 700;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.live-raid-sub {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.live-raid-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.live-raid-go {
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  background: #a855f7;
+  color: #fff;
+  font-size: var(--fs-sm);
+}
+
+.live-raid-stay {
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  font-size: var(--fs-sm);
+}
+
+.live-raid-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #a855f7, #ec4899);
+  transition: width 1s linear;
+}
+
+.live-raid-welcome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(168, 85, 247, 0.14);
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  animation: liveChatIn 0.25s ease-out;
+}
+
+.live-raid-welcome .ui-icon {
+  color: #c084fc;
+}
+
+.live-raid-sent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  font-size: var(--fs-sm);
+}
+
+.live-raid-sent .live-small-btn {
+  margin-left: auto;
+}
+
+.live-raid-search {
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 10px;
+}
+
+.live-raid-search input {
+  padding: 8px 0;
+  font-size: var(--fs-sm);
+}
+
+.live-raid-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.live-raid-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--panel-raised);
+}
+
+.live-raid-item .live-raid-avatar {
+  width: 32px;
+  height: 32px;
+}
+
+.live-raid-item-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.live-raid-item-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.live-raid-item-sub {
+  font-size: var(--fs-2xs);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.live-raid-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-color: rgba(168, 85, 247, 0.55);
+  color: #d8b4fe;
+  flex-shrink: 0;
+}
+
+.live-raid-btn:hover:not(:disabled) {
+  border-color: #c084fc;
+}
+
+/* Plánované vysílání */
+.live-schedule-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(var(--brand-rgb), 0.14), transparent 65%), var(--panel);
+}
+
+.live-schedule-card.soon {
+  border-color: rgba(var(--brand-rgb), 0.6);
+}
+
+.live-schedule-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  flex-shrink: 0;
+}
+
+.live-schedule-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.live-schedule-kicker {
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.live-schedule-title {
+  font-weight: 650;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-schedule-countdown {
+  font-size: var(--fs-lg);
+  font-weight: 750;
+  color: var(--brand);
+  font-variant-numeric: tabular-nums;
+}
+
+.live-schedule-card.soon .live-schedule-countdown {
+  animation: liveSchedulePulse 1.6s ease-in-out infinite;
+}
+
+@keyframes liveSchedulePulse {
+  50% { opacity: 0.55; }
+}
+
+.live-schedule-game {
+  margin-top: 4px;
+}
+
+.live-schedule-action {
+  flex-shrink: 0;
+}
+
+.live-schedule-card.compact {
+  padding: 10px 12px;
+  gap: 12px;
+  margin: 0;
+}
+
+.live-schedule-card.compact .live-schedule-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+
+.live-schedule-card.compact .live-schedule-countdown {
+  font-size: var(--fs-md);
+}
+
+.live-remind {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.live-remind-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+a.live-remind-btn {
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+.live-remind-btn.compact {
+  padding: 7px 12px;
+}
+
+.live-remind-btn.on {
+  background: var(--panel-raised);
+  color: var(--brand);
+  border: 1px solid rgba(var(--brand-rgb), 0.55);
+}
+
+.live-remind-error {
+  font-size: var(--fs-2xs);
+  color: #fca5a5;
+  max-width: 220px;
+  text-align: right;
+}
+
+.live-schedule-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.live-schedule-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.live-schedule-current {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.live-schedule-current-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.live-schedule-when {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.live-schedule-empty {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.live-schedule-empty button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Brzy živě (stránka Živě) */
+.upcoming-streams {
+  margin-top: 28px;
+}
+
+.upcoming-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.upcoming-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.upcoming-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  transition: border-color var(--dur-1) var(--ease);
+}
+
+.upcoming-card:hover,
+.upcoming-card.soon {
+  border-color: rgba(var(--brand-rgb), 0.5);
+}
+
+.upcoming-card-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  color: inherit;
+}
+
+.upcoming-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--panel-raised);
+  flex-shrink: 0;
+}
+
+.upcoming-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.upcoming-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.upcoming-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 650;
+}
+
+.upcoming-title {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.upcoming-foot {
+  display: flex;
+  align-items: center;
+  gap: 4px 10px;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.upcoming-foot .live-remind {
+  margin-left: auto;
+}
+
+.upcoming-when {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-2xs);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.upcoming-countdown {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--brand);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Ankety v chatu */
+.live-poll {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 10px 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(var(--brand-rgb), 0.45);
+  background: rgba(var(--brand-rgb), 0.08);
+  animation: liveChatIn 0.25s ease-out;
+}
+
+.live-poll.ended {
+  border-color: var(--border);
+  background: var(--panel-raised);
+}
+
+.live-poll-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-2xs);
+  color: var(--text-dim);
+}
+
+.live-poll-head .ui-icon {
+  color: var(--brand);
+}
+
+.live-poll-label {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.live-poll-timer {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.live-poll-composer .live-poll-head .live-chat-icon-btn {
+  margin-left: auto;
+}
+
+.live-poll-head .live-small-btn {
+  padding: 4px 10px;
+  font-size: var(--fs-2xs);
+}
+
+.live-poll-question {
+  margin: 0;
+  font-weight: 650;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.live-poll .post-poll {
+  margin-bottom: 0;
+  gap: 6px;
+}
+
+.live-poll .post-poll-option {
+  min-height: 34px;
+  padding: 5px 12px;
+  font-size: var(--fs-sm);
+}
+
+.live-poll-composer input,
+.live-poll-composer select {
+  width: 100%;
+  min-width: 0;
+}
+
+.live-poll-option-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.live-poll-composer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.live-poll-composer-row select {
+  width: auto;
+  flex: 1;
+}
+
+.live-poll-composer-row button[type='submit'] {
+  padding: 8px 14px;
+  font-size: var(--fs-sm);
+}
+
+/* Překryv pro OBS: anketa velká a čitelná přes hru */
+.live-poll.overlay {
+  margin: 0 0 8px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid var(--brand);
+  color: #fff;
+}
+
+.live-poll.overlay .live-poll-head,
+.live-poll.overlay .post-poll-meta {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.live-poll.overlay .live-poll-question {
+  color: #fff;
+  font-size: 1.1em;
+}
+
+.live-poll.overlay .post-poll-option {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* Raid a nová anketa jako řádek v chatu */
+.live-chat-event {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.live-chat-event .ui-icon {
+  flex-shrink: 0;
+}
+
+.live-chat-event.raid {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.22), rgba(236, 72, 153, 0.14));
+  border: 1px solid rgba(168, 85, 247, 0.5);
+}
+
+.live-chat-event.raid .ui-icon {
+  color: #c084fc;
+}
+
+.live-chat-event.poll {
+  background: rgba(var(--brand-rgb), 0.1);
+  border: 1px solid rgba(var(--brand-rgb), 0.35);
+}
+
+.live-chat-event.poll .ui-icon {
+  color: var(--brand);
+}
+
+.live-chat-overlay-msg.event {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.live-chat-overlay-msg.event.raid {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.7), rgba(236, 72, 153, 0.55));
+  border: 2px solid #c084fc;
+}
+
+.live-chat-overlay-msg.event.poll {
+  background: rgba(0, 0, 0, 0.55);
+  border: 2px solid var(--brand);
+}
+
+@media (max-width: 640px) {
+  .games-rail-head {
+    flex-wrap: wrap;
+  }
+
+  .games-rail-search {
+    width: 100%;
+  }
+
+  .live-raid-banner {
+    flex-wrap: wrap;
+  }
+
+  .live-raid-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .live-raid-actions button {
+    flex: 1;
+  }
+
+  .live-schedule-card {
+    flex-wrap: wrap;
+  }
+
+  .live-schedule-action {
+    width: 100%;
+  }
+
+  .live-schedule-action .live-remind,
+  .live-schedule-action .live-remind-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .live-clip-note {
+    right: auto;
+    left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-raid-progress {
+    transition: none;
+  }
+
+  .live-schedule-card.soon .live-schedule-countdown {
+    animation: none;
+  }
+}
+
+/* Hledání v řadě her / raidu: křížek prohlížeče v barvách webu */
+.games-search input::-webkit-search-cancel-button {
+  filter: grayscale(1) brightness(1.6);
+  cursor: pointer;
+}
+
+/* Přihlášení jako registrace (karta + vysvětlení vlevo) */
+.auth-lead {
+  margin: -4px 0 4px;
+  font-size: var(--fs-sm);
+}
+
+.auth-forgot {
+  align-self: flex-end;
+  margin-top: -4px;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+.auth-forgot:hover {
+  color: var(--text);
+}
+
+/* Zapomenuté heslo, nové heslo, kód 2FA - karta místo holého formuláře */
+.form-container.auth-card {
+  max-width: 420px;
+  margin: 56px auto;
+  padding: 28px 26px 24px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(80% 60% at 0% 0%, rgba(var(--brand-rgb), 0.12), transparent 70%),
+    var(--panel);
+  gap: 14px;
+}
+
+.auth-card h1 {
+  margin: 0;
+  font-size: var(--fs-2xl);
+  line-height: 1.2;
+}
+
+.auth-card-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: rgba(var(--brand-rgb), 0.14);
+  color: var(--brand);
+}
+
+.auth-card-icon.ok {
+  background: rgba(74, 222, 128, 0.14);
+  color: #4ade80;
+}
+
+.auth-card-icon.warn {
+  background: rgba(250, 204, 21, 0.14);
+  color: #facc15;
+}
+
+.auth-card-text {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.auth-card-text b {
+  color: var(--text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.auth-card input {
+  width: 100%;
+}
+
+.auth-card-back {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+.auth-card-back:hover {
+  color: var(--text);
+}
+
+.auth-card-link {
+  align-self: center;
+  padding: 4px 8px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auth-card-link:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.auth-code-input {
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.35em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Prázdná stránka / sekce */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 520px;
+  margin: 40px auto;
+  padding: 36px 24px;
+  text-align: center;
+}
+
+.empty-state.compact {
+  margin: 8px 0 0;
+  max-width: none;
+  padding: 24px 18px;
+}
+
+.empty-state-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(var(--brand-rgb), 0.12);
+  color: var(--brand);
+}
+
+.empty-state.compact .empty-state-icon {
+  width: 44px;
+  height: 44px;
+}
+
+.empty-state-title {
+  margin: 0;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.empty-state-text {
+  margin: 0;
+  max-width: 420px;
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+/* Záložky s ikonou a počtem (Aktivita, Vaše videa) */
+.activity-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.flip-v {
+  transform: rotate(180deg);
+}
+
+.yv-tab-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--panel-raised);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.tab-btn.active .yv-tab-count {
+  background: rgba(var(--brand-rgb), 0.18);
+  color: var(--text);
+}
+
+/* Vaše videa - přehled obsahu kanálu */
+.yv-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.yv-title {
+  margin: 0;
+  font-size: var(--fs-2xl);
+}
+
+.yv-sub {
+  margin: 4px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+.yv-head-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.yv-upload-btn,
+.yv-ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.yv-upload-btn {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.yv-upload-btn:hover {
+  filter: brightness(0.92);
+}
+
+.yv-ghost-btn {
+  border: 1px solid var(--border);
+  background: var(--panel-raised);
+  color: var(--text);
+}
+
+.yv-ghost-btn:hover {
+  border-color: var(--text-faint);
+}
+
+.yv-tabs {
+  margin-bottom: 14px;
+}
+
+.yv-tabs .tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.yv-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.yv-list:empty {
+  display: none;
+}
+
+.yv-row {
+  display: grid;
+  grid-template-columns: 136px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  transition: background-color var(--dur-1) var(--ease);
+}
+
+.yv-row:first-child {
+  border-top: none;
+}
+
+.yv-row:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.yv-thumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 136px;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--panel-raised);
+  color: var(--text-faint);
+}
+
+.yv-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.yv-thumb.spark img {
+  object-fit: contain;
+  background: #000;
+}
+
+.yv-duration {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.yv-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.yv-video-title {
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.35;
+}
+
+.yv-video-title:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.yv-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px 8px;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: var(--fs-2xs);
+  color: var(--text-faint);
+}
+
+.yv-meta-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.yv-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--panel-raised);
+  color: var(--text-dim);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.yv-badge.public {
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.35);
+  background: rgba(74, 222, 128, 0.08);
+}
+
+.yv-badge.private {
+  color: var(--text-dim);
+}
+
+.yv-badge.processing {
+  color: #60a5fa;
+  border-color: rgba(96, 165, 250, 0.35);
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.yv-badge.failed {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.yv-badge.scheduled {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.yv-badge .spin {
+  width: 10px;
+  height: 10px;
+}
+
+.yv-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.yv-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--panel-raised);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+
+.yv-action:hover:not(:disabled) {
+  border-color: var(--text-faint);
+}
+
+.yv-action.icon-only {
+  width: 34px;
+  padding: 0;
+  justify-content: center;
+}
+
+.yv-action.danger {
+  color: #f87171;
+}
+
+.yv-action.danger:hover:not(:disabled) {
+  border-color: rgba(248, 113, 113, 0.6);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+@media (max-width: 640px) {
+  .yv-row {
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: 10px 12px;
+    padding: 12px;
+  }
+
+  .yv-thumb {
+    width: 112px;
+  }
+
+  .yv-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .yv-head {
+    align-items: flex-start;
+  }
+
+  .yv-head-actions {
+    width: 100%;
+  }
+
+  .yv-head-actions a {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .form-container.auth-card {
+    margin: 24px auto;
+    padding: 24px 18px 20px;
+  }
+}
+
+@media (max-width: 820px) {
+  /* Přihlášení na telefonu: jen formulář (výhody Kine jsou u registrace). */
+  .auth-login .signup-pitch {
+    display: none;
+  }
+}
+
+/* Kanál bez profilovky: první písmeno jména (raid, Brzy živě) */
+.avatar-initial {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: linear-gradient(135deg, rgba(var(--brand-rgb), 0.22), rgba(255, 255, 255, 0.04));
+}
+
+.yv-badge.failed {
+  white-space: normal;
+}

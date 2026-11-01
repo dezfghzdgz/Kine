@@ -156,7 +156,8 @@ function WatchPageInner() {
   // a u klipu odkaz na původní video + kdo ho vystřihl.
   const [clipOpen, setClipOpen] = useState(false);
   const [clips, setClips] = useState<any[]>([]);
-  const [clipOrigin, setClipOrigin] = useState<{ id: string; title: string; by: string | null } | null>(null);
+  // Klip z videa (odkaz na celé video), nebo z živého vysílání (app/api/live/clip - původní video není).
+  const [clipOrigin, setClipOrigin] = useState<{ id: string | null; title: string; by: string | null; live?: boolean } | null>(null);
   const [confirmModDelete, setConfirmModDelete] = useState(false);
   const { isModerator } = useUserRole();
   const playlistId = searchParams.get('playlist');
@@ -1447,6 +1448,13 @@ function WatchPageInner() {
       ]).then(([orig, by]) => {
         if (orig.data) setClipOrigin({ id: orig.data.id, title: orig.data.title, by: (by.data as any)?.username ?? null });
       });
+    } else if (data.clipped_by) {
+      supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', data.clipped_by)
+        .maybeSingle()
+        .then(({ data: by }) => setClipOrigin({ id: null, title: '', by: (by as any)?.username ?? null, live: true }));
     }
 
     // Ochrana proti umělému nahánění zhlédnutí:
@@ -2095,7 +2103,11 @@ function WatchPageInner() {
         )}
         {clipOrigin && (
           <p className="clip-origin">
-            <Link href={`/watch/${clipOrigin.id}`}>{t('clipOfVideo').replace('{title}', clipOrigin.title)}</Link>
+            {clipOrigin.live || !clipOrigin.id ? (
+              <Link href={`/live/${video.owner_id}`}>{t('clipOfLive')}</Link>
+            ) : (
+              <Link href={`/watch/${clipOrigin.id}`}>{t('clipOfVideo').replace('{title}', clipOrigin.title)}</Link>
+            )}
             {clipOrigin.by && <span> · {t('clipBy').replace('{user}', clipOrigin.by)}</span>}
           </p>
         )}

@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
           });
           // Odběratelé se o něm ještě nedozvěděli (skryté video se nehlásí).
           const scheduledLater = video.scheduled_at && new Date(video.scheduled_at).getTime() > Date.now();
-          if (restore === 'public' && !video.clipped_from_video_id && !scheduledLater) await notifySubscribers(video).catch(() => undefined);
+          if (restore === 'public' && !video.clipped_from_video_id && !video.clipped_by && !scheduledLater) await notifySubscribers(video).catch(() => undefined);
         }
       } else {
         const { error: upd } = await supabaseServer
