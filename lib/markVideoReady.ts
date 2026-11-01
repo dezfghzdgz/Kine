@@ -81,8 +81,6 @@ export async function markVideoReady(
   const notify =
     video.visibility === 'public' &&
     !video.clipped_from_video_id &&
-    // Klip z živého vysílání (app/api/live/clip) nemá původní video, jen toho, kdo ho udělal.
-    !video.clipped_by &&
     !(video.scheduled_at && new Date(video.scheduled_at).getTime() > Date.now());
 
   // Nejdřív automatická kontrola nahoty a porna (lib/nudityScan.ts) - na
@@ -165,7 +163,7 @@ export async function sweepScheduled(max = 10): Promise<number> {
   if (error || !data) return 0;
   let sent = 0;
   for (const video of data) {
-    if (video.clipped_from_video_id || video.clipped_by) {
+    if (video.clipped_from_video_id) {
       await supabaseServer.from('videos').update({ subscribers_notified_at: new Date().toISOString() }).eq('id', video.id);
       continue;
     }
