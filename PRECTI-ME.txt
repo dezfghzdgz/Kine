@@ -1,3 +1,29 @@
+KINE web: oprava 0138 - nabídka ⋮ u karet, migrace, obnovení stránky (F5)
+(dodávka kine-0138b-2026-11-01)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0138b.zip a do GitHubu přetáhni OBSAH složky (jako vždy).
+2. Supabase -> SQL Editor -> spusť supabase-migration-doporucovani-vykon.sql ZNOVU (celý,
+   opravená verze). Minule spadla celá (nic se neuložilo), takže to nevadí. Na konci čtyři
+   sloupce zhlednuti / doporucovani / statistiky / uklid - všechno true = hotovo.
+
+CO JE OPRAVENÉ
+- Nabídka ⋮ u karty videa: v řadách, které se posouvají do strany (Pokračovat ve sledování,
+  Sparks), ji řada ořízla a horní položky nebyly vidět. Teď vyskočí celá - nad tečky,
+  nebo pod ně, kde je víc místa, nikdy přes okraj okna.
+- Migrace padala na „column ip_address does not exist“: v databázi chyběl sloupec z jedné
+  starší migrace (ochrana proti nahánění zhlédnutí). Důsledek, který nebyl vidět: server
+  zhlédnutí do přehledu zhlédnutí vůbec nezapisoval (zápis s IP adresou spadl), takže
+  statistiky „odkud diváci přicházejí“ a „kdy se dívají“ zůstávaly prázdné a ochrana proti
+  opakovanému počítání nefungovala. Migrace teď chybějící sloupce doplní sama a server
+  zhlédnutí zapíše i bez nich.
+- Hlavní stránka po F5 / obnovení ukazovala „This didn't load“, dokud se nekliklo na
+  Try again: první dotaz po obnovení stránky občas spadne (obnovuje se přihlášení /
+  staré spojení) - appka to teď sama zkusí znovu (2×), než něco ukáže, a opravdová
+  příčina se zapíše na /admin/errors („Domů: načtení feedu …“). Když přesto visí,
+  zkusí to sama znovu po návratu na záložku nebo po obnovení připojení.
+
 KINE web: lepší doporučování, rychlejší statistiky, hromadné úpravy videí, hudba bez
 sekání, Sparks bez černé obrazovky, bezpečnost a úklid osobních údajů
 (dodávka kine-0138-2026-11-01)

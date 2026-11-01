@@ -17497,3 +17497,14 @@ a.live-remind-btn {
   .yv-bulk-actions .yv-action span { display: none; }
   .yv-bulk-actions .yv-action { width: 34px; padding: 0; justify-content: center; }
 }
+
+/* 0138: nabídka ⋮ karty je v <body> a pevně k oknu (components/VideoCardMenu.tsx - panelPosition) -
+   řady posouvané do strany (Pokračovat ve sledování, Sparks) ji už neořízou. */
+.video-card-menu-panel.video-card-menu-panel-fixed {
+  position: fixed;
+  right: auto;
+  bottom: auto;
+  z-index: 540;
+}
+/* Tečky zůstanou vidět, dokud je nabídka otevřená (myš je v nabídce, ne na kartě). */
+.video-card-menu-btn.open { opacity: 1; color: var(--text); background: var(--panel-raised); }

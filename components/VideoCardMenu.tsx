@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
@@ -12,6 +13,7 @@ import {
   PlaylistIcon, WatchLaterIcon, DownloadIcon, ShareIcon, ReportIcon, QueueIcon, NotInterestedIcon, BlockChannelIcon,
 } from './ReactionIcons';
 import { shareLink, browserShareDeps } from '@/lib/share';
+import { panelPosition, PANEL_MAX_HEIGHT, type PanelPos } from '@/lib/menuPosition';
 
 /**
  * Nabídka pod třemi tečkami na kartě videa.
@@ -55,6 +57,10 @@ export default function VideoCardMenu({
   const [downloading, setDownloading] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Kde nabídka je (pevně k oknu - viz panelPosition). Null = ještě nezměřeno.
+  const [pos, setPos] = useState<PanelPos | null>(null);
 
   const ownerId: string | undefined = video.owner_id ?? video.profiles?.id;
 
@@ -73,20 +79,47 @@ export default function VideoCardMenu({
   useEffect(() => {
     if (!open) return;
     function handleOutside(e: MouseEvent | TouchEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) closeMenu();
+      const target = e.target as Node;
+      // Nabídka je v <body> (portál), ne v kartě - klik do ní není „mimo“.
+      if (wrapRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      closeMenu();
     }
     function handleEscape(e: KeyboardEvent) {
       if (e.key === 'Escape') closeMenu();
     }
+    // Stránka nebo řada karet se posunula - nabídka by visela mimo tečky, tak se zavře.
+    // (Posouvání uvnitř nabídky samotné ji nezavře.)
+    function handleScroll(e: Event) {
+      if (panelRef.current && e.target instanceof Node && panelRef.current.contains(e.target)) return;
+      closeMenu();
+    }
     document.addEventListener('mousedown', handleOutside);
     document.addEventListener('touchstart', handleOutside);
     document.addEventListener('keydown', handleEscape);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', closeMenu);
     return () => {
       document.removeEventListener('mousedown', handleOutside);
       document.removeEventListener('touchstart', handleOutside);
       document.removeEventListener('keydown', handleEscape);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', closeMenu);
     };
   }, [open]);
+
+  // Poloha nabídky: změří se tečky a nabídka se umístí nad ně, nebo pod ně, kde je víc
+  // místa - vždy celá v okně. Dřív visela uvnitř karty a v řadách, které se posouvají
+  // do strany (Pokračovat ve sledování, Sparks), ji řada ořízla - horní položky nebyly vidět.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null);
+      return;
+    }
+    const btn = btnRef.current;
+    if (!btn) return;
+    const height = panelRef.current?.scrollHeight ?? PANEL_MAX_HEIGHT;
+    setPos(panelPosition(btn.getBoundingClientRect(), height, window.innerWidth, window.innerHeight));
+  }, [open, view, playlists.length, note, downloadUrl]);
 
   function closeMenu() {
     setOpen(false);
@@ -260,8 +293,10 @@ export default function VideoCardMenu({
   return (
     <div className="video-card-menu" ref={wrapRef} onClick={stop}>
       <button
+        ref={btnRef}
         type="button"
-        className="video-card-menu-btn"
+        className={open ? 'video-card-menu-btn open' : 'video-card-menu-btn'}
+        aria-expanded={open}
         aria-label={t('menuMoreActions')}
         title={t('menuMoreActions')}
         onClick={(e) => {
@@ -274,8 +309,18 @@ export default function VideoCardMenu({
         ⋮
       </button>
 
-      {open && (
-        <div className="video-card-menu-panel">
+      {open && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={panelRef}
+          className="video-card-menu-panel video-card-menu-panel-fixed"
+          onClick={stop}
+          style={
+            pos
+              ? { top: pos.top ?? undefined, bottom: pos.bottom ?? undefined, left: pos.left, maxHeight: pos.maxHeight }
+              : // První vykreslení: neviditelně, jen kvůli změření výšky.
+                { top: 0, left: 0, visibility: 'hidden' }
+          }
+        >
           {view === 'main' ? (
             <>
               <button type="button" className="video-card-menu-item" onClick={handleQueue}>
@@ -333,7 +378,7 @@ export default function VideoCardMenu({
                 className="video-card-menu-item"
                 onClick={(e) => { stop(e); setView('main'); }}
               >
-                ← {t('backButton')}
+                {t('backButton')}
               </button>
               <div className="video-card-menu-divider" />
               {playlists.length === 0 ? (
@@ -354,7 +399,8 @@ export default function VideoCardMenu({
           )}
 
           {note && <p className="video-card-menu-note">{note}</p>}
-        </div>
+        </div>,
+        document.body
       )}
 
       {reportOpen && <ReportModal videoId={video.id} onClose={() => setReportOpen(false)} />}

@@ -39,9 +39,32 @@ function isViewMilestone(views: number): boolean {
   return false;
 }
 
+/** Který sloupec v tabulce chybí (starší databáze bez migrace) - z hlášky Supabase / Postgresu. */
+function missingColumn(message: string | undefined): string | null {
+  const text = message ?? '';
+  const m = /Could not find the '([a-z_]+)' column/i.exec(text) ?? /column "?(?:[a-z_]+\.)?([a-z_]+)"? (?:of relation "[a-z_]+" )?does not exist/i.exec(text);
+  return m ? m[1] : null;
+}
+
+/**
+ * Zápis zhlédnutí. Sloupce ip_address, source a device přidávaly samostatné
+ * migrace - když některá neproběhla, zapíše se zhlédnutí bez toho sloupce
+ * (dřív se bez ip_address nezapsalo vůbec a statistiky kanálu byly prázdné).
+ */
+async function logView(row: Record<string, unknown>): Promise<void> {
+  const current: Record<string, unknown> = { ...row };
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { error } = await supabaseServer.from('views_log').insert(current);
+    if (!error) return;
+    const column = missingColumn(error.message);
+    if (!column || column === 'video_id' || !(column in current)) return;
+    delete current[column];
+  }
+}
+
 export async function POST(req: NextRequest) {
-  const { videoId, source, device } = await req.json();
-  if (!videoId) return NextResponse.json({ error: 'Chybí videoId.' }, { status: 400 });
+  const { videoId, source, device } = await req.json().catch(() => ({}) as Record<string, unknown>);
+  if (typeof videoId !== 'string' || !/^[0-9a-f-]{36}$/i.test(videoId)) return NextResponse.json({ error: 'Chybí videoId.' }, { status: 400 });
 
   const { data: video } = await supabaseServer
     .from('videos')
@@ -95,20 +118,7 @@ export async function POST(req: NextRequest) {
 
   // Zařízení (telefon / tablet / počítač / TV) - jen jedna ze čtyř hodnot,
   // cokoliv jiného se zahodí (lib/deviceClass.ts).
-  const { error: logError } = await supabaseServer
-    .from('views_log')
-    .insert({ video_id: videoId, ip_address: ip, source: sanitizeSource(source), device: sanitizeDeviceClass(device) });
-
-  // Sloupce "source" a "device" přidávají samostatné migrace. Když ještě
-  // neproběhly, zhlédnutí se nesmí ztratit - appka ho zapíše aspoň bez nich.
-  if (logError) {
-    const { error: bezZarizeni } = await supabaseServer
-      .from('views_log')
-      .insert({ video_id: videoId, ip_address: ip, source: sanitizeSource(source) });
-    if (bezZarizeni) {
-      await supabaseServer.from('views_log').insert({ video_id: videoId, ip_address: ip });
-    }
-  }
+  await logView({ video_id: videoId, ip_address: ip, source: sanitizeSource(source), device: sanitizeDeviceClass(device) });
 
   return NextResponse.json({ success: true, counted: true });
 }

@@ -201,3 +201,48 @@ export function installErrorReporter(endpoint = '/api/client-errors'): () => voi
     installed = false;
   };
 }
+
+/* ---------- chyby, které appka sama zachytila ---------- */
+
+let handledState: ReporterState | null = null;
+
+/**
+ * Nahlásí chybu, kterou appka sama ošetřila (např. hlavní stránka se napoprvé
+ * nenačetla a zkouší to znovu) - ať je na /admin/errors vidět opravdová
+ * příčina (text, kód, stav odpovědi), ne jen „nepovedlo se“. Bez filtru
+ * IGNORED (u ošetřených chyb chceme vidět i síťové), stejná chyba jednou
+ * za načtení stránky. Nikdy nic nevyhodí.
+ */
+export function reportHandledError(where: string, thrown: unknown): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const d = describeThrown(thrown);
+    const o = thrown && typeof thrown === 'object' ? (thrown as { code?: unknown; status?: unknown }) : null;
+    const extra = o ? [o.code, o.status].filter((v) => v !== undefined && v !== null && v !== '').join(' / ') : '';
+    const message = `${where}: ${d.message || 'neznámá chyba'}${extra ? ` (${extra})` : ''}`.slice(0, MAX_MESSAGE);
+    const fingerprint = fingerprintOf(message, d.stack);
+    handledState ??= createState();
+    if (handledState.sent.has(fingerprint) || handledState.count >= MAX_PER_PAGE) return;
+    handledState.sent.add(fingerprint);
+    handledState.count++;
+    const report: ErrorReport = {
+      kind: 'error',
+      message,
+      stack: d.stack ? String(d.stack).slice(0, MAX_STACK) : null,
+      url: stripUrl(window.location.href),
+      userAgent: (navigator.userAgent || '').slice(0, 300),
+      device: detectDeviceClass(),
+      fingerprint,
+    };
+    const body = JSON.stringify(report);
+    try {
+      if (navigator.sendBeacon && navigator.sendBeacon('/api/client-errors', new Blob([body], { type: 'application/json' }))) return;
+    } catch {
+      // spadne na fetch
+    }
+    void fetch('/api/client-errors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
+  } catch {
+    // hlášení nesmí nic rozbít
+  }
+}
+

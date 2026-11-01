@@ -15,6 +15,7 @@ import LiveNowRow from '@/components/LiveNowRow';
 import HomePostsShelf from '@/components/HomePostsShelf';
 import { scoreVideo, explainVideo, buildBlocks, formatDuration, diversify, interestWeights, mergeCandidates, FEED_BATCH, WATCHED_HISTORY_LIMIT } from '@/lib/homeRecommendation';
 import { impressionsSnapshot, recordImpressions, clearImpression } from '@/lib/feedImpressions';
+import { reportHandledError } from '@/lib/errorReporter';
 import { gameTagSets } from '@/lib/games';
 import { loadFollowedGames } from '@/lib/gamesData';
 import type { Block } from '@/lib/homeRecommendation';
@@ -181,6 +182,14 @@ async function loadCandidates(cutoff: string, who: { subscribedIds: Set<string>;
   return mergeCandidates(results.map((r) => (r.error ? null : (r.data as any[]))));
 }
 
+/** Chyba přihlášení u dotazu (prošlý / neplatný token) - pomůže obnovit přihlášení. */
+function isAuthError(e: unknown): boolean {
+  const o = (e && typeof e === 'object' ? e : {}) as { status?: unknown; code?: unknown; message?: unknown };
+  return Number(o.status) === 401 || o.code === 'PGRST301' || o.code === 'PGRST302' || /jwt/i.test(String(o.message ?? ''));
+}
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 /** Kolik kandidátů mimo časovou osu se přimíchá do jedné dávky (první dávka víc - je nejvíc vidět). */
 const POOL_FIRST = 16;
 const POOL_NEXT = 10;
@@ -222,7 +231,15 @@ export default function HomePage() {
   const latestRef = useRef({ blocks, progressMap, hasMore, sparkNotice, hiddenCount });
   latestRef.current = { blocks, progressMap, hasMore, sparkNotice, hiddenCount };
   const scrollYRef = useRef(0);
+  const mountedRef = useRef(true);
   const router = useRouter();
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Sparks dopředu (lib/sparksPrefetch.ts): až je feed načtený a prohlížeč volný,
   // připraví se seznam a první dva Sparks - klepnutí na Sparks v menu pak nečeká.
@@ -299,18 +316,30 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** Spustí načtení feedu a pohlídá, že se případný pád projeví na obrazovce. */
+  /**
+   * Spustí načtení feedu. Když první pokus spadne, zkusí to appka sama ještě
+   * dvakrát (po chvilce), než ukáže „Nepovedlo se“: po obnovení stránky (F5)
+   * první dotaz občas spadne (obnovuje se přihlášení, staré spojení s databází)
+   * a hned další projde - dřív to divák musel odklikat sám. Příčina se nahlásí
+   * na /admin/errors (lib/errorReporter.ts - reportHandledError).
+   */
   async function startLoad() {
     setLoadFailed(false);
-    try {
-      await loadInitial();
-    } catch {
-      // Konkrétní chybu tu nemá cenu ukazovat - divákovi neřekne nic
-      // a bývá to stejně jen "Failed to fetch". Podstatné je, že se dá
-      // zkusit to znovu.
-      setLoadFailed(true);
-      loadingRef.current = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await loadInitial();
+        return;
+      } catch (e) {
+        loadingRef.current = false;
+        if (attempt === 0) reportHandledError('Domů: načtení feedu', e);
+        if (attempt === 2 || !mountedRef.current) break;
+        // Prošlé / neplatné přihlášení: nejdřív ho obnovit.
+        if (isAuthError(e)) await supabase.auth.refreshSession().catch(() => undefined);
+        await wait(attempt === 0 ? 700 : 2000);
+        if (!mountedRef.current) return;
+      }
     }
+    if (mountedRef.current) setLoadFailed(true);
   }
 
   // Automatické donačítání - jakmile je "cílová značka" dole vidět na
@@ -326,6 +355,22 @@ export default function HomePage() {
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
   }, [hasMore, blocks]);
+
+  // Spojení se vrátilo / divák se vrátil k záložce: když feed visí na „Nepovedlo se“,
+  // zkusí to znovu sám (bez klikání na „Zkusit znovu“).
+  useEffect(() => {
+    if (!loadFailed) return;
+    const again = () => {
+      if (document.visibilityState === 'visible') void retryLoad();
+    };
+    window.addEventListener('online', again);
+    document.addEventListener('visibilitychange', again);
+    return () => {
+      window.removeEventListener('online', again);
+      document.removeEventListener('visibilitychange', again);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadFailed]);
 
   // Které karty divák opravdu viděl (aspoň napůl, přes vteřinu) - příště
   // klesnou, když na ně neklikl (lib/feedImpressions.ts). Jedna karta se
@@ -392,6 +437,9 @@ export default function HomePage() {
     // První dávka videí jde do databáze hned, souběžně s tím, co o divákovi
     // víme (odběry, historie...) - dřív čekala, až dorazí všechno ostatní.
     const cutoff = new Date().toISOString();
+    // Přihlášení napřed připravit (z paměti prohlížeče; prošlý token se tu obnoví) -
+    // první dotaz po obnovení stránky jinak mohl odejít dřív a spadnout.
+    await supabase.auth.getSession().catch(() => null);
     // Pozor: dotaz Supabase se odešle až při "await"/then() - bez then() tady by
     // první dávka čekala na profil a historii a souběh by byl jen naoko.
     const firstBatch = queryBatch(0, cutoff).then((res) => res);
@@ -504,12 +552,12 @@ export default function HomePage() {
       while (emptyBatches < MAX_EMPTY_BATCHES) {
         const from = offsetRef.current;
         // První dávka už mohla odejít dřív (loadInitial) - jinak teď.
-        let { data, error } = await (early ?? queryBatch(from, ctx.cutoff));
+        let { data, error, status } = await (early ?? queryBatch(from, ctx.cutoff));
         early = null;
         if (error && rankColumns && isMissingColumn(error)) {
           // Bez migrace (sloupec engagement) - stejná dávka po staru.
           rankColumns = false;
-          ({ data, error } = await queryBatch(from, ctx.cutoff));
+          ({ data, error, status } = await queryBatch(from, ctx.cutoff));
         }
 
         // Chyba se tu dřív zahazovala a pokračovalo se s prázdným polem.
@@ -518,7 +566,7 @@ export default function HomePage() {
         // "konec seznamu", a divákovi ukázala hlášku "Zatím tu nejsou
         // žádná videa" s nabídkou nahrát první. Při vypadlé wifi tedy
         // appka tvrdila, že je celá platforma prázdná.
-        if (error) throw error;
+        if (error) throw Object.assign(new Error(error.message || 'Dotaz na videa spadl'), { code: error.code, status });
 
         const rows = data ?? [];
         offsetRef.current = from + rows.length;
@@ -653,7 +701,16 @@ export default function HomePage() {
     if (loadingRef.current || !hasMore || loadFailed) return;
     setLoadingMore(true);
     try {
-      await fetchBatch(false);
+      try {
+        await fetchBatch(false);
+      } catch (e) {
+        // Jednou sám znovu (výpadek na chvilku), teprve pak tlačítko.
+        loadingRef.current = false;
+        reportHandledError('Domů: další dávka', e);
+        if (isAuthError(e)) await supabase.auth.refreshSession().catch(() => undefined);
+        await wait(1200);
+        await fetchBatch(false);
+      }
     } catch {
       // Donačítání spadlo. Feed, který už na obrazovce je, zůstává -
       // jen se pod ním nabídne další pokus místo věčného "Načítám…".
