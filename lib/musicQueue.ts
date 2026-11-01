@@ -2,6 +2,7 @@ import { supabase } from './supabaseClient';
 import type { MusicTrack } from './musicPlayer';
 import type { QueuedVideo } from './videoQueue';
 import { isMusicVideo } from './playbackMode';
+import { isHiddenScheduled, isUpcomingPremiere } from './scheduling';
 
 /**
  * Z čeho se skládá hudební fronta.
@@ -55,10 +56,17 @@ async function fillMissing(items: QueuedVideo[]): Promise<Map<string, any>> {
 
   const { data } = await supabase
     .from('videos')
-    .select('id, title, thumbnail_url, duration_seconds, cloudflare_video_id, profiles!videos_owner_id_fkey(username)')
+    .select('id, title, thumbnail_url, duration_seconds, cloudflare_video_id, is_premiere, scheduled_at, profiles!videos_owner_id_fkey(username)')
     .in('id', missing);
 
-  return new Map((data ?? []).map((video: any) => [video.id, video]));
+  // Premiéra, která ještě nezačala, se do fronty dostane bez cloudflare id (VideoCardMenu) -
+  // pustit jde, až začne.
+  const now = Date.now();
+  return new Map(
+    (data ?? [])
+      .filter((video: any) => !isUpcomingPremiere(video, now) && !isHiddenScheduled(video, now))
+      .map((video: any) => [video.id, video])
+  );
 }
 
 export async function buildMusicQueue(
@@ -84,8 +92,11 @@ export async function buildMusicQueue(
     return fromQueue;
   }
 
+  const now = Date.now();
   const fromRelated = (related ?? [])
-    .filter((video) => isMusicVideo(video))
+    // Premiéra, která ještě nezačala (nebo naplánované video), se pustit nesmí - dřív ji
+    // fronta pustila jako další skladbu dřív, než začala.
+    .filter((video) => isMusicVideo(video) && !isUpcomingPremiere(video, now) && !isHiddenScheduled(video, now))
     .map(trackFromVideo)
     .filter((track): track is MusicTrack => track !== null)
     .filter((track) => track.id !== currentTrack.id);

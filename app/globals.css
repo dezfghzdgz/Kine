@@ -541,12 +541,17 @@ select:focus-visible {
 }
 
 .page-transition-fade {
-  animation: page-fade-in 0.2s ease both;
+  animation: page-fade-in 0.18s ease both;
 }
 
+/* Ne z nuly: obsah na chvilku úplně zmizel a stránka "zčernala a blikla" (app/template.tsx). */
 @keyframes page-fade-in {
-  from { opacity: 0; }
+  from { opacity: 0.55; }
   to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-transition-fade { animation: none; }
 }
 
 .video-card-skeleton {
@@ -952,6 +957,35 @@ button:disabled {
 .video-meta {
   color: var(--text-faint);
   font-size: 13px;
+}
+
+/* Stránka videa, než dojdou údaje (components/WatchSkeleton.tsx) - stejné rozměry jako hotová. */
+.watch-skeleton-title {
+  height: 20px;
+  width: 62%;
+  margin: 20px 0 6px;
+}
+.watch-skeleton-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+.watch-skeleton-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--panel-raised);
+  flex-shrink: 0;
+}
+.watch-skeleton-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .watch-skeleton .skeleton-shimmer::after { animation: none; }
 }
 
 .panel {

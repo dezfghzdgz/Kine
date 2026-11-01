@@ -4,8 +4,9 @@
  * Napojení HLS zdroje na <audio>/<video> (lib/musicPlayer.tsx).
  *
  * Safari umí HLS nativně - stačí src. Ostatní prohlížeče (Chrome, Edge,
- * Firefox, Android, televize) ho neumějí a potřebují hls.js, které HLS
- * rozebere a krmí jím prohlížeč přes Media Source Extensions. hls.js se
+ * Firefox, televize) potřebují hls.js, které HLS rozebere a krmí jím
+ * prohlížeč přes Media Source Extensions (Chrome na Androidu HLS umí, ale
+ * videa i tak hrají přes hls.js - viz prefersNativeHls). hls.js se
  * stahuje až když je potřeba (jen mimo Safari, jen když hraje hudba) -
  * a předem "na dálku", ať je v ruce ve chvíli, kdy divák klikne: napojení
  * pak proběhne ještě v tom samém kliknutí, které prohlížeč bere jako
@@ -15,8 +16,15 @@
 export type Detach = () => void;
 
 let nativeHlsMemo: boolean | null = null;
+let preferNativeMemo: boolean | null = null;
 
-/** Umí prohlížeč HLS sám? (Safari na iPhonu, iPadu i Macu.) */
+/**
+ * Umí prohlížeč HLS sám? Safari na iPhonu, iPadu i Macu - ale taky Chrome
+ * na Androidu (odjakživa) a nově i Chrome na počítači.
+ *
+ * Tohle rozhoduje jen o hudbě (lib/musicPlayer.tsx: <audio>, které hraje
+ * i se zamčenou obrazovkou). Videa se řídí prefersNativeHls.
+ */
 export function supportsNativeHls(): boolean {
   if (nativeHlsMemo !== null) return nativeHlsMemo;
   if (typeof document === 'undefined') return false;
@@ -29,13 +37,41 @@ export function supportsNativeHls(): boolean {
   return nativeHlsMemo;
 }
 
+/**
+ * Hrát videa přes HLS prohlížeče (true), nebo přes hls.js (false)?
+ *
+ * Prohlížeč jen u Apple (Safari na Macu, iPhone, iPad - tam je jeho
+ * přehrávač nejlepší) a tam, kde hls.js nejde (bez Media Source
+ * Extensions). Chrome na Androidu a nově i na počítači HLS taky hlásí -
+ * jenže kvalitu si pak volí sám, bez nabídky kvality a bez stropu podle
+ * velikosti přehrávače, takže video bývalo rozmazané i na dobrém
+ * internetu. Tam teď hraje hls.js (lib/vodPlayer.ts).
+ */
+export function prefersNativeHls(): boolean {
+  if (preferNativeMemo !== null) return preferNativeMemo;
+  if (typeof window === 'undefined') return false;
+  if (!supportsNativeHls()) {
+    preferNativeMemo = false;
+    return false;
+  }
+  try {
+    const w = window as any;
+    const mse = !!(w.MediaSource || w.ManagedMediaSource || w.WebKitMediaSource);
+    const apple = /apple/i.test(typeof navigator !== 'undefined' ? navigator.vendor || '' : '');
+    preferNativeMemo = apple || !mse;
+  } catch {
+    preferNativeMemo = true;
+  }
+  return preferNativeMemo;
+}
+
 let HlsCtor: any = null;
 let hlsLoading: Promise<any> | null = null;
 
-/** Stáhne hls.js dopředu (mimo Safari). Bez čekání, bez chyby navenek. */
+/** Stáhne hls.js dopředu (kromě Apple, kde videa hraje prohlížeč sám). Bez čekání, bez chyby navenek. */
 export function preloadHls(): Promise<any> {
   if (HlsCtor) return Promise.resolve(HlsCtor);
-  if (supportsNativeHls()) return Promise.resolve(null);
+  if (prefersNativeHls()) return Promise.resolve(null);
   if (!hlsLoading) {
     hlsLoading = import('hls.js')
       .then((mod) => {
@@ -80,6 +116,11 @@ export type AttachOptions = {
   onFatal?: (why: string) => void;
   /** Zdroj je napojený - teprve teď má smysl volat play(). */
   onReady?: () => void;
+  /**
+   * Odkud začít (vteřiny) - skladba předaná z režimu Video naváže tam, kde video bylo.
+   * hls.js načte rovnou ten kus (ne začátek a pak skok), Safari skočí po načtení údajů.
+   */
+  startAt?: number | null;
 };
 
 /**
@@ -87,10 +128,22 @@ export type AttachOptions = {
  * (při výměně skladby, zavření přehrávače).
  */
 export function attachHls(el: HTMLMediaElement, url: string, options: AttachOptions = {}): Detach {
+  const startAt = typeof options.startAt === 'number' && Number.isFinite(options.startAt) && options.startAt > 0 ? options.startAt : null;
   if (supportsNativeHls()) {
+    // Safari: začátek jde nastavit, až prvek zná délku.
+    const onMeta = () => {
+      if (startAt === null || Math.abs(el.currentTime - startAt) <= 1) return;
+      try {
+        el.currentTime = startAt;
+      } catch {
+        // Ještě nejde - hraje se od začátku, nic se nerozbije.
+      }
+    };
+    if (startAt !== null) el.addEventListener('loadedmetadata', onMeta, { once: true });
     el.src = url;
     options.onReady?.();
     return () => {
+      el.removeEventListener('loadedmetadata', onMeta);
       el.removeAttribute('src');
       try { el.load(); } catch { /* prohlížeč bez load() - není co uklízet */ }
     };
@@ -115,6 +168,7 @@ export function attachHls(el: HTMLMediaElement, url: string, options: AttachOpti
       enableWorker: true,
       // Obraz nikdy větší, než je vidět (malé okno / telefon = menší kvalita, méně dat).
       capLevelToPlayerSize: true,
+      startPosition: startAt ?? -1,
     });
     instances.set(el, hls);
     if (lowVideo.has(el)) hls.autoLevelCapping = 0;

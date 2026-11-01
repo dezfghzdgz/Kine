@@ -215,9 +215,21 @@ function decideAndSave(samples: StartSample[]): void {
 export type LightReason = 'pref' | 'hint' | 'measured' | null;
 
 /**
+ * Smí přehrávač lehký režim sám zrušit, když se připojení ukáže dobré (rychlé kusy po sobě)?
+ * Ano, když ho zapnulo měření - nebo jen odhad prohlížeče: Chrome občas hlásí pomalé
+ * připojení i na rychlé wifi a celé video pak zůstalo rozmazané. Ne, když si šetření dat
+ * vybral člověk - v Kine ('pref'), nebo v prohlížeči (saveData).
+ */
+export function lightCanLift(reason: LightReason, conn: ConnectionInfo = browserConnection()): boolean {
+  if (reason === 'measured') return true;
+  if (reason === 'hint') return !conn?.saveData;
+  return false;
+}
+
+/**
  * Režim a proč: 'pref' = člověk si vybral šetření dat, 'hint' = prohlížeč hlásí pomalé
- * připojení / šetření dat, 'measured' = Kine naměřilo potíže (jen tehdy smí přehrávač
- * sám přepnout zpátky na plnou kvalitu, když se signál zlepší).
+ * připojení / šetření dat, 'measured' = Kine naměřilo potíže. Kdy smí přehrávač sám
+ * přepnout zpátky na plnou kvalitu: lightCanLift.
  */
 export function playbackDecision(now: number = Date.now()): { mode: PlaybackMode; reason: LightReason } {
   const pref = dataSaverPref();

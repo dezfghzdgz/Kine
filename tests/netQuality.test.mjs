@@ -108,5 +108,13 @@ test('hls.js v lehkém režimu: strop = nejvyšší kvalita do 1,6 Mb/s', () => 
   assert.equal(n.lightLevelCap([]), -1);
 });
 
+test('lehký režim se sám zruší po rychlých kusech: po měření i po (mylném) odhadu prohlížeče, ne po volbě člověka', () => {
+  assert.equal(n.lightCanLift('measured', null), true);
+  assert.equal(n.lightCanLift('hint', { effectiveType: '3g', downlink: 1.2 }), true, 'Chrome hlásil pomalé připojení - dřív celé video rozmazané');
+  assert.equal(n.lightCanLift('hint', { saveData: true, effectiveType: '4g' }), false, 'šetření dat v prohlížeči');
+  assert.equal(n.lightCanLift('pref', null), false, 'šetření dat v Kine');
+  assert.equal(n.lightCanLift(null, null), false);
+});
+
 console.log(`\n${prosly} prošlo, ${padly} spadlo`);
 if (padly > 0) process.exit(1);

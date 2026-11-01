@@ -15,6 +15,7 @@ import { customerCodeFromUrl, manifestUrl } from '@/lib/streamSource';
 import { preloadHls } from '@/lib/hlsAttach';
 import { rememberStreamCode } from '@/lib/networkHints';
 import { previewsAllowed } from '@/lib/netQuality';
+import { rememberVideoPeek } from '@/lib/videoPeek';
 
 /**
  * Prodleva po najetí, než se náhled začne stahovat: jen tolik, aby se nespouštěl
@@ -283,7 +284,9 @@ function VideoCard({
         if (e.pointerType === 'mouse') stopHover();
       }}
     >
-      <Link href={href} className="video-card-link">
+      {/* Název a náhled si stránka videa vezme hned odsud (lib/videoPeek.ts) - po kliknutí
+          je na místě přehrávače rovnou obrázek, ne prázdná plocha. */}
+      <Link href={href} className="video-card-link" onClick={() => rememberVideoPeek(video)}>
         {/* is-previewing: náhled se chystá / hraje - kolečko ▶ se neukazuje (nepřekrývá video). */}
         <div className={`${isSparks ? 'video-thumb video-thumb-vertical' : 'video-thumb'}${previewing ? ' is-previewing' : ''}`}>
           {/* U vlastního přehrávače obrázek zůstává pod videem (žádné černé bliknutí, než se video rozjede). */}
@@ -341,7 +344,7 @@ function VideoCard({
       {/* Text a tři tečky jsou hned pod videem v jednom řádku - jako na
           YouTube. Tečky tak sedí u názvu, ne až na spodku celé karty. */}
       <div className="video-card-footer">
-        <Link href={href} className="video-card-textlink">
+        <Link href={href} className="video-card-textlink" onClick={() => rememberVideoPeek(video)}>
           <p className="video-card-title">{video.title}</p>
           <p className="video-card-meta">
             {!hideCreator && <>{video.profiles?.username ?? t('unknownCreator')} · </>}

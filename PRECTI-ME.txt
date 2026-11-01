@@ -1,3 +1,39 @@
+KINE web: hudba - Video je normální přehrávač, ostřejší video, žádné černé bliknutí
+(dodávka kine-0139-2026-11-01)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0139.zip a do GitHubu přetáhni OBSAH složky (jako vždy).
+   Žádná migrace v Supabase, žádná nová proměnná ve Vercelu.
+2. Pořád platí: na GitHubu zbývá smazat složku kine-web-0135 a soubory ze seznamu
+   "smazat" ve stav-souboru.json (sestavení projde i bez toho).
+
+CO JE NOVÉ / OPRAVENÉ
+- Hudba: napoprvé se ukáže obal. Když přepneš na Video, zůstane Video i u dalších skladeb
+  (dokud nepřepneš zpátky). Video je teď normální přehrávač jako u každého videa - časová
+  osa, kvalita, celá obrazovka, kino, titulky, rychlost, klávesy, mini přehrávač při
+  scrollu. Začne tam, kde hudba hrála, a po přepnutí na obal (nebo po odchodu ze stránky)
+  hudba naváže tam, kde video skončilo, a hraje dál v liště dole. Dřív se v režimu Video
+  jen promítal obraz hudby: bez ovládání, v nízké kvalitě a dlouho se načítal (při
+  uloženém Video se skladba po otevření někdy nenačetla vůbec).
+- Když mezitím hraje jiná skladba (fronta, tlačítko Další), Video otevře tu, co hraje.
+- Premiéra skladby, která ještě nezačala, už nehraje potichu na pozadí ani jako další
+  skladba ve frontě (podobná videa teď znají čas premiéry - odpočet i na kartě).
+- Video rozmazané i na rychlém internetu - tři příčiny:
+  1) kvalita se brala přesně podle velikosti přehrávače: na počítači s okénkem ~600-850
+     bodů jen 480p (u Cloudflare nízký datový tok = kostičky). Teď s rezervou: na počítači
+     720p-1080p, na telefonu na výšku 720p, na celé obrazovce vždy plná kvalita;
+  2) Chrome na Androidu (a nově i na počítači) přehrával video sám a kvalitu si volil po
+     svém, bez nabídky kvality - teď i tam hraje přehrávač Kine (hls.js) s volbou kvality.
+     Safari a iPhone beze změny, hudba v liště taky (hraje dál i se zamčeným telefonem);
+  3) šetření dat se zapínalo i tehdy, když se video rozjíždělo pomalu kvůli Cloudflare
+     (ne kvůli připojení), nebo když Chrome mylně hlásil pomalé připojení - a nižší kvalita
+     pak zůstala celé video. Teď se po pár rychle stažených kusech samo zruší (kromě
+     šetření dat zapnutého ručně v Nastavení nebo v prohlížeči).
+- Kliknutí na video: stránka už nezčerná a nebliká - hned je vidět rozložení stránky
+  s náhledem videa a názvem z karty, přehrávač pak naskočí na stejném místě. Video se
+  navíc začne načítat dřív (stránka nečeká na podobná videa a ostatní údaje).
+
 KINE web: oprava 0138 - nabídka ⋮ u karet, migrace, obnovení stránky (F5)
 (dodávka kine-0138b-2026-11-01)
 ==========================================================================================

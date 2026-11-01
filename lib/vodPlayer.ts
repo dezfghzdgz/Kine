@@ -1,10 +1,11 @@
 'use client';
 
-import { preloadHls, supportsNativeHls } from './hlsAttach';
-import { fragmentSample, qualityOptions, startEstimateFor, type FragmentSample, type QualityLevel } from './vodPlayerCore';
+import { preloadHls, prefersNativeHls } from './hlsAttach';
+import { fragmentSample, qualityOptions, sizeCapOptions, sizeLevelCap, startEstimateFor, vodVerdict, type FragmentSample, type QualityLevel } from './vodPlayerCore';
 import {
   LIGHT_START_ESTIMATE,
   LIGHT_UPGRADE_BANDWIDTH,
+  lightCanLift,
   lightLevelCap,
   lightManifestUrl,
   playbackDecision,
@@ -61,7 +62,7 @@ function rememberBandwidth(bps: number): void {
 /** Umí prohlížeč vlastní přehrávač? (HLS sám, nebo Media Source Extensions pro hls.js) */
 export function canPlayVodNatively(): boolean {
   if (typeof window === 'undefined') return false;
-  if (supportsNativeHls()) return true;
+  if (prefersNativeHls()) return true;
   const w = window as any;
   return !!(w.MediaSource || w.ManagedMediaSource || w.WebKitMediaSource);
 }
@@ -191,7 +192,7 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
   const mode: PlaybackMode = decision.mode;
   const measure = options.measure !== false;
   const stats: VodStats = {
-    engine: supportsNativeHls() ? 'native' : 'hls.js',
+    engine: prefersNativeHls() ? 'native' : 'hls.js',
     mode,
     host,
     attachedAt: typeof performance !== 'undefined' ? performance.now() : Date.now(),
@@ -221,6 +222,47 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
   let networkRecoveries = 0;
   /** Lehký režim: kolik kusů po sobě přišlo rychle (zvednutí stropu kvality). */
   let fastFragments = 0;
+  // Stropy kvality pro automatiku hls.js (index úrovně, -1 = bez stropu): lehký režim a velikost
+  // přehrávače. Platí nižší z nich (applyCaps).
+  let lightCap = -1;
+  let sizeCap = -1;
+  let sizeObserver: ResizeObserver | null = null;
+  let sizeFrame = 0;
+  const sizeRule = sizeCapOptions({ device: detectDeviceClass(), light: mode === 'light', preview: !measure });
+
+  function applyCaps() {
+    if (!hls || destroyed) return;
+    const caps = [lightCap, sizeCap].filter((c) => c >= 0);
+    const next = caps.length > 0 ? Math.min(...caps) : -1;
+    const previous = Number(hls.autoLevelCapping);
+    if (next === previous) return;
+    hls.autoLevelCapping = next;
+    // Strop se zvedl (celá obrazovka, větší okno, lepší signál): lepší kvalita hned od dalšího
+    // kusu, ne až po všem, co je stažené dopředu - stejně to dělá hls.js. Jen v automatice
+    // (ručně zvolenou kvalitu to nemění) a až když video hraje.
+    const raised = previous !== -1 && (next === -1 || next > previous);
+    if (raised && hls.autoLevelEnabled && stats.firstFrameMs !== null) {
+      try {
+        hls.nextLevel = -1;
+      } catch {
+        // nic - kvalita se zvedne s dalšími kusy sama
+      }
+    }
+  }
+
+  function updateSizeCap() {
+    if (!hls || destroyed) return;
+    let box = { width: 0, height: 0 };
+    try {
+      const r = video.getBoundingClientRect();
+      box = { width: r.width, height: r.height };
+    } catch {
+      // bez rozměrů = bez stropu
+    }
+    const dpr = typeof window !== 'undefined' && Number(window.devicePixelRatio) > 0 ? Number(window.devicePixelRatio) : 1;
+    sizeCap = sizeLevelCap(hls.levels ?? [], box, Math.min(dpr, sizeRule.maxRatio), sizeRule.headroom);
+    applyCaps();
+  }
 
   // Po přetočení a ruční změně kvality se chvíli načítá schválně - to není zaseknutí.
   let quietUntil = 0;
@@ -231,8 +273,11 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
     if (stats.firstFrameMs === null) {
       stats.firstFrameMs = Math.round(now() - (stats.playRequestedAt ?? stats.attachedAt));
       // Jak rychle se video rozjelo - podle toho se příště volí kvalita (lib/netQuality.ts).
-      // Ne když karta byla na pozadí nebo se čekalo na klepnutí (to není síť).
-      if (measure && stats.playRequestedAt !== null && !stats.hiddenBeforeStart) recordStart(stats.firstFrameMs, 0, mode);
+      // Ne když karta byla na pozadí nebo se čekalo na klepnutí (to není síť), a ne když
+      // zdržel Cloudflare (první kus dlouho nepřicházel, pak přišel rychle) - to není slabé
+      // připojení diváka a dřív kvůli tomu i na rychlém internetu naskočila nižší kvalita.
+      const serverSlow = vodVerdict(stats) === 'slow-server';
+      if (measure && stats.playRequestedAt !== null && !stats.hiddenBeforeStart && !serverSlow) recordStart(stats.firstFrameMs, 0, mode);
     }
   };
   const onWaiting = () => {
@@ -268,8 +313,8 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
   let nativeCleanup: (() => void) | null = null;
   let upgradeTimer: ReturnType<typeof setInterval> | null = null;
 
-  // Jen když lehký režim zapnulo měření - ne volba člověka ani hlášení prohlížeče (šetření dat).
-  if (stats.engine === 'native' && mode === 'light' && decision.reason === 'measured' && options.onUpgrade) {
+  // Jen když lehký režim zapnulo měření nebo odhad prohlížeče - ne volba člověka (šetření dat).
+  if (stats.engine === 'native' && mode === 'light' && lightCanLift(decision.reason) && options.onUpgrade) {
     // Safari v lehkém režimu: hraje to plynule a stahuje se daleko dopředu = signál je dobrý -> plná kvalita.
     let playedFrom: number | null = null;
     let stallsAtStart = 0;
@@ -349,12 +394,10 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
                 const memory = rememberedBandwidth();
                 return startEstimateFor({ remembered: memory.bps, rememberedAgeMs: memory.ageMs, device: detectDeviceClass(), downlinkMbps: browserDownlink(), small: !measure });
               })(),
-        // Do malého okna se nestahuje 1080p; na celé obrazovce kvalita vyskočí.
-        capLevelToPlayerSize: true,
-        // Hustý displej telefonu (3x): v plné kvalitě video ostré i na něm (dřív strop 2x = na
-        // telefonu ~480p i na rychlém připojení); v lehkém režimu 2x (o dost míň dat).
-        // Náhled po najetí (bez měření) v malé kartě: 1,5x - menší první kus = rychlejší rozjezd.
-        maxDevicePixelRatio: !measure ? 1.5 : mode === 'light' ? 2 : 3,
+        // Kvalitu podle velikosti přehrávače hlídá applyCaps níž (s rezervou - hls.js samo bralo
+        // úroveň přesně podle bodů přehrávače a na počítači hrálo 480p i na rychlém připojení).
+        // Do malého okna se 1080p pořád nestahuje; na celé obrazovce kvalita vyskočí.
+        capLevelToPlayerSize: false,
         maxBufferLength: bufferAhead,
         maxMaxBufferLength: bufferCap,
         backBufferLength: options.backBuffer ?? 30,
@@ -362,6 +405,18 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
         manifestLoadPolicy: PLAYLIST_POLICY,
         playlistLoadPolicy: PLAYLIST_POLICY,
       });
+      // Velikost přehrávače hlídá ResizeObserver (celá obrazovka, kino, otočení telefonu, okno).
+      if (typeof ResizeObserver !== 'undefined') {
+        sizeObserver = new ResizeObserver(() => {
+          if (typeof cancelAnimationFrame !== 'undefined') cancelAnimationFrame(sizeFrame);
+          sizeFrame = requestAnimationFrame(() => updateSizeCap());
+        });
+        try {
+          sizeObserver.observe(video);
+        } catch {
+          sizeObserver = null;
+        }
+      }
       const E = Hls.Events;
       hls.on(E.MANIFEST_LOADED, (_e: unknown, data: any) => {
         const l = data?.stats?.loading;
@@ -370,10 +425,8 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
       hls.on(E.MANIFEST_PARSED, () => {
         levels = qualityOptions(hls?.levels ?? []);
         // Lehký režim: automatika nejvýš do ~480p (strop se zvedne, když se připojení ukáže dobré).
-        if (mode === 'light') {
-          const cap = lightLevelCap(hls?.levels ?? []);
-          if (cap >= 0) hls.autoLevelCapping = cap;
-        }
+        if (mode === 'light') lightCap = lightLevelCap(hls?.levels ?? []);
+        updateSizeCap();
         options.onLevels?.();
       });
       hls.on(E.LEVEL_SWITCHED, (_e: unknown, data: any) => {
@@ -397,9 +450,12 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
           // Lehký režim a připojení se ukázalo dobré (3 kusy po sobě): strop pryč - kvalita
           // vyskočí sama ("když bude internet OK, tak bez komprese"). Ne, když si člověk
           // šetření dat zapnul sám.
-          if (mode === 'light' && decision.reason === 'measured' && hls && hls.autoLevelCapping !== -1) {
+          if (mode === 'light' && lightCanLift(decision.reason) && hls && lightCap !== -1) {
             fastFragments = bw >= LIGHT_UPGRADE_BANDWIDTH ? fastFragments + 1 : 0;
-            if (fastFragments >= 3) hls.autoLevelCapping = -1;
+            if (fastFragments >= 3) {
+              lightCap = -1;
+              applyCaps();
+            }
           }
         }
       });
@@ -465,6 +521,9 @@ export function attachVod(video: HTMLVideoElement, url: string, options: VodOpti
       destroyed = true;
       if (upgradeTimer) clearInterval(upgradeTimer);
       upgradeTimer = null;
+      sizeObserver?.disconnect();
+      sizeObserver = null;
+      if (sizeFrame && typeof cancelAnimationFrame !== 'undefined') cancelAnimationFrame(sizeFrame);
       video.removeEventListener('play', onPlay);
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('waiting', onWaiting);

@@ -35,13 +35,16 @@ import { chooseEngineKind, companionCorrection, customerCodeFromUrl, manifestUrl
  * (Media Session níž), a v Safari hraje <audio> dál i při zamčeném
  * telefonu, jako každá hudební appka.
  *
- * JEDEN PŘEHRÁVAČ, NE DVA
+ * OBAL HRAJE TADY, VIDEO HRAJE STRÁNKA
  *
- * Stránka videa si v hudebním režimu vlastní přehrávač nezakládá. Když si
- * divák u skladby přepne na Video, obraz se promítne přes místo, kde má
- * být (showEngineOver): mimo Safari se tam přesune samo <video>
- * přehrávače; v Safari, kde hraje <audio>, se tam pustí tichý <video>
- * společník srovnaný podle zvuku. Zvuk ani v jednom případě nepřeskočí.
+ * Na Obal hraje skladbu tenhle přehrávač. Když si divák přepne na Video,
+ * hraje ji obyčejný přehrávač stránky videa - s časovou osou, kvalitou,
+ * celou obrazovkou a vším, co má každé jiné video (dřív se sem jen
+ * promítal obraz tohohle přehrávače, bez ovládání, a rozjížděl se
+ * dlouho). Čas si předávají oba směry: stránka začne tam, kde hudba
+ * zrovna je (now), a když video zmizí (přepnutí na Obal, odchod ze
+ * stránky), hudba naváže tam, kde video skončilo (openTrack se startAt) -
+ * takže hraje dál i mimo stránku, jako u obalu.
  *
  * DVA SLOTY, ABY MEZI SKLADBAMI NEBYLA DÍRA
  *
@@ -82,9 +85,21 @@ const REPEAT_KEY = 'kine-music-repeat';
 const SHUFFLE_KEY = 'kine-music-shuffle';
 const VOLUME_KEY = 'kine-music-volume';
 
+/** Předání skladby z přehrávače stránky (režim Video): odkud hrát a jestli hned hrát. */
+export type OpenTrackOptions = { startAt?: number | null; play?: boolean };
+
+/** Co právě hraje - pro stránku videa, která naváže tam, kde hudba je (i se stejnou hlasitostí). */
+export type MusicNow = { trackId: string | null; time: number; playing: boolean; volume: number };
+
 type MusicCommands = {
-  /** Načte skladbu. Když už hraje ta samá, nedělá nic - návrat na stránku ji nesmí spustit znovu. */
-  openTrack: (track: MusicTrack, queue?: MusicTrack[]) => void;
+  /**
+   * Načte skladbu. Když už hraje ta samá, nedělá nic - návrat na stránku ji nesmí spustit znovu.
+   * S `options` (předání z režimu Video) skočí na startAt a podle `play` hraje, nebo stojí -
+   * i u skladby, která už je načtená.
+   */
+  openTrack: (track: MusicTrack, queue?: MusicTrack[], options?: OpenTrackOptions) => void;
+  /** Co právě hraje (z ref, bez tikajícího stavu - stránka se kvůli tomu nepřekresluje). */
+  now: () => MusicNow;
   toggle: () => void;
   pause: () => void;
   resume: () => void;
@@ -92,11 +107,10 @@ type MusicCommands = {
   /** Kolik už skladba hraje. Čte se z ref, takže si kvůli tomu nikdo nemusí brát tikající stav. */
   getCurrentTime: () => number;
   /**
-   * "Na stránce se právě rozjelo video, hudba drž."
+   * "Na stránce hraje video, hudba drž."
    *
-   * Platí pro OBYČEJNÁ videa, ne pro hudbu. U hudby je totiž tenhle
-   * přehrávač zároveň tím, co je vidět - kdyby se sám pozastavil, přepnutí
-   * na Video by ho umlčelo.
+   * Obyčejná videa a hudba v režimu Video (tu hraje přehrávač stránky).
+   * Na Obal ne - tam hraje skladbu právě tenhle přehrávač.
    */
   setVideoTakeover: (active: boolean) => void;
   /**
@@ -117,11 +131,11 @@ type MusicCommands = {
   /** Stránka videa hlásí "velký obal téhle skladby ukazuju já" - lišta dole se pak schová. */
   attachStage: (videoId: string | null) => void;
   /**
-   * "Promítni obraz sem."
+   * "Promítni obraz sem." (components/MusicVideoSurface.tsx)
    *
-   * Stránka videa předá obdélník, kde má být vidět přehrávač; obraz se
-   * tam promítne. null ho zase schová. Tímhle se z přepnutí obal/video
-   * stala čistě vizuální věc - žádné druhé načítání.
+   * Obdélník, kde má být vidět obraz tohohle přehrávače; null ho schová.
+   * Stránka videa to teď nepoužívá - režim Video hraje její vlastní
+   * přehrávač s ovládáním (viz úvod souboru).
    */
   showEngineOver: (rect: EngineRect | null) => void;
 };
@@ -279,6 +293,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   // načetlo jedno a pustilo druhé.
   const nextChoiceRef = useRef<MusicTrack | null>(null);
   const slotSeqRef = useRef(0);
+  // Předání z režimu Video (openTrack se startAt): nová skladba začne tady a hraje / stojí podle play.
+  const pendingStartRef = useRef<{ trackId: string; seconds: number; play: boolean } | null>(null);
 
   slotsRef.current = slots;
   activeRef.current = active;
@@ -303,10 +319,11 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     const chosen = chooseEngineKind(supportsNativeHls());
     kindRef.current = chosen;
     setKind(chosen);
-    // Mimo Safari se hls.js stáhne hned, ať je při prvním kliknutí na
-    // skladbu v ruce - napojení pak stihne to samé kliknutí, které
-    // prohlížeč bere jako svolení pustit zvuk.
-    preloadHls();
+    // Kde hudba hraje přes hls.js, stáhne se hned, ať je při prvním kliknutí
+    // na skladbu v ruce - napojení pak stihne to samé kliknutí, které
+    // prohlížeč bere jako svolení pustit zvuk. (Kde HLS umí prohlížeč sám -
+    // Safari, Android - hraje hudba v <audio> a hls.js nepotřebuje.)
+    if (chosen === 'video') preloadHls();
   }, []);
 
   // Druhá pojistka. Kdyby se skladba napojila až po přepnutí na obyčejné
@@ -339,6 +356,12 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
     slotSeqRef.current += 1;
     const plan = planSwap(slotsRef.current, from, next, `s${slotSeqRef.current}`);
+
+    // Zrcadla hned, ne až po překreslení: další povel ve stejné chvíli (stránka předá skladbu
+    // a vzápětí ji otevře znovu s frontou) už musí vidět novou skladbu - jinak by ji přepnul
+    // podruhé a zahodil, odkud má hrát.
+    slotsRef.current = plan.slots;
+    activeRef.current = plan.active;
 
     // Nový slot = nový prvek; starý React odpojí sám (bindSlot s null).
     if (!plan.reused) setSlots(plan.slots);
@@ -436,11 +459,15 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       const url = manifestUrl(slot.track.cloudflareId, customerCodeRef.current);
       // Dokud obraz není vidět, stačí nejnižší kvalita (efekt níž ji při přepnutí na Video uvolní).
       setLowVideo(el, !(i === activeRef.current && engineVisibleRef.current && kindRef.current === 'video'));
+      // Skladba předaná z režimu Video: načte se rovnou od místa, kde video bylo (ne od začátku a pak skok).
+      const pending = pendingStartRef.current?.trackId === slot.track.id ? pendingStartRef.current : null;
+      const autoplay = pending ? pending.play : true;
       detachRefs.current[i] = attachHls(el, url, {
+        startAt: pending && pending.seconds > 0.5 ? pending.seconds : null,
         onReady: () => {
           // Skladba se rozjede jen tehdy, když zvuk nedrží obyčejné video.
           // play() až po napojení zdroje: dřív by ho výměna zdroje přerušila.
-          if (i === activeRef.current && !takeoverRef.current && playersRef.current[i] === el) {
+          if (autoplay && i === activeRef.current && !takeoverRef.current && playersRef.current[i] === el) {
             el.play().catch(() => {
               // Prohlížeč bez svolení (žádné kliknutí) - divák to pustí ručně.
             });
@@ -547,10 +574,27 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       // Zvuk dostane jen, když ho uživatel nemá ztlumený (hlasitost 0).
       player.muted = volumeRef.current === 0;
       player.volume = volumeRef.current;
-      // Předem načtený slot mohl kus přehrát ještě potichu; skladba má
-      // začít od začátku.
-      if ((player.currentTime ?? 0) > 0.5) player.currentTime = 0;
-      if (!takeoverRef.current) safePlay(player);
+      const current = slotsRef.current[active].track;
+      const pending = pendingStartRef.current;
+      if (pending && current && pending.trackId === current.id) {
+        // Předání z režimu Video: od místa, kde video bylo. Nově napojený prvek to má už
+        // ze zdroje (attachHls startAt); předem načtený slot se tam přetočí.
+        pendingStartRef.current = null;
+        if (player.readyState >= 1 && Math.abs((player.currentTime ?? 0) - pending.seconds) > 1) {
+          try {
+            player.currentTime = pending.seconds;
+          } catch {
+            // Ještě nejde - zdroj to dožene sám.
+          }
+        }
+        if (!pending.play) player.pause();
+        else if (!takeoverRef.current) safePlay(player);
+      } else {
+        // Předem načtený slot mohl kus přehrát ještě potichu; skladba má
+        // začít od začátku.
+        if ((player.currentTime ?? 0) > 0.5) player.currentTime = 0;
+        if (!takeoverRef.current) safePlay(player);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, slots[active].key]);
@@ -578,10 +622,44 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   // Příkazy se vytvoří jednou a už se nemění - všechno potřebné čtou z ref.
   const commands = useMemo<MusicCommands>(
     () => ({
-      openTrack(nextTrack, nextQueue) {
+      openTrack(nextTrack, nextQueue, options) {
         if (nextQueue) setQueue(nextQueue);
-        if (slotsRef.current[activeRef.current].track?.id === nextTrack.id) return;
+        const startAt = options && typeof options.startAt === 'number' && Number.isFinite(options.startAt) && options.startAt > 0.5 ? options.startAt : null;
+        const play = options?.play !== false;
+        // Předání z přehrávače stránky: zvuk teď patří hudbě (video na stránce zmizelo).
+        if (options && play) {
+          takeoverRef.current = false;
+          setVideoTakeoverState(false);
+        }
+        if (slotsRef.current[activeRef.current].track?.id === nextTrack.id) {
+          if (!options) return;
+          const player = activePlayer();
+          if (!player) return;
+          if (startAt !== null && Math.abs((player.currentTime || 0) - startAt) > 1) {
+            try {
+              player.currentTime = startAt;
+            } catch {
+              // Ještě nejde - skladba hraje odtud, kde je.
+            }
+            setCurrentTime(startAt);
+          }
+          if (play) safePlay(player);
+          else player.pause();
+          return;
+        }
+        pendingStartRef.current = options ? { trackId: nextTrack.id, seconds: startAt ?? 0, play } : null;
         goToTrack(nextTrack);
+        if (startAt !== null) setCurrentTime(startAt);
+      },
+      now() {
+        const player = playersRef.current[activeRef.current];
+        const time = Number(player?.currentTime);
+        return {
+          trackId: slotsRef.current[activeRef.current].track?.id ?? null,
+          time: Number.isFinite(time) && time > 0 ? time : currentTimeRef.current,
+          playing: !!player && !player.paused,
+          volume: volumeRef.current,
+        };
       },
       toggle() {
         const player = activePlayer();

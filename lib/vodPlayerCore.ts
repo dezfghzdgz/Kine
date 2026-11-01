@@ -88,6 +88,61 @@ export function startEstimateFor(opts: {
   return DESKTOP_DEFAULT_START_BPS;
 }
 
+/**
+ * Jak velkou kvalitu stahovat podle velikosti přehrávače (sizeLevelCap).
+ *
+ * hls.js to umí samo (capLevelToPlayerSize), ale bere úroveň přesně podle
+ * počtu bodů přehrávače: na počítači s obyčejným displejem a přehrávačem
+ * ~850 bodů široko tak hrálo 480p i na rychlém připojení - obraz vypadal
+ * zkomprimovaně ("i na kvalitním internetu" - 480p od Cloudflare má nízký
+ * datový tok, kostičky jsou vidět i zmenšené). YouTube v takovém okně hraje
+ * 720p-1080p. Teď je nad velikostí rezerva:
+ *  - počítač a televize: x1,5 - přehrávač ~600 bodů = 720p, 854+ = 1080p,
+ *  - telefon a tablet: hustý displej počítaný nejvýš dvojnásobně, rezerva
+ *    x1,25 - na výšku 720p (dřív telefony s dvojnásobným displejem 480p),
+ *    na celé obrazovce plná kvalita; víc dat by na výšku nebylo vidět,
+ *  - lehký režim (šetření dat): bez rezervy, displej nejvýš dvojnásobně,
+ *  - náhled po najetí na kartě: malý (displej nejvýš 1,5x, bez rezervy).
+ */
+export function sizeCapOptions(opts: { device: 'phone' | 'tablet' | 'desktop' | 'tv'; light: boolean; preview: boolean }): { maxRatio: number; headroom: number } {
+  if (opts.preview) return { maxRatio: 1.5, headroom: 1 };
+  if (opts.light) return { maxRatio: 2, headroom: 1 };
+  if (opts.device === 'phone' || opts.device === 'tablet') return { maxRatio: 2, headroom: 1.25 };
+  return { maxRatio: 3, headroom: 1.5 };
+}
+
+/**
+ * Index nejvyšší úrovně hls.js, kterou má smysl stahovat do přehrávače
+ * velikosti `box` (body na obrazovce) - pro hls.autoLevelCapping. Úrovně
+ * jdou od nejnižší (jak je řadí hls.js); bere se první, jejíž delší strana
+ * pokryje delší stranu přehrávače × displej × rezerva, a z úrovní stejné
+ * velikosti ta s nejvyšším tokem. -1 = bez stropu (přehrávač je větší než
+ * cokoli, nebo se nedá změřit - schovaný, bez rozměrů úrovní).
+ */
+export function sizeLevelCap(
+  levels: ReadonlyArray<{ width?: number; height?: number } | null | undefined>,
+  box: { width: number; height: number },
+  pixelRatio: number,
+  headroom = 1
+): number {
+  const w = Number(box?.width);
+  const h = Number(box?.height);
+  if (!levels.length || !(w > 0) || !(h > 0)) return -1;
+  const ratio = Number.isFinite(pixelRatio) && pixelRatio > 0 ? pixelRatio : 1;
+  const room = Number.isFinite(headroom) && headroom > 0 ? headroom : 1;
+  const need = Math.max(w, h) * ratio * room;
+  const side = (level: { width?: number; height?: number } | null | undefined) =>
+    Math.max(Number(level?.width) || 0, Number(level?.height) || 0);
+  for (let i = 0; i < levels.length; i++) {
+    const size = side(levels[i]);
+    if (size <= 0 || size < need) continue;
+    let j = i;
+    while (j + 1 < levels.length && side(levels[j + 1]) === size) j++;
+    return j >= levels.length - 1 ? -1 : j;
+  }
+  return -1;
+}
+
 export type EngineChoice = 'native' | 'iframe';
 
 /** Vlastní přehrávač, nebo iframe Cloudflare? (vynucený Cloudflare = ?player=cloudflare, záchrana při potížích) */

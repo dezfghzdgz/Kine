@@ -12,7 +12,7 @@ import { isSpark } from '@/lib/videoBlocks';
 import LoadFailed from '@/components/LoadFailed';
 import { canPlayVodNatively } from '@/lib/vodPlayer';
 import { chooseEngine } from '@/lib/vodPlayerCore';
-import { preloadHls, supportsNativeHls } from '@/lib/hlsAttach';
+import { preloadHls, prefersNativeHls } from '@/lib/hlsAttach';
 import { customerCodeFromUrl } from '@/lib/streamSource';
 import { useMusicCommands } from '@/lib/musicPlayer';
 import { isTvMode } from '@/lib/tvMode';
@@ -69,7 +69,7 @@ function SparksPageInner() {
   const musicCommands = useMusicCommands();
 
   useEffect(() => {
-    setEngine(chooseEngine({ nativeHls: supportsNativeHls(), mse: canPlayVodNatively(), forceCloudflare: searchParams.get('player') === 'cloudflare' }));
+    setEngine(chooseEngine({ nativeHls: prefersNativeHls(), mse: canPlayVodNatively(), forceCloudflare: searchParams.get('player') === 'cloudflare' }));
     // hls.js se stahuje hned, souběžně se seznamem Sparks - ne až když je první video na řadě.
     void preloadHls();
     try {

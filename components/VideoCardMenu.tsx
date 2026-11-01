@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 import { addToQueue } from '@/lib/videoQueue';
+import { isHiddenScheduled, isUpcomingPremiere } from '@/lib/scheduling';
 import { hideVideo, hideChannel } from '@/lib/hiddenContent';
 import { startDownload, recordDownload } from '@/lib/download';
 import ReportModal from './ReportModal';
@@ -155,7 +156,9 @@ export default function VideoCardMenu({
       thumbnail_url: video.thumbnail_url ?? null,
       duration_seconds: video.duration_seconds ?? null,
       username: video.profiles?.username ?? null,
-      cloudflare_video_id: video.cloudflare_video_id ?? null,
+      // Premiéra, která ještě nezačala: bez cloudflare id - hudba si ho dohledá, až začne
+      // (lib/musicQueue.ts), dřív by ji fronta pustila předčasně.
+      cloudflare_video_id: isUpcomingPremiere(video) || isHiddenScheduled(video) ? null : video.cloudflare_video_id ?? null,
     });
     setNote(added ? t('menuAddedToQueue') : t('menuAlreadyInQueue'));
   }

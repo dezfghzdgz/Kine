@@ -6,10 +6,14 @@ import { useMusicCommands } from '@/lib/musicPlayer';
 /**
  * Místo, kam se promítne obraz hudebního přehrávače.
  *
+ * ZATÍM NEPOUŽITÉ: stránka videa v režimu Video hraje skladbu vlastním
+ * přehrávačem s ovládáním (časová osa, kvalita, celá obrazovka) - promítnutý
+ * obraz žádné ovládání neměl a dlouho se načítal. Zůstává pro případné
+ * použití jinde (malý obraz k hudbě).
+ *
  * Sama o sobě je to prázdná krabice se správným poměrem stran. Skutečný
  * přehrávač žije v kostře appky (lib/musicPlayer.tsx) a jen se sem
- * promítne - díky tomu se při přepnutí z obalu na video nic nenačítá
- * znovu, zvuk nepřeskočí a přepnutí je okamžité.
+ * promítne.
  *
  * Poloha se hlásí v souřadnicích DOKUMENTU: přehrávač je v <body>
  * s position: absolute, takže při rolování jede se stránkou sám a nic se

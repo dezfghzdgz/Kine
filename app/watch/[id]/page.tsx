@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Script from 'next/script';
 import { buildVideoBlocks, isSpark } from '@/lib/videoBlocks';
@@ -34,9 +34,9 @@ import { getQueue, removeFromQueue, clearQueue, subscribeToQueue, type QueuedVid
 import { videoCountLabel } from '@/lib/plural';
 import { playbackMode } from '@/lib/playbackMode';
 import { buildMusicQueue, trackFromVideo } from '@/lib/musicQueue';
-import { useMusicCommands } from '@/lib/musicPlayer';
+import { useMusicCommands, type MusicTrack } from '@/lib/musicPlayer';
 import MusicStage from '@/components/MusicStage';
-import MusicVideoSurface from '@/components/MusicVideoSurface';
+import WatchSkeleton from '@/components/WatchSkeleton';
 import { startPlayback as beginPlayback } from '@/lib/playerStart';
 import { decideOrientationFullscreen } from '@/lib/playerControls';
 import { pipSupported, togglePictureInPicture } from '@/lib/pictureInPicture';
@@ -63,7 +63,7 @@ import { seenOrderLocally, rankRelated, upNextWithFallback } from '@/lib/upNext'
 import { filterHidden, loadHiddenContent, NOTHING_HIDDEN, type HiddenContent } from '@/lib/hiddenContent';
 import { chooseEngine, shouldReportSlowStart, statsReport, vodVerdict, type QualityLevel } from '@/lib/vodPlayerCore';
 import { customerCodeFromUrl, manifestUrl } from '@/lib/streamSource';
-import { preloadHls, supportsNativeHls } from '@/lib/hlsAttach';
+import { preloadHls, prefersNativeHls } from '@/lib/hlsAttach';
 import PlaybackStats, { bufferedAhead } from '@/components/PlaybackStats';
 import { VideoBlockRow } from '@/components/SparksShelf';
 import ProfileImage from '@/components/ProfileImage';
@@ -77,8 +77,10 @@ const CAPTIONS_KEY = 'kine-captions';
 
 const MUSIC_VIEW_KEY = 'kine-music-view';
 
+// scheduled_at + is_premiere: premiéra, která ještě nezačala, má na kartě odpočet, nehraje náhled
+// po najetí a hudební fronta ji nepustí (lib/musicQueue.ts) - bez nich se tvářila jako hotové video.
 const RELATED_COLUMNS =
-  'id, title, thumbnail_url, views, width, height, duration_seconds, category, hashtags, created_at, owner_id, cloudflare_video_id, profiles!videos_owner_id_fkey(username)';
+  'id, title, thumbnail_url, views, width, height, duration_seconds, category, hashtags, created_at, owner_id, cloudflare_video_id, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username)';
 
 /**
  * Kandidáti na „podobná videa“ vedle přehrávače (a po konci videa). Jen
@@ -199,10 +201,15 @@ function WatchPageInner() {
   // se serverová a prohlížečová verze stránky neliší.
   const [queue, setQueue] = useState<QueuedVideo[]>([]);
 
-  // Hudba: obal místo videa. Volba se pamatuje, takže kdo jednou přepne
-  // na Video, má ho příště rovnou.
+  // Hudba: napoprvé obal. Volba se pamatuje, takže kdo jednou přepne na
+  // Video, má ho u dalších skladeb rovnou (dokud nepřepne zpátky).
   const [musicView, setMusicView] = useState<'cover' | 'video'>('cover');
   const musicCommands = useMusicCommands();
+  // Režim Video hraje přehrávač stránky; fronta skladeb je připravená dopředu, aby hudba po
+  // odchodu ze stránky mohla hned navázat (předání musí proběhnout hned, bez čekání na dotaz).
+  const musicQueueRef = useRef<{ id: string; tracks: MusicTrack[] } | null>(null);
+  // Přepnutí z Videa na Obal: hudba převezme skladbu i zastavenou (při odchodu ze stránky jen hrající).
+  const toCoverRef = useRef(false);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<any>(null);
@@ -406,27 +413,48 @@ function WatchPageInner() {
   /**
    * Přepnutí mezi obalem a videem.
    *
-   * Odteď je to čistě vizuální věc. Hraje pořád ten samý přehrávač
-   * (lib/musicPlayer.tsx) - v režimu Video se jeho obraz jen promítne na
-   * stránku, v režimu Obal se schová. Žádné předávání času, žádné druhé
-   * načítání, žádná pauza ve zvuku.
+   * Obal: skladbu hraje hudební přehrávač v kostře appky (lib/musicPlayer.tsx),
+   * takže hraje dál i po odchodu ze stránky. Video: hraje ji obyčejný přehrávač
+   * stránky - časová osa, kvalita, celá obrazovka, titulky, klávesy, všechno
+   * jako u každého jiného videa. Dřív se v režimu Video jen promítal obraz
+   * hudebního přehrávače: bez ovládání, v nízké kvalitě a dlouho se načítal.
    *
-   * Dřív si stránka v režimu Video zakládala vlastní přehrávač se stejným
-   * videem, jaké hrálo na pozadí. Dva přehrávače téhož videa si ale lezou
-   * do zelí: appka se na ten druhý napojila, poslala mu "hraj" a nic se
-   * nestalo. Přesně proto se video po přepnutí nikdy nenačetlo.
+   * Čas se předává oběma směry: video začne tam, kde hudba zrovna je (napojení
+   * přehrávače níž), a po přepnutí na Obal hudba naváže tam, kde video skončilo
+   * (předání v efektu "Video -> hudba").
    */
   function changeMusicView(view: 'cover' | 'video') {
-    setMusicView(view);
+    if (view === musicView) return;
     try {
       localStorage.setItem(MUSIC_VIEW_KEY, view);
     } catch {
       // Volba se prostě nezapamatuje.
     }
+    if (view === 'video' && video) {
+      // Hudba mezitím přešla na jinou skladbu (fronta, tlačítko Další) - divák chce video
+      // toho, co právě slyší. Stránka té skladby naváže tam, kde hudba je.
+      // (Tahle stránka zůstane do odchodu na obalu - jinak by na chvilku zastavila hudbu.)
+      const now = musicCommands.now();
+      if (now.trackId && now.trackId !== video.id && now.playing) {
+        router.push(nextHref(now.trackId));
+        return;
+      }
+      // Video začne tam, kde hudba právě je (přehrávač stránky si začátek bere odsud).
+      const fromMusic = musicStartFor(video);
+      if (fromMusic) startAtRef.current = fromMusic;
+    }
+    toCoverRef.current = view === 'cover';
+    setMusicView(view);
   }
 
   const mode = playbackMode(video);
-  const showMusicStage = mode === 'music' && musicView === 'cover';
+  // Kdo hraje: 'music' = hudební přehrávač (obal), jinak přehrávač stránky. Hudba v režimu
+  // Video se chová přesně jako obyčejné video ('classic').
+  const playerMode: ReturnType<typeof playbackMode> = mode === 'music' && musicView === 'video' ? 'classic' : mode;
+  const showMusicStage = playerMode === 'music';
+  // Premiéra, která ještě nezačala (dřív ji vidí jen majitel): místo přehrávače odpočet - a hudba
+  // na obal ji nesmí pustit potichu na pozadí (dřív to šlo).
+  const premiereLocked = !!video && !(userId && userId === (video.owner_id ?? video.profiles?.id)) && isUpcomingPremiere(video, clock);
 
   // "Sleduje obraz" (Nastavení -> Vzhled): pozadí skla a světlo kolem přehrávače berou barvy
   // ze snímku z místa, kde video právě hraje (Cloudflare umí náhled odkudkoli) - každou sekundu,
@@ -438,7 +466,7 @@ function WatchPageInner() {
     setAmbientFrame(null);
     // Až když se obraz opravdu rozjel - snímky nesmí brzdit první kus videa (a čas přehrávače
     // před rozjetím ještě nemusí sedět).
-    if (!followFrames || !playerReady || !playbackStarted || !frameSource || mode === 'music') return;
+    if (!followFrames || !playerReady || !playbackStarted || !frameSource || playerMode === 'music') return;
     let last = '';
     let cancelled = false;
     const tick = async () => {
@@ -458,7 +486,7 @@ function WatchPageInner() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [followFrames, playerReady, playbackStarted, frameSource, mode]);
+  }, [followFrames, playerReady, playbackStarted, frameSource, playerMode]);
 
   /**
    * Předání skladby trvalému přehrávači.
@@ -468,15 +496,21 @@ function WatchPageInner() {
    * ukazuju já, schovej se".
    */
   useEffect(() => {
-    if (!video || !showMusicStage) return;
+    if (!video || !showMusicStage || premiereLocked) return;
 
     const track = trackFromVideo(video);
     if (!track) return;
 
+    // Skladba hned, fronta až bude poskládaná: obal a zvuk naskočí bez čekání na dotazy
+    // (dřív bylo místo obalu do té doby prázdno a pak naskočil - stránka poskočila).
+    if (musicCommands.now().trackId !== track.id) musicCommands.openTrack(track, [track]);
+
     let cancelled = false;
-    buildMusicQueue(video, otherVideos, queue).then((tracks) => {
-      if (!cancelled) musicCommands.openTrack(track, tracks);
-    });
+    buildMusicQueue(video, otherVideos, queue)
+      .then((tracks) => {
+        if (!cancelled && tracks.length > 0) musicCommands.openTrack(track, tracks);
+      })
+      .catch(() => {});
 
     musicCommands.attachStage(video.id);
     return () => {
@@ -484,7 +518,64 @@ function WatchPageInner() {
       musicCommands.attachStage(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [video?.id, showMusicStage, otherVideos, queue]);
+  }, [video?.id, showMusicStage, premiereLocked, otherVideos, queue]);
+
+  /**
+   * Hudba v režimu Video: fronta skladeb připravená dopředu (pro předání níž) a lišta dole
+   * schovaná, když ukazuje tu samou skladbu - video má vlastní ovládání, dvakrát totéž
+   * (a navíc lišta s pauzou) by mátlo.
+   */
+  useEffect(() => {
+    if (!video || mode !== 'music' || playerMode === 'music') return;
+    let cancelled = false;
+    const current = video;
+    buildMusicQueue(current, otherVideos, queue)
+      .then((tracks) => {
+        if (!cancelled && tracks.length > 0) musicQueueRef.current = { id: current.id, tracks };
+      })
+      .catch(() => {});
+    musicCommands.attachStage(current.id);
+    return () => {
+      cancelled = true;
+      musicCommands.attachStage(null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video?.id, mode, playerMode, otherVideos, queue]);
+
+  /**
+   * Video -> hudba: přehrávač stránky u skladby zmizí (přepnutí na Obal, jiné video,
+   * odchod ze stránky) a hudba naváže tam, kde video bylo - hraje dál i mimo stránku,
+   * stejně jako na obal. Při odchodu jen když video hrálo; přepnutí na Obal převezme
+   * i zastavené (skladba pak stojí na stejném místě).
+   *
+   * useLayoutEffect: úklid proběhne hned při odchodu, dřív než se přehrávač odpojí
+   * (čas by byl na nule) a než ho prohlížeč po vyjmutí ze stránky sám zastaví - s obyčejným
+   * efektem byl při odchodu ze stránky už zastavený a hudba nenavázala.
+   */
+  useLayoutEffect(() => {
+    if (!video || mode !== 'music' || playerMode === 'music') return;
+    const current = video;
+    return () => {
+      const toCover = toCoverRef.current;
+      toCoverRef.current = false;
+      const player = playerRef.current;
+      const track = trackFromVideo(current);
+      if (!player || !track) return;
+      const at = Number(player.currentTime) || 0;
+      const length = Number(player.duration) || Number(current.duration_seconds) || 0;
+      // Dohrané video: hudba nemá kde navázat (na konci by hned přeskočila na další).
+      if (player.ended || (length > 0 && at >= length - 1)) return;
+      const play = !player.paused;
+      if (!play && !toCover) return;
+      // Hlasitost, kterou si divák u videa nastavil, platí dál i pro hudbu.
+      const volume = player.muted ? 0 : Number(player.volume);
+      if (Number.isFinite(volume) && Math.abs(volume - musicCommands.now().volume) > 0.01) musicCommands.setVolume(volume);
+      const prepared = musicQueueRef.current;
+      const tracks = prepared && prepared.id === current.id ? prepared.tracks : [track];
+      musicCommands.openTrack(track, tracks, { startAt: at, play });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video?.id, mode, playerMode]);
 
   /**
    * Kdo má zvuk.
@@ -498,12 +589,12 @@ function WatchPageInner() {
    * hudba na pozadí ztichne, stejně jako na YouTube.
    */
   useEffect(() => {
-    // Jen u obyčejných videí. U hudby je přehrávač hudby zároveň tím, co
-    // je vidět - kdyby se sám umlčel, přepnutí na Video by ho zastavilo.
-    musicCommands.setVideoTakeover(!!video && mode !== 'music');
+    // Obyčejná videa a hudba v režimu Video (hraje ji přehrávač stránky). Na Obal ne -
+    // tam hraje skladbu právě hudební přehrávač.
+    musicCommands.setVideoTakeover(!!video && playerMode !== 'music');
     return () => musicCommands.setVideoTakeover(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [video?.id, mode]);
+  }, [video?.id, playerMode]);
 
   // Klávesové zkratky: mezerník = přehrát/pauza, šipky vlevo/vpravo = posun
   // o 5 s, šipky nahoru/dolů = hlasitost, M = ztlumit, F = celá obrazovka.
@@ -762,7 +853,7 @@ function WatchPageInner() {
     setMini(null);
     miniDismissedRef.current = false;
     const dock = dockRef.current;
-    if (!dock || mode === 'music' || typeof IntersectionObserver === 'undefined') return;
+    if (!dock || playerMode === 'music' || typeof IntersectionObserver === 'undefined') return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -791,7 +882,7 @@ function WatchPageInner() {
     return () => observer.disconnect();
     // video?.id: krabice existuje až po načtení videa, do té doby není co
     // pozorovat - efekt se musí pustit znovu, jakmile se vykreslí.
-  }, [videoId, mode, video?.id]);
+  }, [videoId, playerMode, video?.id]);
 
   function leaveMini(scrollBack: boolean) {
     if (scrollBack) {
@@ -850,7 +941,7 @@ function WatchPageInner() {
     phoneLandscape.addEventListener('change', onOrientation);
     return () => phoneLandscape.removeEventListener('change', onOrientation);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [video?.id, mode]);
+  }, [video?.id, playerMode]);
 
   /**
    * Náhradní celá obrazovka schová všechno ostatní. Rámeček je sice
@@ -885,9 +976,8 @@ function WatchPageInner() {
   /**
    * Přehrávač je napojený (vlastní <video>, nebo iframe Cloudflare přes jeho
    * SDK - oba mají stejné ovládání): od teď ho ovládá stránka a rozjede ho.
-   * Tenhle přehrávač je jen pro obyčejná videa. Hudbu hraje jeden jediný
-   * přehrávač v kostře appky a stránka si ho jen promítne - viz
-   * components/MusicVideoSurface.tsx.
+   * Obyčejná videa a hudba v režimu Video. Hudbu na Obal hraje přehrávač
+   * v kostře appky (lib/musicPlayer.tsx).
    */
   function attachPlayer(player: any, seekTo: number | null) {
     playerRef.current = player;
@@ -902,6 +992,11 @@ function WatchPageInner() {
         el.defaultPlaybackRate = keep.rate;
         el.playbackRate = keep.rate;
       }
+    } else if (mode === 'music') {
+      // Skladba v režimu Video: stejná hlasitost jako hudba - žádný skok na plnou.
+      const volume = musicCommands.now().volume;
+      player.volume = volume;
+      player.muted = volume === 0;
     } else {
       player.muted = false;
       player.volume = 1;
@@ -928,6 +1023,20 @@ function WatchPageInner() {
       const start = startAtRef.current;
       attachPlayer((window as any).Stream(iframeRef.current), start ? start.seconds : null);
     }
+  }
+
+  /**
+   * Kde je skladba v hudebním přehrávači - odtud začne video v režimu Video (přepnutí
+   * z obalu, otevření skladby, která hraje v liště). null = hudba hraje něco jiného,
+   * nic, nebo je skladba skoro na konci.
+   */
+  function musicStartFor(data: any): { seconds: number; resumed: boolean } | null {
+    if (!data || playbackMode(data) !== 'music') return null;
+    const now = musicCommands.now();
+    if (now.trackId !== data.id || !(now.time > 1)) return null;
+    const length = Number(data.duration_seconds) || 0;
+    if (length > 0 && now.time >= length - 2) return null;
+    return { seconds: Math.round(now.time * 10) / 10, resumed: false };
   }
 
   /**
@@ -960,6 +1069,10 @@ function WatchPageInner() {
       return Number.isFinite(seconds) && seconds > 0 ? { seconds: Math.floor(seconds), resumed: false } : null;
     }
     if (data?.status !== 'ready') return null;
+    // Skladba, kterou právě hraje (nebo zastavila) hudba - třeba klik na lištu dole: video
+    // v režimu Video naváže tam, kde hudba je, ne tam, kde divák skončil minule.
+    const fromMusic = musicStartFor(data);
+    if (fromMusic) return fromMusic;
     try {
       const history = await (prefetched ?? resumeRow());
       const progress = Math.floor(Number(history?.progress_seconds) || 0);
@@ -1025,9 +1138,9 @@ function WatchPageInner() {
     setQuality(-1);
     setPlayingHeight(null);
 
-    // U hudby stránka žádný vlastní přehrávač nemá - hraje ten v kostře
-    // appky a stránka si ho jen promítne.
-    if (mode === 'music') return;
+    // Hudbu na Obal hraje přehrávač v kostře appky - stránka žádný vlastní nemá.
+    // (V režimu Video hraje skladbu tenhle přehrávač, jako každé jiné video.)
+    if (playerMode === 'music') return;
 
     if (engine === 'native') {
       // Vlastní přehrávač: HLS od Cloudflare rovnou do <video> (lib/vodPlayer.ts).
@@ -1112,12 +1225,12 @@ function WatchPageInner() {
       playbackCleanupRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [video?.id, mode, engine, forcedMode, reattach]);
+  }, [video?.id, playerMode, engine, forcedMode, reattach]);
 
   // Tlačítka na klávesnici a sluchátkách, zamčená obrazovka a oznámení ovládají
   // video (vlastní přehrávač je ve stejném dokumentu jako hudba - lib/musicPlayer.tsx).
   useEffect(() => {
-    if (engine !== 'native' || !playerReady || !video || mode === 'music') return;
+    if (engine !== 'native' || !playerReady || !video || playerMode === 'music') return;
     musicCommands.setVideoControls({
       play: () => void playerRef.current?.play?.(),
       pause: () => playerRef.current?.pause?.(),
@@ -1131,7 +1244,7 @@ function WatchPageInner() {
     });
     return () => musicCommands.setVideoControls(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine, playerReady, video?.id, mode]);
+  }, [engine, playerReady, video?.id, playerMode]);
 
   // Pomalý rozjezd (nebo opakované zasekávání) vlastního přehrávače se jednou
   // za zobrazení nahlásí do /admin/errors i se statistikami - je pak vidět,
@@ -1382,7 +1495,7 @@ function WatchPageInner() {
     // Vlastní přehrávač, kde to jde; ?player=cloudflare vynutí přehrávač Cloudflare (záchrana, srovnání).
     setEngine(
       chooseEngine({
-        nativeHls: supportsNativeHls(),
+        nativeHls: prefersNativeHls(),
         mse: canPlayVodNatively(),
         forceCloudflare: searchParams.get('player') === 'cloudflare',
       })
@@ -1390,6 +1503,9 @@ function WatchPageInner() {
 
     setVideo(data);
     document.title = `${data.title} - Kine`;
+    // Přehrávač hned - podobná videa, spolupracovníci a Sledovat později se doplní, až dojdou.
+    // Dřív stránka čekala i na ně (další 2-4 dotazy) a video se o to později začalo načítat.
+    setLoading(false);
 
     // Appka teď tyhle tři nezávislé věci natahuje souběžně, ne jednu po druhé.
     const [{ data: collabData }, { data: others }, watchLaterResult, seenAndHidden] = await Promise.all([
@@ -1618,7 +1734,9 @@ function WatchPageInner() {
     }
   }
 
-  if (loading) return <p style={{ color: 'var(--text-faint)' }}>{t('loading')}</p>;
+  // Než dojdou údaje: rozložení stránky s náhledem z karty, na kterou divák klikl - ne prázdná
+  // tmavá plocha s "Načítání…" (stránka po kliknutí zčernala a pak naskočila celá najednou).
+  if (loading) return <WatchSkeleton videoId={videoId} />;
 
   if (notFound || !video) {
     // Přesná hláška podle toho, co server ví; obecná jen když neví nic.
@@ -1681,17 +1799,14 @@ function WatchPageInner() {
   const miniActive = !!mini && !isMaximized;
 
   return (
-    <div className={`watch-layout ${theater && mode !== 'music' ? 'watch-layout-theater' : ''}`}>
+    <div className={`watch-layout ${theater && playerMode !== 'music' ? 'watch-layout-theater' : ''}`}>
       {engine === 'iframe' && <Script src="https://embed.cloudflarestream.com/embed/sdk.latest.js" onLoad={handlePlayerSdkReady} />}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <WatchHistoryTracker videoId={video.id} />
       <div className="watch-video-column">
-        {/* U hudby si stránka vlastní přehrávač nezakládá vůbec - ani
-            v režimu Video. Hraje jeden jediný přehrávač v kostře appky,
-            takže hudba jde s divákem i po odchodu ze stránky; v režimu
-            Video se jeho obraz jen promítne do krabice níž. Dva
-            přehrávače téhož videa si lezly do zelí a právě proto se
-            video po přepnutí nikdy nenačetlo. */}
+        {/* Hudba na Obal: velký obal a ovládání hudebního přehrávače v kostře
+            appky (hraje dál i po odchodu ze stránky). Hudba v režimu Video:
+            obyčejný přehrávač stránky se vším ovládáním, jako každé video. */}
         {premiereWaiting ? (
           <div className="premiere-wait" style={{ aspectRatio: '16/9' }}>
             {video.thumbnail_url && <div className="premiere-wait-bg" style={{ backgroundImage: `url(${video.thumbnail_url})` }} />}
@@ -1703,12 +1818,8 @@ function WatchPageInner() {
               </span>
             </div>
           </div>
-        ) : mode === 'music' ? (
-          showMusicStage ? (
-            <MusicStage />
-          ) : (
-            <MusicVideoSurface vertical={video.height > video.width} />
-          )
+        ) : playerMode === 'music' ? (
+          <MusicStage />
         ) : (
                 <div
                   ref={dockRef}
@@ -1874,7 +1985,7 @@ function WatchPageInner() {
                         quality={quality}
                         playingHeight={playingHeight}
                         dataSaver={
-                          engine === 'native' && supportsNativeHls()
+                          engine === 'native' && prefersNativeHls()
                             ? {
                                 light: playingMode === 'light',
                                 onToggle: () => {
@@ -2210,7 +2321,7 @@ function WatchPageInner() {
               </div>
             )}
           </div>
-          {video.visibility === 'public' && video.status === 'ready' && mode !== 'music' && (
+          {video.visibility === 'public' && video.status === 'ready' && playerMode !== 'music' && (
             <button
               className={`reaction-btn ${clipOpen ? 'active' : ''}`}
               onClick={() => {

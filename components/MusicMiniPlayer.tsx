@@ -12,12 +12,11 @@ import {
  * Lišta dole.
  *
  * Není to jen ukazatel hudby na pozadí, ale ovladač toho, co zrovna hraje.
- * Když si divák u skladby přepne na video, lišta zůstane a ovládá rovnou
- * ten přehrávač - stejný čas, pauza funguje z obou stran. Dřív v takové
- * chvíli mizela, takže nešlo skladbu pozastavit a zase se k ní vrátit.
  *
- * Schová se jediné: když stránka videa ukazuje velký obal té samé skladby.
- * Tam je ovládání kousek nad ní a dvakrát to samé pod sebou nedává smysl.
+ * Schová se jediné: když stránka videa ukazuje tu samou skladbu - velký
+ * obal s ovládáním, nebo video s vlastním přehrávačem (režim Video; po
+ * odchodu ze stránky hudba naváže tam, kde video bylo, a lišta se vrátí).
+ * Dvakrát to samé pod sebou nedává smysl.
  */
 export default function MusicMiniPlayer() {
   const { t } = useLanguage();

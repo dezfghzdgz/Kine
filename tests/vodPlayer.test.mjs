@@ -151,5 +151,57 @@ test('technický souhrn: všechno podstatné na pár řádcích', () => {
   assert.match(text, /buffer=12\.5s/);
 });
 
+// --- kvalita podle velikosti přehrávače (sizeLevelCap) --------------------------
+
+// Úrovně jako od Cloudflare (hls.js je řadí od nejnižší).
+const ladder = [
+  { width: 426, height: 240 },
+  { width: 640, height: 360 },
+  { width: 854, height: 480 },
+  { width: 1280, height: 720 },
+  { width: 1920, height: 1080 },
+];
+const pc = v.sizeCapOptions({ device: 'desktop', light: false, preview: false });
+const phone = v.sizeCapOptions({ device: 'phone', light: false, preview: false });
+
+test('počítač s obyčejným displejem: rezerva nad přehrávačem (dřív 480p v okně 610-854)', () => {
+  assert.equal(v.sizeLevelCap(ladder, { width: 610, height: 343 }, 1, pc.headroom), 3, 'okno 1280 px: 720p, ne 480p');
+  assert.equal(v.sizeLevelCap(ladder, { width: 854, height: 480 }, 1, pc.headroom), -1, '854: 1080p');
+  assert.equal(v.sizeLevelCap(ladder, { width: 400, height: 225 }, 1, pc.headroom), 1, 'mini přehrávač v rohu: 360p');
+  assert.equal(v.sizeLevelCap(ladder, { width: 1280, height: 720 }, 1, pc.headroom), -1, '1080p = bez stropu');
+  assert.equal(v.sizeLevelCap(ladder, { width: 960, height: 540 }, 1, pc.headroom), -1);
+  assert.equal(v.sizeLevelCap(ladder, { width: 640, height: 360 }, 1, pc.headroom), 3, 'malé okno 720p');
+  assert.equal(v.sizeLevelCap(ladder, { width: 320, height: 180 }, 1, pc.headroom), 1, 'malinké okno 360p');
+  // bez rezervy (jak to dělalo hls.js samo) by v okně 854 bylo 480p
+  assert.equal(v.sizeLevelCap(ladder, { width: 854, height: 480 }, 1, 1), 2);
+});
+
+test('telefon: na výšku 720p (i s dvojnásobným displejem), na celé obrazovce bez stropu', () => {
+  const dpr = (real) => Math.min(real, phone.maxRatio);
+  assert.equal(v.sizeLevelCap(ladder, { width: 390, height: 219 }, dpr(3), phone.headroom), 3);
+  assert.equal(v.sizeLevelCap(ladder, { width: 390, height: 219 }, dpr(2), phone.headroom), 3, 'dřív 480p');
+  assert.equal(v.sizeLevelCap(ladder, { width: 844, height: 390 }, dpr(3), phone.headroom), -1);
+});
+
+test('svislé video a náhled na kartě', () => {
+  const vertical = ladder.map((l) => ({ width: l.height, height: l.width }));
+  assert.equal(v.sizeLevelCap(vertical, { width: 405, height: 720 }, 1, pc.headroom), 3, 'svislé 720p');
+  assert.equal(v.sizeLevelCap(vertical, { width: 608, height: 1080 }, 1, pc.headroom), -1, 'na celou výšku bez stropu');
+  const preview = v.sizeCapOptions({ device: 'desktop', light: false, preview: true });
+  assert.equal(v.sizeLevelCap(ladder, { width: 320, height: 180 }, Math.min(2, preview.maxRatio), preview.headroom), 1, '360p');
+});
+
+test('bez rozměrů nebo bez úrovní žádný strop (schovaný přehrávač, manifest bez RESOLUTION)', () => {
+  assert.equal(v.sizeLevelCap(ladder, { width: 0, height: 0 }, 1, 1.4), -1);
+  assert.equal(v.sizeLevelCap([], { width: 800, height: 450 }, 1, 1.4), -1);
+  assert.equal(v.sizeLevelCap([{}, {}], { width: 800, height: 450 }, 1, 1.4), -1);
+  assert.equal(v.sizeLevelCap(ladder, { width: 800, height: 450 }, NaN, NaN), 2, 'nesmysl = 1x bez rezervy');
+});
+
+test('stejná velikost ve více tocích: bere se ta lepší', () => {
+  const dup = [{ width: 640, height: 360 }, { width: 1280, height: 720 }, { width: 1280, height: 720 }, { width: 1920, height: 1080 }];
+  assert.equal(v.sizeLevelCap(dup, { width: 854, height: 480 }, 1, 1.4), 2);
+});
+
 console.log(`\n${prosly} prošlo, ${padly} spadlo`);
 if (padly > 0) process.exit(1);
