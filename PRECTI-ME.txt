@@ -1,3 +1,37 @@
+KINE web: živé vysílání - chat, hlavička, další přenosy, klip ke stažení, zvuk zůstane vypnutý
+(dodávka kine-0141-2026-11-02)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0141.zip a do GitHubu přetáhni OBSAH složky (jako vždy).
+   Žádná migrace v Supabase, žádná nová proměnná ve Vercelu.
+2. Pořád platí: na GitHubu zbývá smazat složku kine-web-0135 a soubory ze seznamu
+   "smazat" ve stav-souboru.json (sestavení projde i bez toho).
+
+CO JE NOVÉ / OPRAVENÉ (stránka přenosu)
+- Nabídky v chatu (barva jména, čtení nahlas, anketa, nastavení chatu, ⋯ u zprávy):
+  otevřená je vždy jen jedna a klik mimo nebo Esc ji zavře. Dřív šly otevřít všechny
+  naráz a kreslily se přes sebe.
+- Co vidí kdo: obyčejný divák má v hlavičce chatu jen barvu svého jména a chat v novém
+  okně. Nastavení chatu, ankety a moderování zpráv (smazat, ztlumit, zablokovat,
+  připnout) byly jen pro streamera a moderátory už předtím. Nově jen pro ně je i čtení
+  zpráv nahlas - je to nástroj pro vysílání. Divákovi, kterému ze staré verze zůstalo
+  zapnuté, už nečte.
+- Pod názvem přenosu je „👁 1 · ⏱ 8:28“ (diváci · jak dlouho přenos běží) - dřív se
+  tečka lepila na čas („1 ·8:28“) a nebylo jasné, co to číslo je.
+- Další živé přenosy: pod přehrávačem (na telefonu pod chatem) je řada ostatních
+  přenosů, která se posouvá do strany, takže se dá přejít k dalšímu, i když jich běží
+  hodně. I na hlavní stránce se řada Živě na telefonu posouvá do strany (místo dlouhého
+  sloupce karet).
+- Klip z přenosu se jen stáhne do zařízení (posledních ~30 s jako MP4, např.
+  kine-jakub-koubek-2026-11-02-1830.mp4). Na Kine se nic neukládá: klip nezabírá úložiště
+  ani se nepřidá jako video na kanál streamera. Cloudflare ho vyrobí ze záznamu vysílání
+  až při stažení a neúčtuje ho jako uložené video. Klip jde dělat jen přihlášeným.
+- Ztlumený přenos se už sám nerozezní: přehrávač se občas načte znovu (zamrzlý obraz,
+  přechod na lepší adresu) a dřív pak znovu hrál se zvukem. Teď si pamatuje ztlumení
+  i hlasitost a po načtení je vrátí. Kdo si zvuk vypnul sám, tomu se ani neukazuje
+  „Zapnout zvuk“.
+
 KINE web: telefon - nabídky bez textu přes text, iPhone bez přiblížení, tlačítka u videa v řadě
 (dodávka kine-0140-2026-11-02)
 ==========================================================================================

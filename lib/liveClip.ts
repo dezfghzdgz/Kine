@@ -1,13 +1,13 @@
 /**
- * Klip z živého vysílání (čistá logika - tests/liveClip.test.mjs).
+ * Klip z živého vysílání (čistá logika - tests/liveExtras.test.mjs).
  *
- * Divák u přenosu klikne na „Klip“ a uloží se posledních ~30 sekund -
- * jako na Twitchi. Cloudflare to umí sám ("Live Instant Clipping"): ze
+ * Divák u přenosu klikne na „Klip“ a posledních ~30 sekund se mu stáhne
+ * do zařízení. Cloudflare to umí sám ("Live Instant Clipping"): ze
  * záznamu, který se při vysílání nahrává, vyrobí MP4 od-do
  * (https://customer-<kód>.cloudflarestream.com/<video>/clip.mp4?time=…&duration=…).
- * Takový klip ale u Cloudflare nezůstává (zmizí se záznamem), proto ho Kine
- * hned zkopíruje jako nové video (API "copy") - pak je to obyčejný klip
- * jako z videa: vlastní ho streamer, u klipu je uvedené, kdo ho udělal.
+ * Takový klip se u Cloudflare neukládá a neplatí se za úložiště - Kine ho
+ * už nekopíruje jako nové video (dřív každé kliknutí přidalo video do
+ * úložiště streamera).
  *
  * Kde je "posledních 30 s": náhledový manifest ?duration=30s vrací
  * v hlavičce preview-start-seconds, kde těch posledních 30 s začíná
@@ -60,11 +60,29 @@ export function livePreviewManifestUrl(code: string, videoUid: string, length = 
 }
 
 /** MP4 klipu ze záznamu vysílání (Cloudflare ho vyrobí, když si ho někdo stáhne). */
-export function liveClipMp4Url(code: string, videoUid: string, window: { time: number; duration: number }): string | null {
+export function liveClipMp4Url(code: string, videoUid: string, window: { time: number; duration: number }, filename = 'kine-clip.mp4'): string | null {
   if (!CODE.test(code) || !UID.test(videoUid)) return null;
   const time = Math.max(0, Math.floor(window.time));
   const duration = Math.max(1, Math.min(60, Math.floor(window.duration)));
-  return `https://customer-${code}.cloudflarestream.com/${videoUid}/clip.mp4?time=${time}s&duration=${duration}s&filename=kine-clip.mp4`;
+  const name = /^[A-Za-z0-9._-]{1,120}\.mp4$/.test(filename) ? filename : 'kine-clip.mp4';
+  return `https://customer-${code}.cloudflarestream.com/${videoUid}/clip.mp4?time=${time}s&duration=${duration}s&filename=${name}`;
+}
+
+/**
+ * Název staženého souboru: kine-<kanál>-<rrrr-mm-dd>-<hhmm>.mp4 - jen písmena
+ * bez diakritiky, číslice a pomlčky (projde každým systémem i adresou).
+ */
+export function liveClipFilename(channel: string | null | undefined, at: Date = new Date()): string {
+  const slug = (channel ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const stamp = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}-${pad(at.getHours())}${pad(at.getMinutes())}`;
+  return `kine-${slug ? `${slug}-` : ''}${stamp}.mp4`;
 }
 
 /** Hlavička preview-start-seconds -> číslo (nesmysl = null). */

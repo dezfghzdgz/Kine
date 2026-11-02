@@ -34,6 +34,8 @@ export type LiveItem = {
 
 /** Na hlavní stránce nejvýš tolik přenosů - všechny jsou na stránce Živě (/streams). */
 const HOME_LIMIT = 8;
+/** V řadě „Další živé přenosy“ u přenosu (posouvá se do strany) nejvýš tolik. */
+const MORE_LIMIT = 24;
 
 /** Seznam starší než tohle (nejde obnovit) se schová - přenosy v něm už nemusí běžet. */
 const STALE_AFTER_MS = 90 * 1000;
@@ -58,8 +60,13 @@ export function recentLiveList(maxAgeMs: number = REUSE_MS): { at: number; strea
 /**
  * Řada "Živě" na hlavní stránce - kdo teď vysílá. Když nikdo, nevykreslí
  * se nic. Obnovuje se každých 20 s (jen když je karta prohlížeče vidět).
+ *
+ * variant="more": „Další živé přenosy“ na stránce přenosu (bez kanálu
+ * excludeOwnerId) - jedna řada, která se posouvá do strany, ať jde přejít
+ * k dalšímu přenosu, i když jich běží hodně. Na telefonu se do strany
+ * posouvá i řada na hlavní stránce (místo dlouhého sloupce karet).
  */
-export default function LiveNowRow() {
+export default function LiveNowRow({ variant = 'home', excludeOwnerId }: { variant?: 'home' | 'more'; excludeOwnerId?: string } = {}) {
   const { t } = useLanguage();
   const [streams, setStreams] = useState<LiveItem[]>(() => recentLiveList()?.streams ?? []);
   const [now, setNow] = useState(() => Date.now());
@@ -118,20 +125,23 @@ export default function LiveNowRow() {
     };
   }, []);
 
-  if (streams.length === 0) return null;
+  const more = variant === 'more';
+  const list = excludeOwnerId ? streams.filter((s) => s.ownerId !== excludeOwnerId) : streams;
+  if (list.length === 0) return null;
+  const heading = more ? t('liveMoreHeading') : t('liveNowHeading');
 
   return (
-    <section className="live-now" aria-label={t('liveNowHeading')}>
+    <section className={more ? 'live-now live-more' : 'live-now'} aria-label={heading}>
       <div className="live-now-head">
         <p className="section-title" style={{ margin: 0 }}>
-          <span className="live-dot" aria-hidden="true" /> {t('liveNowHeading')}
+          <span className="live-dot" aria-hidden="true" /> {heading}
         </p>
         <Link href="/streams" className="live-now-all">
-          {streams.length > HOME_LIMIT ? t('liveNowSeeAllCount').replace('{count}', String(streams.length)) : t('liveNowSeeAll')} →
+          {!more && streams.length > HOME_LIMIT ? t('liveNowSeeAllCount').replace('{count}', String(streams.length)) : t('liveNowSeeAll')} →
         </Link>
       </div>
-      <div className="live-now-grid">
-        {streams.slice(0, HOME_LIMIT).map((s) => (
+      <div className={more ? 'live-rail' : 'live-now-grid live-now-home'}>
+        {list.slice(0, more ? MORE_LIMIT : HOME_LIMIT).map((s) => (
           <LiveCard key={s.ownerId} item={s} now={now} />
         ))}
       </div>

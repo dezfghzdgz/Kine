@@ -12,6 +12,7 @@ import { categoryLabel } from '@/lib/categories';
 import { gameBySlug } from '@/lib/games';
 import GameChip from '@/components/GameChip';
 import LiveChat from '@/components/LiveChat';
+import LiveNowRow from '@/components/LiveNowRow';
 import LiveTipDialog from '@/components/LiveTipDialog';
 import SubscribeButton from '@/components/SubscribeButton';
 import VerifiedBadge from '@/components/VerifiedBadge';
@@ -239,7 +240,7 @@ export default function LivePage() {
             {t('liveStudioTitle')}
           </Link>
         )}
-        {status.live && !status.held && playerUrl && <LiveClipButton channelId={profile.id} loggedIn={!!viewerId} />}
+        {status.live && !status.held && playerUrl && <LiveClipButton channelId={profile.id} channelName={profile.username} loggedIn={!!viewerId} />}
         {!isOwner && status.live && status.tips?.enabled && CREATOR_PAYMENTS_ENABLED && (
           <button type="button" className="live-tip-btn" onClick={() => setTipOpen(true)}>
             💛 {t('tipButton')}
@@ -258,6 +259,10 @@ export default function LivePage() {
       )}
     </div>
   );
+
+  // Další živé přenosy (bez tohohle kanálu) - řada, která se posouvá do strany.
+  // V mřížce stránky je za chatem: na telefonu pod chatem, na počítači pod přehrávačem.
+  const moreLive = <LiveNowRow variant="more" excludeOwnerId={profile.id} />;
 
   // Raid a přivítání po raidu - nahoře nad přehrávačem (i po konci vysílání).
   const raidBanner = status.raid && !isOwner ? <LiveRaidBanner raid={status.raid} fromId={profile.id} fromName={name} /> : null;
@@ -284,6 +289,7 @@ export default function LivePage() {
           {channelRow}
         </div>
         <LiveChat {...chatProps} />
+        {moreLive}
       </div>
     );
   }
@@ -307,6 +313,7 @@ export default function LivePage() {
           {channelRow}
         </div>
         <LiveChat {...chatProps} />
+        {moreLive}
       </div>
     );
   }
@@ -338,6 +345,7 @@ export default function LivePage() {
           {channelRow}
         </div>
         <LiveChat {...chatProps} />
+        {moreLive}
       </div>
     );
   }
@@ -382,11 +390,15 @@ export default function LivePage() {
             <span className="live-meta-viewers" title={t('liveViewersNow')}>
               <UiIcon name="eye" size={14} /> {new Intl.NumberFormat(DATE_LOCALES[lang]).format(status.viewers)}
               <span className="live-stats-sr"> {t('liveViewersNow')}</span>
-              {' · '}
             </span>
           )}
-          {stream?.startedAt && <span>{liveElapsed(stream.startedAt, now)}</span>}
-          {stream?.category && !liveGame && <span> · {categoryLabel(stream.category, t)}</span>}
+          {stream?.startedAt && (
+            <span className="live-meta-time" title={t('liveUptimeTitle')}>
+              <UiIcon name="timer" size={14} /> {liveElapsed(stream.startedAt, now)}
+              <span className="live-stats-sr"> {t('liveUptimeTitle')}</span>
+            </span>
+          )}
+          {stream?.category && !liveGame && <span>{categoryLabel(stream.category, t)}</span>}
         </p>
         {liveGame && (
           <p className="live-game-row">
@@ -401,6 +413,7 @@ export default function LivePage() {
         )}
       </div>
       <LiveChat {...chatProps} />
+      {moreLive}
     </div>
   );
 }

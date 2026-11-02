@@ -195,7 +195,8 @@ export default function LivePollBox({
   }
 
   const composer = composerOpen && canManage && !overlay && (
-    <form className="live-poll live-poll-composer" onSubmit={create}>
+    // data-chat-menu: klik do formuláře nezavře nabídky chatu (components/LiveChat.tsx).
+    <form className="live-poll live-poll-composer" onSubmit={create} data-chat-menu>
       <div className="live-poll-head">
         <UiIcon name="poll" size={15} />
         <span className="live-poll-label">{t('livePollNew')}</span>

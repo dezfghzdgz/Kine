@@ -17737,3 +17737,84 @@ html {
     padding-top: 2px;
   }
 }
+
+/* =====================================================================
+   0141: Živé vysílání
+   ===================================================================== */
+
+/* Řádek pod názvem přenosu: diváci · jak dlouho běží · kategorie. Oddělovače
+   kreslí CSS - dřív se tečka lepila na čas („1 ·8:28“). */
+.live-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 0;
+}
+.live-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.live-meta > span + span::before {
+  content: '·';
+  margin: 0 8px;
+  color: var(--text-faint);
+}
+.live-meta-time .ui-icon {
+  color: var(--text-faint);
+}
+
+/* „Další živé přenosy“ u přenosu: jedna řada, posouvá se do strany (prstem,
+   kolečkem se Shiftem, posuvníkem). V mřížce stránky je pod přehrávačem vlevo,
+   na telefonu (jeden sloupec) pod chatem. */
+.live-more {
+  grid-column: 1;
+  min-width: 0;
+  margin: 8px 0 0;
+}
+.live-rail {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(240px, 280px);
+  gap: 16px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  padding-bottom: 8px;
+  scrollbar-width: thin;
+}
+.live-rail > * {
+  scroll-snap-align: start;
+  min-width: 0;
+}
+@media (max-width: 1000px) {
+  .live-more {
+    grid-column: auto;
+  }
+}
+@media (max-width: 768px) {
+  /* html … má stejnou váhu jako html[data-cards] .live-now-grid (velikost karet ve Vzhledu) a je později. */
+  .live-rail,
+  html .live-now-grid.live-now-home {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: min(78vw, 300px);
+    gap: 12px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    margin-left: -16px;
+    margin-right: -16px;
+    padding: 0 16px 6px;
+    scroll-padding-left: 16px;
+    scrollbar-width: none;
+  }
+  .live-rail::-webkit-scrollbar,
+  .live-now-home::-webkit-scrollbar {
+    display: none;
+  }
+  .live-now-home > * {
+    scroll-snap-align: start;
+    min-width: 0;
+  }
+}

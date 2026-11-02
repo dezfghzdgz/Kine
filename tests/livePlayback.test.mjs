@@ -77,5 +77,14 @@ test('postup času: jen dopředu, skok zpět ani první údaj není postup', () 
   assert.equal(lp.timeAdvanced(5, Number.NaN), false);
 });
 
+test('zvuk diváka: ztlumení a hlasitost se pamatují, nesmysl se zahodí', () => {
+  assert.deepEqual(lp.parseLiveAudio('{"muted":true,"volume":0.4}'), { muted: true, volume: 0.4 });
+  assert.deepEqual(lp.parseLiveAudio('{"muted":false,"volume":7}'), { muted: false, volume: 1 });
+  assert.deepEqual(lp.parseLiveAudio('{"muted":true}'), { muted: true, volume: 1 });
+  assert.equal(lp.parseLiveAudio('{"volume":0.5}'), null);
+  assert.equal(lp.parseLiveAudio('nesmysl'), null);
+  assert.equal(lp.parseLiveAudio(null), null);
+});
+
 console.log(`\n${prosly} prošlo, ${padly} spadlo`);
 if (padly > 0) process.exit(1);

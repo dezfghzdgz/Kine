@@ -4,7 +4,23 @@ import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import UiIcon from '@/components/UiIcon';
-import { livePlayerSrc, stallAction, timeAdvanced } from '@/lib/livePlayback';
+import { LIVE_AUDIO_KEY, livePlayerSrc, parseLiveAudio, stallAction, timeAdvanced, type LiveAudioPref } from '@/lib/livePlayback';
+
+function readLiveAudio(): LiveAudioPref | null {
+  try {
+    return parseLiveAudio(window.localStorage.getItem(LIVE_AUDIO_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function saveLiveAudio(pref: LiveAudioPref) {
+  try {
+    window.localStorage.setItem(LIVE_AUDIO_KEY, JSON.stringify(pref));
+  } catch {
+    // Bez úložiště se zvuk jen nepamatuje.
+  }
+}
 
 /** Přehrávač Cloudflare ovládaný přes jeho SDK (stejné jako na stránce videa). */
 type SdkPlayer = {
@@ -12,6 +28,7 @@ type SdkPlayer = {
   removeEventListener: (event: string, fn: () => void) => void;
   play: () => Promise<void> | void;
   muted: boolean;
+  volume: number;
   paused: boolean;
   currentTime: number;
 };
@@ -83,16 +100,51 @@ export default function LivePlayer({ url, title }: { url: string; title: string 
     const onPause = () => {
       w.pausedByViewer = true;
     };
+    // Zvuk podle diváka (lib/livePlayback.ts - parseLiveAudio): po každém načtení přehrávače
+    // vrátit jeho ztlumení a hlasitost. Změny, které udělá Kine sama (rozjetí ztlumeně,
+    // vrácení nastavení), se jako volba diváka neukládají.
+    let ownChangeUntil = 0;
+    const applyAudio = () => {
+      const pref = readLiveAudio();
+      if (!pref || cancelled) return;
+      ownChangeUntil = Date.now() + 1000;
+      try {
+        player.volume = pref.volume;
+        if (pref.muted && !player.muted) player.muted = true;
+      } catch {
+        // Starší SDK hlasitost neumí - nic.
+      }
+    };
+    const onVolume = () => {
+      if (cancelled || Date.now() < ownChangeUntil) return;
+      let muted: boolean;
+      let volume: number;
+      try {
+        muted = !!player.muted;
+        volume = Number(player.volume);
+      } catch {
+        return;
+      }
+      saveLiveAudio({ muted, volume: Number.isFinite(volume) ? volume : 1 });
+      if (!muted) setAutoMuted(false);
+    };
+    applyAudio();
+
     player.addEventListener('timeupdate', onTime);
     player.addEventListener('playing', onPlay);
     player.addEventListener('play', onPlay);
     player.addEventListener('pause', onPause);
+    player.addEventListener('volumechange', onVolume);
+    player.addEventListener('loadeddata', applyAudio);
+    player.addEventListener('playing', applyAudio);
 
     // Rozjet: se zvukem, a když ho prohlížeč bez kliknutí nepustí, ztlumeně (+ "Zapnout zvuk").
     const startMuted = async () => {
       try {
+        ownChangeUntil = Date.now() + 1000;
         player.muted = true;
-        if (!cancelled) setAutoMuted(true);
+        // Kdo si ztlumil sám, tomu „Zapnout zvuk“ neukazovat.
+        if (!cancelled) setAutoMuted(!readLiveAudio()?.muted);
         await player.play();
       } catch {
         if (cancelled) return;
@@ -123,6 +175,9 @@ export default function LivePlayer({ url, title }: { url: string; title: string 
       player.removeEventListener('playing', onPlay);
       player.removeEventListener('play', onPlay);
       player.removeEventListener('pause', onPause);
+      player.removeEventListener('volumechange', onVolume);
+      player.removeEventListener('loadeddata', applyAudio);
+      player.removeEventListener('playing', applyAudio);
       if (playerRef.current === player) playerRef.current = null;
     };
   }, [sdkReady, url, reload]);
@@ -163,6 +218,8 @@ export default function LivePlayer({ url, title }: { url: string; title: string 
   function unmute() {
     const player = playerRef.current;
     setAutoMuted(false);
+    // Divák zvuk zapnul sám - zapamatovat (i když událost hlasitosti nepřijde).
+    saveLiveAudio({ muted: false, volume: readLiveAudio()?.volume ?? 1 });
     if (!player) return;
     try {
       player.muted = false;
@@ -175,6 +232,7 @@ export default function LivePlayer({ url, title }: { url: string; title: string 
   function tapToPlay() {
     const player = playerRef.current;
     setNeedsTap(false);
+    saveLiveAudio({ muted: false, volume: readLiveAudio()?.volume ?? 1 });
     watch.current.pausedByViewer = false;
     watch.current.lastProgressAt = Date.now();
     if (!player) return;

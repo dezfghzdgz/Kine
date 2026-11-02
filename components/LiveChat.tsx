@@ -154,6 +154,36 @@ export default function LiveChat({
   const [ttsMode, setTtsMode] = useState<TtsMode>('off');
   const [ttsMenu, setTtsMenu] = useState(false);
   const [ttsSupported, setTtsSupported] = useState(true);
+
+  // Nabídky v hlavičce chatu (barva, čtení nahlas, anketa, nastavení) a ⋯ u zprávy:
+  // vždy jen jedna otevřená - dřív šly otevřít všechny naráz a kreslily se přes sebe.
+  // Klik mimo nabídku nebo Esc ji zavře (prvky nabídek a jejich tlačítka mají data-chat-menu).
+  const anyMenuOpen = colorMenu || ttsMenu || panelOpen || pollComposer || actionsFor !== null;
+  function closeMenus() {
+    setColorMenu(false);
+    setTtsMenu(false);
+    setPanelOpen(false);
+    setPollComposer(false);
+    setActionsFor(null);
+    setPickerOpen(false);
+  }
+  useEffect(() => {
+    if (!anyMenuOpen) return;
+    const onDown = (e: PointerEvent) => {
+      const target = e.target as Element | null;
+      if (target && typeof target.closest === 'function' && target.closest('[data-chat-menu]')) return;
+      closeMenus();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeMenus();
+    };
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [anyMenuOpen]);
   const speakerRef = useRef<ChatSpeaker | null>(null);
   const spokenUpToRef = useRef<number | null>(null);
 
@@ -179,7 +209,9 @@ export default function LiveChat({
     const maxId = messages[messages.length - 1].id;
     const from = spokenUpToRef.current;
     spokenUpToRef.current = Math.max(from ?? 0, maxId);
-    if (from === null || ttsMode === 'off' || !speakerRef.current) return;
+    // Čtení nahlas je nástroj pro vysílání: streamer a moderátoři (a překryv pro OBS) -
+    // divákovi, kterému zůstalo zapnuté ze starší verze, už nečte.
+    if (from === null || ttsMode === 'off' || !speakerRef.current || (!mod && !overlay)) return;
     const templates = { tip: t('ttsTip'), tipNoMessage: t('ttsTipNoMessage'), chat: t('ttsChat'), link: t('ttsLinkWord') };
     for (const m of messages) {
       if (m.id <= from || m.user_id === userId) continue;
@@ -526,7 +558,9 @@ export default function LiveChat({
   }
 
   async function openColorMenu() {
-    setColorMenu((v) => !v);
+    const wasOpen = colorMenu;
+    closeMenus();
+    setColorMenu(!wasOpen);
     if (myColor !== undefined) return;
     try {
       const res = await fetch('/api/live/chat/color', { headers: await authHeader(), cache: 'no-store' });
@@ -704,7 +738,7 @@ export default function LiveChat({
         <span>{t('liveChatHeading')}</span>
         <span className="live-chat-head-actions">
           {userId && (
-            <span className="live-chat-tts">
+            <span className="live-chat-tts" data-chat-menu>
               <button
                 type="button"
                 className={`live-chat-icon-btn ${colorMenu ? 'active' : ''}`}
@@ -740,11 +774,16 @@ export default function LiveChat({
               )}
             </span>
           )}
-          <span className="live-chat-tts">
+          {mod && (
+          <span className="live-chat-tts" data-chat-menu>
             <button
               type="button"
               className={`live-chat-icon-btn ${ttsMode !== 'off' ? 'active' : ''}`}
-              onClick={() => setTtsMenu((v) => !v)}
+              onClick={() => {
+                const wasOpen = ttsMenu;
+                closeMenus();
+                setTtsMenu(!wasOpen);
+              }}
               title={t('ttsButton')}
               aria-label={t('ttsButton')}
               aria-expanded={ttsMenu}
@@ -780,6 +819,7 @@ export default function LiveChat({
               </span>
             )}
           </span>
+          )}
           {popoutHref && (
             <a
               href={popoutHref}
@@ -800,7 +840,12 @@ export default function LiveChat({
             <button
               type="button"
               className={`live-chat-icon-btn ${pollComposer ? 'active' : ''}`}
-              onClick={() => setPollComposer((v) => !v)}
+              data-chat-menu
+              onClick={() => {
+                const wasOpen = pollComposer;
+                closeMenus();
+                setPollComposer(!wasOpen);
+              }}
               title={t('livePollNew')}
               aria-label={t('livePollNew')}
               aria-expanded={pollComposer}
@@ -812,7 +857,12 @@ export default function LiveChat({
             <button
               type="button"
               className={`live-chat-icon-btn ${panelOpen ? 'active' : ''}`}
-              onClick={() => setPanelOpen((v) => !v)}
+              data-chat-menu
+              onClick={() => {
+                const wasOpen = panelOpen;
+                closeMenus();
+                setPanelOpen(!wasOpen);
+              }}
               title={t('liveChatSettings')}
               aria-label={t('liveChatSettings')}
               aria-expanded={panelOpen}
@@ -834,7 +884,7 @@ export default function LiveChat({
       )}
 
       {mod && panelOpen && rules && (
-        <div className="live-chat-panel">
+        <div className="live-chat-panel" data-chat-menu>
           {!rules.available && <p className="live-chat-panel-note">{t('liveChatRulesNeedMigration')}</p>}
           <button
             type="button"
@@ -1000,7 +1050,7 @@ export default function LiveChat({
                 {tip && <span className="live-chat-tip-amount">💛 {tip}</span>}
                 {tip && m.body === '💛' ? null : <ChatBody body={m.body} emotes={emotes.map} me={myName} />}
                 {actionsFor === m.id && mod && !own && (
-                  <span className="live-chat-actions">
+                  <span className="live-chat-actions" data-chat-menu>
                     <button type="button" onClick={() => remove(m.id)}>
                       {t('liveChatDelete')}
                     </button>
@@ -1033,7 +1083,12 @@ export default function LiveChat({
                   <button
                     type="button"
                     className="live-chat-delete"
-                    onClick={() => setActionsFor((v) => (v === m.id ? null : m.id))}
+                    data-chat-menu
+                    onClick={() => {
+                      const wasOpen = actionsFor === m.id;
+                      closeMenus();
+                      setActionsFor(wasOpen ? null : m.id);
+                    }}
                     aria-label={t('liveChatModerate')}
                     title={t('liveChatModerate')}
                   >
@@ -1108,7 +1163,11 @@ export default function LiveChat({
             <button
               type="button"
               className={`live-chat-icon-btn chat-emote-toggle ${pickerOpen ? 'active' : ''}`}
-              onClick={() => setPickerOpen((v) => !v)}
+              onClick={() => {
+                const wasOpen = pickerOpen;
+                closeMenus();
+                setPickerOpen(!wasOpen);
+              }}
               aria-label={t('liveChatEmotePicker')}
               title={t('liveChatEmotePicker')}
               aria-expanded={pickerOpen}

@@ -55,6 +55,28 @@ export function nextPlayerUrl(current: string | null, incoming: string | null): 
   return incoming;
 }
 
+/**
+ * Zvuk u živého vysílání podle diváka (components/LivePlayer.tsx): ztlumení
+ * a hlasitost se pamatují v prohlížeči a po každém načtení přehrávače se
+ * vrátí. Dřív se přehrávač při obnově (zamrzlý obraz, přechod na lepší
+ * adresu, nový přenos) načetl znovu se zvukem - ztlumený přenos se po chvíli
+ * sám rozezněl.
+ */
+export type LiveAudioPref = { muted: boolean; volume: number };
+export const LIVE_AUDIO_KEY = 'kine-live-audio';
+
+export function parseLiveAudio(raw: string | null | undefined): LiveAudioPref | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw);
+    if (!value || typeof value !== 'object' || typeof value.muted !== 'boolean') return null;
+    const volume = Number(value.volume);
+    return { muted: value.muted, volume: Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 1 };
+  } catch {
+    return null;
+  }
+}
+
 /** Adresa přehrávače po n-té obnově (jiná adresa = prohlížeč iframe opravdu načte znovu). */
 export function livePlayerSrc(url: string, reload: number): string {
   if (!reload || reload < 1) return url;

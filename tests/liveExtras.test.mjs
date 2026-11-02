@@ -59,6 +59,9 @@ test('klip: adresy jen s platným kódem a id videa', () => {
   assert.equal(clip.liveClipMp4Url('evil.com/x', UID, { time: 0, duration: 30 }), null);
   assert.equal(clip.liveClipMp4Url('abc123', '../../etc', { time: 0, duration: 30 }), null);
   assert.equal(clip.livePreviewManifestUrl('abc123', UID), `https://customer-abc123.cloudflarestream.com/${UID}/manifest/video.m3u8?duration=30s`);
+  // 0141: klip se stahuje do zařízení - jméno souboru jde do adresy, jen bezpečné znaky.
+  assert.equal(clip.liveClipMp4Url('abc123', UID, { time: 5, duration: 30 }, 'kine-daniel-2026-11-02-1830.mp4'), `https://customer-abc123.cloudflarestream.com/${UID}/clip.mp4?time=5s&duration=30s&filename=kine-daniel-2026-11-02-1830.mp4`);
+  assert.equal(clip.liveClipMp4Url('abc123', UID, { time: 5, duration: 30 }, 'zly&param=1.mp4'), `https://customer-abc123.cloudflarestream.com/${UID}/clip.mp4?time=5s&duration=30s&filename=kine-clip.mp4`);
   assert.equal(clip.readPreviewStart(' 42.5 '), 42.5);
   assert.equal(clip.readPreviewStart('nesmysl'), null);
   assert.equal(clip.readPreviewStart(null), null);
@@ -170,6 +173,14 @@ test('anketa: souhrn - hlasy, procenta dají 100, vítěz jen po konci a bez rem
   assert.equal(running.winner, null);
   assert.deepEqual(polls.pollSummary(row, [], NOW).percents, [0, 0, 0]);
   assert.deepEqual(polls.pollOptions(['a', 5, 'b', null]), ['a', 'b']);
+});
+
+test('klip: jméno staženého souboru bez diakritiky a divných znaků', () => {
+  const at = new Date(2026, 10, 2, 18, 5);
+  assert.equal(clip.liveClipFilename('Jakub.koubek', at), 'kine-jakub-koubek-2026-11-02-1805.mp4');
+  assert.equal(clip.liveClipFilename('Červený Žluťoučký kůň!', at), 'kine-cerveny-zlutoucky-kun-2026-11-02-1805.mp4');
+  assert.equal(clip.liveClipFilename(null, at), 'kine-2026-11-02-1805.mp4');
+  assert.equal(clip.liveClipFilename('../../etc', at), 'kine-etc-2026-11-02-1805.mp4');
 });
 
 console.log(`\n${prosly} prošlo, ${padly} spadlo`);
