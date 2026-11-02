@@ -310,7 +310,7 @@ export default function NotificationBell({ mobileTrigger = false, onNavigate }: 
       >
         <NotificationIcon icon={chosenIcon} />
         {!mobileTrigger && t((NAV_SHORTCUT_OPTIONS.find((o) => o.key === chosenIcon)?.labelKey ?? 'notifications') as any)}
-        {mobileTrigger && <span style={{ fontSize: 9 }}>{t((NAV_SHORTCUT_OPTIONS.find((o) => o.key === chosenIcon)?.labelKey ?? 'notifications') as any)}</span>}
+        {mobileTrigger && <span>{t((NAV_SHORTCUT_OPTIONS.find((o) => o.key === chosenIcon)?.labelKey ?? 'notifications') as any)}</span>}
         {chosenIcon === 'notifications' && unreadCount > 0 && <span className="notif-badge">{unreadCount}</span>}
       </button>
 

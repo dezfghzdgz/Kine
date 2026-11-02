@@ -60,7 +60,7 @@ export default function FieldHint({ text }: { text: string }) {
           role="tooltip"
           style={{
             position: 'absolute', ...(below ? { top: 'calc(100% + 6px)' } : { bottom: 'calc(100% + 6px)' }), left: shift, width: POPOVER_WIDTH, maxWidth: `calc(100vw - ${2 * EDGE}px)`, zIndex: 30,
-            background: 'var(--panel-raised)', border: '1px solid var(--border)', borderRadius: 8,
+            background: 'var(--overlay-bg-raised)', border: '1px solid var(--border)', borderRadius: 8,
             padding: 10, fontSize: 12, fontWeight: 400, letterSpacing: 'normal', textAlign: 'left', textTransform: 'none',
             color: 'var(--text-dim)', lineHeight: 1.4, whiteSpace: 'normal',
             boxShadow: '0 8px 24px rgba(0,0,0,0.4)',

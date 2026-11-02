@@ -132,7 +132,7 @@ export default function BrandLogo({ className, onNavigate }: { className?: strin
           className="brand-color-picker"
           style={{
             position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 200,
-            background: 'var(--panel-raised)', border: '1px solid var(--border)', borderRadius: 10,
+            background: 'var(--overlay-bg-raised)', border: '1px solid var(--border)', borderRadius: 10,
             padding: 12, width: 190, boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
           }}
         >

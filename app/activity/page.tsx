@@ -224,7 +224,7 @@ function ActivityPageInner() {
     <div>
       <p className="section-title">{t('yourActivityTitle')}</p>
 
-      <div className="tab-row" style={{ marginBottom: 16, flexWrap: 'wrap' }}>
+      <div className="tab-row" style={{ marginBottom: 16 }}>
         {TABS.map(({ key, label, icon, count: n }) => (
           <button
             key={key}

@@ -1,3 +1,34 @@
+KINE web: telefon - nabídky bez textu přes text, iPhone bez přiblížení, tlačítka u videa v řadě
+(dodávka kine-0140-2026-11-02)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0140.zip a do GitHubu přetáhni OBSAH složky (jako vždy).
+   Žádná migrace v Supabase, žádná nová proměnná ve Vercelu.
+2. Pořád platí: na GitHubu zbývá smazat složku kine-web-0135 a soubory ze seznamu
+   "smazat" ve stav-souboru.json (sestavení projde i bez toho).
+
+CO JE OPRAVENÉ (jen telefon, na počítači se rozložení nemění)
+- Text přes text v nabídkách: menu ☰, nabídka účtu, oznámení (ze spodní lišty i z menu),
+  Sdílet, ⋮ a dialogy byly průsvitné - hlavně se zapnutým sklem ve Vzhledu - a pod nimi
+  byl ostře vidět text stránky. iPhone sklo uvnitř spodní lišty a menu nerozmaže, takže
+  zůstal jen průsvitný panel. Teď mají všechny tyhle plochy skoro neprůhlednou barvu
+  (v tmavém, šedém i světlém vzhledu a při jakékoli síle skla). Na počítači jsou nabídky
+  taky plné, zbytek skla zůstává.
+- Klepnutí do pole (hledání, komentář, chat, nahrávání, nastavení) už iPhone nepřiblíží:
+  pole s písmem menším než 16 px Safari při klepnutí zvětší a stránka zůstane přiblížená.
+  Na dotykových zařízeních mají pole aspoň 16 px.
+- Spodní lišta: číslo nepřečtených oznámení je u ikonky zvonku (ne pod nápisem)
+  a popisek má stejnou velikost jako ostatní.
+- Stránka videa: tlačítka pod videem (Líbí se, Odebírat, Sdílet, Klip, Playlist, Stáhnout,
+  Později, Nahlásit) jsou v jedné řadě, která se posouvá prstem do strany - dřív zabraly
+  pět řad. Nabídky z nich (Sdílet, playlist, zvonek odběru) vyjedou jako list nad spodní
+  lištou.
+- Kanál na úzkém telefonu: profilovka přes banner a vpravo tlačítko Odebírat, jméno, počty,
+  odznaky a popis pod nimi přes celou šířku (dřív se lámaly do úzkého sloupce).
+- Vaše aktivita a další záložky: na úzké obrazovce se nezalamují do dvou řádků, posouvají
+  se do strany.
+
 KINE web: hudba - Video je normální přehrávač, ostřejší video, žádné černé bliknutí
 (dodávka kine-0139-2026-11-01)
 ==========================================================================================

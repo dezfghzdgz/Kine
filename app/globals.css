@@ -17542,3 +17542,198 @@ a.live-remind-btn {
 }
 /* Tečky zůstanou vidět, dokud je nabídka otevřená (myš je v nabídce, ne na kartě). */
 .video-card-menu-btn.open { opacity: 1; color: var(--text); background: var(--panel-raised); }
+
+/* =====================================================================
+   0140: Telefon - nabídky a panely vždy čitelné, iPhone bez přiblížení
+   ---------------------------------------------------------------------
+   1) Plovoucí plochy (nabídka účtu, oznámení, menu ☰, ⋮, dialogy, tipy)
+      mají vlastní, skoro neprůhlednou barvu. Se zapnutým sklem
+      (Nastavení -> Vzhled) bylo --panel průsvitné až na 38 % a rozostření
+      se v Safari na plochách uvnitř jiných ploch (spodní lišta, menu ☰)
+      nepoužije - pod nabídkou pak byl ostře vidět text stránky.
+      Nabídka tak vypadá stejně v každém vzhledu i síle skla.
+   2) Pole s písmem pod 16 px iPhone při klepnutí přiblíží a stránka
+      zůstane přiblížená - na dotykových zařízeních mají pole aspoň 16 px.
+   3) Odznak nepřečtených oznámení ve spodní liště sedí u ikonky zvonku,
+      ne pod popiskem.
+   ===================================================================== */
+
+:root {
+  --overlay-bg: rgba(17, 17, 23, 0.985);
+  --overlay-bg-raised: rgba(26, 26, 33, 0.992);
+}
+
+html[data-theme="gray"] {
+  --overlay-bg: rgba(46, 46, 52, 0.985);
+  --overlay-bg-raised: rgba(57, 57, 63, 0.992);
+}
+
+html[data-theme="light"] {
+  --overlay-bg: rgba(255, 255, 255, 0.985);
+  --overlay-bg-raised: rgba(248, 248, 250, 0.992);
+}
+
+.profile-dropdown,
+.video-card-menu-panel,
+.shortcuts-panel,
+.brand-color-picker,
+.modal-glass,
+.post-menu,
+.chat-suggest,
+.chat-picker,
+.live-chat-tts-menu,
+.live-clip-note,
+.badge-toast,
+.upload-bar,
+.yv-bulk-bar {
+  background-color: var(--overlay-bg);
+}
+
+/* Dialogy berou barvu z proměnné --panel (components/ConfirmDialog.tsx). */
+.modal-glass {
+  --panel: var(--overlay-bg);
+}
+
+/* Hlavička seznamu oznámení zůstává nahoře při rolování - pod ní nesmí prosvítat oznámení.
+   Barvu bere od seznamu (je jeho přímý potomek), ať na telefonu nevznikne tmavší pruh. */
+.notification-list-head {
+  background: none;
+  background-color: inherit;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="reset"]):not([type="hidden"]),
+  textarea,
+  select {
+    font-size: max(16px, 1em) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .mobile-drawer,
+  .mobile-drawer-bottom,
+  .mobile-drawer-side,
+  .mobile-drawer-backdrop .mobile-drawer-side,
+  .mobile-drawer-foot {
+    background-color: var(--overlay-bg);
+  }
+
+  .mobile-drawer-side .profile-dropdown,
+  .mobile-nav-item .profile-dropdown,
+  .notification-list-dropdown {
+    background-color: var(--overlay-bg-raised);
+  }
+
+  /* Srovnávací tabulka na /plus roluje do strany s přilepeným prvním sloupcem. */
+  .plus-table tbody th {
+    background-color: var(--overlay-bg);
+  }
+
+  .mobile-nav-item {
+    position: relative;
+  }
+
+  .mobile-nav-item .notif-badge {
+    position: absolute;
+    top: 3px;
+    left: calc(50% + 4px);
+    margin: 0;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 5px;
+    line-height: 17px;
+    font-size: 10px;
+    text-align: center;
+    box-shadow: 0 0 0 2px var(--overlay-bg);
+    pointer-events: none;
+  }
+}
+
+/* Tlačítka pod videem na telefonu: jedna řada, která se posouvá prstem do strany
+   (jako na YouTube). Dřív to byla mřížka dvou sloupců přes celou šířku - Líbí se,
+   Odebírat, Sdílet, Klip, Playlist, Stáhnout, Později, Nahlásit zabraly pět řad
+   a komentáře i další videa odsunuly hluboko dolů. Nabídky z těch tlačítek
+   (Sdílet, Playlist, zvonek u odběru) by řada ořízla - na telefonu proto
+   vyjedou jako list nad spodní lištou. */
+@media (max-width: 768px) {
+  .video-actions-row {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin-left: -16px;
+    margin-right: -16px;
+    padding: 2px 16px 4px;
+  }
+
+  .video-actions-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .video-actions-row > * {
+    flex: none;
+    width: auto;
+  }
+
+  .video-actions-row .reaction-btn {
+    width: auto;
+    white-space: nowrap;
+  }
+
+  .video-actions-row .profile-dropdown {
+    position: fixed !important;
+    left: 12px !important;
+    right: 12px !important;
+    top: auto !important;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: 60vh;
+    overflow-y: auto;
+    z-index: 560 !important;
+    box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 0 0 1px var(--glass-line), 0 18px 48px rgba(0, 0, 0, 0.55);
+  }
+}
+
+/* Záložky v řadě (.tab-row se už posouvá do strany) se na úzké obrazovce
+   nemačkají do dvou řádků - zůstanou celé a dají se odsunout prstem. */
+.tab-row > .tab-btn {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* Hlavička kanálu na úzkém telefonu: vedle profilovky zbylo ~220 px, takže se
+   jméno, počty i odznaky lámaly do úzkého sloupce. Teď jako na X/Instagramu:
+   profilovka (přes banner) a vpravo od ní tlačítka, jméno a vše ostatní
+   pod nimi přes celou šířku. */
+@media (max-width: 520px) {
+  .channel-head-row {
+    align-items: flex-end;
+  }
+  .channel-avatar {
+    order: 0;
+  }
+  .channel-actions {
+    order: 1;
+    width: auto;
+    margin-left: auto;
+    padding-top: 0;
+    justify-content: flex-end;
+  }
+  .channel-info {
+    order: 2;
+    flex: 1 1 100%;
+    padding-top: 2px;
+  }
+}

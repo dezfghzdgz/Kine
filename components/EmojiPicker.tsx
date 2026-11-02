@@ -33,7 +33,7 @@ export default function EmojiPicker({ onSelect }: { onSelect: (emoji: string) =>
           style={{
             // Tlačítko je u pravého okraje pole - nabídka se otevře doleva, ať nevyjede z panelu.
             position: 'absolute', bottom: 'calc(100% + 6px)', right: 0, zIndex: 50,
-            background: 'var(--panel-raised)', border: '1px solid var(--border)', borderRadius: 8,
+            background: 'var(--overlay-bg-raised)', border: '1px solid var(--border)', borderRadius: 8,
             padding: 8, display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 2, width: 224,
           }}
         >
