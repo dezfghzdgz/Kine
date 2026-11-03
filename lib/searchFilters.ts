@@ -96,6 +96,33 @@ export function applySearchFilters<T extends Row>(rows: T[], f: SearchFilters, i
   return out;
 }
 
+/** Profil s příznaky blokace (čte jen server přes service role - do prohlížeče nesmí). */
+export type OwnerFlags = { id: string; is_banned?: boolean | null; is_shadow_banned?: boolean | null };
+
+/**
+ * Kanály, které se ve výsledcích hledání nesmí ukázat: zablokované a
+ * shadow-banované. Hledání jde přes service role (obchází pravidla
+ * databáze - RLS), takže to hlídat musí server sám. Dřív hledání
+ * shadow-banovaná videa ukazovalo všem.
+ */
+export function restrictedOwners(rows: readonly OwnerFlags[] | null | undefined): Set<string> {
+  const out = new Set<string>();
+  for (const row of rows ?? []) {
+    if (row?.id && (row.is_banned === true || row.is_shadow_banned === true)) out.add(row.id);
+  }
+  return out;
+}
+
+/** Videa bez zablokovaných a shadow-banovaných kanálů (podle owner_id, jinak navázaného profilu). */
+export function withoutRestricted<T>(videos: readonly T[], restricted: ReadonlySet<string>): T[] {
+  if (restricted.size === 0) return [...videos];
+  return videos.filter((v: any) => {
+    const profiles = v?.profiles;
+    const owner = v?.owner_id ?? (Array.isArray(profiles) ? profiles[0]?.id : profiles?.id);
+    return !(owner && restricted.has(owner));
+  });
+}
+
 /** Adresa hledání se změněným filtrem (ostatní parametry zůstanou). */
 export function searchHref(query: string, f: SearchFilters, change: Partial<SearchFilters>, minRating?: string | null): string {
   const next = { ...f, ...change };

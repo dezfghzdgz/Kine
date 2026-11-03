@@ -42,22 +42,39 @@ function firstOf<T>(value: T | T[] | null | undefined): T | null {
   return value ?? null;
 }
 
+/** Majitel, jehož videa ostatní nevidí (zablokovaný, shadow-ban - v prohlížeči to hlídá RLS, tady service role ne). */
+export function ownerHidden(owner: { is_banned?: boolean | null; is_shadow_banned?: boolean | null } | null | undefined): boolean {
+  return !!owner && (owner.is_banned === true || owner.is_shadow_banned === true);
+}
+
 export const loadPublicVideo = cache(async (id: string, revalidate?: number): Promise<PublicVideo | null> => {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
   try {
-    const { data } = await (revalidate ? supabaseServerCached(revalidate) : supabaseServer)
+    const client = revalidate ? supabaseServerCached(revalidate) : supabaseServer;
+    // Jeden doslovný řetězec, ne skládaný: Supabase z textu výběru odvozuje
+    // typ řádku a ze skládaného odvodí "chybu" (na tom už jednou spadl build).
+    let { data, error } = await client
       .from('videos')
-      // Jeden doslovný řetězec, ne skládaný: Supabase z textu výběru odvozuje
-      // typ řádku a ze skládaného odvodí "chybu" (na tom už jednou spadl build).
-      .select('id, title, description, thumbnail_url, cloudflare_video_id, width, height, duration_seconds, views, created_at, owner_id, made_for_kids, hashtags, visibility, status, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username, display_name)')
+      .select('id, title, description, thumbnail_url, cloudflare_video_id, width, height, duration_seconds, views, created_at, owner_id, made_for_kids, hashtags, visibility, status, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username, display_name, is_banned, is_shadow_banned)')
       .eq('id', id)
       .maybeSingle();
+    if (error) {
+      // Databáze bez sloupců o blokaci (migrace moderátorských rolí) - bez nich, jako dřív.
+      ({ data, error } = (await client
+        .from('videos')
+        .select('id, title, description, thumbnail_url, cloudflare_video_id, width, height, duration_seconds, views, created_at, owner_id, made_for_kids, hashtags, visibility, status, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username, display_name)')
+        .eq('id', id)
+        .maybeSingle()) as any);
+    }
 
     if (!data || data.status !== 'ready' || data.visibility !== 'public') return null;
     // Naplánované video (ne premiéra s odpočtem) ještě nevyšlo - náhled odkazu,
     // vložený přehrávač ani oEmbed ho nesmí prozradit (ani název) před vydáním.
     if (!isReleased(data as { scheduled_at?: string | null; is_premiere?: boolean | null })) return null;
     const row = data as any;
+    // Zablokovaný / shadow-banovaný tvůrce: vložený přehrávač, oEmbed ani náhled odkazu
+    // jeho video neukážou (service role obchází RLS, které ho ostatním schová).
+    if (ownerHidden(firstOf(row.profiles))) return null;
     return {
       id: row.id,
       title: row.title,

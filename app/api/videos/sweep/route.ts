@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { supabaseServer } from '@/lib/supabaseServer';
 import { sweepProcessing } from '@/lib/markVideoReady';
 import { sweepNudity } from '@/lib/nudityScan';
 import { costAlertCheck } from '@/lib/costs';
@@ -9,9 +10,36 @@ export const dynamic = 'force-dynamic';
 // Kontrola obsahu starších videí potřebuje pár desítek sekund (model běží na procesoru).
 export const maxDuration = 60;
 
-/** Bez CRON_SECRET jde důkladný úklid spustit nejvýš jednou za hodinu (na instanci). */
+/** Bez CRON_SECRET jde důkladný úklid spustit nejvýš jednou za hodinu. */
 const OPEN_FORCE_EVERY_MS = 60 * 60 * 1000;
 let lastOpenForce = 0;
+
+/**
+ * Důkladný úklid bez CRON_SECRET: jednou za hodinu pro celý web, ne na instanci
+ * serveru. Dřív stačilo poslat víc požadavků naráz - každá nová instance Vercelu
+ * pustila vlastní důkladný úklid (stovky dotazů na Cloudflare API, jehož limit
+ * platí pro celý účet). Značka hodiny se zapíše do tabulky zámků (kine_user_locks);
+ * kdo ji zapíše první, uklízí. null = tabulka není (migrace) - pak postaru na instanci.
+ */
+async function claimOpenForce(now: number): Promise<boolean | null> {
+  const key = `sweep-force:${new Date(now).toISOString().slice(0, 13)}`;
+  const { error } = await supabaseServer.from('kine_user_locks').insert({ key });
+  if (!error) {
+    // Značky starších hodin pryč (jen tyhle - zámky uživatelů se nemažou).
+    await supabaseServer
+      .from('kine_user_locks')
+      .delete()
+      .like('key', 'sweep-force:%')
+      .lt('locked_at', new Date(now - 3 * OPEN_FORCE_EVERY_MS).toISOString())
+      .then(
+        () => undefined,
+        () => undefined
+      );
+    return true;
+  }
+  if (error.code === '23505') return false;
+  return null;
+}
 
 /**
  * Úklid na zavolání (viz lib/markVideoReady.ts, sweepProcessing): zaseklá
@@ -33,7 +61,8 @@ export async function GET(req: NextRequest) {
   let force = !!secret;
   if (!secret && Date.now() - lastOpenForce > OPEN_FORCE_EVERY_MS) {
     lastOpenForce = Date.now();
-    force = true;
+    const claimed = await claimOpenForce(Date.now());
+    force = claimed !== false;
   }
   const started = Date.now();
   const result = await sweepProcessing({ max: 25, force });

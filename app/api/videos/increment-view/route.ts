@@ -1,15 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
+import { supabaseAsUser, bearerFrom } from '@/lib/supabaseAsUser';
+import { userFromRequest } from '@/lib/apiUser';
 import { sanitizeDeviceClass } from '@/lib/deviceClass';
-import { clientIp } from '@/lib/clientIp';
-
-const COOLDOWN_MS = 30 * 60 * 1000; // 30 minut
+import { clientIpKey } from '@/lib/clientIp';
+import { VIEW_COOLDOWN_MS, viewCountable, viewSlot } from '@/lib/viewCount';
 
 // Zvýší počet zhlédnutí. Předtím appka tohle chránila jen v prohlížeči
 // (localStorage) - to jde snadno obejít (appku zavolat rovnou, nebo
 // localStorage smazat). Appka teď navíc hlídá IP adresu, ať pozná
 // opakované počítání odjinud ze stejného místa i tehdy, kdyby appce
 // klient neposlal pravdivý stav svého localStorage.
+//
+// Pojistky (lib/viewCount.ts):
+//  - počítá se jen hotové, zveřejněné a ne soukromé video (dřív i soukromé
+//    a naplánované - stačilo znát id); video jen pro odběratele, jen když ho
+//    divák opravdu vidí (RLS),
+//  - vlastní zhlédnutí tvůrce se nepočítá (když prohlížeč pošle přihlášení),
+//  - IPv6 se bere po sítích /64 (lib/clientIp.ts - ipBucket): v jedné /64 je
+//    2^64 adres a s každou novou šlo zhlédnutí přičíst znovu,
+//  - zápis zhlédnutí s jedinečným klíčem (video, adresa, půlhodina) rozhodne,
+//    kdo přičítá - dva souběžné požadavky už nepřičtou totéž zhlédnutí dvakrát.
 /**
  * Zdroj zhlédnutí ukládáme jen jako krátký očištěný název místa nebo domény.
  * Cokoliv jiného appka zahodí - do databáze nesmí přistát libovolný text,
@@ -62,20 +73,47 @@ async function logView(row: Record<string, unknown>): Promise<void> {
   }
 }
 
+/**
+ * Zápis zhlédnutí s jedinečným klíčem (video, adresa, půlhodina - sloupec view_slot
+ * a jedinečný index z SQL dodávky). 'claimed' = zapsalo se (tenhle požadavek přičítá),
+ * 'duplicate' = totéž zhlédnutí už zapsal někdo jiný, 'unsupported' = index / sloupec
+ * ještě není - pak se zapisuje postaru (logView) a souběh se nehlídá.
+ */
+async function claimView(row: Record<string, unknown>, slot: number): Promise<'claimed' | 'duplicate' | 'unsupported'> {
+  const { data, error } = await supabaseServer
+    .from('views_log')
+    .upsert({ ...row, view_slot: slot }, { onConflict: 'video_id,ip_address,view_slot', ignoreDuplicates: true })
+    .select('id');
+  if (error) return 'unsupported';
+  return Array.isArray(data) && data.length > 0 ? 'claimed' : 'duplicate';
+}
+
 export async function POST(req: NextRequest) {
   const { videoId, source, device } = await req.json().catch(() => ({}) as Record<string, unknown>);
   if (typeof videoId !== 'string' || !/^[0-9a-f-]{36}$/i.test(videoId)) return NextResponse.json({ error: 'Chybí videoId.' }, { status: 400 });
 
-  const { data: video } = await supabaseServer
-    .from('videos')
-    .select('views, title, owner_id')
-    .eq('id', videoId)
-    .single();
+  // select('*') schválně: moderation_hold je až s pozdější migrací.
+  const { data: video } = await supabaseServer.from('videos').select('*').eq('id', videoId).maybeSingle();
   if (!video) return NextResponse.json({ error: 'Video nenalezeno.' }, { status: 404 });
 
-  // IP od Vercelu, ne z hlavičky, kterou si klient může poslat sám (lib/clientIp.ts).
-  const ip = clientIp(req.headers);
-  const cooldownStart = new Date(Date.now() - COOLDOWN_MS).toISOString();
+  const countable = viewCountable(video);
+  if (!countable.ok) return NextResponse.json({ success: true, counted: false });
+
+  const token = bearerFrom(req);
+  if (token) {
+    // Tvůrce na svém videu se nepočítá.
+    const viewer = await userFromRequest(req);
+    if (viewer && viewer.id === video.owner_id) return NextResponse.json({ success: true, counted: false });
+  }
+  if (countable.check === 'access') {
+    // Video jen pro odběratele: počítá se jen divák, kterému ho databáze ukáže (RLS).
+    const { data: visible } = await supabaseAsUser(token).from('videos').select('id').eq('id', videoId).maybeSingle();
+    if (!visible) return NextResponse.json({ success: true, counted: false });
+  }
+
+  // IP od Vercelu, ne z hlavičky, kterou si klient může poslat sám (lib/clientIp.ts); IPv6 po /64.
+  const ip = clientIpKey(req.headers);
+  const cooldownStart = new Date(Date.now() - VIEW_COOLDOWN_MS).toISOString();
 
   const { data: recentView } = await supabaseServer
     .from('views_log')
@@ -90,6 +128,12 @@ export async function POST(req: NextRequest) {
     // Appka tohle zhlédnutí odsud a od tohohle videa už nedávno počítala.
     return NextResponse.json({ success: true, counted: false });
   }
+
+  // Zařízení (telefon / tablet / počítač / TV) - jen jedna ze čtyř hodnot,
+  // cokoliv jiného se zahodí (lib/deviceClass.ts).
+  const row = { video_id: videoId, ip_address: ip, source: sanitizeSource(source), device: sanitizeDeviceClass(device) };
+  const claim = await claimView(row, viewSlot());
+  if (claim === 'duplicate') return NextResponse.json({ success: true, counted: false });
 
   // Přičtení řeší funkce v databázi, aby se souběžná zhlédnutí nepřebíjela
   // (dva diváci naráz by jinak přečetli stejné číslo a jedno by se ztratilo).
@@ -116,9 +160,8 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Zařízení (telefon / tablet / počítač / TV) - jen jedna ze čtyř hodnot,
-  // cokoliv jiného se zahodí (lib/deviceClass.ts).
-  await logView({ video_id: videoId, ip_address: ip, source: sanitizeSource(source), device: sanitizeDeviceClass(device) });
+  // Bez jedinečného indexu (SQL z dodávky) se zhlédnutí zapisuje postaru až teď.
+  if (claim === 'unsupported') await logView(row);
 
   return NextResponse.json({ success: true, counted: true });
 }

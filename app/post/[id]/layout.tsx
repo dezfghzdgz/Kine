@@ -10,13 +10,14 @@ export const revalidate = 300;
  * Příspěvky jsou veřejné (stejně jako na kanálu); zablokovaný kanál nic neukáže
  * a příspěvek jen pro členy jen jméno kanálu (bez textu a fotek).
  */
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  if (!/^[0-9a-f-]{36}$/i.test(params.id)) return { title: 'Kine' };
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return { title: 'Kine' };
   // Metadata postu smí být až 5 minut stará (revalidate výše) - API cesty čtou vždy čerstvě.
   const { data: post } = await supabaseServerCached(300)
     .from('posts')
     .select('*, profiles!posts_owner_id_fkey(username, display_name, is_banned)')
-    .eq('id', params.id)
+    .eq('id', id)
     .maybeSingle();
   const author = (post as any)?.profiles;
   if (!post || author?.is_banned) return { title: 'Kine', robots: { index: false, follow: false } };

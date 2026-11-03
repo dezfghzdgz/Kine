@@ -496,9 +496,11 @@ async function addLiveSeconds(row: LiveStreamRow, endIso: string): Promise<void>
 async function endStream(row: LiveStreamRow, nowIso: string): Promise<boolean> {
   // Čerstvé hlášení, kterému se už nevěří (Cloudflare přenos dlouho nevidí):
   // smazat ho, ať ho další "pořád vysílám" neoživí - znovu jen "začal jsem".
+  // current_video_uid pryč: id záznamu skončeného přenosu u Cloudflare se nemá nikde
+  // dál objevovat (nezveřejněný záznam jde podle id přehrát - lib/liveStream.ts publicLive).
   let query = supabaseServer
     .from('live_streams')
-    .update({ is_live: false, ended_at: nowIso, checked_at: nowIso, updated_at: nowIso, ...(appPingFresh(row) ? { app_ping_at: null } : {}) })
+    .update({ is_live: false, current_video_uid: null, ended_at: nowIso, checked_at: nowIso, updated_at: nowIso, ...(appPingFresh(row) ? { app_ping_at: null } : {}) })
     .eq('owner_id', row.owner_id)
     .eq('is_live', true);
   if (row.updated_at) query = query.eq('updated_at', row.updated_at);
@@ -1071,7 +1073,8 @@ export type PublicLive = {
   category: string | null;
   startedAt: string | null;
   endedAt: string | null;
-  inputId: string;
+  /** Id vstupu u Cloudflare; null = ostatním se neukazuje (přenos neběží / je skrytý - withoutPlayback). */
+  inputId: string | null;
   videoUid: string | null;
   /** Přehrávač Cloudflare; null = zatím nejde (Cloudflare přenos ještě nepotvrdil a kód zákazníka není znám). */
   playerUrl: string | null;
@@ -1084,6 +1087,19 @@ export type PublicLive = {
   /** Hra (lib/games.ts - slug): nastavená ve studiu, z appky podle názvu; null = žádná. */
   game: string | null;
 };
+
+/**
+ * Údaje o přenosu bez všeho, čím jde vysílání (nebo jeho záznam) přehrát přímo
+ * u Cloudflare: id vstupu a záznamu, přehrávač, HLS. Vstupy ani záznamy nemají
+ * podepsané adresy - kdo zná id, přehraje je i mimo Kine. Proto je dostane jen
+ * majitel, tým Kine a diváci běžícího, viditelného přenosu (app/api/live/status).
+ * Dřív šlo id vstupu zjistit z kanálu, který zrovna nevysílal, a pak přes něj
+ * sledovat i přenos skrytý kontrolou obsahu; id záznamu po konci vysílání
+ * přehrálo celý nezveřejněný záznam.
+ */
+export function withoutPlayback<T extends PublicLive>(stream: T): T {
+  return { ...stream, inputId: null, videoUid: null, playerUrl: null, hlsUrl: null };
+}
 
 export async function publicLive(row: LiveStreamRow): Promise<PublicLive> {
   const code = await streamCustomerCode();

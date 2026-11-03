@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
     language: typeof body?.language === 'string' ? body.language : undefined,
     rightAfterStream: body?.rightAfterStream === true,
   });
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  // code: 'banned' (zablokovaný účet), 'moderation' (přenos skrytý kontrolou obsahu - lib/liveRecording.ts).
+  if (!result.ok) return NextResponse.json({ error: result.error, ...(result.code ? { code: result.code } : {}) }, { status: result.status });
   return NextResponse.json({ videoId: result.videoId, status: result.status, alreadyPublished: result.alreadyPublished });
 }

@@ -136,7 +136,12 @@ export default function LiveStudioPage() {
       cache: 'no-store',
     });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`);
+    if (!res.ok) {
+      // Kód chyby (např. 'moderation' u záznamu ze skrytého přenosu) jde dál s chybou.
+      const err = new Error(body?.error ?? `HTTP ${res.status}`) as Error & { code?: string };
+      err.code = typeof body?.code === 'string' ? body.code : undefined;
+      throw err;
+    }
     return body;
   }
 
@@ -307,7 +312,8 @@ export default function LiveStudioPage() {
       setPublishing(null);
       setToast({ message: t('livePublished'), type: 'success' });
     } catch (e) {
-      setToast({ message: (e as Error).message, type: 'error' });
+      const code = (e as Error & { code?: string }).code;
+      setToast({ message: code === 'moderation' ? t('liveRecordingHeldByModeration') : (e as Error).message, type: 'error' });
     } finally {
       setBusy(false);
     }

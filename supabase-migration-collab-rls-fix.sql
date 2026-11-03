@@ -11,22 +11,32 @@
 
 drop policy if exists "Videa jsou viditelná podle nastavení soukromí" on videos;
 
+-- POZOR (bezpečnost, listopad 2026): cizí člověk vidí jen HOTOVÁ a ZVEŘEJNĚNÁ
+-- videa (ne rozpracovaná ani dopředu naplánovaná - z cloudflare_video_id by
+-- si je jinak pustil). Majitel a (po)zvaný spolutvůrce vidí vždy. Viz
+-- supabase-migration-bezpecnost-listopad.sql (M3).
 create policy "Videa jsou viditelná podle nastavení soukromí" on videos for select
 using (
-  visibility = 'public'
-  or owner_id = auth.uid()
-  or (
-    visibility = 'subscribers'
-    and exists (
-      select 1 from subscriptions
-      where subscriptions.channel_id = videos.owner_id
-      and subscriptions.subscriber_id = auth.uid()
-    )
-  )
+  owner_id = auth.uid()
   or exists (
     select 1 from video_collaborators
     where video_collaborators.video_id = videos.id
     and video_collaborators.profile_id = auth.uid()
+  )
+  or (
+    status = 'ready'
+    and (scheduled_at is null or scheduled_at <= now() or is_premiere)
+    and (
+      visibility = 'public'
+      or (
+        visibility = 'subscribers'
+        and exists (
+          select 1 from subscriptions
+          where subscriptions.channel_id = videos.owner_id
+          and subscriptions.subscriber_id = auth.uid()
+        )
+      )
+    )
   )
 );
 

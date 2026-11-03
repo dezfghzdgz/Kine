@@ -12,11 +12,12 @@ export const revalidate = 60;
  * obrázek se snímkem z vysílání a odznakem LIVE (opengraph-image.tsx
  * vedle). Anglicky - odkaz uvidí lidé odkudkoli.
  */
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const preview = await loadLivePreview(params.id, revalidate);
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const preview = await loadLivePreview(id, revalidate);
   if (!preview) return { title: 'Live', robots: { index: false, follow: false } };
 
-  const url = `${SITE_URL}/live/${params.id}`;
+  const url = `${SITE_URL}/live/${id}`;
   const title = preview.live
     ? `🔴 ${preview.name} is live${preview.title ? `: ${preview.title}` : ''}`
     : `${preview.name} - live on Kine`;

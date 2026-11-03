@@ -79,5 +79,12 @@ test('nesmyslné hodnoty nespadnou', () => {
   assert.equal(out.length, 2);
 });
 
+
+test('Sparks se k navázání nenabízí (hrají ve smyčce, historii si teď zapisují taky)', () => {
+  assert.equal(pickContinueWatching([radek('s', 20, 60, { video: { width: 1080, height: 1920 } })]).length, 0, 'Spark na výšku do 2 min');
+  assert.equal(pickContinueWatching([radek('p', 100, 600, { video: { width: 1080, height: 1920 } })]).length, 1, 'dlouhé video na výšku ano');
+  assert.equal(pickContinueWatching([radek('l', 20, 60, { video: { width: 1920, height: 1080 } })]).length, 1, 'krátké na šířku ano');
+});
+
 console.log('\n' + prosly + ' prošlo, ' + padly + ' spadlo');
 process.exit(padly ? 1 : 0);

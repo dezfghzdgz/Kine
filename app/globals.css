@@ -17818,3 +17818,7 @@ html {
     min-width: 0;
   }
 }
+
+/* 0142: emote kanálu čekající na schválení moderátorem (vidí jen majitel) */
+.chat-emote-chip.pending img { opacity: 0.45; }
+.chat-emote-chip .chat-emote-pending { display: inline-flex; align-items: center; color: var(--text-faint); }

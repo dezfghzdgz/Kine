@@ -18,7 +18,7 @@ import { channelTrust, RATING_UNLOCK_THRESHOLD } from '@/lib/trustRatingClient';
 import { useUserRole } from '@/lib/useUserRole';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import LiveBadge from '@/components/LiveBadge';
-import { visibleNowFilter } from '@/lib/scheduling';
+import { isHiddenScheduled, visibleNowFilter } from '@/lib/scheduling';
 import { setAmbientSource } from '@/lib/appearance';
 import { VideoBlockRow } from '@/components/SparksShelf';
 import ChannelBadges from '@/components/ChannelBadges';
@@ -143,7 +143,7 @@ function ChannelPageInner() {
         // sama, jednoznačně, hned pod tím v appce.
         supabase
           .from('video_collaborators')
-          .select('status, videos(id, owner_id, title, thumbnail_url, views, width, height, duration_seconds, created_at, status, cloudflare_video_id, visibility)')
+          .select('status, videos(id, owner_id, title, thumbnail_url, views, width, height, duration_seconds, created_at, status, cloudflare_video_id, visibility, scheduled_at, is_premiere)')
           .eq('profile_id', channelId),
         supabase
           .from('posts')
@@ -168,10 +168,13 @@ function ChannelPageInner() {
         supabase.from('videos').select('id', { count: 'exact', head: true }).eq('owner_id', channelId).not('live_started_at', 'is', null),
       ]);
 
+      // Naplánované video spolutvůrce (ne premiéra) do času zveřejnění na cizím kanálu
+      // nikdo nevidí - dřív tu prosáklo (název i náhled) dřív, než ho tvůrce vydal.
+      const collabNow = Date.now();
       const collabVideos = (collabRows ?? [])
         .filter((r: any) => r.status === 'accepted')
         .map((r: any) => r.videos)
-        .filter((v: any) => v && v.status === 'ready' && v.visibility !== 'private');
+        .filter((v: any) => v && v.status === 'ready' && v.visibility !== 'private' && (ownChannel || !isHiddenScheduled(v, collabNow)));
 
       const mergedVideos = [...(videoData ?? []), ...collabVideos]
         .filter((v, i, arr) => arr.findIndex((x) => x.id === v.id) === i)

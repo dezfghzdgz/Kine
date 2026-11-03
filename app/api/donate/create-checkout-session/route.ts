@@ -4,7 +4,7 @@ import { stripeServer } from '@/lib/stripeServer';
 import { siteUrlFrom } from '@/lib/siteUrl';
 import { userFromRequest } from '@/lib/apiUser';
 import { allowAttempt, paymentAllowedNow, publicError, TEST_MODE_OFF } from '@/lib/paymentsServer';
-import { clientIp } from '@/lib/clientIp';
+import { clientIpKey } from '@/lib/clientIp';
 
 // Vytvoří appce jednorázovou platební relaci na podporu appky Kine (ne
 // appky konkrétního tvůrce - to appka řešit později v rámci většího
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     // Testovací klíč Stripe: zkouší jen správce (lib/paymentsServer.ts).
     if (!(await paymentAllowedNow(userId))) return NextResponse.json(TEST_MODE_OFF, { status: 503 });
     // Nejvýš 6 platebních stránek za 10 minut z jedné adresy (zkoušení kradených karet).
-    if (!allowAttempt(`donate:${userId ?? clientIp(req.headers)}`, 6, 10 * 60_000)) {
+    if (!allowAttempt(`donate:${userId ?? clientIpKey(req.headers)}`, 6, 10 * 60_000)) {
       return NextResponse.json({ error: 'Příliš mnoho pokusů. Zkus to za pár minut.', code: 'rate-limit' }, { status: 429 });
     }
 

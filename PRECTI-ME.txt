@@ -1,3 +1,55 @@
+KINE web: bezpečnostní kontrola, Next.js 16, lepší doporučování
+(dodávka kine-0142-2026-11-03)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0142.zip a do GitHubu přetáhni OBSAH složky (jako vždy).
+2. JEDNA MIGRACE v Supabase: supabase-migration-bezpecnost-listopad.sql
+   Supabase -> tvůj projekt -> SQL Editor -> New query -> vlož CELÝ obsah souboru -> Run.
+   Na konci ukáže tabulku, co se zapnulo. Dá se pustit i znovu (nic se nerozbije).
+   Web funguje i před ní - jen bez nových pojistek v databázi.
+3. Vercel -> projekt -> Settings:
+   - General -> Node.js Version: 20.x nebo 22.x (Next.js 16 na 18.x nejde).
+   - Environment Variables: musí tam být CRON_SECRET (dlouhý náhodný text),
+     NEXT_PUBLIC_SITE_URL=https://www.playkine.com a NEXT_PUBLIC_STREAM_CUSTOMER_CODE
+     (kód z Cloudflare Stream, část adresy customer-XXXX.cloudflarestream.com).
+4. Pořád platí: na GitHubu zbývá smazat složku kine-web-0135 a soubory ze seznamu
+   "smazat" ve stav-souboru.json (sestavení projde i bez toho).
+
+BEZPEČNOST
+- Next.js 14 -> 16 (React 19): Next 14 už nedostává opravy a měl řadu známých děr.
+  Sestavení zůstává na webpacku, vzhled ani chování se nemění.
+- Databáze (migrace výš): skryté video (kontrola nahoty, moderátor) už nejde zveřejnit
+  oklikou přes spolupráci; komentář nejde podstrčit jako připnutý / „srdíčko od tvůrce“
+  a nejde psát pod video s vypnutými komentáři; zakázaná jména (admin, kine…) nejdou
+  obejít; naplánovaná a rozpracovaná videa nikdo cizí nevidí dopředu; videa zablokovaných
+  a shadow-banovaných kanálů zmizí všem kromě nich a moderátorů; cizí soubory v úložišti
+  nejde vypsat; oznámení z prohlížeče jen za skutečnou akci; moderátor nezablokuje správce.
+  Opraveno i nahrávání fotek k příspěvkům (databáze odmítala nové názvy souborů).
+  Staré SQL soubory jsou upravené tak, aby jejich opakované spuštění díry zase neotevřelo.
+- Server: zhlédnutí se počítají jen u hotových veřejných videí, vlastní zhlédnutí tvůrce
+  ne, IPv6 po sítích a bez souběhu; živý přenos neprozradí mimo vysílání id u Cloudflare
+  a skončený přenos maže id záznamu; zablokovaný uživatel nezveřejní záznam, záznam ze
+  skrytého přenosu jen po schválení; náhledy stahuje server jen z vlastního úložiště
+  a Cloudflare (s limitem); vložené přehrávání / oEmbed / sitemapa bez zablokovaných
+  kanálů; denní limit stahování nejde obejít; úklid bez CRON_SECRET nejvýš jednou za hodinu.
+- Emoty v chatu: statický obrázek server zkontroluje sám (dřív kontroloval náhled, který
+  poslal prohlížeč). Animovaný GIF / WebP čeká na schválení v /reports (Kontrola obsahu).
+
+DOPORUČOVÁNÍ
+- Hlavní stránka řadí velký výběr (nejnovější, oblíbené, odběry, tvoje kategorie,
+  hashtagy, hry, čerstvě zveřejněné), ne jen dávku 48 nejnovějších - nahoře se tak
+  opravdu střídají nová videa. Náhoda drží 30 minut (obnovení stránky nepřehází všechno).
+- „Zhlédnuté“ = opravdu viděné: do historie se video zapíše až po ~3 s přehrávání
+  (ne po otevření). Dokoukané (50 %+) se 90 dní nenabízí, překliknuté jen trochu klesne.
+- Vlastní videa se tobě nedoporučují; „Nezajímá mě“ / „Nedoporučovat kanál“ platí hned
+  a všude (Home, Explore, Sparks, hledání, další videa).
+- Zájmy podle toho, co a jak nedávno jsi sledoval, lajky nahoru, dislajky a schovaná dolů.
+- Sparks: zhlédnuté se zapisují (neopakují se pořád stejné), stránkuje se dál.
+- Explore: záložky Sparks a Překvapení opravené (dřív náhodná stovka bez řazení).
+- Po konci videa se automaticky nikdy nespustí premiéra s odpočtem.
+- Hledání: bez zablokovaných / shadow-banovaných kanálů.
+
 KINE web: živé vysílání - chat, hlavička, další přenosy, klip ke stažení, zvuk zůstane vypnutý
 (dodávka kine-0141-2026-11-02)
 ==========================================================================================

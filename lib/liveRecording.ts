@@ -7,6 +7,9 @@ import { channelRoom } from './liveChat';
 import { defaultRecordingTitle, parseRecordingVisibility, pickRecording, recordingsInWindow, type RecordingVisibility } from './liveRecordingRules';
 import { limitsForProfile, uploadProfile, uploadUsage } from './uploadTickets';
 import { formatDuration } from './uploadLimits';
+import { liveHiddenNow } from './nudityRules';
+import { liveMaxHours } from './liveLimits';
+import { estimatedRecordingSeconds, recordingBelongsToStream } from './liveRecordingGuard';
 
 export { defaultRecordingTitle, parseRecordingVisibility, pickRecording, RECORDING_VISIBILITIES, type RecordingVisibility } from './liveRecordingRules';
 
@@ -25,7 +28,30 @@ export { defaultRecordingTitle, parseRecordingVisibility, pickRecording, RECORDI
  */
 export type PublishResult =
   | { ok: true; videoId: string; alreadyPublished: boolean; status: 'ready' | 'processing' }
-  | { ok: false; status: number; error: string };
+  | { ok: false; status: number; error: string; code?: string };
+
+/**
+ * Patří záznam k přenosu, který skryla kontrola obsahu (a moderátor ho
+ * nepustil)? Takový záznam se nezveřejní - dřív šel přenos skrytý kvůli
+ * nahotě po konci rovnou nahrát jako veřejné video (zkontrolovalo by ho jen
+ * pár snímků kontroly videa). Platí pro poslední přenos (skrytí v řádku
+ * live_streams) i pro starší záznamy s otevřeným / potvrzeným hlášením.
+ */
+async function recordingHeldByModeration(ownerId: string, rec: LiveRecording, stream: Record<string, unknown> | null): Promise<boolean> {
+  if (stream && liveHiddenNow(stream as { moderation_hidden_at?: string | null; started_at?: string | null }) && recordingBelongsToStream(rec, stream as { started_at?: string | null })) {
+    return true;
+  }
+  const { data, error } = await supabaseServer
+    .from('content_flags')
+    .select('id')
+    .eq('kind', 'live')
+    .eq('channel_id', ownerId)
+    .eq('live_video_uid', rec.uid)
+    .in('status', ['open', 'removed'])
+    .limit(1);
+  // Bez fronty kontroly (migrace) žádná hlášení nejsou.
+  return !error && (data ?? []).length > 0;
+}
 
 export async function publishRecording(
   ownerId: string,
@@ -39,6 +65,12 @@ export async function publishRecording(
     rightAfterStream?: boolean;
   }
 ): Promise<PublishResult> {
+  // Zablokovaný účet nic nezveřejňuje - ani záznam (zápis jde přes service role, takže
+  // pojistka v databázi proti vkládání videí zablokovanými se tu neuplatní).
+  const profile = await uploadProfile(ownerId);
+  if (!profile) return { ok: false, status: 404, error: 'Profil nenalezen.' };
+  if (profile.is_banned) return { ok: false, status: 403, error: 'Účet je zablokovaný.', code: 'banned' };
+
   const { data: input } = await supabaseServer.from('live_inputs').select('cf_input_id').eq('owner_id', ownerId).maybeSingle();
   if (!input?.cf_input_id) return { ok: false, status: 404, error: 'Nemáš založené živé vysílání.' };
 
@@ -69,12 +101,18 @@ export async function publishRecording(
   // Běžící vysílání se zveřejnit nedá; po jeho konci ano, i když Cloudflare záznam ještě uzavírá.
   if (rec.state === 'live-inprogress' && stream?.is_live) return { ok: false, status: 409, error: 'Vysílání ještě běží.' };
 
+  if (await recordingHeldByModeration(ownerId, rec, (stream as Record<string, unknown> | null) ?? null)) {
+    return { ok: false, status: 409, error: 'Tenhle záznam je z přenosu skrytého kontrolou obsahu - zveřejnit ho půjde, až ho moderátor pustí.', code: 'moderation' };
+  }
+
   // Zveřejněný záznam zůstane napořád - počítá se do úložiště kanálu (lib/uploadLimits.ts).
-  const profile = await uploadProfile(ownerId);
+  // Délku záznamu, který Cloudflare ještě uzavírá (-1), odhadne podle přenosu v databázi
+  // (lib/liveRecordingGuard.ts) - dřív se počítalo s nulou a prošel i dvanáctihodinový záznam.
   const limits = limitsForProfile(profile, null);
   if (limits.storageSeconds > 0) {
     const { usage } = await uploadUsage(ownerId);
-    if (usage.storedSeconds + (rec.duration ?? 0) > limits.storageSeconds) {
+    const seconds = estimatedRecordingSeconds(rec, stream as { is_live?: boolean; started_at?: string | null; ended_at?: string | null } | null, (liveMaxHours() + 1) * 3600);
+    if (usage.storedSeconds + seconds > limits.storageSeconds) {
       return {
         ok: false,
         status: 507,

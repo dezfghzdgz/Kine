@@ -17,21 +17,24 @@ import { watchUrl } from '@/lib/embed';
 
 export const revalidate = 300;
 
-type Props = { params: { id: string }; searchParams: { t?: string } };
+type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ t?: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const video = await loadPublicVideo(params.id, revalidate);
+  const { id } = await params;
+  const video = await loadPublicVideo(id, revalidate);
   return {
     // absolute: bez šablony "| Kine" z kořenového layoutu (bylo by "Kine | Kine").
     title: { absolute: video ? `${video.title} · Kine` : 'Kine' },
     // Vložený přehrávač se neindexuje - patří do výsledků stránka videa.
     robots: { index: false, follow: true },
-    alternates: { canonical: `${SITE_URL}/watch/${params.id}` },
+    alternates: { canonical: `${SITE_URL}/watch/${id}` },
   };
 }
 
 export default async function EmbedPage({ params, searchParams }: Props) {
-  const video = await loadPublicVideo(params.id, revalidate);
+  const { id } = await params;
+  const query = await searchParams;
+  const video = await loadPublicVideo(id, revalidate);
 
   if (!video || !video.cloudflare_video_id) {
     return (
@@ -43,7 +46,7 @@ export default async function EmbedPage({ params, searchParams }: Props) {
     );
   }
 
-  const start = Number(searchParams?.t);
+  const start = Number(query?.t);
   const startTime = Number.isFinite(start) && start > 0 ? Math.floor(start) : 0;
   const poster = videoThumbnail(video.thumbnail_url, video.cloudflare_video_id);
   const src =

@@ -7,7 +7,8 @@ import GameView from '@/components/GameView';
  * Neznámá hra = 404. Stránka se připraví při první návštěvě a hodinu se
  * drží (revalidate v layout.tsx) - při sestavení se nic nestahuje.
  */
-export default function GamePage({ params }: { params: { slug: string } }) {
-  if (!gameBySlug(params.slug)) notFound();
-  return <GameView slug={params.slug} />;
+export default async function GamePage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  if (!gameBySlug(slug)) notFound();
+  return <GameView slug={slug} />;
 }

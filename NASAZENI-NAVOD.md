@@ -222,3 +222,24 @@ to prober s účetní.
    starší 30 dní pryč, hlášení chyb po 30 dnech, IP pokusů o přihlášení po 2 dnech.
 3. Bez migrace: doporučování jede bez kvality, statistiky kanálu postaru (pomaleji)
    a úklid se nedělá - Ochrana osobních údajů přitom slibuje 30 dní, tak ji pusť.
+
+## 13. Bezpečnostní oprava (listopad 2026)
+
+1. **Supabase → SQL Editor → New Query** → vlož CELÝ obsah souboru
+   `supabase-migration-bezpecnost-listopad.sql` → **Run**. Stačí JEDNOU, ale
+   **dá se pustit i opakovaně** (nic se nerozbije) a nespadne ani na databázi,
+   kde některá starší nepovinná migrace neproběhla. Na konci vypíše tabulku
+   s tím, co udělal.
+2. Nic dalšího se nenastavuje, žádná nová proměnná ve Vercelu. Je to samostatný
+   soubor - web funguje před spuštěním i po něm.
+3. Co to opravuje (krátce): skryté video po kontrole obsahu už nejde oklikou
+   zveřejnit; komentáře nejde podstrčit jako „připnuté / od tvůrce" a nejdou
+   číst/psát pod videem, které nevidíš; cizí člověk neuvidí rozpracovaná ani
+   dopředu naplánovaná videa a videa zablokovaných kanálů; seznam souborů
+   v úložišti si vypíše jen jejich majitel (a opraví se nahrávání fotek
+   k příspěvkům); oznámení z prohlížeče projdou jen za skutečnou akci; drobné
+   pojistky kolem jmen, ratingu, ověření a blokování správců.
+4. Pro jistotu je dobré potom znovu pustit i dřívější „opakovatelné" migrace
+   (`supabase-migration-zabezpeceni-a-limity.sql`, `-podpory-kontrola.sql`,
+   `-statistiky-prispevky-zamky.sql`, `-privacy-fixes.sql`) - mají teď v sobě
+   tytéž opravy, takže opakované spuštění bezpečné nastavení nerozbije.

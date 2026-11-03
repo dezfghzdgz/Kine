@@ -14,6 +14,8 @@ import PostCard from '@/components/PostCard';
 import { buildVideoBlocks } from '@/lib/videoBlocks';
 import VideoCard from '@/components/VideoCard';
 import ProfileImage from '@/components/ProfileImage';
+import { isHiddenScheduled, visibleNowFilter } from '@/lib/scheduling';
+import { filterHidden, loadHiddenContent, NOTHING_HIDDEN } from '@/lib/hiddenContent';
 
 function SubscriptionsPageInner() {
   const { t } = useLanguage();
@@ -55,13 +57,16 @@ function SubscriptionsPageInner() {
     // netahá sloupec, který by prozradil, kdo ho má.
     const channelIds = channelList.map((c: any) => c.id);
     if (channelIds.length > 0) {
-      const [{ data: videoData }, { data: postData }] = await Promise.all([
+      const [{ data: videoData }, { data: postData }, hidden] = await Promise.all([
         supabase
           .from('videos')
-          .select('id, title, thumbnail_url, views, width, height, duration_seconds, created_at, cloudflare_video_id, profiles!videos_owner_id_fkey(username)')
+          // scheduled_at + is_premiere: naplánované video (ne premiéra) sem do času zveřejnění
+          // nepatří - dřív ho odběratelé viděli (název i náhled) dřív, než ho tvůrce vydal.
+          .select('id, owner_id, title, thumbnail_url, views, width, height, duration_seconds, created_at, scheduled_at, is_premiere, cloudflare_video_id, profiles!videos_owner_id_fkey(username)')
           .in('owner_id', channelIds)
           .eq('status', 'ready')
           .eq('visibility', 'public')
+          .or(visibleNowFilter())
           .order('created_at', { ascending: false })
           .limit(48),
         supabase
@@ -70,8 +75,13 @@ function SubscriptionsPageInner() {
           .in('owner_id', channelIds)
           .order('created_at', { ascending: false })
           .limit(48),
+        loadHiddenContent(authData.user.id).catch(() => NOTHING_HIDDEN),
       ]);
-      setVideos(videoData ?? []);
+      // Pojistka i v prohlížeči (databáze to hlídá taky). "Nezajímá mě" u konkrétního videa
+      // platí i tady; "Nedoporučovat kanál" ne - odběr si divák vybral sám.
+      const now = Date.now();
+      const released = (videoData ?? []).filter((v: any) => !isHiddenScheduled(v, now));
+      setVideos(filterHidden(released, { videoIds: hidden.videoIds, channelIds: new Set<string>() }));
       setPosts(postData ?? []);
     }
 

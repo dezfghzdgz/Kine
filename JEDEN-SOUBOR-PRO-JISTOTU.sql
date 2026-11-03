@@ -43,8 +43,12 @@ create table if not exists playlist_videos (
 alter table playlists enable row level security;
 alter table playlist_videos enable row level security;
 
+-- POZOR (soukromí): dřív "using (true)" ukázalo i soukromé playlisty komukoli.
+-- Veřejné playlisty zpřístupní až pravidlo podle visibility
+-- (supabase-migration-zabezpeceni-a-limity.sql / -bezpecnost-listopad.sql).
+-- Tady tedy jen vlastníkovi, kdyby se soubor pustil znovu.
 do $$ begin
-  create policy "Playlisty jsou veřejně viditelné" on playlists for select using (true);
+  create policy "Playlisty jsou veřejně viditelné" on playlists for select using (owner_id = auth.uid());
 exception when duplicate_object then null; end $$;
 do $$ begin
   create policy "Uživatel vytváří jen svoje playlisty" on playlists for insert with check (auth.uid() = owner_id);
@@ -52,8 +56,11 @@ exception when duplicate_object then null; end $$;
 do $$ begin
   create policy "Uživatel maže jen svoje playlisty" on playlists for delete using (auth.uid() = owner_id);
 exception when duplicate_object then null; end $$;
+-- POZOR (soukromí): obsah playlistu vidí jen ten, kdo vidí playlist. Veřejné
+-- playlisty zpřístupní pravidlo podle visibility (viz výše). Tady jen vlastníkovi.
 do $$ begin
-  create policy "Obsah playlistů je veřejně viditelný" on playlist_videos for select using (true);
+  create policy "Obsah playlistů je veřejně viditelný" on playlist_videos for select
+    using (exists (select 1 from playlists where playlists.id = playlist_id and playlists.owner_id = auth.uid()));
 exception when duplicate_object then null; end $$;
 do $$ begin
   create policy "Uživatel přidává jen do svých playlistů" on playlist_videos for insert

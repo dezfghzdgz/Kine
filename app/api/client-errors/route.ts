@@ -3,7 +3,7 @@ import { supabaseServer } from '@/lib/supabaseServer';
 import { sanitizeDeviceClass } from '@/lib/deviceClass';
 import { MAX_MESSAGE, MAX_STACK, MAX_URL } from '@/lib/errorReporter';
 import { allowRequest } from '@/lib/rateLimit';
-import { clientIp } from '@/lib/clientIp';
+import { clientIpKey } from '@/lib/clientIp';
 import { createHash } from 'node:crypto';
 
 /**
@@ -45,7 +45,8 @@ const MAX_BODY_BYTES = 32 * 1024;
  * poslat jiný a brzdu tak obejít.
  */
 function ipKey(req: NextRequest): string {
-  return createHash('sha256').update(clientIp(req.headers)).digest('base64url').slice(0, 16);
+  // IPv6 po sítích /64 (lib/clientIp.ts - ipBucket).
+  return createHash('sha256').update(clientIpKey(req.headers)).digest('base64url').slice(0, 16);
 }
 // perf = pomalé video (lib/vodPlayer.ts - reportSlowVideo): statistiky přehrávání místo zásobníku.
 const ALLOWED_KINDS = new Set(['error', 'rejection', 'perf']);

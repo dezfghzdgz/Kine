@@ -6,6 +6,8 @@
  * patří. Čisté, bez prohlížeče: tests/continueWatching.test.mjs.
  */
 
+import { isSpark } from './videoBlocks';
+
 /** Pod tolik vteřin se nevyplatí navazovat - to člověk sotva klikl. */
 export const MIN_PROGRESS_S = 10;
 /** Za touhle hranicí je video prakticky dokoukané. */
@@ -46,8 +48,9 @@ export interface ContinueItem {
  *
  * Vyhazuje dokoukané (příznak i podle času), sotva načatá, videa bez
  * délky (bez ní nejde říct, kolik zbývá) a videa, která nejsou hotová
- * nebo už neexistují. Nejnovější napřed, jedno video jednou, nejvíc
- * MAX_ITEMS.
+ * nebo už neexistují. Sparks taky - hrají ve smyčce, "navázat" u nich
+ * nedává smysl (Sparks si teď historii zapisují taky, components/SparksCard.tsx).
+ * Nejnovější napřed, jedno video jednou, nejvíc MAX_ITEMS.
  */
 export function pickContinueWatching(rows: HistoryRow[]): ContinueItem[] {
   const seen = new Set<string>();
@@ -61,6 +64,7 @@ export function pickContinueWatching(rows: HistoryRow[]): ContinueItem[] {
     if (seen.has(video.id)) continue;
     if (row.completed) continue;
     if (video.status && video.status !== 'ready') continue;
+    if (isSpark(video)) continue;
 
     const duration = video.duration_seconds ?? 0;
     const progress = row.progress_seconds ?? 0;

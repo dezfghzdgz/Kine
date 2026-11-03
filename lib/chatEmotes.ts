@@ -19,6 +19,8 @@ export type ChatEmote = {
   animated?: boolean;
   /** Id v tabulce channel_emotes (jen emoty kanálu). */
   id?: string;
+  /** Čeká na schválení moderátorem (vidí jen majitel kanálu, v chatu se neukazuje). */
+  pending?: boolean;
 };
 
 /** Emoty Kine - soubory public/emotes/<kód>.svg. */

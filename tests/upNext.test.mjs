@@ -49,7 +49,8 @@ test('po konci: málo nových -> doplní nejdéle neviděná (nabídka nikdy pr�
   const order = ['e', 'a', 'd', 'b', 'c'];
   assert.deepEqual(u.upNextWithFallback(list, current, order).map((v) => v.id), ['c', 'b', 'd', 'a', 'e'], 'všechno viděné: nejdávněji viděné napřed');
   assert.deepEqual(u.upNextWithFallback(list, current, ['a', 'b', 'c', 'd']).slice(0, 2).map((v) => v.id), ['e', 'd'], 'jedno nové + nejdávněji viděné');
-  assert.deepEqual(u.upNextWithFallback(list, current, ['a']).map((v) => v.id), ['c', 'b', 'd', 'e'], 'nových dost - zhlédnutá se nepřidávají');
+  // Kandidáti přichází už seřazení podle podobnosti (rankRelated) - pořadí se drží, jen bez zhlédnutých.
+  assert.deepEqual(u.upNextWithFallback(list, current, ['a']).map((v) => v.id), ['b', 'c', 'd', 'e'], 'nových dost - zhlédnutá se nepřidávají');
   assert.ok(!u.upNextWithFallback(list, current, order).some((v) => v.id === 'now'), 'nikdy to samé video');
 });
 
@@ -62,6 +63,58 @@ test('paměť zhlédnutých: nejnovější napřed, bez opakování, se stropem'
   assert.deepEqual(u.addSeen([], 'z'), ['z']);
   assert.equal(u.addSeen(Array.from({ length: 600 }, (_, i) => `v${i}`), 'new').length, u.SEEN_MAX);
   assert.deepEqual(u.addSeen(['a'], ''), ['a']);
+});
+
+
+test('po konci se drží pořadí podle podobnosti (shoda v hashtazích se neztratí)', () => {
+  const NOW = Date.parse('2026-11-03T12:00:00Z');
+  const cur = { id: 'cur', owner_id: 'o1', category: 'catGaming', hashtags: ['minecraft', 'survival'] };
+  const cands = [
+    // stejná kategorie i tvůrce, ale žádný společný hashtag
+    { id: 'same', owner_id: 'o1', category: 'catGaming', hashtags: [], views: 10, created_at: new Date(NOW - 86400000).toISOString() },
+    // jiná kategorie, ale oba hashtagy
+    { id: 'tags', owner_id: 'x', category: 'catFilm', hashtags: ['minecraft', 'survival'], views: 10, created_at: new Date(NOW - 86400000).toISOString() },
+  ];
+  const ranked = u.rankRelated(cands, cur, new Set(), NOW);
+  assert.deepEqual(ranked.map((v) => v.id), ['tags', 'same'], 'dva společné hashtagy (24) > kategorie + tvůrce (18)');
+  assert.deepEqual(u.upNextWithFallback(ranked, cur, [], 2, NOW).map((v) => v.id), ['tags', 'same'], 'po konci stejné pořadí jako vedle videa');
+});
+
+test('po konci nikdy video, které ještě nejde pustit (premiéra s odpočtem, naplánované)', () => {
+  const NOW = Date.parse('2026-11-03T12:00:00Z');
+  const later = new Date(NOW + 3 * 86400000).toISOString();
+  const earlier = new Date(NOW - 3600000).toISOString();
+  const cands = [
+    { id: 'premiere', owner_id: 'alice', category: 'catGaming', scheduled_at: later, is_premiere: true },
+    { id: 'scheduled', owner_id: 'alice', category: 'catGaming', scheduled_at: later, is_premiere: false },
+    { id: 'started', owner_id: 'alice', category: 'catGaming', scheduled_at: earlier, is_premiere: true },
+    { id: 'plain', owner_id: 'bob', category: 'catMusic' },
+  ];
+  const ids = u.upNextWithFallback(cands, current, [], 2, NOW).map((v) => v.id);
+  assert.deepEqual(ids, ['started', 'plain']);
+  assert.deepEqual(u.upNextWithFallback(cands, current, ['started', 'plain'], 2, NOW).map((v) => v.id), ['plain', 'started'], 'ani jako doplnění ze zhlédnutých');
+  assert.equal(u.notPlayableYet({ scheduled_at: later }, NOW), true);
+  assert.equal(u.notPlayableYet({ scheduled_at: earlier }, NOW), false);
+  assert.equal(u.notPlayableYet({ scheduled_at: null }, NOW), false);
+  assert.equal(u.notPlayableYet({ scheduled_at: 'blbost' }, NOW), false);
+});
+
+test('seznam vedle videa: jeden kanál nezaplní začátek (lehká rozmanitost)', () => {
+  const NOW = Date.parse('2026-11-03T12:00:00Z');
+  const cur = { id: 'cur', owner_id: 'o1', category: 'catGaming', hashtags: ['cs2'] };
+  const day = (n) => new Date(NOW - n * 86400000).toISOString();
+  const cands = [
+    { id: 'o1a', owner_id: 'o1', category: 'catGaming', hashtags: ['cs2'], views: 100, created_at: day(1) },
+    { id: 'o1b', owner_id: 'o1', category: 'catGaming', hashtags: ['cs2'], views: 100, created_at: day(2) },
+    { id: 'o1c', owner_id: 'o1', category: 'catGaming', hashtags: ['cs2'], views: 100, created_at: day(3) },
+    { id: 'other', owner_id: 'o2', category: 'catGaming', hashtags: ['cs2'], views: 100, created_at: day(4) },
+  ];
+  const ids = u.rankRelated(cands, cur, new Set(), NOW).map((v) => v.id);
+  assert.equal(ids[0], 'o1a', 'nejpodobnější pořád první');
+  assert.ok(ids.indexOf('other') <= 2, `jiný kanál se dostane nahoru: ${ids}`);
+  assert.equal(new Set(ids).size, 4);
+  const seenLast = u.rankRelated(cands, cur, new Set(['o1a']), NOW).map((v) => v.id);
+  assert.equal(seenLast[seenLast.length - 1], 'o1a', 'zhlédnuté pořád až na konci');
 });
 
 console.log(`\n${prosly} prošlo, ${padly} spadlo`);

@@ -18,11 +18,15 @@ create table playlist_videos (
 alter table playlists enable row level security;
 alter table playlist_videos enable row level security;
 
-create policy "Playlisty jsou veřejně viditelné" on playlists for select using (true);
+-- POZOR (soukromí): dřív "using (true)" ukázalo i soukromé playlisty. Veřejné
+-- zpřístupní pravidlo podle visibility (supabase-migration-zabezpeceni-a-limity.sql
+-- / -bezpecnost-listopad.sql); tady jen vlastníkovi.
+create policy "Playlisty jsou veřejně viditelné" on playlists for select using (owner_id = auth.uid());
 create policy "Uživatel vytváří jen svoje playlisty" on playlists for insert with check (auth.uid() = owner_id);
 create policy "Uživatel maže jen svoje playlisty" on playlists for delete using (auth.uid() = owner_id);
 
-create policy "Obsah playlistů je veřejně viditelný" on playlist_videos for select using (true);
+create policy "Obsah playlistů je veřejně viditelný" on playlist_videos for select
+  using (exists (select 1 from playlists where playlists.id = playlist_id and playlists.owner_id = auth.uid()));
 create policy "Uživatel přidává jen do svých playlistů" on playlist_videos for insert
   with check (exists (select 1 from playlists where playlists.id = playlist_id and playlists.owner_id = auth.uid()));
 create policy "Uživatel odebírá jen ze svých playlistů" on playlist_videos for delete

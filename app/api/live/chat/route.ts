@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isMissingTable, userFromRequest } from '@/lib/apiUser';
-import { parseChatRoom, CHAT_MAX_LENGTH, CHAT_MIN_INTERVAL_MS } from '@/lib/liveChat';
+import { parseChatRoom, CHAT_MAX_LENGTH, CHAT_MIN_INTERVAL_MS, type ChatRoom } from '@/lib/liveChat';
+import { bearerFrom, supabaseAsUser } from '@/lib/supabaseAsUser';
 import { checkChatMessage, sanitizeChatSettings, SHIELD_SETTINGS, DEFAULT_CHAT_SETTINGS, type ChatPinned, type ChatSettings } from '@/lib/liveChatRules';
 import { activeBan, chatRole, listBans, listModerators, loadChatSettings, saveChatSettings, savePinned } from '@/lib/liveChatModeration';
 import { emoteMap, isEmoteOnlyMessage, normalizeOutgoing, validChatColor, type ChatBadge, type ChatMeta } from '@/lib/chatEmotes';
@@ -74,6 +75,23 @@ async function loadProfile(userId: string): Promise<ProfileRow | null> {
 type MessageRow = { id: number; room: string; user_id: string; body: string; profiles?: { username: string | null } | null };
 
 /**
+ * Smí se do chatu psát? Chat premiéry ("video:<id>") jen u videa, které pisateli
+ * ukáže databáze (RLS - soukromé video jen majiteli, video pro odběratele odběratelům);
+ * chat kanálu jen u existujícího, nezablokovaného kanálu.
+ */
+async function roomAvailable(room: ChatRoom, token: string | null): Promise<boolean> {
+  if (room.kind === 'video') {
+    const { data } = await supabaseAsUser(token).from('videos').select('id').eq('id', room.id).maybeSingle();
+    return !!data;
+  }
+  const full = await supabaseServer.from('profiles').select('id, is_banned').eq('id', room.id).maybeSingle();
+  if (!full.error) return !!full.data && (full.data as { is_banned?: boolean | null }).is_banned !== true;
+  // Databáze bez sloupce is_banned (starší migrace) - stačí, že kanál existuje.
+  const basic = await supabaseServer.from('profiles').select('id').eq('id', room.id).maybeSingle();
+  return !!basic.data;
+}
+
+/**
  * Chat živého vysílání a premiér. Číst ho jde přímo z databáze (je veřejný),
  * psát a mazat jen tudy: server ověří přihlášení, blokaci, tempo (jedna
  * zpráva za ~1,5 s) a pravidla chatu (lib/liveChatRules.ts).
@@ -104,6 +122,10 @@ export async function POST(req: NextRequest) {
   if (isMissingTable(last.error)) return NextResponse.json({ error: 'Chat ještě není v databázi zapnutý.' }, { status: 503 });
   const lastAt = last.data?.[0]?.created_at ? new Date(last.data[0].created_at).getTime() : 0;
   if (Date.now() - lastAt < CHAT_MIN_INTERVAL_MS) return NextResponse.json({ error: 'Pomaleji :)', code: 'slow', seconds: 2 }, { status: 429 });
+
+  // Chat jen u něčeho, co existuje a pisatel to vidí. Dřív šlo psát do "chatu" jakéhokoli id -
+  // i soukromého nebo neexistujícího videa (zprávy pak ležely v databázi pro nikoho).
+  if (!(await roomAvailable(room, bearerFrom(req)))) return NextResponse.json({ error: 'Tenhle chat není.', code: 'room' }, { status: 404 });
 
   const { role, ownerId } = await chatRole(user.id, room);
   const replyId = Number(body?.replyTo);

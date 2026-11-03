@@ -6,8 +6,13 @@
  *  - po konci videa (odpočet, automatické pokračování) jen videa, která
  *    divák ještě neviděl - podle historie na účtu (watch_history) i podle
  *    paměti prohlížeče (funguje i bez přihlášení);
- *  - příbuzná napřed: stejná kategorie, stejný tvůrce; jinak nejnovější;
- *  - v seznamu vedle videa podobná napřed (rankRelated), zhlédnutá až za nezhlédnutými.
+ *  - v pořadí podle podobnosti (rankRelated - společné hashtagy, kategorie,
+ *    tvůrce); dřív se to po konci přeřadilo hrubě jen podle kategorie
+ *    a tvůrce a shoda v hashtazích se ztratila;
+ *  - nikdy video, které ještě nejde pustit (premiéra s odpočtem, naplánované) -
+ *    automatické pokračování dřív skončilo na odpočtu premiéry;
+ *  - v seznamu vedle videa podobná napřed (rankRelated), zhlédnutá až za
+ *    nezhlédnutými, jeden kanál nezaplní celý seznam.
  * Když nových videí není dost, doplní se ta, která divák viděl nejdávněji
  * (označená „Zhlédnuto“) - nabídka po konci tak nikdy nezůstane prázdná
  * (dřív se pak neukázalo nic a vypadalo to jako chyba).
@@ -20,7 +25,16 @@ export type UpNextCandidate = {
   id: string;
   owner_id?: string | null;
   category?: string | null;
+  scheduled_at?: string | null;
+  is_premiere?: boolean | null;
 };
+
+/** Čas zveřejnění je v budoucnu (premiéra s odpočtem, naplánované video) - pustit to ještě nejde. */
+export function notPlayableYet(video: { scheduled_at?: string | null } | null | undefined, now: number = Date.now()): boolean {
+  if (!video?.scheduled_at) return false;
+  const at = Date.parse(video.scheduled_at);
+  return Number.isFinite(at) && at > now;
+}
 
 export type CurrentVideo = {
   id: string;
@@ -41,22 +55,36 @@ export function rankUpNext<T extends UpNextCandidate>(candidates: readonly T[], 
 }
 
 /**
- * Po konci videa: nezhlédnutá napřed (rankUpNext); když jich je méně než `want`,
- * doplní zhlédnutá - nejdéle neviděná napřed. `seenOrder` = id zhlédnutých od
- * nejnovějšího (historie na účtu, pak paměť prohlížeče).
+ * Po konci videa. `candidates` jsou už seřazené podle podobnosti (rankRelated)
+ * a to pořadí se drží: nezhlédnutá napřed, a když jich je méně než `want`,
+ * doplní se zhlédnutá - nejdéle neviděná napřed. `seenOrder` = id zhlédnutých
+ * od nejnovějšího (historie na účtu, pak paměť prohlížeče). Video, které ještě
+ * nejde pustit (premiéra s odpočtem, naplánované), se nenabídne vůbec.
  */
-export function upNextWithFallback<T extends UpNextCandidate>(candidates: readonly T[], current: CurrentVideo, seenOrder: readonly string[], want = 2): T[] {
+export function upNextWithFallback<T extends UpNextCandidate>(
+  candidates: readonly T[],
+  current: CurrentVideo,
+  seenOrder: readonly string[],
+  want = 2,
+  now: number = Date.now()
+): T[] {
   const seen = new Set(seenOrder);
-  const fresh = rankUpNext(candidates, current, seen);
+  const unique = new Set<string>();
+  const playable = candidates
+    .map((video, index) => ({ video, index }))
+    .filter(({ video }) => {
+      if (!video?.id || video.id === current.id || unique.has(video.id) || notPlayableYet(video, now)) return false;
+      unique.add(video.id);
+      return true;
+    });
+  const fresh = playable.filter(({ video }) => !seen.has(video.id)).map(({ video }) => video);
   if (fresh.length >= want) return fresh;
   const recency = new Map<string, number>();
   seenOrder.forEach((id, i) => {
     if (!recency.has(id)) recency.set(id, i);
   });
-  const taken = new Set(fresh.map((v) => v.id));
-  const older = candidates
-    .map((video, index) => ({ video, index }))
-    .filter(({ video }) => !!video && !!video.id && video.id !== current.id && !taken.has(video.id))
+  const older = playable
+    .filter(({ video }) => seen.has(video.id))
     // Větší pořadí v seznamu zhlédnutých = viděné dávněji -> dřív.
     .sort((a, b) => (recency.get(b.video.id) ?? -1) - (recency.get(a.video.id) ?? -1) || a.index - b.index)
     .map(({ video }) => video);
@@ -69,11 +97,16 @@ export type RelatedCandidate = UpNextCandidate & {
   created_at?: string | null;
 };
 
+/** O kolik bodů přijde každé další video stejného kanálu v seznamu (lehká rozmanitost). */
+export const RELATED_SAME_OWNER_HIT = 7;
+
 /**
  * Seznam vedle videa: podobná napřed. Dřív tu byla prostě nejnovější videa
  * na Kine (jen nezhlédnutá napřed) - k videu o Minecraftu klidně recept.
  * Teď: společné hashtagy, stejná kategorie a stejný tvůrce, k tomu trochu
  * oblíbenost a čerstvost. Zhlédnutá až za nezhlédnutými; bez opakování.
+ * Každé další video téhož kanálu ztrácí pár bodů (RELATED_SAME_OWNER_HIT) -
+ * "víc od tohoto tvůrce" zůstane nahoře, ale celý seznam nezaplní.
  */
 export function rankRelated<T extends RelatedCandidate>(
   candidates: readonly T[],
@@ -98,9 +131,31 @@ export function rankRelated<T extends RelatedCandidate>(
     if (!video?.id || video.id === current.id || unique.has(video.id)) return;
     unique.set(video.id, { video, index, s: score(video), seen: seen.has(video.id) });
   });
-  return [...unique.values()]
-    .sort((a, b) => Number(a.seen) - Number(b.seen) || b.s - a.s || a.index - b.index)
-    .map((x) => x.video);
+  const sorted = [...unique.values()].sort((a, b) => Number(a.seen) - Number(b.seen) || b.s - a.s || a.index - b.index);
+  // Lehká rozmanitost: hladový výběr, každé další video téhož kanálu o kus níž
+  // (zvlášť v nezhlédnutých a zvlášť ve zhlédnutých - ty zůstávají až za nimi).
+  const out: T[] = [];
+  for (const group of [sorted.filter((x) => !x.seen), sorted.filter((x) => x.seen)]) {
+    const owners = new Map<string, number>();
+    const pool = [...group];
+    while (pool.length > 0) {
+      let best = 0;
+      let bestValue = -Infinity;
+      for (let i = 0; i < pool.length; i++) {
+        const owner = pool[i].video.owner_id;
+        const value = pool[i].s - (owner ? owners.get(owner) ?? 0 : 0) * RELATED_SAME_OWNER_HIT;
+        if (value > bestValue) {
+          bestValue = value;
+          best = i;
+        }
+      }
+      const [pick] = pool.splice(best, 1);
+      out.push(pick.video);
+      const owner = pick.video.owner_id;
+      if (owner) owners.set(owner, (owners.get(owner) ?? 0) + 1);
+    }
+  }
+  return out;
 }
 
 /** Seznam vedle videa: nezhlédnutá napřed, zhlédnutá za nimi (jinak pořadí beze změny). */

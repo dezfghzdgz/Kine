@@ -4,36 +4,48 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 import { EMOTE_MAX_BYTES, EMOTE_SIZE, MAX_CHANNEL_EMOTES, validChannelEmoteCode, type ChatEmote } from '@/lib/chatEmotes';
+import UiIcon from './UiIcon';
 
-/** Obrázek pro nahrání: statický se zmenší na 112 px (PNG), GIF / WebP zůstanou (můžou být animované). */
-async function prepareImage(file: File): Promise<{ image: Blob; scan: Blob }> {
+/**
+ * Je GIF / WebP animovaný? GIF: víc než jeden blok "řízení snímku" (0x21 0xF9),
+ * WebP: kontejner VP8X s příznakem animace. Na hrubé rozlišení stačí - jde jen
+ * o to, jestli obrázek poslat beze změny (animovaný), nebo ho převést na PNG.
+ */
+async function isAnimated(file: File): Promise<boolean> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (file.type === 'image/gif') {
+    let frames = 0;
+    for (let i = 0; i + 2 < bytes.length; i++) {
+      if (bytes[i] === 0x21 && bytes[i + 1] === 0xf9 && bytes[i + 2] === 0x04 && ++frames > 1) return true;
+    }
+    return false;
+  }
+  if (file.type === 'image/webp') {
+    const fourcc = (o: number) => String.fromCharCode(bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]);
+    return bytes.length > 21 && fourcc(12) === 'VP8X' && (bytes[20] & 0x02) !== 0;
+  }
+  return false;
+}
+
+/**
+ * Obrázek pro nahrání: statický se zmenší na 112 px PNG (server ho sám
+ * zkontroluje a emote je hned v chatu), animovaný GIF / WebP zůstane, jak je
+ * (čeká na schválení moderátorem - server animaci zkontrolovat neumí).
+ */
+async function prepareImage(file: File): Promise<Blob> {
+  if ((file.type === 'image/gif' || file.type === 'image/webp') && file.size <= EMOTE_MAX_BYTES && (await isAnimated(file))) return file;
   const bitmap = await createImageBitmap(file);
   try {
-    const keep = (file.type === 'image/gif' || file.type === 'image/webp') && file.size <= EMOTE_MAX_BYTES;
-    let image: Blob = file;
-    if (!keep) {
-      const canvas = document.createElement('canvas');
-      canvas.width = EMOTE_SIZE;
-      canvas.height = EMOTE_SIZE;
-      const ctx = canvas.getContext('2d')!;
-      const scale = Math.min(EMOTE_SIZE / bitmap.width, EMOTE_SIZE / bitmap.height);
-      const w = Math.max(1, Math.round(bitmap.width * scale));
-      const h = Math.max(1, Math.round(bitmap.height * scale));
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(bitmap, Math.round((EMOTE_SIZE - w) / 2), Math.round((EMOTE_SIZE - h) / 2), w, h);
-      image = await new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('png'))), 'image/png'));
-    }
-    // Náhled pro kontrolu obsahu: první snímek na šedém pozadí jako JPEG.
-    const scanCanvas = document.createElement('canvas');
-    scanCanvas.width = 224;
-    scanCanvas.height = 224;
-    const sctx = scanCanvas.getContext('2d')!;
-    sctx.fillStyle = '#808080';
-    sctx.fillRect(0, 0, 224, 224);
-    const s = Math.min(224 / bitmap.width, 224 / bitmap.height);
-    sctx.drawImage(bitmap, (224 - bitmap.width * s) / 2, (224 - bitmap.height * s) / 2, bitmap.width * s, bitmap.height * s);
-    const scan = await new Promise<Blob>((resolve, reject) => scanCanvas.toBlob((b) => (b ? resolve(b) : reject(new Error('jpeg'))), 'image/jpeg', 0.85));
-    return { image, scan };
+    const canvas = document.createElement('canvas');
+    canvas.width = EMOTE_SIZE;
+    canvas.height = EMOTE_SIZE;
+    const ctx = canvas.getContext('2d')!;
+    const scale = Math.min(EMOTE_SIZE / bitmap.width, EMOTE_SIZE / bitmap.height);
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bitmap, Math.round((EMOTE_SIZE - w) / 2), Math.round((EMOTE_SIZE - h) / 2), w, h);
+    return await new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('png'))), 'image/png'));
   } finally {
     bitmap.close();
   }
@@ -59,6 +71,7 @@ export default function ChatEmoteManager({
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [inputKey, setInputKey] = useState(0);
   const [preview, setPreview] = useState<string | null>(null);
@@ -82,6 +95,7 @@ export default function ChatEmoteManager({
   async function add(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setNote(null);
     const clean = code.trim();
     if (!validChannelEmoteCode(clean)) {
       setError(t('liveChatEmoteErrCode'));
@@ -93,7 +107,7 @@ export default function ChatEmoteManager({
     }
     setBusy(true);
     try {
-      const { image, scan } = await prepareImage(file);
+      const image = await prepareImage(file);
       if (image.size > EMOTE_MAX_BYTES) {
         setError(t('liveChatEmoteErrFile'));
         return;
@@ -102,14 +116,15 @@ export default function ChatEmoteManager({
       form.append('room', room);
       form.append('code', clean);
       form.append('image', image, 'emote');
-      form.append('scan', scan, 'scan.jpg');
       const res = await fetch('/api/live/chat/emotes', { method: 'POST', headers: await token(), body: form });
       const body = await res.json().catch(() => ({}));
       if (!res.ok || !body?.emote) {
-        setError(body?.error ?? t('liveChatUnavailable'));
+        setError(body?.code === 'unverifiable' ? t('liveChatEmoteErrUnverifiable') : body?.error ?? t('liveChatUnavailable'));
         return;
       }
       onChange([...emotes, body.emote as ChatEmote]);
+      // Animovaný emote čeká na moderátora - ať majitel ví, proč ho v chatu zatím nevidí.
+      if (body.pending || body.emote?.pending) setNote(t('liveChatEmotePending'));
       setCode('');
       setFile(null);
       setInputKey((k) => k + 1);
@@ -143,9 +158,14 @@ export default function ChatEmoteManager({
       {emotes.length > 0 && (
         <div className="chat-emote-list">
           {emotes.map((e) => (
-            <span key={e.id ?? e.code} className="chat-emote-chip">
+            <span key={e.id ?? e.code} className={`chat-emote-chip${e.pending ? ' pending' : ''}`} title={e.pending ? t('liveChatEmotePending') : undefined}>
               <img src={e.url} alt="" />
               <code>{e.code}</code>
+              {e.pending && (
+                <span className="chat-emote-pending" aria-label={t('liveChatEmotePending')}>
+                  <UiIcon name="timer" size={13} />
+                </span>
+              )}
               {e.id &&
                 (confirmId === e.id ? (
                   <button type="button" className="danger" onClick={() => remove(e.id!)}>
@@ -179,6 +199,7 @@ export default function ChatEmoteManager({
           </button>
         </form>
       )}
+      {note && !error && <p className="live-chat-panel-note">{note}</p>}
       {error && <p className="live-chat-panel-note error">{error}</p>}
     </div>
   );

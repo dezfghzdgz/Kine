@@ -9,6 +9,7 @@ import { DEFAULT_FILTERS, OPEN_SEARCH_FILTERS_EVENT, searchHref, type SearchFilt
 import UiIcon from './UiIcon';
 import ProfileImage from './ProfileImage';
 import { GENRE_KEYS, gameBySlug, gameMonogram } from '@/lib/games';
+import { filterHidden, useHiddenContent } from '@/lib/hiddenContent';
 
 /**
  * Výsledky hledání (app/search/page.tsx).
@@ -43,6 +44,12 @@ export default function SearchResults({
   minRating?: string | null;
 }) {
   const { t } = useLanguage();
+  // "Nezajímá mě" / "Nedoporučovat kanál" platí i v hledání. Server diváka nezná
+  // (přihlášení žije v prohlížeči), takže se schované vyřadí až tady.
+  const hidden = useHiddenContent();
+  const shownVideos = filterHidden(videos, hidden);
+  const shownRecommended = filterHidden(recommended, hidden);
+  const shownCreators = hidden.channelIds.size > 0 ? creators.filter((c: any) => !hidden.channelIds.has(c?.id)) : creators;
 
   if (!query) {
     return <p style={{ color: 'var(--text-faint)' }}>{t('searchEmptyPrompt')}</p>;
@@ -127,11 +134,11 @@ export default function SearchResults({
         </div>
       )}
 
-      {creators.length > 0 && (
+      {shownCreators.length > 0 && (
         <div style={{ marginBottom: 32 }}>
           <p className="panel-heading">{t('searchCreatorsHeading')}</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 420 }}>
-            {creators.map((c: any) => (
+            {shownCreators.map((c: any) => (
               <Link key={c.id} href={`/channel/${c.id}`} className="sidebar-link" style={{ display: 'flex', alignItems: 'center', gap: 10 }} data-anim-scope>
                 <span className="profile-avatar-small">{c.avatar_url ? <ProfileImage src={c.avatar_url} /> : null}</span>
                 {c.display_name ?? c.username}
@@ -142,20 +149,20 @@ export default function SearchResults({
       )}
 
       <p className="panel-heading">{t('videosTab')}</p>
-      {videos.length === 0 ? (
+      {shownVideos.length === 0 ? (
         <>
           <p style={{ color: 'var(--text-dim)', fontSize: 16, marginBottom: 28 }}>
             {t('searchNoVideosSuggest').replace('{query}', query)}
           </p>
           <div className="video-grid">
-            {recommended.map((v: any) => (
+            {shownRecommended.map((v: any) => (
               <VideoCard key={v.id} video={v} href={`/watch/${v.id}`} formatDuration={formatDuration} />
             ))}
           </div>
         </>
       ) : (
         <div className="video-grid">
-          {videos.map((v: any) => (
+          {shownVideos.map((v: any) => (
             <VideoCard key={v.id} video={v} href={`/watch/${v.id}`} formatDuration={formatDuration} />
           ))}
         </div>

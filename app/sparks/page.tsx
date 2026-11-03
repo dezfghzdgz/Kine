@@ -19,10 +19,14 @@ import { isTvMode } from '@/lib/tvMode';
 import { SPARK_WARM_FALLBACK_MS, sparkSlot, type SparkEngine } from '@/lib/sparksPlayback';
 import { playbackMode } from '@/lib/netQuality';
 import ProfileImage from '@/components/ProfileImage';
-import { SPARK_FIELDS, fetchSparkList, takePrefetchedSparks } from '@/lib/sparksPrefetch';
+import { SPARK_FIELDS, fetchSparkList, loadSparkViewer, sparkRankContext, takePrefetchedSparks } from '@/lib/sparksPrefetch';
+import { rankSparks, type SparkRankContext } from '@/lib/sparksRanking';
+import { NOTHING_HIDDEN } from '@/lib/hiddenContent';
 
 /** Kód zákazníka Cloudflare z minula - spojení se serverem videí se naváže, ještě než přijde seznam Sparks. */
 const STREAM_CODE_KEY = 'kine-stream-code';
+/** Kolik Sparks před koncem seznamu se načte další stránka. */
+const SPARKS_MORE_BEFORE_END = 5;
 
 function preconnectStream(code: string | null) {
   if (!code || !/^[a-z0-9]+$/i.test(code) || typeof document === 'undefined') return;
@@ -67,6 +71,14 @@ function SparksPageInner() {
   const [warm, setWarm] = useState(false);
   const [saveData, setSaveData] = useState(false);
   const musicCommands = useMusicCommands();
+  // Stránkování a pořadí (lib/sparksRanking.ts) - drží se pro celé posezení na stránce.
+  const rankCtxRef = useRef<SparkRankContext | null>(null);
+  const pageRef = useRef(0);
+  const moreRef = useRef(false);
+  const loadingMoreRef = useRef(false);
+  const scrolledStartRef = useRef<string | null>(null);
+  const videosRef = useRef<any[]>([]);
+  videosRef.current = videos;
 
   useEffect(() => {
     setEngine(chooseEngine({ nativeHls: prefersNativeHls(), mse: canPlayVodNatively(), forceCloudflare: searchParams.get('player') === 'cloudflare' }));
@@ -142,30 +154,44 @@ function SparksPageInner() {
 
     const nowIso = new Date().toISOString();
     // Seznam připravený z hlavní stránky (lib/sparksPrefetch.ts) - bez čekání na databázi.
-    const list = takePrefetchedSparks() ?? (await fetchSparkList());
+    // Souběžně s ním kdo se dívá (z hlavní stránky, jinak dva malé dotazy) - na pořadí.
+    const [page, viewer] = await Promise.all([
+      takePrefetchedSparks() ?? fetchSparkList(0),
+      loadSparkViewer().catch(() => null),
+    ]);
 
     // Chyba se dřív zahazovala a z prázdného výsledku vyšlo "Zatím tu
     // nejsou žádné Sparks" i při vypadlém spojení.
-    if (!list) {
+    if (!page) {
       setLoadFailed(true);
       setLoading(false);
       return;
     }
 
-    const sparks: any[] = [...list];
+    // Pořadí pro diváka (lib/sparksRanking.ts): čerstvé a oblíbené napřed, zhlédnuté
+    // a přeskočené dozadu, kousek náhody stálé ~30 minut - Sparks nezačínají pořád stejně.
+    const ctx = sparkRankContext(viewer ?? { userId: null, hidden: NOTHING_HIDDEN, watched: new Map(), subscribed: new Set() });
+    rankCtxRef.current = ctx;
+    pageRef.current = 0;
+    moreRef.current = page.more;
+    let sparks: any[] = rankSparks(page.videos, ctx);
 
-    // Odkaz na konkrétní Spark (?start=), který už není mezi nejnovějšími: přidá se na začátek -
-    // jinak by se místo něj pustilo úplně jiné video.
-    if (startId && !sparks.some((v) => v.id === startId)) {
-      const { data: one } = await supabase
-        .from('videos')
-        .select(SPARK_FIELDS)
-        .eq('id', startId)
-        .eq('status', 'ready')
-        .eq('visibility', 'public')
-        .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso}`)
-        .maybeSingle();
-      if (one && isSpark(one)) sparks.unshift(one);
+    // Odkaz na konkrétní Spark (?start=) jde vždycky první - i když už není mezi
+    // nejnovějšími (dohledá se) nebo by ho pořadí jinak vynechalo (třeba vlastní).
+    if (startId) {
+      let start = page.videos.find((v) => v.id === startId) ?? null;
+      if (!start) {
+        const { data: one } = await supabase
+          .from('videos')
+          .select(SPARK_FIELDS)
+          .eq('id', startId)
+          .eq('status', 'ready')
+          .eq('visibility', 'public')
+          .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso}`)
+          .maybeSingle();
+        start = one && isSpark(one) ? one : null;
+      }
+      if (start) sparks = [start, ...sparks.filter((v) => v.id !== startId)];
     }
 
     // Spojení se serverem videí hned (a příště ještě dřív - kód si prohlížeč zapamatuje).
@@ -190,15 +216,50 @@ function SparksPageInner() {
   }
 
   useEffect(() => {
-    if (videos.length === 0 || !startId) return;
+    if (videos.length === 0 || !startId || scrolledStartRef.current === startId) return;
     const idx = videos.findIndex((v) => v.id === startId);
     if (idx >= 0) {
+      // Jen jednou pro odkaz - po donačtení dalších Sparks už divákem nehýbat.
+      scrolledStartRef.current = startId;
       // Instantní skok na dané video, ať se stránka neotevře uprostřed animace
       requestAnimationFrame(() => {
         itemRefs.current[idx]?.scrollIntoView({ behavior: 'auto' });
       });
     }
   }, [videos, startId]);
+
+  // Dojetí ke konci: další stránka kandidátů, seřazená stejně (lib/sparksRanking.ts).
+  // Dřív Sparks skončily po pár desítkách videí.
+  useEffect(() => {
+    if (loading || !moreRef.current || loadingMoreRef.current) return;
+    if (videos.length === 0 || activeIndex < videos.length - SPARKS_MORE_BEFORE_END) return;
+    const ctx = rankCtxRef.current;
+    if (!ctx) return;
+    loadingMoreRef.current = true;
+    (async () => {
+      // Stránka může vyjít celá naprázdno (vlastní, schovaná) - pak hned další, ale nanejvýš pár.
+      for (let attempt = 0; attempt < 3 && moreRef.current; attempt++) {
+        const nextPage = pageRef.current + 1;
+        const page = await fetchSparkList(nextPage);
+        if (!page) return;
+        pageRef.current = nextPage;
+        moreRef.current = page.more;
+        const have = new Set(videosRef.current.map((v) => v.id));
+        const fresh = rankSparks(page.videos.filter((v) => !have.has(v.id)), ctx);
+        if (fresh.length > 0) {
+          setVideos((prev) => {
+            const ids = new Set(prev.map((v) => v.id));
+            return [...prev, ...fresh.filter((v) => !ids.has(v.id))];
+          });
+          return;
+        }
+      }
+    })()
+      .catch(() => {})
+      .finally(() => {
+        loadingMoreRef.current = false;
+      });
+  }, [activeIndex, videos.length, loading]);
 
   useEffect(() => {
     if (videos.length === 0) return;

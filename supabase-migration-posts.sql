@@ -50,7 +50,11 @@ insert into storage.buckets (id, name, public) values ('post-images', 'post-imag
 insert into storage.buckets (id, name, public) values ('comment-images', 'comment-images', true) on conflict (id) do nothing;
 
 do $$ begin
-  create policy "Obrázky příspěvků jsou veřejně viditelné" on storage.objects for select using (bucket_id = 'post-images');
+  -- POZOR (soukromí, listopad 2026): obrázky se zobrazují přes veřejnou adresu
+  -- i bez tohoto pravidla. SELECT řídí jen výpis souborů (list) - jen vlastní
+  -- složka, jinak si kdokoli vypíše fotky z členských příspěvků
+  -- (viz supabase-migration-bezpecnost-listopad.sql, M4). Dřív veřejné čtení.
+  create policy "Obrázky příspěvků jsou veřejně viditelné" on storage.objects for select to authenticated using (bucket_id = 'post-images' and (storage.foldername(name))[1] = auth.uid()::text);
 exception when duplicate_object then null; end $$;
 do $$ begin
   create policy "Uživatel nahrává obrázek příspěvku jen do své složky" on storage.objects for insert
@@ -58,7 +62,8 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  create policy "Obrázky komentářů jsou veřejně viditelné" on storage.objects for select using (bucket_id = 'comment-images');
+  -- POZOR (soukromí): viz výše - jen výpis vlastní složky (zobrazení přes veřejnou adresu).
+  create policy "Obrázky komentářů jsou veřejně viditelné" on storage.objects for select to authenticated using (bucket_id = 'comment-images' and (storage.foldername(name))[1] = auth.uid()::text);
 exception when duplicate_object then null; end $$;
 do $$ begin
   create policy "Uživatel nahrává obrázek komentáře jen do své složky" on storage.objects for insert

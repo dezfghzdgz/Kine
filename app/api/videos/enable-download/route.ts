@@ -5,6 +5,7 @@ import { protectionConfigured, shouldBeProtected } from '@/lib/streamProtection'
 import { createStreamToken, signingKeyFromEnv, swapPlaybackId, DOWNLOAD_TOKEN_TTL_S } from '@/lib/streamToken';
 import { isCloudflareUid, streamApiUrl } from '@/lib/cloudflareVideos';
 import { allowRequest, tooManyRequests } from '@/lib/rateLimit';
+import { isMissingTable } from '@/lib/apiUser';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,22 +67,55 @@ export async function POST(req: NextRequest) {
   // Každé stažení Cloudflare účtuje jako přehrání celého videa - nejvýš
   // DOWNLOADS_PER_DAY různých videí za 24 hodin (vlastní videa se nepočítají).
   if (video.owner_id !== userData.user.id) {
-    const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-    const { data: recent, error: recentError } = await supabaseServer
-      .from('downloads')
-      .select('video_id')
-      .eq('user_id', userData.user.id)
-      .gte('downloaded_at', since)
-      .limit(DOWNLOADS_PER_DAY + 1);
-    const rows = (recent ?? []) as { video_id: string }[];
-    if (!recentError && rows.length >= DOWNLOADS_PER_DAY && !rows.some((r) => r.video_id === video.id)) {
-      return NextResponse.json({ error: `Za 24 hodin jde stáhnout nejvýš ${DOWNLOADS_PER_DAY} videí. Zkus to prosím později.`, code: 'limit' }, { status: 429 });
-    }
-    // Nové video (ne dotaz "už je hotovo?" na rozjeté): i přípravy souborů mají denní strop.
-    if (!alreadyPreparing(userData.user.id, video.id)) {
-      if (!allowRequest(`download-prepare:${userData.user.id}`, DOWNLOADS_PER_DAY * 2, DAY_MS)) {
-        return NextResponse.json({ error: `Za 24 hodin jde stáhnout nejvýš ${DOWNLOADS_PER_DAY} videí. Zkus to prosím později.`, code: 'limit' }, { status: 429 });
+    const limited = () => NextResponse.json({ error: `Za 24 hodin jde stáhnout nejvýš ${DOWNLOADS_PER_DAY} videí. Zkus to prosím později.`, code: 'limit' }, { status: 429 });
+    const since = new Date(Date.now() - DAY_MS).toISOString();
+    // Počítá se v download_events - tabulku zapisuje jen server (RLS bez pravidel). Dřív se počítalo
+    // z historie stažení (downloads), kterou si uživatel může sám smazat nebo přepsat datum, a strop
+    // pak hlídala jen paměť jedné instance serveru. Jedno video = jeden záznam za 24 hodin
+    // (opakované dotazy "už je hotovo?" ani opětovné stažení téhož videa se nepočítají znovu).
+    const recentVideos = () =>
+      supabaseServer
+        .from('download_events')
+        .select('video_id')
+        .eq('user_id', userData.user.id)
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(1000);
+    const distinct = (rows: unknown) => new Set(((rows ?? []) as { video_id: string }[]).map((r) => r.video_id));
+    const events = await recentVideos();
+    if (!events.error) {
+      const seen = distinct(events.data);
+      if (!seen.has(video.id)) {
+        if (seen.size >= DOWNLOADS_PER_DAY) return limited();
+        const logged = await supabaseServer.from('download_events').insert({ user_id: userData.user.id, video_id: video.id }).select('id').single();
+        if (logged.error) {
+          console.error('Kine: stažení - záznam do download_events se nepovedl', logged.error.message);
+        } else {
+          // Souběh: víc požadavků naráz na různá videa mohlo kontrolou výš projít všechno.
+          // Po zápisu se počítá znovu - kdo strop přetáhl, svůj záznam smaže a dostane odmítnutí
+          // (v nejhorším odmítne oba souběžné, nikdy nepustí víc než strop).
+          const again = await recentVideos();
+          if (!again.error && distinct(again.data).size > DOWNLOADS_PER_DAY) {
+            await supabaseServer.from('download_events').delete().eq('id', (logged.data as { id: number | string }).id);
+            return limited();
+          }
+        }
       }
+    } else {
+      // Tabulka ještě není (migrace z dodávky) - postaru: historie stažení + brzda v paměti.
+      if (!isMissingTable(events.error)) console.error('Kine: stažení - download_events nejde přečíst', events.error.message);
+      const { data: recent, error: recentError } = await supabaseServer
+        .from('downloads')
+        .select('video_id')
+        .eq('user_id', userData.user.id)
+        .gte('downloaded_at', since)
+        .limit(DOWNLOADS_PER_DAY + 1);
+      const rows = (recent ?? []) as { video_id: string }[];
+      if (!recentError && rows.length >= DOWNLOADS_PER_DAY && !rows.some((r) => r.video_id === video.id)) return limited();
+    }
+    // Nové video (ne dotaz "už je hotovo?" na rozjeté): i přípravy souborů mají denní strop (pojistka v paměti).
+    if (!alreadyPreparing(userData.user.id, video.id)) {
+      if (!allowRequest(`download-prepare:${userData.user.id}`, DOWNLOADS_PER_DAY * 2, DAY_MS)) return limited();
       markPreparing(userData.user.id, video.id);
     }
   }

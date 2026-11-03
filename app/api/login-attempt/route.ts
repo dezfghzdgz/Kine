@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
-import { clientIp } from '@/lib/clientIp';
+import { clientIpKey } from '@/lib/clientIp';
 
 const MAX_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
@@ -28,7 +28,8 @@ function lockKey(email: string, ip: string): string {
 // za hodinu. IP bere od Vercelu (lib/clientIp.ts) - hlavičku
 // x-forwarded-for si klient může poslat vlastní.
 export async function POST(req: NextRequest) {
-  const ip = clientIp(req.headers);
+  // IPv6 po sítích /64 (lib/clientIp.ts - ipBucket) - jinak by šlo s každou adresou z /64 začít načisto.
+  const ip = clientIpKey(req.headers);
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
   const { count: ipRequestCount } = await supabaseServer

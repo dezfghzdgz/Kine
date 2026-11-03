@@ -71,9 +71,15 @@ execute function protect_admin_fields();
 drop policy if exists "playlist_covers_all" on storage.objects;
 drop policy if exists "playlist_thumbnails_all" on storage.objects;
 
--- Číst může kdokoliv (obálky playlistů jsou veřejné obrázky).
+-- Obálky playlistů se zobrazují přes veřejnou adresu (getPublicUrl) i bez
+-- tohoto pravidla. SELECT řídí jen výpis souborů (list) - ten patří jen
+-- majiteli složky, jinak si kdokoli vypíše cizí soubory
+-- (viz supabase-migration-bezpecnost-listopad.sql, M4). Dřív tu bylo veřejné čtení.
 create policy "playlist_images_read" on storage.objects
-  for select using (bucket_id in ('playlist-covers', 'playlist-thumbnails'));
+  for select to authenticated using (
+    bucket_id in ('playlist-covers', 'playlist-thumbnails')
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
 
 -- Zapisovat, měnit a maza jen ve své vlastní složce.
 create policy "playlist_images_insert" on storage.objects
@@ -164,9 +170,12 @@ create policy "Moderátor uzavírá hlášení" on reports
   );
 
 -- Hlasování v anketách se neukládalo.
+-- POZOR (bezpečnost, listopad 2026): pravidlo "Přihlášený hlasuje v anketě"
+-- s using (true) dovolovalo komukoli přihlášenému PŘEPSAT jakýkoli cizí
+-- příspěvek. Hlasuje se teď funkcí vote_post_poll (supabase-migration-posty-ankety.sql)
+-- a úpravy příspěvků řeší jen pravidlo "Majitel upravuje...". Proto se tu už
+-- NEZAKLÁDÁ - staré pravidlo jen pro jistotu smažeme, kdyby ještě bylo.
 drop policy if exists "Přihlášený hlasuje v anketě" on posts;
-create policy "Přihlášený hlasuje v anketě" on posts
-  for update to authenticated using (true);
 
 -- ---------------------------------------------------------------------
 -- 5. Tvůrce si mohl přepsat počet zhlédnutí svého videa

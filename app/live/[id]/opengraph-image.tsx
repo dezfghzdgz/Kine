@@ -33,8 +33,9 @@ function clip(text: string, max: number): string {
   return clean.length <= max ? clean : `${clean.slice(0, max - 1).trimEnd()}…`;
 }
 
-export default async function LiveOpenGraphImage({ params }: { params: { id: string } }) {
-  const preview = await loadLivePreview(params.id, revalidate);
+export default async function LiveOpenGraphImage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const preview = await loadLivePreview(id, revalidate);
   const [background, avatar] = await Promise.all([
     // Vlastní náhled přenosu, jinak snímek z vysílání; offline banner kanálu.
     (async () =>

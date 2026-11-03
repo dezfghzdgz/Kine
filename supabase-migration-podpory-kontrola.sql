@@ -93,32 +93,56 @@ end $mig$;
 -- Skryté video si autor nemůže sám zveřejnit a výsledek kontroly nezmění
 -- (to smí jen server - moderátor přes /reports). Nový vlastní náhled =
 -- znovu zkontrolovat.
+-- POZOR (bezpečnost, listopad 2026): dokud je video skryté kontrolou
+-- (moderation_hold), musí z prohlížeče zůstat soukromé A ZÁROVEŇ nejde
+-- nastavit "čekající viditelnost" spolupráce (pending_collab_visibility) -
+-- jinak si ji autor nastavil na 'public', pozvánkou ke spolupráci donutil
+-- server viditelnost „uvolnit" a skryté video zveřejnil. Viz
+-- supabase-migration-bezpecnost-listopad.sql (H1). Přes jsonb, aby funkce
+-- nespadla ani tam, kde některý sloupec (pending_collab_visibility) není.
 create or replace function protect_video_moderation()
 returns trigger
 language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
+declare
+  stare jsonb;
 begin
-  if auth.uid() is not null and coalesce(auth.role(), '') <> 'service_role' then
-    if tg_op = 'INSERT' then
-      new.moderation_checked_at := null;
-      new.moderation_reason := null;
-      new.moderation_hold := null;
-      new.moderation_prev_visibility := null;
-    else
-      new.moderation_checked_at := old.moderation_checked_at;
-      new.moderation_reason := old.moderation_reason;
-      new.moderation_hold := old.moderation_hold;
-      new.moderation_prev_visibility := old.moderation_prev_visibility;
-      if old.moderation_hold is not null then
-        new.visibility := old.visibility;
-      end if;
-      if new.thumbnail_url is distinct from old.thumbnail_url then
-        new.moderation_checked_at := null;
-      end if;
-    end if;
+  -- Server (service role) i SQL editor (auth.uid() null) bez omezení.
+  if auth.uid() is null or coalesce(auth.role(), '') = 'service_role' then
+    return new;
   end if;
+
+  if tg_op = 'INSERT' then
+    new := jsonb_populate_record(new, jsonb_build_object(
+      'moderation_checked_at', null,
+      'moderation_reason', null,
+      'moderation_hold', null,
+      'moderation_prev_visibility', null
+    ));
+    return new;
+  end if;
+
+  stare := to_jsonb(old);
+  new := jsonb_populate_record(new, jsonb_build_object(
+    'moderation_checked_at', stare -> 'moderation_checked_at',
+    'moderation_reason', stare -> 'moderation_reason',
+    'moderation_hold', stare -> 'moderation_hold',
+    'moderation_prev_visibility', stare -> 'moderation_prev_visibility'
+  ));
+
+  if (stare ->> 'moderation_hold') is not null then
+    new := jsonb_populate_record(new, jsonb_build_object(
+      'visibility', 'private',
+      'pending_collab_visibility', stare -> 'pending_collab_visibility'
+    ));
+  end if;
+
+  if (to_jsonb(new) ->> 'thumbnail_url') is distinct from (stare ->> 'thumbnail_url') then
+    new := jsonb_populate_record(new, jsonb_build_object('moderation_checked_at', null));
+  end if;
+
   return new;
 end;
 $$;

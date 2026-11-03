@@ -35,6 +35,11 @@ const nextConfig = {
   // schválně, ať to nikdo omylem nezapne) a bez hlavičky "X-Powered-By".
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
+  // Titulek a značky náhledu odkazu (og:..., twitter:...) jdou do <head> všem, jako v Next 14.
+  // Next 15.2+ je u stránek s generateMetadata (video, kanál, příspěvek, přenos, hra) jinak
+  // posílá až na konec stránky a do <head> je dává jen robotům ze svého seznamu (Discord, X,
+  // WhatsApp, Facebook...) - náhledy ale dělají i další (Mastodon, Viber, Pinterest...).
+  htmlLimitedBots: /.*/,
   async redirects() {
     const site = canonicalSite();
     let host = '';
@@ -58,21 +63,21 @@ const nextConfig = {
       },
     ];
   },
-  experimental: {
-    // Kontrola nahoty (lib/nudityScan.ts): TensorFlow.js a model se na serveru
-    // načtou z node_modules tak, jak jsou - nebalí se do kódu stránek.
-    serverComponentsExternalPackages: ['@tensorflow/tfjs', 'nsfwjs', 'jpeg-js'],
-    // Soubory modelu nsfwjs se načítají až za běhu (require s vypočtenou cestou) -
-    // sledování závislostí je samo nenajde, tak se k funkcím, které kontrolují, přidají ručně.
-    outputFileTracingIncludes: {
-      '/api/videos/**': NSFW_MODEL_FILES,
-      '/api/live/**': NSFW_MODEL_FILES,
-      '/api/desktop/**': NSFW_MODEL_FILES,
-      '/api/moderation/**': NSFW_MODEL_FILES,
-      // Písmo obrázku náhledu odkazu a ikon (app/opengraph-image.tsx, app/apple-icon.tsx).
-      '/opengraph-image': ['./lib/og-fonts/**'],
-      '/apple-icon': ['./lib/og-fonts/**'],
-    },
+  // Kontrola nahoty (lib/nudityScan.ts): TensorFlow.js a model se na serveru
+  // načtou z node_modules tak, jak jsou - nebalí se do kódu stránek.
+  // (Do Next 14 se to jmenovalo experimental.serverComponentsExternalPackages.)
+  serverExternalPackages: ['@tensorflow/tfjs', 'nsfwjs', 'jpeg-js'],
+  // Soubory modelu nsfwjs se načítají až za běhu (require s vypočtenou cestou) -
+  // sledování závislostí je samo nenajde, tak se k funkcím, které kontrolují, přidají ručně.
+  // (Do Next 14 bylo pod experimental, od Next 15 je to hlavní volba.)
+  outputFileTracingIncludes: {
+    '/api/videos/**': NSFW_MODEL_FILES,
+    '/api/live/**': NSFW_MODEL_FILES,
+    '/api/desktop/**': NSFW_MODEL_FILES,
+    '/api/moderation/**': NSFW_MODEL_FILES,
+    // Písmo obrázku náhledu odkazu a ikon (app/opengraph-image.tsx, app/apple-icon.tsx).
+    '/opengraph-image': ['./lib/og-fonts/**'],
+    '/apple-icon': ['./lib/og-fonts/**'],
   },
   images: {
     // Jen naše zdroje: vlastní projekt Supabase (veřejné úložiště), vlastní účet Cloudflare
@@ -83,6 +88,10 @@ const nextConfig = {
       { protocol: 'https', hostname: supabaseImageHost(), pathname: '/storage/v1/object/public/**' },
       { protocol: 'https', hostname: 'media*.giphy.com' },
     ],
+    // Výchozí hodnoty Next 16 stačí: kvalita jen 75 (žádný <Image> nemá vlastní quality) a
+    // zmenšený obrázek se drží 4 hodiny (Next 14: minuta, u Supabase hodina podle hlavičky).
+    // Přes <Image> jdou jen náhledy videí a obaly playlistů a nový obrázek má vždycky novou
+    // adresu (soubor s časem v názvu nebo ?t=<čas>) - pod starou adresou se nic nezmění.
   },
   async headers() {
     return [

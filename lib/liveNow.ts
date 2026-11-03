@@ -11,6 +11,8 @@
  * Zablokované kanály se neukazují nikomu, shadow-banované jen majiteli.
  */
 
+import { hashText, mixSeed } from './seededRandom';
+
 export type LiveNowProfile = {
   id: string;
   username: string;
@@ -23,26 +25,10 @@ export type LiveNowProfile = {
 
 export const LIVE_NOW_SHUFFLE_MS = 10 * 60 * 1000;
 
-/** Krátký stabilní otisk textu (FNV-1a) - na zamíchání bez náhody, která by skákala při každém obnovení. */
-function hash(text: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h >>> 0;
-}
-
-/** Promíchání otisku s kolem (murmur3 fmix32) - každé kolo úplně jiné pořadí. */
-function mixWithSeed(h: number, seed: number): number {
-  let x = (h ^ Math.imul(seed, 0x9e3779b9)) >>> 0;
-  x ^= x >>> 16;
-  x = Math.imul(x, 0x85ebca6b) >>> 0;
-  x ^= x >>> 13;
-  x = Math.imul(x, 0xc2b2ae35) >>> 0;
-  x ^= x >>> 16;
-  return x >>> 0;
-}
+// Otisk (FNV-1a) a promíchání s kolem (murmur3 fmix32) - na zamíchání bez náhody,
+// která by skákala při každém obnovení. Stejné funkce používá doporučování (lib/seededRandom.ts).
+const hash = hashText;
+const mixWithSeed = mixSeed;
 
 /**
  * Proč přenos ostatní nevidí (vidí ho jen tým Kine, popisek u karty):

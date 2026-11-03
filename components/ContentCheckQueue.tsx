@@ -6,8 +6,9 @@ import { useLanguage, DATE_LOCALES } from '@/lib/i18n';
 import { authHeaders } from '@/lib/authHeaders';
 
 type Item = {
-  id: number;
-  kind: 'video' | 'live';
+  /** Číslo nálezu; emote čekající na schválení má id "emote:<uuid>" (posílá se zpátky beze změny). */
+  id: number | string;
+  kind: 'video' | 'live' | 'emote';
   verdict: 'hidden' | 'review';
   reason: string;
   status: 'open' | 'approved' | 'removed';
@@ -18,21 +19,24 @@ type Item = {
   video: { id: string; title: string; visibility: string; hold: string | null } | null;
   strikes: number | null;
   frames: { url: string; porn: number | null; sexy: number | null; t: number | null }[];
+  emote?: { id: string; code: string } | null;
 };
 
 /**
  * Fronta automatické kontroly nahoty a porna (v /reports, jen moderátoři).
  * Snímky jsou rozmazané, dokud na ně moderátor neklikne. "Pustit" vrátí
  * video / přenos (omyl modelu, umění), "Nechat skryté" ho ponechá skryté
- * a autorovi přijde oznámení. Data i akce jdou přes /api/moderation/content.
+ * a autorovi přijde oznámení. Emoty kanálů, které server sám zkontrolovat
+ * neumí (animované GIF / WebP), tu čekají na schválení - "Pustit" je ukáže
+ * v chatu, druhé tlačítko je smaže. Data i akce jdou přes /api/moderation/content.
  */
 export default function ContentCheckQueue() {
   const { t, lang } = useLanguage();
   const [items, setItems] = useState<Item[] | null>(null);
   const [available, setAvailable] = useState(true);
   const [showDone, setShowDone] = useState(false);
-  const [revealed, setRevealed] = useState<Set<number>>(new Set());
-  const [working, setWorking] = useState<number | null>(null);
+  const [revealed, setRevealed] = useState<Set<number | string>>(new Set());
+  const [working, setWorking] = useState<number | string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function load(all = showDone) {
@@ -107,7 +111,14 @@ export default function ContentCheckQueue() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {items.map((item) => {
           const show = revealed.has(item.id);
-          const href = item.kind === 'live' ? `/live/${item.channel.id}` : item.video ? `/watch/${item.video.id}` : null;
+          const href =
+            item.kind === 'live' ? `/live/${item.channel.id}` : item.kind === 'emote' ? `/channel/${item.channel.id}` : item.video ? `/watch/${item.video.id}` : null;
+          const label =
+            item.kind === 'live'
+              ? t('contentCheckLive')
+              : item.kind === 'emote'
+                ? t('contentCheckEmote').replace('{code}', item.emote?.code ?? '')
+                : item.video?.title ?? '—';
           return (
             <div key={item.id} className={`content-check-item ${item.status !== 'open' ? 'done' : ''}`}>
               <div className="content-check-head">
@@ -122,7 +133,7 @@ export default function ContentCheckQueue() {
                 )}
               </div>
               <p className="content-check-title">
-                {href ? <Link href={href}>{item.kind === 'live' ? t('contentCheckLive') : item.video?.title ?? '—'}</Link> : '—'}
+                {href ? <Link href={href}>{label}</Link> : '—'}
               </p>
               <p className="content-check-meta">
                 <Link href={`/channel/${item.channel.id}`}>{item.channel.name}</Link> · {new Date(item.createdAt).toLocaleString(DATE_LOCALES[lang])}

@@ -10,8 +10,9 @@ export const revalidate = 3600;
  * jediného veřejného videa se vyhledávačům nenabízí (prázdná stránka by
  * jim vadila) - jakmile video přibude, do hodiny se to srovná.
  */
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
-  const game = gameBySlug(params.slug);
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const game = gameBySlug(slug);
   if (!game) return { title: 'Kine', robots: { index: false, follow: false } };
   let hasVideos = true;
   try {

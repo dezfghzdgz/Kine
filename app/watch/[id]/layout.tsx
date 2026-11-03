@@ -22,8 +22,9 @@ export const revalidate = 300;
  * Soukromá videa a videa jen pro odběratele nesmí přes náhled odkazu
  * prozradit ani název - loadPublicVideo je vůbec nevrátí.
  */
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const video = await loadPublicVideo(params.id, revalidate);
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const video = await loadPublicVideo(id, revalidate);
 
   if (!video) {
     return { title: 'Video', robots: { index: false, follow: false } };
@@ -81,9 +82,10 @@ export default async function WatchLayout({
   params,
 }: {
   children: React.ReactNode;
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const video = await loadPublicVideo(params.id, revalidate);
+  const { id } = await params;
+  const video = await loadPublicVideo(id, revalidate);
 
   // Strukturovaná data pro vyhledávače (schema.org/VideoObject). Jen u
   // veřejných videí; JSON.stringify sám escapuje uvozovky, "<" se navíc

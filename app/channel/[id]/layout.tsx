@@ -27,8 +27,9 @@ async function loadProfile(id: string): Promise<ProfileRow | null> {
   }
 }
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const profile = await loadProfile(params.id);
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const profile = await loadProfile(id);
 
   if (!profile) {
     return { title: 'Channel', robots: { index: false, follow: false } };
@@ -39,7 +40,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   // Banner je na náhled lepší než avatar - je široký, takže ho sítě
   // ukážou celý místo aby ho ořízly.
   const image = profile.banner_url || profile.avatar_url || undefined;
-  const url = `${SITE_URL}/channel/${params.id}`;
+  const url = `${SITE_URL}/channel/${id}`;
 
   // Karta pro Twitter/X se schválně skládá ve dvou celých variantách.
   // Kdyby se přepínal jen druh karty (card: image ? 'a' : 'b'), TypeScript

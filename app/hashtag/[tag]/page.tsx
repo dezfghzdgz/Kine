@@ -11,6 +11,7 @@ import VideoCard from '@/components/VideoCard';
 import { VideoBlockRow } from '@/components/SparksShelf';
 import GameChip from '@/components/GameChip';
 import { gameFromTag } from '@/lib/games';
+import { filterHidden, loadHiddenContent, NOTHING_HIDDEN } from '@/lib/hiddenContent';
 
 /**
  * Videa s hashtagem. Stejné karty jako všude jinde (náhled po najetí,
@@ -32,16 +33,23 @@ export default function HashtagPage() {
 
   async function load() {
     setLoading(true);
-    const { data } = await supabase
-      .from('videos')
-      .select('id, title, thumbnail_url, views, width, height, duration_seconds, category, owner_id, cloudflare_video_id, created_at, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username)')
-      .eq('status', 'ready')
-      .eq('visibility', 'public')
-      .contains('hashtags', [tag])
-      .or(visibleNowFilter())
-      .order('created_at', { ascending: false })
-      .limit(48);
-    setVideos(data ?? []);
+    const [{ data }, hidden] = await Promise.all([
+      supabase
+        .from('videos')
+        .select('id, title, thumbnail_url, views, width, height, duration_seconds, category, owner_id, cloudflare_video_id, created_at, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username)')
+        .eq('status', 'ready')
+        .eq('visibility', 'public')
+        .contains('hashtags', [tag])
+        .or(visibleNowFilter())
+        .order('created_at', { ascending: false })
+        .limit(48),
+      // "Nezajímá mě" / "Nedoporučovat kanál" platí i tady (seznam schovaných je sdílený, většinou bez dotazu).
+      supabase.auth
+        .getSession()
+        .then(({ data: s }) => (s.session?.user?.id ? loadHiddenContent(s.session.user.id) : NOTHING_HIDDEN))
+        .catch(() => NOTHING_HIDDEN),
+    ]);
+    setVideos(filterHidden(data ?? [], hidden));
     setLoading(false);
     document.title = `#${tag} - Kine`;
   }

@@ -289,9 +289,10 @@ function VideoCard({
       <Link href={href} className="video-card-link" onClick={() => rememberVideoPeek(video)}>
         {/* is-previewing: náhled se chystá / hraje - kolečko ▶ se neukazuje (nepřekrývá video). */}
         <div className={`${isSparks ? 'video-thumb video-thumb-vertical' : 'video-thumb'}${previewing ? ' is-previewing' : ''}`}>
-          {/* U vlastního přehrávače obrázek zůstává pod videem (žádné černé bliknutí, než se video rozjede). */}
+          {/* U vlastního přehrávače obrázek zůstává pod videem (žádné černé bliknutí, než se video rozjede).
+              fetchPriority: od Next 16 ho priority samo nenastaví (v Next 14 ano) - přednost zůstává. */}
           {video.thumbnail_url && (!previewing || nativePreview) && (
-            <Image src={video.thumbnail_url} alt={video.title} width={320} height={180} priority={priority} />
+            <Image src={video.thumbnail_url} alt={video.title} width={320} height={180} priority={priority} fetchPriority={priority ? 'high' : undefined} />
           )}
           {nativePreview && (
             <video

@@ -27,6 +27,11 @@ import {
   type SparkEngine,
 } from '@/lib/sparksPlayback';
 import { bufferedAhead } from './PlaybackStats';
+import { authHeaders } from '@/lib/authHeaders';
+import { EMPTY_METER, REAL_PLAYBACK_S, meterProgress, meterStep, type PlaybackSample } from '@/lib/playbackMeter';
+import { saveWatchRow } from '@/lib/watchHistory';
+import { rememberSeen } from '@/lib/upNext';
+import { clearImpression, recordImpressions } from '@/lib/feedImpressions';
 
 /** Kdo se dívá - stránka Sparks to zjistí jednou pro všechny karty (dřív každá karta zvlášť). */
 export type SparkViewer = { userId: string | null; ratingMode: 'stars' | 'like_dislike' };
@@ -142,11 +147,16 @@ export default function SparksCard({
     if (Date.now() - lastViewedAt <= cooldownMs) return;
 
     const timer = setTimeout(() => {
-      fetch('/api/videos/increment-view', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: video.id, device: detectDeviceClass() }),
-      }).catch(() => {});
+      // S přihlášením (lib/authHeaders.ts): server pak tvůrci nepočítá zhlédnutí vlastního videa.
+      void authHeaders()
+        .then((auth) =>
+          fetch('/api/videos/increment-view', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...auth },
+            body: JSON.stringify({ videoId: video.id, device: detectDeviceClass() }),
+          })
+        )
+        .catch(() => {});
       try {
         localStorage.setItem(lastViewKey, String(Date.now()));
       } catch {
@@ -156,6 +166,58 @@ export default function SparksCard({
 
     return () => clearTimeout(timer);
   }, [active, video.id]);
+
+  // Historie a "viděno": karta, která byla na řadě, se počítá jako zobrazení
+  // (lib/feedImpressions.ts - přeskočený Spark příště klesne); po ~3 s
+  // opravdového přehrávání se zapíše do historie (i s tím, kam se divák
+  // dostal a jestli ho dokoukal - smyčka) a zobrazení se smaže. Dřív Sparks
+  // historii nezapisovaly vůbec: hlavní stránka nabízela pořád ty samé
+  // a Sparks začínaly vždycky stejně.
+  useEffect(() => {
+    if (!active) return;
+    recordImpressions([video.id]);
+    const knownDuration = Number(video.duration_seconds) || 0;
+    let meter = EMPTY_METER;
+    let started = false;
+    let saved = { progress: -1, completed: false };
+    const read = (): PlaybackSample | null => {
+      if (native) {
+        const el = videoRef.current;
+        if (!el) return null;
+        return { time: el.currentTime, playing: !el.paused && !el.ended, duration: Number.isFinite(el.duration) && el.duration > 0 ? el.duration : knownDuration };
+      }
+      const player = playerRef.current;
+      if (!player) return null;
+      return { time: Number(player.currentTime), playing: !player.paused, duration: Number(player.duration) || knownDuration };
+    };
+    const save = () => {
+      if (!userId) return;
+      const { progress, completed } = meterProgress(meter, knownDuration || null);
+      if (progress <= saved.progress && completed === saved.completed) return;
+      saved = { progress, completed };
+      // "Dokoukáno" se jen přidává - krátké opakované zhlédnutí nesmí smazat, že ho divák dřív viděl celé.
+      void saveWatchRow(video.id, completed ? { progress_seconds: progress, completed: true } : { progress_seconds: progress });
+    };
+    const timer = window.setInterval(() => {
+      const sample = read();
+      if (!sample) return;
+      meter = meterStep(meter, sample);
+      if (!started && meter.played >= REAL_PLAYBACK_S) {
+        started = true;
+        rememberSeen(video.id);
+        clearImpression(video.id);
+        save();
+      } else if (started && meter.loops > 0 && !saved.completed) {
+        // Dokoukáno (smyčka) - zapsat hned, odchod ze stránky už to stihnout nemusí.
+        save();
+      }
+    }, 1000);
+    return () => {
+      window.clearInterval(timer);
+      if (started) save();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, video.id, native, userId]);
 
   // ---- vlastní přehrávač -------------------------------------------------------------
 

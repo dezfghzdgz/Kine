@@ -3,6 +3,9 @@ import { liveThumbnailPath } from './liveThumbnail';
 import { SERVER_FETCH_TOKEN_TTL_S, createStreamToken, signingKeyFromEnv } from './streamToken';
 import { syncVideoProtection } from './streamProtection';
 import { logLiveEvent } from './liveEvents';
+import { isOwnThumbnailUrl } from './mediaHosts';
+import { fetchMediaImage } from './mediaFetch';
+import { visibilityBeforeHold } from './moderationVisibility';
 import {
   addLiveStrike,
   framesFromPredictions,
@@ -59,23 +62,19 @@ function loadModel(): Promise<{ tf: Tf; model: Model }> {
   return loading;
 }
 
-/** Stáhne obrázek (JPEG) a ohodnotí ho. null = nejde stáhnout / není to JPEG. */
+/**
+ * Stáhne obrázek (JPEG) a ohodnotí ho. Jen z vlastního úložiště nebo Cloudflare
+ * Stream vlastního účtu, s časovým limitem a stropem velikosti (lib/mediaFetch.ts) -
+ * dřív se stahovalo cokoli z adresy vlastního náhledu. null = nejde / nesmí / není JPEG.
+ */
 async function classifyUrl(url: string): Promise<FrameScores | null> {
-  let bytes: Uint8Array;
-  try {
-    const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(10_000) });
-    if (!res.ok) return null;
-    bytes = new Uint8Array(await res.arrayBuffer());
-  } catch {
-    return null;
-  }
-  return classifyJpeg(bytes);
+  const media = await fetchMediaImage(url);
+  return media ? classifyJpeg(media.bytes) : null;
 }
 
 /** Ohodnotí obrázek JPEG (bajty). null = není to JPEG / nejde přečíst. */
 async function classifyJpeg(bytes: Uint8Array): Promise<FrameScores | null> {
   if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
-  const { tf, model } = await loadModel();
   const jpeg = (await import('jpeg-js')).default;
   let decoded: { width: number; height: number; data: Uint8Array };
   try {
@@ -83,7 +82,17 @@ async function classifyJpeg(bytes: Uint8Array): Promise<FrameScores | null> {
   } catch {
     return null;
   }
-  const image = tf.tensor3d(decoded.data, [decoded.height, decoded.width, 3], 'int32');
+  return classifyPixels({ width: decoded.width, height: decoded.height, rgb: decoded.data });
+}
+
+/** Obrázek jako pole RGB (3 bajty na pixel) - např. PNG emotu rozbalené na serveru (lib/pngDecode.ts). */
+export type RgbImage = { width: number; height: number; rgb: Uint8Array };
+
+/** Ohodnotí obrázek z pixelů. null = nesmyslné rozměry. */
+async function classifyPixels(img: RgbImage): Promise<FrameScores | null> {
+  if (!(img.width > 0 && img.height > 0) || img.rgb.length !== img.width * img.height * 3) return null;
+  const { tf, model } = await loadModel();
+  const image = tf.tensor3d(img.rgb, [img.height, img.width, 3], 'int32');
   try {
     return framesFromPredictions(await model.classify(image));
   } finally {
@@ -127,9 +136,16 @@ export async function scanVideo(videoId: string): Promise<ScanResult> {
   const times = scanTimes(Number(video.duration_seconds) || 0);
   const id = frameId(video.cloudflare_video_id);
   const targets: { t: number | null; url: string }[] = times.map((t) => ({ t, url: frameUrl(id, t) }));
-  // Vlastní náhled (ten se ukazuje na kartách) taky.
-  if (video.custom_thumbnail && typeof video.thumbnail_url === 'string' && /^https:\/\//.test(video.thumbnail_url)) {
-    targets.push({ t: null, url: video.thumbnail_url });
+  // Vlastní náhled (ten se ukazuje na kartách) taky - ale jen ze složky majitele ve vlastním
+  // úložišti. Adresa jinam (cizí server, který by kontrole ukázal něco jiného než divákům)
+  // se zahodí: databáze dřív hlídala jen kus cesty, ne server (lib/mediaHosts.ts).
+  if (video.custom_thumbnail && typeof video.thumbnail_url === 'string' && video.thumbnail_url) {
+    if (isOwnThumbnailUrl(video.thumbnail_url, String(video.owner_id ?? ''))) {
+      targets.push({ t: null, url: video.thumbnail_url });
+    } else {
+      await supabaseServer.from('videos').update({ thumbnail_url: null, custom_thumbnail: false }).eq('id', videoId).eq('thumbnail_url', video.thumbnail_url);
+      console.warn('Kine: kontrola obsahu - cizí adresa vlastního náhledu zahozena', videoId);
+    }
   }
 
   const scored: { t: number | null; f: FrameScores }[] = [];
@@ -165,16 +181,18 @@ export async function scanVideo(videoId: string): Promise<ScanResult> {
   if (verdict.action === 'hold') {
     // Už skryté (opakovaná kontrola) - původní viditelnost zůstane ta první.
     const alreadyHeld = !!video.moderation_hold;
-    const { error } = await supabaseServer
-      .from('videos')
-      .update({
-        moderation_checked_at: nowIso,
-        moderation_reason: verdict.reason,
-        moderation_hold: alreadyHeld ? video.moderation_hold : 'hidden',
-        moderation_prev_visibility: alreadyHeld ? video.moderation_prev_visibility : video.visibility,
-        visibility: 'private',
-      })
-      .eq('id', videoId);
+    const holdPatch: Record<string, unknown> = {
+      moderation_checked_at: nowIso,
+      moderation_reason: verdict.reason,
+      moderation_hold: alreadyHeld ? video.moderation_hold : 'hidden',
+      // Video čekající na spolutvůrce si pamatuje chtěnou viditelnost (lib/moderationVisibility.ts).
+      moderation_prev_visibility: alreadyHeld ? video.moderation_prev_visibility : visibilityBeforeHold(video),
+      visibility: 'private',
+    };
+    // Čekající viditelnost ze spolupráce pryč - jinak by ji odpověď spolutvůrce vrátila
+    // (app/api/videos/respond-collab). Sloupec je až s migrací collab-visibility.
+    if (Object.prototype.hasOwnProperty.call(video, 'pending_collab_visibility')) holdPatch.pending_collab_visibility = null;
+    const { error } = await supabaseServer.from('videos').update(holdPatch).eq('id', videoId);
     if (error) {
       console.error('Kine: kontrola obsahu - skrytí videa', error.message);
       return { outcome: 'failed' };
@@ -410,17 +428,33 @@ export async function scanLiveThumbnail(ownerId: string, url: string): Promise<'
 }
 
 /**
- * Emote kanálu (app/api/live/chat/emotes): prohlížeč k obrázku pošle i jeho
- * první snímek jako JPEG (na šedém pozadí) - ten se ohodnotí. Nahota nebo
- * porno = emote pryč (řádek i soubor) a tvůrce dostane oznámení.
+ * Emote kanálu (app/api/live/chat/emotes): ohodnotí se přímo nahraný obrázek,
+ * rozbalený na serveru (lib/pngDecode.ts, na šedém pozadí). Dřív se hodnotil
+ * náhled, který poslal prohlížeč - a ten si mohl kdokoli vybrat (nevinný
+ * JPEG k jinému obrázku). Nahota nebo porno = emote pryč (řádek i soubor)
+ * a tvůrce dostane oznámení; slabší podezření nebo nepovedená kontrola =
+ * emote počká na moderátora (když to databáze umí - `reviewSupported`).
  */
-export async function scanChatEmote(channelId: string, emoteId: string, imagePath: string | null, jpeg: Uint8Array): Promise<'ok' | 'removed' | 'failed'> {
-  const f = await classifyJpeg(jpeg).catch(() => null);
+export async function scanChatEmote(
+  channelId: string,
+  emoteId: string,
+  imagePath: string | null,
+  image: RgbImage,
+  opts: { reviewSupported?: boolean } = {}
+): Promise<'ok' | 'removed' | 'failed' | 'review'> {
+  const toReview = async () => {
+    if (!opts.reviewSupported) return false;
+    const { error } = await supabaseServer.from('channel_emotes').update({ review_status: 'pending' }).eq('id', emoteId).eq('channel_id', channelId);
+    return !error;
+  };
+  const f = await classifyPixels(image).catch(() => null);
   if (!f) {
     console.error('Kine: emote se nepodařilo zkontrolovat', channelId, emoteId);
-    return 'failed';
+    return (await toReview()) ? 'review' : 'failed';
   }
-  if (nudityVerdict([f]).action !== 'hold') return 'ok';
+  const verdict = nudityVerdict([f]);
+  if (verdict.action === 'review') return (await toReview()) ? 'review' : 'ok';
+  if (verdict.action !== 'hold') return 'ok';
   const { data } = await supabaseServer.from('channel_emotes').delete().eq('id', emoteId).eq('channel_id', channelId).select('code');
   if (imagePath) await supabaseServer.storage.from('thumbnails').remove([imagePath]).then(() => undefined, () => undefined);
   const code = (data as { code?: string }[] | null)?.[0]?.code;

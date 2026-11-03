@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { syncVideoProtection } from '@/lib/streamProtection';
+import { collabRelease } from '@/lib/moderationVisibility';
 
 /**
  * Odpověď na pozvánku ke spolupráci na videu.
@@ -58,6 +59,11 @@ export async function POST(req: NextRequest) {
  * odpověď nikdo další nečeká - ať už všichni přijali, nebo někdo odmítl -
  * vrátí se viditelnost, kterou tvůrce původně zvolil. Video tak nezůstane
  * uvězněné jako soukromé kvůli někomu, kdo se nikdy neozval.
+ *
+ * Nikdy ale ne u videa skrytého kontrolou obsahu (moderation_hold): dřív stačilo
+ * si do pending_collab_visibility zapsat "public", pozvat druhý účet a ten
+ * pozvánku odmítnout - server (service role) skryté video zase zveřejnil.
+ * Skryté video pouští jen moderátor (lib/moderationVisibility.ts).
  */
 async function releaseVisibilityIfEveryoneAnswered(videoId: string) {
   const { data: stillPending } = await supabaseServer
@@ -68,19 +74,28 @@ async function releaseVisibilityIfEveryoneAnswered(videoId: string) {
 
   if (stillPending && stillPending.length > 0) return;
 
-  const { data: videoRow } = await supabaseServer
-    .from('videos')
-    .select('pending_collab_visibility')
-    .eq('id', videoId)
-    .maybeSingle();
+  // select('*') schválně: moderation_hold je až s migrací podpory-kontrola - bez ní
+  // sloupec chybí (a skrývat se nedá nic), dotaz na jméno sloupce by spadl.
+  const { data: videoRow } = await supabaseServer.from('videos').select('*').eq('id', videoId).maybeSingle();
+  const row = videoRow as Record<string, unknown> | null;
+  if (!row) return;
+  const decision = collabRelease(row as { pending_collab_visibility?: string | null; moderation_hold?: string | null });
+  if (decision.action === 'none') return;
 
-  if (videoRow?.pending_collab_visibility) {
-    await supabaseServer
-      .from('videos')
-      .update({ visibility: videoRow.pending_collab_visibility, pending_collab_visibility: null })
-      .eq('id', videoId);
-    // Viditelnost se změnila -> ochrana podepsanými adresami se srovná
-    // (lib/streamProtection.ts; bez nastaveného klíče nic nedělá).
-    await syncVideoProtection(videoId);
+  if (decision.action === 'clear') {
+    await supabaseServer.from('videos').update({ pending_collab_visibility: null }).eq('id', videoId);
+    return;
   }
+
+  let update = supabaseServer
+    .from('videos')
+    .update({ visibility: decision.visibility, pending_collab_visibility: null })
+    .eq('id', videoId);
+  // Kontrola obsahu mohla video skrýt mezi čtením a zápisem - pak se nezapíše nic.
+  if (Object.prototype.hasOwnProperty.call(row, 'moderation_hold')) update = update.is('moderation_hold', null);
+  const { data: changed, error } = await update.select('id');
+  if (error || !changed || changed.length === 0) return;
+  // Viditelnost se změnila -> ochrana podepsanými adresami se srovná
+  // (lib/streamProtection.ts; bez nastaveného klíče nic nedělá).
+  await syncVideoProtection(videoId);
 }

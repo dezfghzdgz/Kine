@@ -15,7 +15,11 @@ do $$ begin
   create policy "Uživatel vidí jen svoje notifikace" on notifications for select using (auth.uid() = user_id);
 exception when duplicate_object then null; end $$;
 do $$ begin
-  create policy "Kdokoliv přihlášený může vytvořit notifikaci pro jiného uživatele" on notifications for insert with check (true);
+  -- POZOR (bezpečnost): dřív "with check (true)" pustilo i nepřihlášeného.
+  -- Odesílatele a druh hlídá trigger notifications_client_guard
+  -- (supabase-migration-bezpecnost-rijen.sql / -bezpecnost-listopad.sql);
+  -- tady aspoň vyžadujeme přihlášení, kdyby se soubor pustil znovu.
+  create policy "Kdokoliv přihlášený může vytvořit notifikaci pro jiného uživatele" on notifications for insert with check (auth.uid() is not null);
 exception when duplicate_object then null; end $$;
 do $$ begin
   create policy "Uživatel upravuje jen svoje notifikace" on notifications for update using (auth.uid() = user_id);

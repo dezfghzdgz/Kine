@@ -1,6 +1,8 @@
 import { supabaseServerCached } from '@/lib/supabaseServer';
 import { SITE_URL, shorten, videoThumbnail } from '@/lib/linkPreview';
 import { embedUrl, escapeXml, watchUrl } from '@/lib/embed';
+import { ownerHidden } from '@/lib/publicVideo';
+import { isFetchableMediaUrl } from '@/lib/mediaHosts';
 
 /**
  * Video sitemap: /video-sitemap.xml
@@ -16,22 +18,38 @@ import { embedUrl, escapeXml, watchUrl } from '@/lib/embed';
 export const revalidate = 3600;
 
 export async function GET() {
-  const { data } = await supabaseServerCached(3600)
+  const client = supabaseServerCached(3600);
+  const released = `scheduled_at.is.null,scheduled_at.lte.${new Date().toISOString()},is_premiere.eq.true`;
+  let { data, error } = await client
     .from('videos')
-    .select('id, title, description, thumbnail_url, cloudflare_video_id, duration_seconds, views, created_at, made_for_kids, hashtags, owner_id, profiles!videos_owner_id_fkey(username, display_name)')
+    .select('id, title, description, thumbnail_url, cloudflare_video_id, duration_seconds, views, created_at, made_for_kids, hashtags, owner_id, profiles!videos_owner_id_fkey(username, display_name, is_banned, is_shadow_banned)')
     .eq('status', 'ready')
     .eq('visibility', 'public')
     // Naplánované video do mapy webu až po vydání (premiéra s odpočtem hned).
-    .or(`scheduled_at.is.null,scheduled_at.lte.${new Date().toISOString()},is_premiere.eq.true`)
+    .or(released)
     .order('created_at', { ascending: false })
     .limit(1000);
+  if (error) {
+    // Databáze bez sloupců o blokaci (migrace moderátorských rolí) - bez nich, jako dřív.
+    ({ data, error } = (await client
+      .from('videos')
+      .select('id, title, description, thumbnail_url, cloudflare_video_id, duration_seconds, views, created_at, made_for_kids, hashtags, owner_id, profiles!videos_owner_id_fkey(username, display_name)')
+      .eq('status', 'ready')
+      .eq('visibility', 'public')
+      .or(released)
+      .order('created_at', { ascending: false })
+      .limit(1000)) as any);
+  }
 
   const entries = (data ?? [])
     .filter((v: any) => v.cloudflare_video_id)
+    // Zablokovaný / shadow-banovaný tvůrce: do mapy webu nic (service role obchází RLS, které jeho videa schová).
+    .filter((v: any) => !ownerHidden(Array.isArray(v.profiles) ? v.profiles[0] : v.profiles))
     .map((v: any) => {
       const owner = Array.isArray(v.profiles) ? v.profiles[0] : v.profiles;
       const name = owner?.display_name || owner?.username || 'Kine';
-      const thumb = videoThumbnail(v.thumbnail_url, v.cloudflare_video_id);
+      // Náhled jen z vlastního úložiště / Cloudflare (lib/mediaHosts.ts) - jinak výchozí snímek z Cloudflare.
+      const thumb = videoThumbnail(isFetchableMediaUrl(v.thumbnail_url) ? v.thumbnail_url : null, v.cloudflare_video_id);
       const description = shorten(v.description, 2000) ?? v.title;
       const duration = Math.max(1, Math.min(28800, Math.round(v.duration_seconds ?? 0)));
       const tags = (v.hashtags ?? []).slice(0, 32).map((tag: string) => `      <video:tag>${escapeXml(tag)}</video:tag>`);

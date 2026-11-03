@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { loadPublicVideo, creatorName } from '@/lib/publicVideo';
 import { SITE_URL, videoThumbnail } from '@/lib/linkPreview';
 import { embedCode, embedSize, videoIdFromUrl, watchUrl } from '@/lib/embed';
+import { isFetchableMediaUrl } from '@/lib/mediaHosts';
 
 /**
  * oEmbed: /api/oembed?url=https://kine.../watch/<id>&format=json
@@ -31,7 +32,9 @@ export async function GET(req: NextRequest) {
   const maxWidth = Number(params.get('maxwidth')) || null;
   const maxHeight = Number(params.get('maxheight')) || null;
   const size = embedSize(video.width, video.height, maxWidth, maxHeight);
-  const thumbnail = videoThumbnail(video.thumbnail_url, video.cloudflare_video_id);
+  // Náhled jen z vlastního úložiště / Cloudflare (lib/mediaHosts.ts): adresa vlastního náhledu pochází
+  // z prohlížeče a cizí server by mohl kontrole obsahu ukázat jiný obrázek než webům, které odkaz rozbalí.
+  const thumbnail = videoThumbnail(isFetchableMediaUrl(video.thumbnail_url) ? video.thumbnail_url : null, video.cloudflare_video_id);
 
   const body = {
     version: '1.0',

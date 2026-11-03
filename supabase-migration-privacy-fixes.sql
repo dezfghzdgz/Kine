@@ -153,10 +153,11 @@ $$ language sql security definer stable;
 revoke execute on function moderation_flags(uuid) from public, anon;
 grant execute on function moderation_flags(uuid) to authenticated, service_role;
 
-create or replace function owner_is_shadow_banned(owner uuid)
-returns boolean as $$
-  select coalesce((select p.is_shadow_banned from profiles p where p.id = owner), false);
-$$ language sql security definer stable;
+-- POZOR (bezpečnost, listopad 2026): tahle funkce se přesunula do neveřejného
+-- schématu kine_private (supabase-migration-bezpecnost-listopad.sql, L1), aby
+-- nešla zavolat z prohlížeče (RPC) a vyzradit, kdo je shadow-banovaný. Tady se
+-- už NEZAKLÁDÁ. Pravidlo pro skrytí videí je v části 4 níž (taky přesunuté).
+-- create or replace function owner_is_shadow_banned(owner uuid) ...  -- zrušeno
 
 
 -- =====================================================================
@@ -270,7 +271,10 @@ declare
     'is_admin', 'role', 'is_banned', 'is_shadow_banned', 'payouts_suspended',
     'revenue_share_percent', 'revenue_share_manual', 'partner_status', 'revenue_share_note',
     'stripe_account_id', 'stripe_onboarding_complete', 'subscription_stripe_price_id',
-    'username_exempt', 'agreed_to_rules', 'agreed_to_rules_at'
+    'username_exempt', 'agreed_to_rules', 'agreed_to_rules_at',
+    -- Doplněno (listopad 2026): serverové sloupce přidané pozdějšími migracemi,
+    -- aby je opakované spuštění neotevřelo veřejnosti. Viz supabase-migration-bezpecnost-listopad.sql.
+    'plan_stripe_subscription_id', 'plan_stripe_customer_id', 'plan_note', 'badges_seen'
   ];
   potrebne text[] := '{}';
   sloupec text;
@@ -344,10 +348,13 @@ end $mig$;
 -- "as restrictive" znamená, že se to k dosavadním politikám přidá jako
 -- další podmínka (A ZÁROVEŇ), ne jako další povolená cesta.
 
+-- POZOR (bezpečnost, listopad 2026): tohle pravidlo nahradilo přísnější
+-- "Skryté kanály schovají videa ostatním" (skryje videa zablokovaných
+-- I shadow-banovaných kanálů, s výjimkou majitele, spolutvůrců a moderátorů) -
+-- viz supabase-migration-bezpecnost-listopad.sql (M3). Používalo veřejnou
+-- funkci owner_is_shadow_banned, která se přesunula do kine_private (L1), tak
+-- se tu už NEZAKLÁDÁ. Staré pravidlo jen pro jistotu smažeme, kdyby ještě bylo.
 drop policy if exists "Shadow ban schová videa ostatním" on videos;
-create policy "Shadow ban schová videa ostatním" on videos
-  as restrictive for select
-  using (owner_id = auth.uid() or not owner_is_shadow_banned(owner_id));
 
 
 -- =====================================================================

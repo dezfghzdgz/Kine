@@ -50,7 +50,10 @@ alter table comments add column if not exists timestamp_seconds int;
 alter table videos add column if not exists custom_thumbnail boolean default false;
 insert into storage.buckets (id, name, public) values ('thumbnails', 'thumbnails', true) on conflict (id) do nothing;
 do $$ begin
-  create policy "Náhledy jsou veřejně viditelné" on storage.objects for select using (bucket_id = 'thumbnails');
+  -- POZOR (soukromí, listopad 2026): náhledy se zobrazují přes veřejnou adresu
+  -- i bez tohoto pravidla; SELECT (výpis souborů) jen pro vlastní složku, jinak
+  -- si kdokoli vypíše náhledy soukromých videí (supabase-migration-bezpecnost-listopad.sql, M4).
+  create policy "Náhledy jsou veřejně viditelné" on storage.objects for select to authenticated using (bucket_id = 'thumbnails' and (storage.foldername(name))[1] = auth.uid()::text);
 exception when duplicate_object then null; end $$;
 do $$ begin
   create policy "Uživatel nahrává náhled jen do své složky" on storage.objects for insert
@@ -75,7 +78,11 @@ do $$ begin
   create policy "Uživatel vidí jen svoje notifikace" on notifications for select using (auth.uid() = user_id);
 exception when duplicate_object then null; end $$;
 do $$ begin
-  create policy "Kdokoliv přihlášený může vytvořit notifikaci pro jiného uživatele" on notifications for insert with check (true);
+  -- POZOR (bezpečnost): dřív "with check (true)" pustilo i nepřihlášeného.
+  -- Odesílatele a druh hlídá trigger notifications_client_guard
+  -- (supabase-migration-bezpecnost-rijen.sql / -bezpecnost-listopad.sql);
+  -- tady aspoň vyžadujeme přihlášení, kdyby se soubor pustil znovu.
+  create policy "Kdokoliv přihlášený může vytvořit notifikaci pro jiného uživatele" on notifications for insert with check (auth.uid() is not null);
 exception when duplicate_object then null; end $$;
 do $$ begin
   create policy "Uživatel upravuje jen svoje notifikace" on notifications for update using (auth.uid() = user_id);

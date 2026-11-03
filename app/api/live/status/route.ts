@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isMissingTable, isStaffUser, userFromRequest } from '@/lib/apiUser';
-import { LIST_SYNC_BUDGET_MS, publicLive, syncLiveStreamsForViewers, type LiveStreamRow } from '@/lib/liveStream';
+import { LIST_SYNC_BUDGET_MS, publicLive, syncLiveStreamsForViewers, withoutPlayback, type LiveStreamRow } from '@/lib/liveStream';
 import type { LiveRestriction } from '@/lib/liveNow';
 import { liveHiddenNow } from '@/lib/nudityRules';
 import { runInBackground } from '@/lib/background';
@@ -119,7 +119,11 @@ export async function GET(req: NextRequest) {
     }
   }
   if (!row) return NextResponse.json({ enabled: true, live: false, profile: publicProfile, stream: null }, { headers: { 'Cache-Control': 'no-store' } });
-  const stream = await publicLive(row as LiveStreamRow);
+  // Mimo vysílání bez id vstupu / záznamu a přehrávače (lib/liveStream.ts - withoutPlayback):
+  // stránka je bere jen během vysílání a podle id šlo přehrát i skrytý přenos nebo
+  // nezveřejněný záznam přímo u Cloudflare. Majitel je má ve studiu (/api/live/me).
+  const full = await publicLive(row as LiveStreamRow);
+  const stream = full.live ? full : withoutPlayback(full);
   if (stream.live) runInBackground(import('@/lib/nudityScan').then((m) => m.scanLiveStreams()), 'kontrola obsahu přenosů');
   // Statistiky vysílání (lib/liveStats.ts) - na pozadí, nejvýš jednou za minutu; počet diváků
   // pro stránku přenosu jen z paměti (nikdy se na něj nečeká).

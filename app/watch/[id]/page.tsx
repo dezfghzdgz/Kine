@@ -59,7 +59,8 @@ import AmbientCanvas from '@/components/AmbientCanvas';
 import { useAppearance } from '@/lib/useAppearance';
 import { attachVod, canPlayVodNatively, mediaPlayer, reportSlowVideo, type VodHandle } from '@/lib/vodPlayer';
 import type { PlaybackMode } from '@/lib/netQuality';
-import { seenOrderLocally, rankRelated, upNextWithFallback } from '@/lib/upNext';
+import { seenOrderLocally, rankRelated, upNextWithFallback, notPlayableYet } from '@/lib/upNext';
+import { authHeaders } from '@/lib/authHeaders';
 import { filterHidden, loadHiddenContent, NOTHING_HIDDEN, type HiddenContent } from '@/lib/hiddenContent';
 import { chooseEngine, shouldReportSlowStart, statsReport, vodVerdict, type QualityLevel } from '@/lib/vodPlayerCore';
 import { customerCodeFromUrl, manifestUrl } from '@/lib/streamSource';
@@ -310,9 +311,11 @@ function WatchPageInner() {
       const videoIds = items.map((i: any) => i.video_id);
       if (videoIds.length === 0) return;
 
+      // scheduled_at + is_premiere: další video z playlistu, které ještě nejde pustit
+      // (premiéra s odpočtem), se nespustí samo (automatické pokračování).
       const ordered = await fetchByIds<any>(
         'videos',
-        'id, title, thumbnail_url, duration_seconds, profiles!videos_owner_id_fkey(username)',
+        'id, title, thumbnail_url, duration_seconds, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username)',
         videoIds
       );
       setPlaylistVideos(ordered);
@@ -1086,17 +1089,24 @@ function WatchPageInner() {
 
   // Uloží, kde divák ve videu skončil, aby se dalo navázat i z jiného
   // zařízení - jednou za 8 sekund, ne při každém snímku, ať to zbytečně
-  // nezavaluje databázi.
+  // nezavaluje databázi. Jen když se pozice od minula pohnula: video, které
+  // se vůbec nerozjelo (prohlížeč nepustil přehrávání), do historie nepatří
+  // (zapisuje se až po pár vteřinách přehrávání - components/WatchHistoryTracker.tsx)
+  // a stojící video nemá cenu zapisovat pořád dokola.
   useEffect(() => {
     if (!playerReady) return;
+    let lastSaved = -1;
     const interval = setInterval(async () => {
       const player = playerRef.current;
       if (!player || !video?.id) return;
 
+      const currentTime = Math.floor(player.currentTime ?? 0);
+      if (!(currentTime > 0) || currentTime === lastSaved) return;
+
       const { data: authData } = await supabase.auth.getUser();
       if (!authData.user) return;
 
-      const currentTime = Math.floor(player.currentTime ?? 0);
+      lastSaved = currentTime;
       const duration = video.duration_seconds ?? 0;
       const completed = duration > 0 && currentTime >= duration - 5;
 
@@ -1291,6 +1301,10 @@ function WatchPageInner() {
     ...(playlistNext ? [playlistNext] : []),
     ...upNextPool,
   ].slice(0, 2);
+  // Automaticky se pustí jen to, co už jde přehrát - nikdy premiéra s odpočtem
+  // (dřív automatické pokračování skončilo na odpočtu). Doporučená to vyřazují
+  // už sama (lib/upNext.ts), tady jde o frontu a playlist.
+  const autoplayTarget = upNextQueue.find((v: any) => !notPlayableYet(v, clock)) ?? null;
 
   function nextHref(id: string) {
     return playlistId ? `/watch/${id}?playlist=${playlistId}` : `/watch/${id}`;
@@ -1370,10 +1384,10 @@ function WatchPageInner() {
   }, [playerReady, upNextQueue, playerGen]);
 
   useEffect(() => {
-    // Automatické pokračování vypnuté: nabídka dalších videí zůstane, ale nikam se nejde samo.
-    if (!showUpNext || !autoplay) return;
+    // Automatické pokračování vypnuté (nebo není co pustit): nabídka dalších videí zůstane, ale nikam se nejde samo.
+    if (!showUpNext || !autoplay || !autoplayTarget) return;
     if (upNextCountdown <= 0) {
-      router.push(nextHref(upNextQueue[0].id));
+      router.push(nextHref(autoplayTarget.id));
       return;
     }
     const timer = setTimeout(() => setUpNextCountdown((c) => c - 1), 1000);
@@ -1615,14 +1629,20 @@ function WatchPageInner() {
       if (viewTimerRef.current) clearTimeout(viewTimerRef.current);
       viewTimerRef.current = setTimeout(() => {
         viewTimerRef.current = null;
-        fetch('/api/videos/increment-view', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          // Posíláme i to, odkud divák přišel a na čem se dívá - ve
-          // statistikách je pak vidět, co kanálu vozí diváky a na jakém
-          // zařízení se Kine používá.
-          body: JSON.stringify({ videoId, source: detectViewSource(), device: detectDeviceClass() }),
-        });
+        // Posíláme i to, odkud divák přišel a na čem se dívá - ve
+        // statistikách je pak vidět, co kanálu vozí diváky a na jakém
+        // zařízení se Kine používá. S přihlášením (lib/authHeaders.ts):
+        // server tvůrci nepočítá zhlédnutí vlastního videa.
+        const body = JSON.stringify({ videoId, source: detectViewSource(), device: detectDeviceClass() });
+        void authHeaders()
+          .then((auth) =>
+            fetch('/api/videos/increment-view', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...auth },
+              body,
+            })
+          )
+          .catch(() => {});
         localStorage.setItem(lastViewKey, String(Date.now()));
       }, 5000);
     }
@@ -1802,7 +1822,21 @@ function WatchPageInner() {
     <div className={`watch-layout ${theater && playerMode !== 'music' ? 'watch-layout-theater' : ''}`}>
       {engine === 'iframe' && <Script src="https://embed.cloudflarestream.com/embed/sdk.latest.js" onLoad={handlePlayerSdkReady} />}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      <WatchHistoryTracker videoId={video.id} />
+      {/* Do historie až po ~3 s opravdového přehrávání (ne při otevření ani na odpočtu premiéry). */}
+      <WatchHistoryTracker
+        videoId={video.id}
+        readPlayback={() => {
+          if (premiereWaiting) return null;
+          if (playerMode === 'music') {
+            // Hudba na Obal: hraje přehrávač v kostře appky.
+            const now = musicCommands.now();
+            return now.trackId === video.id ? { time: now.time, playing: now.playing, duration: Number(video.duration_seconds) || null } : null;
+          }
+          const player = playerRef.current;
+          if (!player) return null;
+          return { time: Number(player.currentTime), playing: !player.paused, duration: Number(video.duration_seconds) || null };
+        }}
+      />
       <div className="watch-video-column">
         {/* Hudba na Obal: velký obal a ovládání hudebního přehrávače v kostře
             appky (hraje dál i po odchodu ze stránky). Hudba v režimu Video:
@@ -2015,14 +2049,14 @@ function WatchPageInner() {
                       <div className="player-upnext">
                         <div className="player-upnext-inner">
                           <p className="player-upnext-note">
-                            {autoplay ? t('nextVideoInSecondsNote').replace('{seconds}', String(upNextCountdown)) : t('nextVideoPickNote')}
+                            {autoplay && autoplayTarget ? t('nextVideoInSecondsNote').replace('{seconds}', String(upNextCountdown)) : t('nextVideoPickNote')}
                           </p>
                           <div className={`player-upnext-grid ${upNextQueue.length < 2 ? 'player-upnext-grid-single' : ''}`}>
-                            {upNextQueue.slice(0, 2).map((v: any, i: number) => (
+                            {upNextQueue.slice(0, 2).map((v: any) => (
                               <button
                                 key={v.id}
                                 type="button"
-                                className={`player-upnext-card ${i === 0 && autoplay ? 'player-upnext-card-next' : ''}`}
+                                className={`player-upnext-card ${autoplay && autoplayTarget?.id === v.id ? 'player-upnext-card-next' : ''}`}
                                 onClick={() => router.push(nextHref(v.id))}
                               >
                                 <span className="player-upnext-thumb">

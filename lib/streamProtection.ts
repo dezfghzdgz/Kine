@@ -1,4 +1,6 @@
 import { supabaseServer } from './supabaseServer';
+import { isOwnStreamMediaUrl } from './mediaHosts';
+import { fetchMediaImage } from './mediaFetch';
 import {
   createStreamToken,
   isCloudflareStreamUrl,
@@ -125,17 +127,20 @@ async function copyThumbnailToStorage(video: {
 }): Promise<string | null> {
   const key = signingKeyFromEnv();
   if (!key) return null;
+  // Jen náhled z Cloudflare Stream vlastního účtu (lib/mediaHosts.ts) - token se jinam
+  // neposílá a server nestahuje z adresy, kterou si někdo zapsal sám.
+  if (!isOwnStreamMediaUrl(video.thumbnail_url)) return null;
 
   const token = createStreamToken(key, video.cloudflare_video_id, { ttlSeconds: SERVER_FETCH_TOKEN_TTL_S });
   const src = swapPlaybackId(video.thumbnail_url, token);
   if (!src) return null;
 
   try {
-    const res = await fetch(src);
-    if (!res.ok) return null;
-    const contentType = res.headers.get('content-type') ?? 'image/jpeg';
+    const media = await fetchMediaImage(src);
+    if (!media) return null;
+    const contentType = media.contentType || 'image/jpeg';
     if (!contentType.startsWith('image/')) return null;
-    const bytes = Buffer.from(await res.arrayBuffer());
+    const bytes = Buffer.from(media.bytes);
     if (bytes.length === 0) return null;
 
     const path = `${video.owner_id}/${video.id}-auto.jpg`;
