@@ -15,6 +15,7 @@ export const BADGE_ICONS: Record<BadgeId, UiIconName> = {
   team: 'users',
   moderator: 'shield',
   betaTester: 'bolt',
+  founder: 'flag',
   partner: 'heart',
   bugHunter: 'bug',
   early: 'sparkle',
@@ -121,6 +122,8 @@ export function badgeTexts(t: T, lang: Lang) {
         return t('badgeModerator');
       case 'betaTester':
         return t('badgeBetaTester');
+      case 'founder':
+        return t('badgeFounder');
       case 'partner':
         return t('badgePartner');
       case 'bugHunter':
@@ -167,6 +170,8 @@ export function badgeTexts(t: T, lang: Lang) {
         return t('badgeModeratorTip');
       case 'betaTester':
         return t('badgeBetaTesterTip');
+      case 'founder':
+        return t('badgeFounderTip');
       case 'partner':
         return t('badgePartnerTip');
       case 'bugHunter':
@@ -214,6 +219,8 @@ export function badgeTexts(t: T, lang: Lang) {
         return t('badgeModerator');
       case 'betaTester':
         return t('badgeBetaTester');
+      case 'founder':
+        return t('badgeFounder');
       case 'partner':
         return t('badgePartner');
       case 'bugHunter':

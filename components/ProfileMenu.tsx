@@ -203,6 +203,7 @@ export default function ProfileMenu({
             <Link href="/rules">{t('rulesLink')}</Link>
             <Link href="/copyright">{t('copyrightLink')}</Link>
             <a href="mailto:kinesupport@gmail.com">{t('supportLink')}</a>
+            <Link href="/fans">{t('fansLink')}</Link>
           </div>
         </div>
       )}

@@ -12779,6 +12779,7 @@ button.secondary:hover:not(:disabled) {
 .special-betaTester { --tier-a: #f0abfc; --tier-b: #a21caf; --tier-text: #f5d0fe; }
 .special-partner { --tier-a: #fda4af; --tier-b: #be123c; --tier-text: #fecdd3; }
 .special-bugHunter { --tier-a: #fdba74; --tier-b: #c2410c; --tier-text: #fed7aa; }
+.special-founder { --tier-a: #5eead4; --tier-b: #0f766e; --tier-text: #99f6e4; }
 .tier-special .badge-medal,
 .badge-medal.tier-special {
   color: #fff;
@@ -17822,3 +17823,96 @@ html {
 /* 0142: emote kanálu čekající na schválení moderátorem (vidí jen majitel) */
 .chat-emote-chip.pending img { opacity: 0.45; }
 .chat-emote-chip .chat-emote-pending { display: inline-flex; align-items: center; color: var(--text-faint); }
+
+/* 0143: Zeď fanoušků (playkine.com/fans) - stejný styl jako O Kine */
+.fans-page { max-width: 1040px; margin: 0 auto; }
+.fans-hero {
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  padding: 48px 20px 40px;
+  margin-bottom: 24px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(70% 90% at 15% 0%, rgba(var(--brand-rgb), 0.28), transparent 70%),
+    radial-gradient(60% 80% at 90% 10%, rgba(124, 58, 237, 0.22), transparent 70%),
+    var(--panel);
+}
+.fans-hero-glow {
+  position: absolute;
+  inset: auto 0 -60% 0;
+  height: 120%;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(var(--brand-rgb), 0.18), transparent 70%);
+  pointer-events: none;
+}
+.fans-kicker {
+  position: relative;
+  margin: 0 0 6px;
+  color: var(--brand);
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.fans-count {
+  position: relative;
+  margin: 0;
+  font-size: clamp(56px, 12vw, 96px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: var(--track-tight);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-shadow: 0 0 40px rgba(var(--brand-rgb), 0.45);
+}
+.fans-hero h1 {
+  position: relative;
+  margin: 10px 0 8px;
+  font-size: clamp(24px, 4vw, 36px);
+  letter-spacing: var(--track-tight);
+}
+.fans-tagline { position: relative; max-width: 560px; margin: 0 auto; color: var(--text-dim); font-size: 15px; line-height: 1.6; }
+.fans-cta { position: relative; display: flex; justify-content: center; margin-top: 18px; }
+.fans-page .streams-btn.primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(var(--brand-rgb), 0.22);
+  border-color: rgba(var(--brand-rgb), 0.65);
+  color: var(--text);
+}
+.fans-page .streams-btn.primary:hover { background: rgba(var(--brand-rgb), 0.32); }
+.fans-day { margin: 0 0 22px; }
+.fans-day-head { display: flex; align-items: baseline; gap: 10px; margin: 0 0 10px; font-size: 18px; }
+.fans-day-count { font-size: 13px; font-weight: 500; color: var(--text-faint); }
+.fans-grid { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.fans-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.fans-day.newest .fans-chip { border-color: rgba(var(--brand-rgb), 0.55); background: rgba(var(--brand-rgb), 0.12); }
+.fans-chip.linked:hover { border-color: var(--brand); }
+.fans-chip svg { color: var(--brand); flex: none; }
+.fans-empty { text-align: center; color: var(--text-faint); padding: 24px 0; }
+.fans-admin { max-width: 900px; }
+.fans-admin .streams-btn.primary { background: rgba(var(--brand-rgb), 0.22); border-color: rgba(var(--brand-rgb), 0.65); color: var(--text); }
+.fans-admin .streams-btn.primary:hover:not(:disabled) { background: rgba(var(--brand-rgb), 0.32); }
+.fans-admin .streams-btn.primary:disabled { opacity: 0.5; }
+.fans-admin .panel { margin-bottom: 12px; }
+.fans-admin-add textarea { width: 100%; margin: 8px 0 10px; font-size: 16px; resize: vertical; }
+.fans-admin-ok { color: var(--brand); font-size: 14px; }
+.fans-admin-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.fans-admin-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.fans-admin-list li:last-child { border-bottom: 0; }

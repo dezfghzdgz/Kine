@@ -184,7 +184,7 @@ export default function AboutPage() {
         </div>
         <p className="about-legal">
           <Link href="/rules">{t('rulesLink')}</Link> · <Link href="/terms">{t('termsLink')}</Link> · <Link href="/privacy">{t('privacyLink')}</Link> ·{' '}
-          <Link href="/copyright">{t('copyrightLink')}</Link>
+          <Link href="/copyright">{t('copyrightLink')}</Link> · <Link href="/fans">{t('fansLink')}</Link>
         </p>
       </section>
     </div>

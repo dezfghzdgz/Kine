@@ -14,10 +14,11 @@
 /**
  * Speciální odznaky - nepočítají se, přiděluje je tým Kine (/admin/badges,
  * tabulka profile_special_badges): Majitel, Vývojář, Tým Kine, Moderátor,
- * Beta tester, Partner, Lovec chyb. Na kanálu jsou první (dokud si majitel
- * kanálu nevybere jinak - i "žádný").
+ * Beta tester, Zakladatel, Partner, Lovec chyb. Na kanálu jsou první (dokud si
+ * majitel kanálu nevybere jinak - i "žádný"). Zakladatel = jméno na zdi
+ * fanoušků (playkine.com/fans), přidá ho propojení v Adminu (app/admin/fans).
  */
-export const SPECIAL_BADGES = ['owner', 'dev', 'team', 'moderator', 'betaTester', 'partner', 'bugHunter'] as const;
+export const SPECIAL_BADGES = ['owner', 'dev', 'team', 'moderator', 'betaTester', 'founder', 'partner', 'bugHunter'] as const;
 export type SpecialBadgeId = (typeof SPECIAL_BADGES)[number];
 
 export function isSpecialBadge(value: unknown): value is SpecialBadgeId {

@@ -1,3 +1,31 @@
+KINE web: Zeď fanoušků (playkine.com/fans) + odznak Zakladatel
+(dodávka kine-0143-2026-11-03)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0143.zip a do GitHubu přetáhni OBSAH složky (jako vždy).
+2. JEDNA MIGRACE v Supabase: supabase-migration-fans.sql
+   Supabase -> tvůj projekt -> SQL Editor -> New query -> vlož CELÝ obsah souboru -> Run.
+   Na konci tabulka: zed_fanousku / nastaveni / odznak_zakladatel = true.
+   Dá se pustit i znovu. Bez ní stránka /fans ukazuje „Zatím tu nikdo není“.
+3. Žádná nová proměnná ve Vercelu.
+
+CO JE NOVÉ
+- playkine.com/fans - zeď fanoušků: nahoře velký počet, pod tím přezdívky z Instagramu
+  po dnech kampaně („Den 2“, „Den 1“…), nejnovější den nahoře a zvýrazněný. Na telefonu
+  se hezky natáčí. Odkaz „Fanoušci“ je v nabídce profilu (vedle About Kine, Terms…)
+  a dole na stránce O Kine.
+- Admin -> Zeď fanoušků (boční menu, jen správce): napíšeš @přezdívku a dáš Enter -
+  jméno je hned na webu. Víc jmen naráz: každé na nový řádek nebo oddělené čárkou
+  (duplicity a nesmysly appka pozná). Den kampaně se počítá sám od prvního jména podle
+  českého kalendáře, jde ale přepsat. U každého jména: Smazat (kdo tam být nechce)
+  a Propojit s účtem na Kine - na zdi pak má odkaz na svůj kanál a na profilu odznak
+  Zakladatel. Nahoře se nastaví účet Kine na Instagramu (tlačítko „Sledovat Kine na
+  Instagramu“ na zdi).
+- Nový speciální odznak Zakladatel - dostane ho propojený fanoušek, jde dát i ručně
+  v Admin -> Odznaky.
+- Zásady ochrany osobních údajů: věta o zdi fanoušků (jen přezdívka, na požádání smažeme).
+
 KINE web: bezpečnostní kontrola, Next.js 16, lepší doporučování
 (dodávka kine-0142-2026-11-03)
 ==========================================================================================

@@ -341,6 +341,13 @@ export default function Sidebar() {
             {t('pushAdminLabel')}
           </Link>
         )}
+        {/* Zeď fanoušků (playkine.com/fans) - přidávání jmen z Instagramu. */}
+        {isAdmin && (
+          <Link href="/admin/fans" className={`sidebar-link ${pathname === '/admin/fans' ? 'active' : ''}`}>
+            <UiIcon name="heart" size={20} />
+            {t('fansAdminLabel')}
+          </Link>
+        )}
         {/* Odznaky spravuje celý tým Kine - moderátor i správce. */}
         {(isAdmin || isModerator) && (
           <Link href="/admin/badges" className={`sidebar-link ${pathname === '/admin/badges' ? 'active' : ''}`}>
@@ -583,6 +590,12 @@ export default function Sidebar() {
             <Link href="/admin/push" className="sidebar-link" onClick={closeMobileNav}>
               <UiIcon name="bell" size={20} />
               {t('pushAdminLabel')}
+            </Link>
+          )}
+          {isAdmin && (
+            <Link href="/admin/fans" className="sidebar-link" onClick={closeMobileNav}>
+              <UiIcon name="heart" size={20} />
+              {t('fansAdminLabel')}
             </Link>
           )}
           {(isAdmin || isModerator) && (
