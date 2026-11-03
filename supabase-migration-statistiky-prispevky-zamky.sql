@@ -88,6 +88,12 @@ do $mig$
 declare
   tym text;
   pol record;
+  has_post_id boolean;
+  has_cd boolean;
+  has_pinned boolean;
+  has_heart boolean;
+  sel_expr text;
+  ins_expr text;
 begin
   if to_regclass('public.posts') is null then
     raise notice 'C) přeskočeno: chybí tabulka posts.';
@@ -156,14 +162,32 @@ begin
   end loop;
   execute 'create policy "Příspěvky vidí každý, pro členy jen členové" on posts for select using (kine_can_see_post(owner_id, members_only))';
 
-  -- Komentáře pod příspěvkem pro členy: číst a psát jen ten, kdo příspěvek vidí
-  -- (stejně tak pryč všechna dosavadní pravidla pro čtení a psaní komentářů).
+  -- Komentáře: číst i psát jen ten, kdo obsah vidí; u videa jen pod viditelným
+  -- videem a ne s vypnutými komentáři, a z prohlížeče nejde podstrčit připnutý
+  -- / „od tvůrce" komentář (viz supabase-migration-bezpecnost-listopad.sql, M1).
+  -- Sloupce se ověřují, aby pravidlo nespadlo na databázi bez některé migrace.
   if to_regclass('public.comments') is not null then
+    has_post_id := exists (select 1 from information_schema.columns where table_schema='public' and table_name='comments' and column_name='post_id');
+    has_cd := exists (select 1 from information_schema.columns where table_schema='public' and table_name='videos' and column_name='comments_disabled');
+    has_pinned := exists (select 1 from information_schema.columns where table_schema='public' and table_name='comments' and column_name='pinned');
+    has_heart := exists (select 1 from information_schema.columns where table_schema='public' and table_name='comments' and column_name='hearted_by_creator');
+    if has_post_id then
+      sel_expr := '(case when post_id is not null then exists (select 1 from posts p where p.id = comments.post_id) else exists (select 1 from videos v where v.id = comments.video_id) end)';
+      ins_expr := '(case when post_id is not null then exists (select 1 from posts p where p.id = comments.post_id) else (exists (select 1 from videos v where v.id = comments.video_id'
+        || case when has_cd then ' and not coalesce(v.comments_disabled, false))' else ')' end || ') end)';
+    else
+      sel_expr := 'exists (select 1 from videos v where v.id = comments.video_id)';
+      ins_expr := 'exists (select 1 from videos v where v.id = comments.video_id'
+        || case when has_cd then ' and not coalesce(v.comments_disabled, false))' else ')' end;
+    end if;
     for pol in select policyname from pg_policies where schemaname = 'public' and tablename = 'comments' and cmd in ('SELECT', 'INSERT') loop
       execute format('drop policy %I on comments', pol.policyname);
     end loop;
-    execute 'create policy "Komentáře čte každý, u členských příspěvků jen člen" on comments for select using (post_id is null or exists (select 1 from posts p where p.id = comments.post_id))';
-    execute 'create policy "Přihlášený komentuje, u příspěvků pro členy jen člen" on comments for insert with check (auth.uid() = user_id and (post_id is null or exists (select 1 from posts p where p.id = comments.post_id)))';
+    execute format('create policy "Komentáře čte každý, u členských příspěvků jen člen" on comments for select using (%s)', sel_expr);
+    execute format('create policy "Přihlášený komentuje, u příspěvků pro členy jen člen" on comments for insert to authenticated with check (auth.uid() = user_id%s%s and %s)',
+      case when has_pinned then ' and not coalesce(pinned, false)' else '' end,
+      case when has_heart then ' and not coalesce(hearted_by_creator, false)' else '' end,
+      ins_expr);
   end if;
 
   -- Počet příspěvků pro členy (zamčená dlaždice „N příspěvků jen pro členy“ - bez obsahu).

@@ -247,11 +247,13 @@ begin
   if (nove -> 'captions') is distinct from (stare -> 'captions') and char_length(coalesce((nove -> 'captions')::text, '')) > 600000 then
     raise exception 'Titulky jsou moc dlouhé.' using errcode = 'check_violation';
   end if;
-  -- Vlastní náhled jen z vlastní složky v úložišti Kine.
+  -- Vlastní náhled jen z vlastní složky v úložišti Kine. Kontrola je UKOTVENÁ
+  -- na začátek řetězce (^https://.../storage/v1/object/public/thumbnails/<vlastník>/),
+  -- jinak by prošlo https://zlo.cz/?/storage/v1/object/public/thumbnails/<id>/
+  -- a server by si ten obrázek stáhl ke kontrole (viz supabase-migration-bezpecnost-listopad.sql, L2).
   if (nove ->> 'thumbnail_url') is distinct from (stare ->> 'thumbnail_url') and (nove ->> 'thumbnail_url') is not null
-     and ((nove ->> 'thumbnail_url') !~ '^https://'
-          or char_length(nove ->> 'thumbnail_url') > 600
-          or position(('/storage/v1/object/public/thumbnails/' || old.owner_id::text || '/') in (nove ->> 'thumbnail_url')) = 0) then
+     and ( char_length(nove ->> 'thumbnail_url') > 600
+          or (nove ->> 'thumbnail_url') !~ ('^https://[a-z0-9.-]+/storage/v1/object/public/thumbnails/' || old.owner_id::text || '/') ) then
     raise exception 'Náhled musí být obrázek nahraný na Kine.' using errcode = 'check_violation';
   end if;
   return new;
@@ -467,14 +469,18 @@ begin
     end if;
   end loop;
 
-  -- Čtení: obrázky jsou veřejné (bucket public) - kdyby čtecí pravidlo spadlo s "for all", vrátí se.
+  -- Čtení: obrázky se zobrazují přes VEŘEJNOU adresu (getPublicUrl), která u
+  -- veřejného bucketu funguje bez ohledu na RLS. Čtecí (SELECT) pravidlo řídí
+  -- jen výpis souborů (list) - ten patří jen majiteli složky, jinak by si
+  -- kdokoli vypsal cizí náhledy a fotky (viz supabase-migration-bezpecnost-listopad.sql, M4).
+  -- Dřív se tu zakládalo veřejné čtení (using bucket_id = ...); teď jen vlastní složka.
   foreach b in array nase loop
     if not exists (
       select 1 from pg_policies
        where schemaname = 'storage' and tablename = 'objects' and cmd = 'SELECT'
          and position(('''' || b || '''') in coalesce(qual, '')) > 0
     ) then
-      execute format('create policy %I on storage.objects for select using (bucket_id = %L)', 'kine_' || b || '_read', b);
+      execute format('create policy %I on storage.objects for select to authenticated using (bucket_id = %L and (storage.foldername(name))[1] = auth.uid()::text)', 'kine_' || b || '_read', b);
     end if;
   end loop;
 
@@ -519,12 +525,15 @@ drop policy if exists "kine_thumbnails_delete" on storage.objects;
 create policy "kine_thumbnails_delete" on storage.objects for delete to authenticated
   using (bucket_id = 'thumbnails' and (storage.foldername(name))[1] = auth.uid()::text);
 
--- Fotky v příspěvcích: <uživatel>/<čas>-<pořadí>.<obrázek>, nejvýš 60 za den.
+-- Fotky v příspěvcích: <uživatel>/<název>.<obrázek>, nejvýš 60 za den. Appka
+-- pojmenovává soubory náhodně (crypto.randomUUID - components/PostComposer.tsx),
+-- takže se nekontroluje konkrétní tvar názvu, jen vlastní složka a typ obrázku
+-- (dřívější „jen číslice" fotky k příspěvkům úplně odmítalo).
 drop policy if exists "kine_post_images_insert" on storage.objects;
 create policy "kine_post_images_insert" on storage.objects for insert to authenticated
   with check (
     bucket_id = 'post-images'
-    and name ~* ('^' || auth.uid()::text || '/[0-9]{10,16}(-[0-9]{1,3})?\.(jpg|jpeg|png|webp|gif|avif)$')
+    and name ~* ('^' || auth.uid()::text || '/[A-Za-z0-9._-]{1,80}\.(jpg|jpeg|png|webp|gif|avif)$')
     and public.kine_storage_recent_uploads('post-images') < 60
   );
 drop policy if exists "kine_post_images_delete" on storage.objects;
