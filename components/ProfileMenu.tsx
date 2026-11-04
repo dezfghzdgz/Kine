@@ -10,6 +10,7 @@ import ConfirmDialog from './ConfirmDialog';
 import { APPEARANCE_EVENT, readTheme, saveTheme, type Theme } from '@/lib/appearance';
 import UiIcon, { type UiIconName } from './UiIcon';
 import { goToSettingsSection } from '@/lib/settingsNav';
+import { INSTALL_READY_EVENT, appMarkedInstalled, canOfferInstall, requestInstall } from '@/lib/installApp';
 import ProfileImage from './ProfileImage';
 
 /** Položka nabídky: ikona a krátký text (vpravo případně hodnota) - jde se podle ikon. */
@@ -47,6 +48,8 @@ export default function ProfileMenu({
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>('dark');
+  // „Kine v telefonu“ (přidat na plochu) - jen na telefonu/tabletu, ne v appce z plochy (lib/installApp.ts).
+  const [offerInstall, setOfferInstall] = useState(false);
   const { lang, setLang, t } = useLanguage();
   const THEME_LABELS: Record<Theme, string> = {
     dark: t('themeDark'),
@@ -63,6 +66,13 @@ export default function ProfileMenu({
     sync();
     window.addEventListener(APPEARANCE_EVENT, sync);
     return () => window.removeEventListener(APPEARANCE_EVENT, sync);
+  }, []);
+
+  useEffect(() => {
+    const check = () => setOfferInstall(canOfferInstall() && !appMarkedInstalled());
+    check();
+    window.addEventListener(INSTALL_READY_EVENT, check);
+    return () => window.removeEventListener(INSTALL_READY_EVENT, check);
   }, []);
 
   useEffect(() => {
@@ -127,6 +137,20 @@ export default function ProfileMenu({
           <Link href="/channel-stats" className="profile-dropdown-item" onClick={go}>
             <ItemLabel icon="chart">{t('channelStats')}</ItemLabel>
           </Link>
+
+          {offerInstall && (
+            <button
+              type="button"
+              className="profile-dropdown-item profile-dropdown-install"
+              onClick={() => {
+                go();
+                // Hned v kliknutí - systémové okno Androidu jde otevřít jen po klepnutí.
+                void requestInstall();
+              }}
+            >
+              <ItemLabel icon="phone">{t('installMenuItem')}</ItemLabel>
+            </button>
+          )}
 
           <Link href="/download" className="profile-dropdown-item" onClick={go}>
             <ItemLabel icon="desktop">{t('desktopAppLink')}</ItemLabel>
@@ -203,7 +227,7 @@ export default function ProfileMenu({
             <Link href="/rules">{t('rulesLink')}</Link>
             <Link href="/copyright">{t('copyrightLink')}</Link>
             <a href="mailto:kinesupport@gmail.com">{t('supportLink')}</a>
-            <Link href="/fans">{t('fansLink')}</Link>
+            <Link href="/supporters">{t('fansLink')}</Link>
           </div>
         </div>
       )}

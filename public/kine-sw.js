@@ -24,8 +24,10 @@ self.addEventListener('push', (event) => {
   const title = typeof data.title === 'string' && data.title ? data.title.slice(0, 120) : 'Kine';
   const options = {
     body: typeof data.body === 'string' ? data.body.slice(0, 300) : '',
-    icon: '/apple-icon',
-    badge: '/apple-icon',
+    // Ikona Kine a malý bílý trojúhelník do horní lišty Androidu (tam je vidět
+    // jen tvar - plná ikona by se ukázala jako bílý čtvereček).
+    icon: '/icons/kine-192.png',
+    badge: '/icons/kine-badge-96.png',
     tag: typeof data.tag === 'string' ? data.tag.slice(0, 80) : undefined,
     data: { url: typeof data.url === 'string' ? data.url : '/' },
   };

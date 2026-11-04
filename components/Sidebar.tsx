@@ -341,9 +341,9 @@ export default function Sidebar() {
             {t('pushAdminLabel')}
           </Link>
         )}
-        {/* Zeď fanoušků (playkine.com/fans) - přidávání jmen z Instagramu. */}
+        {/* Podporovatelé (playkine.com/supporters) - přidávání jmen z Instagramu. */}
         {isAdmin && (
-          <Link href="/admin/fans" className={`sidebar-link ${pathname === '/admin/fans' ? 'active' : ''}`}>
+          <Link href="/admin/supporters" className={`sidebar-link ${pathname === '/admin/supporters' ? 'active' : ''}`}>
             <UiIcon name="heart" size={20} />
             {t('fansAdminLabel')}
           </Link>
@@ -593,7 +593,7 @@ export default function Sidebar() {
             </Link>
           )}
           {isAdmin && (
-            <Link href="/admin/fans" className="sidebar-link" onClick={closeMobileNav}>
+            <Link href="/admin/supporters" className="sidebar-link" onClick={closeMobileNav}>
               <UiIcon name="heart" size={20} />
               {t('fansAdminLabel')}
             </Link>

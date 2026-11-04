@@ -1,9 +1,9 @@
 /**
- * Zeď fanoušků (playkine.com/fans) - čistá logika bez databáze
+ * Podporovatelé (playkine.com/supporters; v kódu "fans") - čistá logika bez databáze
  * (tests/fans.test.mjs).
  *
  * Kampaň na Instagramu: kdo začne Kine sledovat, toho přezdívka zůstane na
- * webu navždy. Jména přidává správce v Adminu (app/admin/fans), stránka je
+ * webu navždy. Jména přidává správce v Adminu (app/admin/supporters), stránka je
  * ukazuje podle dne kampaně ("Den 1", "Den 2"…). Ukládá se jen přezdívka
  * z Instagramu - žádné skutečné jméno ani fotka; kdo tam být nechce, toho
  * správce smaže.

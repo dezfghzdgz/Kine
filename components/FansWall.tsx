@@ -7,11 +7,11 @@ import { groupByDay, type FanEntry } from '@/lib/fans';
 import UiIcon from './UiIcon';
 
 /**
- * Zeď fanoušků (playkine.com/fans): přezdívky lidí, kteří Kine sledují od
+ * Podporovatelé (playkine.com/supporters): přezdívky lidí, kteří Kine sledují od
  * prvních dní (kampaň na Instagramu "Den 1…"). Nahoře počet, pod tím dny
  * kampaně od nejnovějšího - nové jméno je hned vidět, když se natáčí.
  * Kdo má i účet na Kine, má u jména odkaz na svůj kanál.
- * Data načte server (app/fans/page.tsx, lib/fansServer.ts).
+ * Data načte server (app/supporters/page.tsx, lib/fansServer.ts).
  */
 export default function FansWall({
   available,

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/lib/i18n';
 import { disablePush, enablePush, pushState, pushSupported, testPush, type PushState } from '@/lib/pushClient';
+import { currentInstallPlatform, requestInstall } from '@/lib/installApp';
 import { PanelHeading } from './HelpTip';
 import UiIcon from './UiIcon';
 
@@ -91,7 +92,15 @@ export default function PushSettings({ userId }: { userId: string }) {
         {state === 'loading' ? (
           <p className="push-note">{t('loading')}</p>
         ) : !supported ? (
-          <p className="push-note">{isIos() ? t('pushIosNote') : t('pushUnsupportedNote')}</p>
+          <>
+            <p className="push-note">{isIos() ? t('pushIosNote') : t('pushUnsupportedNote')}</p>
+            {/* iPhone v Safari: rovnou návod, jak Kine přidat na plochu (components/InstallAppHost.tsx). */}
+            {isIos() && currentInstallPlatform() !== 'installed' && (
+              <button type="button" className="secondary push-install-button" onClick={() => void requestInstall()}>
+                <UiIcon name="phone" size={15} /> {t('installButton')}
+              </button>
+            )}
+          </>
         ) : state === 'denied' ? (
           <p className="push-note push-warn">
             <UiIcon name="warning" size={15} /> {t('pushDeniedNote')}

@@ -910,7 +910,7 @@ export const PRIVACY: LegalDoc = {
         heading: `Kdo údaje vidí`,
         items: [
           `Ostatní uživatelé vidí to, co je veřejné: jméno, profil, veřejná videa, komentáře, zprávy v chatu, vystavené odznaky.`,
-          `Zeď fanoušků (playkine.com/fans) ukazuje přezdívky z Instagramu lidí, kteří o to stáli (a případně odkaz na jejich kanál na Kine) - nic dalšího. Kdo tam být nechce, napíše nám a přezdívku smažeme.`,
+          `Seznam podporovatelů (playkine.com/supporters) ukazuje přezdívky z Instagramu lidí, kteří o to stáli (a případně odkaz na jejich kanál na Kine) - nic dalšího. Kdo tam být nechce, napíše nám a přezdívku smažeme.`,
           `Naši dodavatelé, kteří pro nás údaje zpracovávají: Supabase (databáze, přihlášení, obrázky), Cloudflare (ukládání a přehrávání videí a vysílání, automatické titulky, stahování aplikací a ochrana proti botům při registraci a přihlášení - Turnstile, který kvůli tomu vyhodnotí technické údaje o prohlížeči), Vercel (provoz webu), Stripe (platby a výplaty tvůrcům), GitHub (stahování a aktualizace aplikací) a Google (e-mail podpory, když nám napíšeš).`,
           `Push služby prohlížečů (Google, Apple, Mozilla, Microsoft) doručují oznámení na tvoje zařízení, když si je zapneš - dostanou jen šifrovanou zprávu.`,
           `Úřady jen tehdy, když to vyžaduje zákon (například oznámení zneužívání dětí).`,
@@ -993,7 +993,7 @@ export const PRIVACY: LegalDoc = {
         heading: `Who sees the data`,
         items: [
           `Other users see what is public: your name, profile, public videos, comments, chat messages, showcased badges.`,
-          `The fan wall (playkine.com/fans) shows the Instagram usernames of people who wanted to be listed (and possibly a link to their Kine channel) - nothing else. If you don't want to be there, write to us and we'll remove the username.`,
+          `The supporters list (playkine.com/supporters) shows the Instagram usernames of people who wanted to be listed (and possibly a link to their Kine channel) - nothing else. If you don't want to be there, write to us and we'll remove the username.`,
           `Our providers who process data for us: Supabase (database, login, images), Cloudflare (storing and playing videos and streams, automatic captions, app downloads and bot protection at sign-up and login - Turnstile, which evaluates technical browser data for this), Vercel (running the website), Stripe (payments and creator payouts), GitHub (app downloads and updates) and Google (support email, when you write to us).`,
           `Browser push services (Google, Apple, Mozilla, Microsoft) deliver notifications to your devices if you turn them on - they only receive an encrypted message.`,
           `Authorities only when the law requires it (for example reporting child abuse).`,

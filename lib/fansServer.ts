@@ -4,7 +4,7 @@ import { isMissingTable } from './apiUser';
 import { instagramProfileUrl, type FanEntry } from './fans';
 
 /**
- * Zeď fanoušků na serveru (stránka /fans a Admin). Tabulky fan_wall
+ * Podporovatelé na serveru (stránka /supporters a Admin). Tabulky fan_wall
  * a fan_wall_settings jsou jen pro server (supabase-migration-fans.sql) -
  * z prohlížeče se k nim nikdo nedostane, čte a zapisuje jen service role.
  */
@@ -28,7 +28,7 @@ export type FanWall = {
  * jen když není zablokovaný ani shadow-banovaný - jinak zůstane holá přezdívka.
  * Chyba databáze = prázdná zeď (stránka nespadne).
  *
- * `client`: stránka /fans bere klienta s mezipamětí (supabaseServerCached -
+ * `client`: stránka /supporters bere klienta s mezipamětí (supabaseServerCached -
  * stránka se nevykresluje při každé návštěvě z reklamy znovu, po změně v Adminu
  * ji obnoví revalidatePath); Admin čte vždy čerstvě (supabaseServer).
  */
