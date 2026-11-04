@@ -4,6 +4,7 @@ import AppShellChrome from '@/components/AppShellChrome';
 import ErrorReporter from '@/components/ErrorReporter';
 import TvMode from '@/components/TvMode';
 import BadgeWatcher from '@/components/BadgeWatcher';
+import InstallAppHost from '@/components/InstallAppHost';
 import { LanguageProvider } from '@/lib/i18n';
 import { MobileNavProvider } from '@/lib/mobileNavContext';
 import { MusicPlayerProvider } from '@/lib/musicPlayer';
@@ -13,6 +14,7 @@ import { SITE_URL } from '@/lib/linkPreview';
 import { APPEARANCE_BOOT_SCRIPT } from '@/lib/appearance';
 import { BRAND_BOOT_SCRIPT } from '@/lib/brandColor';
 import { NETWORK_HINTS_BOOT_SCRIPT } from '@/lib/networkHints';
+import { INSTALL_BOOT_SCRIPT } from '@/lib/installApp';
 
 const siteUrl = SITE_URL;
 
@@ -95,6 +97,15 @@ export const metadata: Metadata = {
     title: 'Kine',
     description: 'Watch and create videos and Sparks, go live, and clip your games with Kine Clipper.',
   },
+  // Kine jako appka z plochy (manifest je app/manifest.ts, ikony public/icons, návod
+  // „Přidat na plochu“ lib/installApp.ts). Na iPhonu jméno pod ikonou a černý horní
+  // pruh (obsah pod něj nezajede - Kine nemá odsazení od výřezu nahoře).
+  applicationName: 'Kine',
+  appleWebApp: {
+    capable: true,
+    title: 'Kine',
+    statusBarStyle: 'black',
+  },
 };
 
 export default function RootLayout({
@@ -120,6 +131,8 @@ export default function RootLayout({
         <link rel="preconnect" href="https://videodelivery.net" />
         {/* Kód Cloudflare z minula (když není v nastavení serveru) - spojení hned, ne až s prvním náhledem. */}
         {!STREAM_ORIGIN && <script dangerouslySetInnerHTML={{ __html: NETWORK_HINTS_BOOT_SCRIPT }} />}
+        {/* „Přidat na plochu“ na Androidu: událost od Chromu může přijít dřív než React. */}
+        <script dangerouslySetInnerHTML={{ __html: INSTALL_BOOT_SCRIPT }} />
       </head>
       <body>
         <LanguageProvider>
@@ -139,6 +152,8 @@ export default function RootLayout({
                 <TvMode />
                 {/* Nový odznak = oslavné okénko a oznámení (components/BadgeWatcher.tsx). */}
                 <BadgeWatcher />
+                {/* Návod „Přidat Kine na plochu“ - otevírá ho requestInstall() odkudkoli. */}
+                <InstallAppHost />
                 <AppShellChrome>{children}</AppShellChrome>
               </UploadProvider>
             </MusicPlayerProvider>

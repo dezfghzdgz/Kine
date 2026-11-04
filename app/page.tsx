@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { prefetchSparks } from '@/lib/sparksPrefetch';
 import OnboardingChecklist from '@/components/OnboardingChecklist';
-import DesktopAppBanner from '@/components/DesktopAppBanner';
+import HomeTopBanner from '@/components/HomeTopBanner';
 import LoadFailed from '@/components/LoadFailed';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
@@ -954,6 +954,7 @@ export default function HomePage() {
   if (empty) {
     return (
       <div>
+        <HomeTopBanner />
         {notices}
         {/* I bez jediného videa může někdo vysílat živě. */}
         <LiveNowRow />
@@ -968,7 +969,7 @@ export default function HomePage() {
   if (!blocks) {
     return (
       <div>
-        <DesktopAppBanner />
+        <HomeTopBanner />
         <p className="section-title">{t('recommendedForYouHeading')}</p>
         {loadFailed && <LoadFailed onRetry={startLoad} />}
         <div className="video-grid">
@@ -986,8 +987,9 @@ export default function HomePage() {
 
   return (
     <div>
-      {/* Kine do PC na dosah - jen na počítači, ne v okně appky, jde zavřít. */}
-      <DesktopAppBanner />
+      {/* Jeden pruh nahoře: uvítání pro hosty / Kine na plochu (telefon) / Kine do PC
+          (počítač) - components/HomeTopBanner.tsx, pravidla v lib/homeBanner.ts. */}
+      <HomeTopBanner />
       <OnboardingChecklist />
       {/* "Tady jsi skončil" - jen pro přihlášené a jen když je co dokoukat;
           jinak se nevykreslí nic. */}

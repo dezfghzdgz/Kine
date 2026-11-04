@@ -8,7 +8,7 @@ import { firstFanAt, loadFanWall } from '@/lib/fansServer';
 export const dynamic = 'force-dynamic';
 
 /**
- * Zeď fanoušků - správa (jen správce Kine, stránka /admin/fans).
+ * Podporovatelé - správa (jen správce Kine, stránka /admin/supporters).
  *
  * GET                                        seznam jmen, nastavení, číslo dnešního dne kampaně
  * POST { action: 'add', handles, day? }      přidat jedno nebo víc jmen (řádky / čárky); day = číslo dne, jinak dnešní
@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
  * POST { action: 'settings', instagram }     účet Kine na Instagramu (tlačítko "Sledovat" na stránce)
  *
  * Tabulky jsou jen pro server (supabase-migration-fans.sql). Po každé změně
- * se stránka /fans hned obnoví (revalidatePath) - jméno je vidět okamžitě.
+ * se stránka /supporters hned obnoví (revalidatePath) - jméno je vidět okamžitě.
  */
 const NOT_MIGRATED = { error: 'Chybí migrace supabase-migration-fans.sql (Supabase -> SQL Editor).', code: 'not-migrated' };
 const FOUNDER = 'founder';
@@ -31,7 +31,7 @@ async function requireAdmin(req: NextRequest): Promise<{ id: string } | null> {
 
 function refreshWall() {
   try {
-    revalidatePath('/fans');
+    revalidatePath('/supporters');
   } catch {
     // Mimo běžící server (testy) - nic.
   }

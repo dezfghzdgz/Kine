@@ -1,3 +1,54 @@
+KINE web: uvítání pro nové návštěvníky + Kine jako appka v telefonu
+(dodávka kine-0145-2026-11-04 - obsahuje i 0144, tu už zvlášť nenahrávej)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0145.zip a do GitHubu přetáhni OBSAH složky (jako vždy).
+   Je v něm i dodávka 0144 (Podporovatelé), kterou jsi ještě nenahrál - stačí tahle jedna.
+   Žádná migrace v Supabase, žádná nová proměnná ve Vercelu.
+2. Po nasazení zkus na telefonu: playkine.com v Safari / Chrome (přihlášený) -> nahoře pruh
+   „Kine jako appka v telefonu“ -> Přidat na plochu.
+
+CO JE NOVÉ
+- Uvítání pro nepřihlášené na hlavní stránce: „Vítej na Kine“, jedna věta, co Kine je,
+  čtyři důvody (Bez reklam, Dislajky i hvězdičky, Profil podle sebe, Svoboda názoru)
+  a tlačítka Založit účet zdarma / Přihlásit se. Pod ním jde rovnou koukat. Křížek ho
+  schová na 14 dní. Nahoře je vždycky jen jeden pruh (host na PC nevidí navíc Kine do PC).
+  POZOR: až na Kine budou reklamy, změň text „Bez reklam“ (lib/i18n/*.ts, guestChipNoAds).
+- Kine jako appka v telefonu (PWA): vlastní ikona na ploše, celá obrazovka bez lišty
+  prohlížeče, v přepínači aplikací jako „Kine“. Nic se nestahuje z obchodu a appka je
+  pořád nejnovější (je to pořád web).
+  - Android (Chrome, Edge, Samsung): tlačítko Přidat na plochu otevře systémové okno
+    Instalovat. Chrome ho povolí až po chvilce na webu - do té doby se ukáže návod
+    (nabídka ⋮ -> Přidat na plochu).
+  - iPhone / iPad: návod Sdílet -> Přidat na plochu -> Přidat (Apple nedovolí přidat za
+    člověka). Oznámení fungují na iPhonu jen v Kine přidaném na plochu - v Nastavení ->
+    Oznámení je proto u iPhonu tlačítko s návodem.
+  - Instagram, TikTok a spol.: z jejich vestavěného prohlížeče na plochu přidat nejde -
+    návod „otevři v prohlížeči“ a tlačítko Zkopírovat odkaz.
+  - Kde se nabízí: pruh na hlavní stránce (jen přihlášení na telefonu a tabletu; křížek =
+    30 dní klid) a v nabídce profilu položka „Kine v telefonu“. Na počítači, na televizi
+    a v Kine spuštěném z plochy se nic neukazuje.
+  - Dlouhé podržení ikony na Androidu: zkratky Sparks, Live, Explore, Upload.
+- Oznámení na Androidu: v horní liště je teď malý trojúhelník Kine místo bílého čtverečku.
+- Texty ve všech 8 jazycích.
+
+KINE web: „Podporovatelé“ místo „Fans“ - playkine.com/supporters
+(dodávka kine-0144-2026-11-04)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0144.zip a do GitHubu přetáhni OBSAH složky (jako vždy).
+   Žádná migrace v Supabase, žádná nová proměnná ve Vercelu.
+
+CO JE NOVÉ
+- Seznam se jmenuje Podporovatelé (anglicky Supporters, ostatní jazyky obdobně) a je na
+  playkine.com/supporters. Stará adresa playkine.com/fans sama přesměruje na novou,
+  takže starší odkazy z reklam fungují dál. Jména, která už v seznamu jsou, zůstávají.
+- Správa: Admin -> Podporovatelé (/admin/supporters, stará /admin/fans přesměruje).
+- Texty ve všech 8 jazycích, popis odznaku Zakladatel a věta v zásadách ochrany údajů
+  mluví o podporovatelích.
+
 KINE web: Zeď fanoušků (playkine.com/fans) + odznak Zakladatel
 (dodávka kine-0143-2026-11-03)
 ==========================================================================================
