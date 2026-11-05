@@ -1,3 +1,102 @@
+KINE web: stránka videa a Domů podle YouTube (ale ve stylu Kine), pojistky proti nákladům,
+rychlejší start dalšího videa, jazyk podle prohlížeče
+(dodávka kine-0146-2026-11-04)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0146.zip („Extrahovat vše“) a do GitHubu přetáhni OBSAH rozbalené
+   složky (jako vždy). Je to 64 souborů - počkej, až GitHub ukáže všech 64, teprve pak
+   Commit changes. (U 0145 se nahrálo jen 11 ze 43 a Vercel pak hlásil „Module not found“.)
+2. Žádná migrace v Supabase. Žádná nová proměnná ve Vercelu není nutná.
+   Volitelné proměnné (jen když budeš chtít jiné hodnoty než výchozí):
+   - LIVE_DAILY_MINUTES      minut živého vysílání na účet za 24 h (výchozí 480 = 8 h)
+   - LIVE_DAILY_MINUTES_PLUS totéž pro Kine Plus (výchozí 960 = 16 h), správci bez stropu
+   - GIPHY_API_KEY           hledání GIFů (když není, vezme se NEXT_PUBLIC_GIPHY_API_KEY,
+                             kterou už máš - takže GIFy fungují dál beze změny)
+3. Po nasazení otevři nějaké video na počítači a na telefonu a projdi si to (níže CO JE
+   NOVÉ). Kdyby něco nesedělo, Vercel -> Deployments -> předchozí nasazení -> Promote
+   to Production vrátí minulou verzi za minutu.
+
+CO JE NOVÉ - STRÁNKA VIDEA (playkine.com/watch/…)
+- Levé menu se u videa stáhne do úzké lišty jen s ikonami (najetím myší se ukáže název),
+  přehrávač je tak o hodně větší - na 1366 px má 810 px místo ~640. Video na výšku
+  zůstává úzké (nejvýš 420 px), nenafukuje se přes půl obrazovky.
+- Pod názvem je jeden řádek jako na YouTube: vlevo ikona kanálu, jméno, počet odběratelů
+  a tlačítko Odebírat (bez čísla v tlačítku), vpravo všechny akce v jedné řadě: Líbí /
+  Nelíbí, Super díky, Sdílet, Playlist, Stáhnout a ⋯ (Klip, Sledovat později, Nahlásit,
+  pro moderátora Smazat). Dřív byl tvůrce v panelu vpravo a akce ve dvou řadách.
+- Pod tím řádek „13 757 zhlédnutí · minulý týden“ a popis videa hned pod přehrávačem
+  (zkrácený, „Zobrazit víc“).
+- Panel vpravo vedle videa (na širokém okně drží při rolování) má záložky
+  Komentáře | Další videa | Technické (+ Přepis, když video má titulky). Další videa
+  jsou úzký seznam s malým náhledem, názvem, kanálem a „zhlédnutí · stáří“ - jak to
+  lidi znají. U videa bez komentářů se panel sám otevře na Další videa (jakmile si
+  divák záložku přepne, automatika mlčí).
+- Telefon: přehrávač, název, kanál, akce v jedné posuvné řadě, popis a pod tím panel
+  otevřený rovnou na Další videa (komentáře klepnutím). Nabídky Sdílet / Playlist / ⋯ se
+  na telefonu otevřou jako lišta nad spodním menu (v posuvné řadě by se ořízly).
+- Smajlíky a přílohy v komentářích vedle videa se otevírají dolů (panel se sám roluje,
+  nahoru by vyjely z něj). Potvrzení smazání komentáře se otevře přes celou stránku.
+- Rychlejší start dalšího videa: při najetí myší na položku v Další videa (a na kartu
+  na Domů) si prohlížeč stáhne manifest videa a náhled dopředu; když se u automatického
+  přehrávání blíží konec (85 % nebo posledních 20 s), stáhne se dopředu i další video
+  ve frontě a jeho stránka. Na mobilních datech s úsporou dat se nic nepředstahuje.
+
+CO JE NOVÉ - DOMŮ
+- Pod uvítáním / horním pruhem je řada kategorií: Vše · Hry · Sparks · Živě · Trendy ·
+  Nejnovější · Hudba · Zábava · Věda a technika · Vzdělávání · Sport · Komedie (vedou
+  na Prozkoumat s nastaveným filtrem, Sparks a Živě na své stránky). Na telefonu se
+  posouvá do strany.
+- Karty videí: ikona kanálu (fotka nebo písmeno), tučnější název, jméno kanálu a pod ním
+  „zhlédnutí · před 3 dny“. Kanál, který má prázdné zobrazované jméno, se ukazuje
+  přezdívkou (dřív u něj nebylo jméno žádné - oprava platí všude, i na stránce videa,
+  ve vyhledávání, u historie, playlistů…).
+- V oknech od 769 do 1180 px jsou 3 karty vedle sebe místo 2.
+- Nepřihlášený vidí nadpis „Populární na Kine“, přihlášený „Doporučeno pro tebe“.
+- Jazyk: první návštěva se řídí jazykem prohlížeče (čeština, angličtina, němčina,
+  slovenština, španělština, polština, francouzština, ukrajinština; jinak angličtina).
+  Ruční volba v nastavení má vždy přednost a zůstává. Dřív viděl každý nový návštěvník
+  angličtinu.
+- Nové texty ve všech 8 jazycích (tvary „1 zhlédnutí / 2 zhlédnutí / 5 zhlédnutí“,
+  „odběratelů“, „hodnocení“ podle jazyka; oznámení „X začal odebírat tvůj kanál“ se
+  překládá).
+
+POJISTKY PROTI NÁKLADŮM A ZNEUŽITÍ (bezpečnostní kontrola 0146)
+- Živé vysílání: každý účet smí vysílat nejvýš 8 h za 24 h (Plus 16 h, správci bez
+  stropu). Po vyčerpání se klíč na hodinu vypne a pak se zkusí znovu. Dřív mohl jeden
+  účet s obrázkem vysílat 24/7 a každá minuta je minuta záznamu v úložišti Cloudflare.
+- Nový účet (mladší než 24 h, bez Plus) dostane klíč k vysílání až den po založení
+  (stejná lhůta jako u nahrávání - UPLOAD_NEW_ACCOUNT_HOURS) a smí vystřihnout nejvýš
+  5 klipů za den (ostatní 30). Kdo si založí účet jen proto, aby platformu zatížil,
+  narazí hned.
+- Nezveřejněný záznam vysílání se u Cloudflare maže sám i tehdy, kdyby náš úklid
+  nedoběhl (Cloudflare dostane „smaž po X dnech“ hned při založení klíče).
+- Video, které se u Cloudflare nezpracovalo (chybný soubor, nedokončené nahrání), se tam
+  rovnou smaže - dřív tam zůstávalo, dokud ho tvůrce neodstranil, a drželo místo.
+- Limity požadavků (na účet / IP) u všeho, co stojí peníze: seznam záznamů vysílání,
+  stažení a zahození záznamu, Stripe (kontrola onboardingu, portál předplatného,
+  propojení výplat), propojení appky Kine Clipper.
+- Hledání GIFů jde přes náš server - klíč Giphy už nejezdí do prohlížeče každého
+  návštěvníka.
+- Balíček qs (závislost) zvednutý na 6.17.1 (opravená bezpečnostní chyba), nic
+  jiného v závislostech se neměnilo.
+- Prošlo: platby (webhook Stripe ověřený, Plus se bere jen ze Stripe), limity nahrávání,
+  vlastnictví vysílání, stahování, správa (admin), žádné klíče v repozitáři.
+
+OVĚŘENO
+- Build Next.js, kontrola typů, 80 sad testů (4 nové: jméno kanálu, jazyk prohlížeče,
+  rozpočet vysílání, nový účet), automatické kontroly v prohlížeči: stránka videa
+  (PC 1366, okno 990, telefon, video na výšku) 41/41, Domů 42/42, feedy 19/19, živé
+  vysílání 9/9, ztlumení, Podporovatelé, přetékání na telefonu.
+- Zkontrolovaná podle čerstvého stažení z GitHubu: ZIP obsahuje jen soubory, které se
+  proti GitHubu liší (62 + PRECTI-ME.txt + stav-souboru.json).
+
+CO ZŮSTÁVÁ NA PŘÍŠTĚ (domluvené, ještě není v kódu)
+- Pravidlo pro AI obsah (3 úrovně), štítek 18+ a filtry pro diváky, minimální věk 15,
+  sledování zdroje reklam (Meta Pixel + souhlas s cookies), „Hot takes“.
+- Kine Clipper: výchozí adresa playkine.com místo kine-lac.vercel.app, názvy klipů
+  podle hry.
+
 KINE web: uvítání pro nové návštěvníky + Kine jako appka v telefonu
 (dodávka kine-0145-2026-11-04 - obsahuje i 0144, tu už zvlášť nenahrávej)
 ==========================================================================================

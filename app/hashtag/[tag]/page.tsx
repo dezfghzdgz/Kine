@@ -36,7 +36,7 @@ export default function HashtagPage() {
     const [{ data }, hidden] = await Promise.all([
       supabase
         .from('videos')
-        .select('id, title, thumbnail_url, views, width, height, duration_seconds, category, owner_id, cloudflare_video_id, created_at, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username)')
+        .select('id, title, thumbnail_url, views, width, height, duration_seconds, category, owner_id, cloudflare_video_id, created_at, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username, display_name, avatar_url)')
         .eq('status', 'ready')
         .eq('visibility', 'public')
         .contains('hashtags', [tag])

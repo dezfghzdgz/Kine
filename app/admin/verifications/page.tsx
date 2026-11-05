@@ -1,5 +1,7 @@
 'use client';
 
+import { channelName } from '@/lib/channelName';
+
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -79,7 +81,7 @@ export default function AdminVerificationsPage() {
       ) : (
         pending.map((r) => (
           <div key={r.id} className="panel" style={{ marginBottom: 14 }}>
-            <p style={{ margin: 0, fontWeight: 600 }}>{r.profiles?.display_name ?? r.profiles?.username}</p>
+            <p style={{ margin: 0, fontWeight: 600 }}>{channelName(r.profiles, '—')}</p>
             <p style={{ margin: '4px 0 10px', fontSize: 12, color: 'var(--text-faint)' }}>
               {r.subscriber_count_at_request} odběratelů v době žádosti · {new Date(r.created_at).toLocaleDateString('cs-CZ')}
             </p>
@@ -110,7 +112,7 @@ export default function AdminVerificationsPage() {
           <p className="panel-heading" style={{ marginTop: 24 }}>Vyřízené žádosti</p>
           {reviewed.map((r) => (
             <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-              <span>{r.profiles?.display_name ?? r.profiles?.username}</span>
+              <span>{channelName(r.profiles, '—')}</span>
               <span style={{ color: r.status === 'approved' ? '#4ade80' : '#ff6b6b' }}>
                 {r.status === 'approved' ? 'Schváleno' : 'Zamítnuto'}
               </span>

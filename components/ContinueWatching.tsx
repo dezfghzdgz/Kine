@@ -39,7 +39,7 @@ export default function ContinueWatching() {
         .select(
           'video_id, progress_seconds, completed, watched_at, ' +
             'videos(id, title, thumbnail_url, views, duration_seconds, width, height, owner_id, ' +
-            'cloudflare_video_id, status, profiles!videos_owner_id_fkey(username))'
+            'cloudflare_video_id, status, profiles!videos_owner_id_fkey(username, display_name, avatar_url))'
         )
         .eq('user_id', authData.user.id)
         .eq('completed', false)

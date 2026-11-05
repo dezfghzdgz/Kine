@@ -70,6 +70,12 @@ import { VideoBlockRow } from '@/components/SparksShelf';
 import ProfileImage from '@/components/ProfileImage';
 import GameChip from '@/components/GameChip';
 import { gameFromHashtags } from '@/lib/games';
+import { channelInitial, channelName } from '@/lib/channelName';
+import { countLabel } from '@/lib/plural';
+import { timeAgo } from '@/lib/timeAgo';
+import ExpandableText from '@/components/ExpandableText';
+import MoreVideosList from '@/components/MoreVideosList';
+import { warmVideo } from '@/lib/warmVideo';
 
 const THEATER_KEY = 'kine-theater';
 const AUTOPLAY_KEY = 'kine-autoplay';
@@ -81,7 +87,7 @@ const MUSIC_VIEW_KEY = 'kine-music-view';
 // scheduled_at + is_premiere: premiéra, která ještě nezačala, má na kartě odpočet, nehraje náhled
 // po najetí a hudební fronta ji nepustí (lib/musicQueue.ts) - bez nich se tvářila jako hotové video.
 const RELATED_COLUMNS =
-  'id, title, thumbnail_url, views, width, height, duration_seconds, category, hashtags, created_at, owner_id, cloudflare_video_id, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username)';
+  'id, title, thumbnail_url, views, width, height, duration_seconds, category, hashtags, created_at, owner_id, cloudflare_video_id, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username, display_name, avatar_url)';
 
 /**
  * Kandidáti na „podobná videa“ vedle přehrávače (a po konci videa). Jen
@@ -185,6 +191,48 @@ function WatchPageInner() {
   const playlistScrolledForRef = useRef<string | null>(null);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const shareWrapRef = useRef<HTMLDivElement>(null);
+  // 0146: nabídka ⋯ (klip, sledovat později, nahlásit), počet odběratelů pod jménem kanálu,
+  // úzké okno (telefon) - panel vpravo jde pod video a otevírá se na Další videa.
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const moreWrapRef = useRef<HTMLDivElement>(null);
+  const [subscriberCount, setSubscriberCount] = useState<number | null>(null);
+  const [narrowLayout, setNarrowLayout] = useState(false);
+  useEffect(() => {
+    try {
+      const mq = window.matchMedia('(max-width: 900px)');
+      setNarrowLayout(mq.matches);
+      // Otočení telefonu / zúžení okna: panel vedle přehrávače se přesune pod něj a naopak.
+      const onChange = (e: MediaQueryListEvent) => setNarrowLayout(e.matches);
+      mq.addEventListener('change', onChange);
+      return () => mq.removeEventListener('change', onChange);
+    } catch {
+      // nevadí - zůstane rozložení pro počítač
+    }
+  }, []);
+  // Nabídky Sdílet a ⋯ se zavřou klepnutím vedle nebo klávesou Esc.
+  useEffect(() => {
+    if (!shareMenuOpen && !moreMenuOpen) return;
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (shareWrapRef.current?.contains(target) || moreWrapRef.current?.contains(target)) return;
+      setShareMenuOpen(false);
+      setMoreMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShareMenuOpen(false);
+        setMoreMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('touchstart', onDown, { passive: true });
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('touchstart', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [shareMenuOpen, moreMenuOpen]);
   const [reportOpen, setReportOpen] = useState(false);
   // Klipy (lib/clips.ts): panel na vystřižení, hotové klipy z tohoto videa,
   // a u klipu odkaz na původní video + kdo ho vystřihl.
@@ -315,7 +363,7 @@ function WatchPageInner() {
       // (premiéra s odpočtem), se nespustí samo (automatické pokračování).
       const ordered = await fetchByIds<any>(
         'videos',
-        'id, title, thumbnail_url, duration_seconds, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username)',
+        'id, title, thumbnail_url, duration_seconds, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username, display_name, avatar_url)',
         videoIds
       );
       setPlaylistVideos(ordered);
@@ -1249,7 +1297,7 @@ function WatchPageInner() {
       },
       currentTime: () => Number(playerRef.current?.currentTime) || 0,
       title: String(video.title ?? ''),
-      creator: video.profiles?.display_name ?? video.profiles?.username ?? null,
+      creator: channelName(video.profiles, '') || null,
       thumbnail: video.thumbnail_url ?? null,
     });
     return () => musicCommands.setVideoControls(null);
@@ -1305,6 +1353,33 @@ function WatchPageInner() {
   // (dřív automatické pokračování skončilo na odpočtu). Doporučená to vyřazují
   // už sama (lib/upNext.ts), tady jde o frontu a playlist.
   const autoplayTarget = upNextQueue.find((v: any) => !notPlayableYet(v, clock)) ?? null;
+
+  // 0146: další video se chystá dopředu - od 85 % délky (nebo posledních 20 s) se stáhne jeho
+  // manifest a náhled a připraví stránka, takže po konci (automatické přehrávání) naskočí hned.
+  const warmedNextRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoplayTarget?.id || !autoplay) return;
+    const targetId = autoplayTarget.id as string;
+    const check = () => {
+      if (warmedNextRef.current === targetId) return;
+      const player = playerRef.current;
+      const duration = Number(player?.duration) || Number(video?.duration_seconds) || 0;
+      const at = Number(player?.currentTime) || 0;
+      if (duration <= 0 || at <= 0) return;
+      if (at / duration >= 0.85 || duration - at <= 20) {
+        warmedNextRef.current = targetId;
+        warmVideo(autoplayTarget, 'low');
+        try {
+          router.prefetch(nextHref(targetId));
+        } catch {
+          // nevadí
+        }
+      }
+    };
+    const timer = setInterval(check, 2000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoplayTarget?.id, autoplay, video?.id]);
 
   function nextHref(id: string) {
     return playlistId ? `/watch/${id}?playlist=${playlistId}` : `/watch/${id}`;
@@ -1469,6 +1544,11 @@ function WatchPageInner() {
     setLoading(true);
     setNotFound(false);
     setNotFoundReason(null);
+    // Počet odběratelů a nabídka ⋯ patří k videu, které se právě načítá - hned
+    // na začátku, ne až po dotazech (tlačítko Odebírat by mezitím nahlásilo
+    // nový počet a ten by se tu zase smazal).
+    setSubscriberCount(null);
+    setMoreMenuOpen(false);
     // hls.js (vlastní přehrávač) se stahuje souběžně s údaji o videu - ať je po ruce hned.
     void preloadHls();
     // Kde divák minule skončil - souběžně s údaji o videu (dřív až po nich: o kolo dotazů déle).
@@ -1587,7 +1667,7 @@ function WatchPageInner() {
     setClipOrigin(null);
     supabase
       .from('videos')
-      .select('id, title, thumbnail_url, views, width, height, duration_seconds, category, owner_id, cloudflare_video_id, created_at, clipped_by, profiles!videos_owner_id_fkey(username)')
+      .select('id, title, thumbnail_url, views, width, height, duration_seconds, category, owner_id, cloudflare_video_id, created_at, clipped_by, profiles!videos_owner_id_fkey(username, display_name, avatar_url)')
       .eq('clipped_from_video_id', videoId)
       .eq('status', 'ready')
       .eq('visibility', 'public')
@@ -1805,7 +1885,7 @@ function WatchPageInner() {
   // Chat premiéry běží před začátkem a ještě chvíli po konci videa.
   const premiereChat = !!video.is_premiere && premiereAt > 0 && clock < premiereAt + ((video.duration_seconds ?? 0) + 30 * 60) * 1000;
 
-  const creatorName = video.profiles?.display_name ?? video.profiles?.username ?? t('unknownCreator');
+  const creatorName = channelName(video.profiles, t('unknownCreator'));
   // Hra videa podle hashtagů (lib/games.ts) - štítek pod názvem vede na stránku hry.
   const videoGame = gameFromHashtags(video.hashtags, video.category);
   // Kapitoly zadané při nahrání, jinak z popisu ("0:00 Úvod" po řádcích) - lib/captions.ts.
@@ -2237,6 +2317,160 @@ function WatchPageInner() {
             <GameChip game={videoGame} />
           </div>
         )}
+
+        {/* 0146: pod názvem jeden řádek jako na YouTube - vlevo kanál (ikona, jméno, odběratelé,
+            Odebírat), vpravo akce. Dřív byl tvůrce v panelu vpravo a akce ve dvou řadách. */}
+        <div className="watch-channel-row">
+          <div className="watch-channel-block">
+            <Link href={`/channel/${video.profiles?.id}`} className="watch-channel">
+              <span className="profile-avatar-small watch-channel-avatar">
+                {video.profiles?.avatar_url ? <ProfileImage src={video.profiles.avatar_url} alt={creatorName} /> : <span aria-hidden="true">{channelInitial(creatorName)}</span>}
+              </span>
+              <span className="watch-channel-text">
+                <span className="watch-channel-name">
+                  <span className="watch-channel-name-text">{creatorName}</span>
+                  <VerifiedBadge tier={video.profiles?.verification_tier} />
+                  <PlusBadge userId={video.profiles?.id} />
+                  {trustRating !== null && trustRating >= 90 && (
+                    <span className="creator-star" title={t('highRatingTitle').replace('{rating}', String(trustRating))}>
+                      <UiIcon name="starFilled" size={14} />
+                    </span>
+                  )}
+                </span>
+                <span className="watch-channel-sub">
+                  {subscriberCount !== null ? countLabel(subscriberCount, lang, t, 'subscribersCount') : ' '}
+                  {trustRating !== null && subscriberCount !== null ? ` · ${t('creatorRatingLabel').replace('{rating}', String(trustRating))}` : ''}
+                </span>
+              </span>
+            </Link>
+            {video.profiles?.id && <SubscribeButton channelId={video.profiles.id} hideCount onCount={setSubscriberCount} />}
+          </div>
+
+          <div className="watch-actions">
+            <VideoReactions videoId={video.id} ownerId={video.profiles?.id} />
+            {/* Super díky (peníze tvůrci se vzkazem pod videem) - jen když tvůrce může peníze přijímat. */}
+            {video.profiles?.id && (
+              <VideoThanksButton videoId={video.id} channelId={video.profiles.id} channelName={creatorName} isOwner={ownerView} loggedIn={!!userId} />
+            )}
+            <div ref={shareWrapRef} style={{ position: 'relative' }}>
+              <button className="reaction-btn" onClick={() => { setMoreMenuOpen(false); setShareMenuOpen((v) => !v); }} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ShareIcon size={16} /> {t('share')}
+              </button>
+              {shareMenuOpen && (
+                <div
+                  className="profile-dropdown"
+                  style={{
+                    bottom: 'auto',
+                    top: 'calc(100% + 8px)',
+                    width: 200,
+                    maxWidth: 'calc(100vw - 16px)',
+                    // U pravého okraje okna se otevře doleva (lib/dropdownSide.ts).
+                    ...(dropdownSide(shareWrapRef.current, 200) === 'right' ? { left: 'auto', right: 0 } : { left: 0, right: 'auto' }),
+                  }}
+                >
+                  <button className="profile-dropdown-item" onClick={shareVideo}>{t('shareVideo')}</button>
+                  <button className="profile-dropdown-item" onClick={shareMoment}>{t('shareMoment')}</button>
+                </div>
+              )}
+            </div>
+            <AddToPlaylist videoId={video.id} />
+            <DownloadButton videoId={video.id} cloudflareVideoId={video.cloudflare_video_id} />
+            {/* ⋯ Další možnosti: klip, sledovat později, nahlásit (a pro moderátora smazání). */}
+            <div ref={moreWrapRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className={`reaction-btn watch-more-btn ${moreMenuOpen ? 'active' : ''}`}
+                onClick={() => { setShareMenuOpen(false); setMoreMenuOpen((v) => !v); }}
+                aria-haspopup="menu"
+                aria-expanded={moreMenuOpen}
+                aria-label={t('watchMoreMenu')}
+                title={t('watchMoreMenu')}
+              >
+                <UiIcon name="dots" size={18} />
+              </button>
+              {moreMenuOpen && (
+                <div
+                  className="profile-dropdown watch-more-menu"
+                  role="menu"
+                  style={{
+                    bottom: 'auto',
+                    top: 'calc(100% + 8px)',
+                    width: 230,
+                    maxWidth: 'calc(100vw - 16px)',
+                    ...(dropdownSide(moreWrapRef.current, 230) === 'right' ? { left: 'auto', right: 0 } : { left: 0, right: 'auto' }),
+                  }}
+                >
+                  {video.visibility === 'public' && video.status === 'ready' && playerMode !== 'music' && (
+                    <button
+                      className="profile-dropdown-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setMoreMenuOpen(false);
+                        if (!userId) {
+                          router.push('/login');
+                          return;
+                        }
+                        setClipOpen((v) => !v);
+                      }}
+                    >
+                      <UiIcon name="scissors" size={16} /> {t('clipButton')}
+                    </button>
+                  )}
+                  <button className="profile-dropdown-item" role="menuitem" onClick={() => { setMoreMenuOpen(false); toggleWatchLater(); }}>
+                    <WatchLaterIcon size={16} /> {inWatchLater ? `✓ ${t('watchLater')}` : t('watchLater')}
+                  </button>
+                  <button className="profile-dropdown-item" role="menuitem" onClick={() => { setMoreMenuOpen(false); setReportOpen(true); }}>
+                    <ReportIcon size={16} /> {t('report')}
+                  </button>
+                  {isModerator && (
+                    <button className="profile-dropdown-item" role="menuitem" onClick={() => { setMoreMenuOpen(false); setConfirmModDelete(true); }} style={{ color: '#ff6b6b' }}>
+                      <TrashIcon size={16} /> {t('modDeleteVideoButton')}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Zhlédnutí · stáří videa · odkud klip je · stav zpracování. */}
+        <p className="watch-meta-line">
+          <span>{typeof video.views === 'number' ? countLabel(video.views, lang, t, 'viewsCount') : `${video.views ?? 0} ${t('views')}`}</span>
+          {video.created_at && !premiereWaiting && (
+            <span title={new Date(video.created_at).toLocaleString(DATE_LOCALES[lang])}>{timeAgo(video.created_at, DATE_LOCALES[lang])}</span>
+          )}
+          {video.status === 'failed' ? (
+            <span aria-live="polite">{t('videoStatusFailed')}</span>
+          ) : video.status !== 'ready' ? (
+            <span aria-live="polite">
+              {t('processingVideoNote')}
+              {processingPercent !== null ? ` ${processingPercent}%` : ''}
+            </span>
+          ) : null}
+          {clipOrigin && (
+            <span>
+              {clipOrigin.live || !clipOrigin.id ? (
+                <Link href={`/live/${video.owner_id}`}>{t('clipOfLive')}</Link>
+              ) : (
+                <Link href={`/watch/${clipOrigin.id}`}>{t('clipOfVideo').replace('{title}', clipOrigin.title)}</Link>
+              )}
+              {clipOrigin.by && <> · {t('clipBy').replace('{user}', clipOrigin.by)}</>}
+            </span>
+          )}
+        </p>
+
+        {/* Popis hned pod videem (sbalený, jako na YouTube) - tam, kde ho lidi hledají. Dřív byl v záložce vpravo. */}
+        <section className="watch-description" aria-label={t('watchDescriptionHeading')}>
+          {video.description ? <ExpandableText text={video.description} /> : <p className="watch-description-empty">{t('noDescriptionProvidedNote')}</p>}
+          {Array.isArray(video.hashtags) && video.hashtags.length > 0 && (
+            <div className="watch-hashtags">
+              {video.hashtags.map((h: string) => (
+                <Link key={h} href={`/hashtag/${h}`}>#{h}</Link>
+              ))}
+            </div>
+          )}
+        </section>
+
         {chapters.length > 0 && !premiereWaiting && (
           <div className="chapter-list">
             <button type="button" className="chapter-list-toggle" onClick={() => setChaptersOpen((v) => !v)} aria-expanded={chaptersOpen}>
@@ -2263,38 +2497,6 @@ function WatchPageInner() {
             )}
           </div>
         )}
-        {video.status === 'failed' ? (
-          <p className="clip-origin" aria-live="polite">
-            {t('videoStatusFailed')}
-          </p>
-        ) : video.status !== 'ready' && (
-          <p className="clip-origin" aria-live="polite">
-            {t('processingVideoNote')}
-            {processingPercent !== null ? ` ${processingPercent}%` : ''}
-          </p>
-        )}
-        {clipOrigin && (
-          <p className="clip-origin">
-            {clipOrigin.live || !clipOrigin.id ? (
-              <Link href={`/live/${video.owner_id}`}>{t('clipOfLive')}</Link>
-            ) : (
-              <Link href={`/watch/${clipOrigin.id}`}>{t('clipOfVideo').replace('{title}', clipOrigin.title)}</Link>
-            )}
-            {clipOrigin.by && <span> · {t('clipBy').replace('{user}', clipOrigin.by)}</span>}
-          </p>
-        )}
-        <div className="video-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-          <Link href={`/channel/${video.profiles?.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span className="profile-avatar-small" style={{ width: 28, height: 28 }}>
-              {video.profiles?.avatar_url ? <ProfileImage src={video.profiles.avatar_url} alt={creatorName} /> : null}
-            </span>
-            <span>{creatorName}</span>
-            <VerifiedBadge tier={video.profiles?.verification_tier} />
-            <PlusBadge userId={video.profiles?.id} />
-                {trustRating !== null && trustRating >= 90 && <span title={t('highRatingTitle').replace('{rating}', String(trustRating))} style={{ marginLeft: 5, fontSize: 13 }}>⭐</span>}
-          </Link>
-          <span>{video.views} {t('views')}</span>
-        </div>
 
         {/* Spolutvůrci: profily všech, kdo se na videu podíleli, přímo pod
             videem - každý svoje jméno, avatar a odkaz na kanál. Dřív se
@@ -2326,73 +2528,6 @@ function WatchPageInner() {
             ))}
           </div>
         )}
-
-        <div className="video-actions-row" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 14 }}>
-          <VideoReactions videoId={video.id} ownerId={video.profiles?.id} />
-          {video.profiles?.id && <SubscribeButton channelId={video.profiles.id} />}
-          {/* Super díky (peníze tvůrci se vzkazem pod videem) - jen když tvůrce může peníze přijímat. */}
-          {video.profiles?.id && (
-            <VideoThanksButton videoId={video.id} channelId={video.profiles.id} channelName={creatorName} isOwner={ownerView} loggedIn={!!userId} />
-          )}
-          <div ref={shareWrapRef} style={{ position: 'relative' }}>
-            <button className="reaction-btn" onClick={() => setShareMenuOpen((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <ShareIcon size={16} /> {t('share')}
-            </button>
-            {shareMenuOpen && (
-              <div
-                className="profile-dropdown"
-                style={{
-                  bottom: 'auto',
-                  top: 'calc(100% + 8px)',
-                  width: 200,
-                  maxWidth: 'calc(100vw - 16px)',
-                  // U pravého okraje okna se otevře doleva (lib/dropdownSide.ts).
-                  ...(dropdownSide(shareWrapRef.current, 200) === 'right' ? { left: 'auto', right: 0 } : { left: 0, right: 'auto' }),
-                }}
-              >
-                <button className="profile-dropdown-item" onClick={shareVideo}>{t('shareVideo')}</button>
-                <button className="profile-dropdown-item" onClick={shareMoment}>{t('shareMoment')}</button>
-              </div>
-            )}
-          </div>
-          {video.visibility === 'public' && video.status === 'ready' && playerMode !== 'music' && (
-            <button
-              className={`reaction-btn ${clipOpen ? 'active' : ''}`}
-              onClick={() => {
-                if (!userId) {
-                  router.push('/login');
-                  return;
-                }
-                setClipOpen((v) => !v);
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
-                <circle cx="6" cy="6" r="3" />
-                <circle cx="6" cy="18" r="3" />
-                <path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12" />
-              </svg>
-              {t('clipButton')}
-            </button>
-          )}
-          <AddToPlaylist videoId={video.id} />
-          <DownloadButton videoId={video.id} cloudflareVideoId={video.cloudflare_video_id} />
-          <button className={`reaction-btn ${inWatchLater ? 'active' : ''}`} onClick={toggleWatchLater} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <WatchLaterIcon size={16} /> {inWatchLater ? `✓ ${t('watchLater')}` : t('watchLater')}
-          </button>
-          <button className="reaction-btn" onClick={() => setReportOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <ReportIcon size={16} /> {t('report')}
-          </button>
-          {isModerator && (
-            <button
-              className="reaction-btn"
-              onClick={() => setConfirmModDelete(true)}
-              style={{ color: '#ff6b6b', display: 'flex', alignItems: 'center', gap: 6 }}
-            >
-              <TrashIcon size={16} /> {t('modDeleteVideoButton')}
-            </button>
-          )}
-        </div>
 
         {clipOpen && (
           <ClipPanel
@@ -2431,41 +2566,25 @@ function WatchPageInner() {
             {(video.is_premiere ? t('premiereOwnerNote') : t('scheduledOwnerNote')).replace('{date}', new Date(premiereAt).toLocaleString(DATE_LOCALES[lang]))}
           </p>
         )}
+
+        {/* Klipy vystřižené z tohoto videa - pod videem ve velkých kartách. */}
+        {clips.length > 0 && (
+          <div className="watch-clips">
+            <p className="section-title">{t('clipsFromVideoHeading')}</p>
+            <div className={clips.some((c: any) => isSpark(c)) ? 'shorts-grid' : 'video-grid'}>
+              {clips.map((c: any) => (
+                <VideoCard key={c.id} video={c} href={`/watch/${c.id}`} formatDuration={formatDuration} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {(clips.length > 0 || otherVideos.length > 0) && (
-        <div className="watch-recommendations">
-          {clips.length > 0 && (
-            <>
-              <p className="section-title">{t('clipsFromVideoHeading')}</p>
-              <div className={clips.some((c: any) => isSpark(c)) ? 'shorts-grid' : 'video-grid'} style={{ marginBottom: 28 }}>
-                {clips.map((c: any) => (
-                  <VideoCard key={c.id} video={c} href={`/watch/${c.id}`} formatDuration={formatDuration} />
-                ))}
-              </div>
-            </>
-          )}
-          {otherVideos.length > 0 && <p className="section-title">{t('otherVideosHeading')}</p>}
-          {/* Stejné karty jako na hlavní stránce - včetně nabídky ⋮ (fronta,
-              uložit, playlist, nezajímá mě, nahlásit) a náhledu po najetí.
-              Dřív tu byl vlastní zjednodušený odkaz bez nabídky. */}
-          {otherVideos.length > 0 && buildVideoBlocks(otherVideos).map((block, bi) => (
-            <VideoBlockRow key={bi} type={block.type} style={{ marginBottom: 20 }}>
-              {block.items.map((v: any) => (
-                <VideoCard
-                  key={v.id}
-                  video={v}
-                  href={block.type === 'sparks' ? `/sparks?start=${v.id}` : `/watch/${v.id}`}
-                  isSparks={block.type === 'sparks'}
-                  formatDuration={formatDuration}
-                />
-              ))}
-            </VideoBlockRow>
-          ))}
-        </div>
-      )}
-
-      <div className="watch-comments-column">
+      {/* 0146: pravý sloupec - chat / fronta / playlist / podpory a pod nimi jeden panel
+          se záložkami Komentáře | Další videa | Přepis | Technické. Komentáře se čtou
+          při koukání (jako chat u přenosu); kdo video dokouká, má další videa hned vedle.
+          Na telefonu je sloupec pod videem a otevírá se na Další videa. */}
+      <div className="watch-side-column">
         {/* Video ze živého vysílání: chat se přehrává spolu s videem (components/ChatReplay.tsx). */}
         {video.live_room && video.live_started_at && (
           <div style={{ marginBottom: 20 }}>
@@ -2481,44 +2600,135 @@ function WatchPageInner() {
             <LiveChat room={videoRoom(video.id)} canModerate={ownerView} />
           </div>
         )}
-        <VideoThanksList videoId={video.id} canModerate={ownerView || isModerator} />
-        <p className="section-title">{t('interactionPanelTitle')}</p>
 
-        {/* Tvůrce a diskuse v JEDNÉ kartě: nahoře tvůrce (odkaz na kanál), pod ním záložky
-            Popis / Komentáře / Přepis / Technické. Dřív dvě karty nalepené na sobě. */}
-        <CommentSection
-          header={
-            <div className="creator-row">
-              <Link href={`/channel/${video.profiles?.id}`} className="creator-avatar" style={{ overflow: 'hidden' }} aria-label={creatorName}>
-                {video.profiles?.avatar_url ? (
-                  <ProfileImage src={video.profiles.avatar_url} alt={creatorName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : null}
-              </Link>
+        {/* Fronta - videa přidaná přes ⋮ na kartě. Hraje se přednostně před
+            playlistem i doporučenými videy. */}
+        {queue.length > 0 && (
+          <div className="playlist-panel">
+            <div className="playlist-panel-head">
               <div style={{ minWidth: 0 }}>
-                <Link href={`/channel/${video.profiles?.id}`} className="creator-name" style={{ display: 'block' }}>
-                  {creatorName}
-                  <VerifiedBadge tier={video.profiles?.verification_tier} />
-                  {trustRating !== null && trustRating >= 90 && (
-                    <span className="creator-star" title={t('highRatingTitle').replace('{rating}', String(trustRating))}>
-                      <UiIcon name="starFilled" size={14} />
-                    </span>
-                  )}
-                </Link>
-                {/* Pod jménem hodnocení (když je), jinak odkaz na kanál - žádné zvláštní tlačítko,
-                    karta je i na úzkém sloupci jeden řádek. */}
-                {trustRating !== null ? (
-                  <p className="creator-trust">{t('creatorRatingLabel').replace('{rating}', String(trustRating))}</p>
-                ) : (
-                  <Link href={`/channel/${video.profiles?.id}`} className="creator-trust creator-open-link">
-                    {t('viewChannel')}
-                    <UiIcon name="chevronRight" size={12} />
-                  </Link>
-                )}
+                <p className="playlist-panel-title" style={{ margin: 0 }}>{t('queuePanelTitle')}</p>
+                <p className="playlist-panel-sub">
+                  {videoCountLabel(queue.length, lang, t)}
+                </p>
               </div>
+              <button onClick={clearQueue} className="playlist-panel-toggle" style={{ width: 'auto', padding: '0 10px', fontSize: 12 }}>
+                {t('queueClear')}
+              </button>
             </div>
-          }
+
+            <div className="playlist-panel-list">
+              {queue.map((v, i) => (
+                <div key={v.id} className={`playlist-panel-item ${v.id === videoId ? 'current' : ''}`}>
+                  <Link href={`/watch/${v.id}`} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+                    <span className="playlist-panel-index">{v.id === videoId ? '▶' : i + 1}</span>
+                    <span className="playlist-panel-thumb">
+                      {v.thumbnail_url && (
+                        <Image src={v.thumbnail_url} alt={v.title} width={96} height={54} style={{ objectFit: 'cover' }} />
+                      )}
+                      {!!v.duration_seconds && v.duration_seconds > 0 && (
+                        <span className="playlist-panel-duration">{formatChapterTime(v.duration_seconds)}</span>
+                      )}
+                    </span>
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span className="playlist-panel-item-title">{v.title}</span>
+                      <span className="playlist-panel-item-meta">{v.username ?? t('unknownCreator')}</span>
+                    </span>
+                  </Link>
+                  <button
+                    onClick={() => removeFromQueue(v.id)}
+                    aria-label={t('queueRemove')}
+                    style={{ background: 'none', color: 'var(--text-faint)', padding: '4px 8px', fontSize: 12 }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Panel playlistu: celý seznam videí, kde v playlistu jsi, přeskočit
+            kamkoliv - tak, jak to má YouTube. */}
+        {playlistInfo && (
+          <div className="playlist-panel">
+            <div className="playlist-panel-head">
+              <div style={{ minWidth: 0 }}>
+                <Link href={`/playlists/${playlistId}`} className="playlist-panel-title">
+                  {playlistInfo.title}
+                </Link>
+                <p className="playlist-panel-sub">
+                  {t('watchingFromPlaylistLabel')}
+                  {playlistIndex >= 0 && ` · ${playlistIndex + 1}/${playlistVideos.length}`}
+                </p>
+              </div>
+              <button
+                onClick={() => setPlaylistPanelOpen((v) => !v)}
+                className="playlist-panel-toggle"
+                aria-label={playlistPanelOpen ? t('playlistCollapse') : t('playlistExpand')}
+              >
+                {playlistPanelOpen ? '▴' : '▾'}
+              </button>
+            </div>
+
+            {playlistPanelOpen && (
+              <div className="playlist-panel-list">
+                {playlistVideos.map((v: any, i: number) => {
+                  const isCurrent = v.id === videoId;
+                  return (
+                    <Link
+                      key={v.id}
+                      href={nextHref(v.id)}
+                      className={`playlist-panel-item ${isCurrent ? 'current' : ''}`}
+                      ref={isCurrent ? scrollCurrentIntoView : undefined}
+                    >
+                      <span className="playlist-panel-index">{isCurrent ? '▶' : i + 1}</span>
+                      <span className="playlist-panel-thumb">
+                        {v.thumbnail_url && (
+                          <Image src={v.thumbnail_url} alt={v.title} width={96} height={54} style={{ objectFit: 'cover' }} />
+                        )}
+                        {v.duration_seconds > 0 && (
+                          <span className="playlist-panel-duration">{formatChapterTime(v.duration_seconds)}</span>
+                        )}
+                      </span>
+                      <span style={{ minWidth: 0, flex: 1 }}>
+                        <span className="playlist-panel-item-title">{v.title}</span>
+                        <span className="playlist-panel-item-meta">{channelName(v.profiles, t('unknownCreator'))}</span>
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="playlist-panel-foot">
+              <Link
+                href={playlistIndex > 0 ? nextHref(playlistVideos[playlistIndex - 1].id) : '#'}
+                className={`playlist-panel-nav ${playlistIndex > 0 ? '' : 'disabled'}`}
+                aria-disabled={playlistIndex <= 0}
+              >
+                ← {t('playlistPrevButton')}
+              </Link>
+              <Link
+                href={playlistNext ? nextHref(playlistNext.id) : '#'}
+                className={`playlist-panel-nav ${playlistNext ? '' : 'disabled'}`}
+                aria-disabled={!playlistNext}
+              >
+                {t('playlistNextButton')} →
+              </Link>
+            </div>
+          </div>
+        )}
+
+        <VideoThanksList videoId={video.id} canModerate={ownerView || isModerator} />
+
+        <CommentSection
           videoId={video.id}
           description={video.description}
+          hideDescription
+          sidePanel
+          defaultTab={narrowLayout ? 'more' : 'comments'}
+          moreVideos={otherVideos.length > 0 ? <MoreVideosList videos={otherVideos} formatDuration={formatDuration} playlistSuffix={playlistId ? `?playlist=${playlistId}` : ''} /> : undefined}
           ownerId={video.profiles?.id}
           onSeek={seekTo}
           captions={Array.isArray(video.captions) ? video.captions : null}

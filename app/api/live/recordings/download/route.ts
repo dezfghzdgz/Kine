@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { allowRequest, tooManyRequests } from '@/lib/rateLimit';
 import { userFromRequest } from '@/lib/apiUser';
 import { recordingDownload } from '@/lib/liveRecording';
 
@@ -14,6 +15,9 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   const user = await userFromRequest(req);
   if (!user) return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });
+
+  // 0146: brzda - každé volání jde na Cloudflare / Stripe (společný limit účtu).
+  if (!allowRequest(`recordings-download:${user.id}`, 10, 60000)) return tooManyRequests(60);
   const body = await req.json().catch(() => ({}));
   const uid = String(body?.videoUid ?? '').trim() || 'latest';
   const result = await recordingDownload(user.id, uid);

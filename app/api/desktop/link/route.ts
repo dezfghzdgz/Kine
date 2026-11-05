@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { allowRequest, tooManyRequests } from '@/lib/rateLimit';
 import { supabaseServer } from '@/lib/supabaseServer';
 
 /**
@@ -23,6 +24,8 @@ export async function POST(req: NextRequest) {
   if (userError || !userData.user?.email) {
     return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });
   }
+  // 0146: brzda - každé volání vyrábí přihlašovací odkaz (Supabase Auth).
+  if (!allowRequest(`desktop-link:${userData.user.id}`, 5, 60_000)) return tooManyRequests(60);
 
   const { data, error } = await supabaseServer.auth.admin.generateLink({
     type: 'magiclink',

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { allowRequest, tooManyRequests } from '@/lib/rateLimit';
 import { publicError } from '@/lib/paymentsServer';
 import { PAYMENTS_ENABLED, PAYMENTS_OFF } from '@/lib/payments';
 import { stripeServer } from '@/lib/stripeServer';
@@ -19,6 +20,9 @@ export async function POST(req: NextRequest) {
 
   const { data: userData } = await supabaseServer.auth.getUser(token);
   if (!userData.user) return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });
+
+  // 0146: brzda - každé volání jde na Cloudflare / Stripe (společný limit účtu).
+  if (!allowRequest(`stripe-portal:${userData.user.id}`, 6, 60000)) return tooManyRequests(60);
 
   const { data: profile } = await supabaseServer
     .from('profiles')

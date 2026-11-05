@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { allowRequest, tooManyRequests } from '@/lib/rateLimit';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isMissingTable, userFromRequest } from '@/lib/apiUser';
 import { listInputVideos } from '@/lib/liveStream';
@@ -22,6 +23,9 @@ async function myInput(ownerId: string) {
 export async function GET(req: NextRequest) {
   const user = await userFromRequest(req);
   if (!user) return NextResponse.json({ error: 'Musíš být přihlášený.' }, { status: 401 });
+
+  // 0146: brzda - každé volání jde na Cloudflare / Stripe (společný limit účtu).
+  if (!allowRequest(`recordings-list:${user.id}`, 20, 60000)) return tooManyRequests(60);
   const { inputId, error } = await myInput(user.id);
   if (isMissingTable(error)) return NextResponse.json({ recordings: [] });
   if (!inputId) return NextResponse.json({ recordings: [] });

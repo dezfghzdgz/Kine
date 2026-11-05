@@ -212,24 +212,30 @@ export default function Sidebar() {
         {baseLinks(t).map(({ href, label, icon: Icon }) => {
           const active = pathname === href;
           return (
-            <Link key={href} href={href} className={`sidebar-link ${active ? 'active' : ''}`}>
+            <Link key={href} href={href} className={`sidebar-link ${active ? 'active' : ''}`} title={label}>
               <Icon />
-              {label}
+              <span className="sidebar-label">{label}</span>
             </Link>
           );
         })}
 
         <button
-          className={`sidebar-link ${pathname === '/explore' ? 'active' : ''}`}
+          className={`sidebar-link sidebar-explore ${pathname === '/explore' ? 'active' : ''}`}
           onClick={() => setExploreOpen((v) => !v)}
-          style={{ justifyContent: 'space-between' }}
+          title={t('explore')}
         >
-          <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span className="sidebar-explore-main">
             <ExploreIcon />
-            {t('explore')}
+            <span className="sidebar-label">{t('explore')}</span>
           </span>
-          <span style={{ fontSize: 11, transform: exploreOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}>▾</span>
+          <span className="sidebar-chevron" style={{ transform: exploreOpen ? 'rotate(180deg)' : 'none' }}>▾</span>
         </button>
+        {/* 0146: v úzké liště u přehrávače (jen ikony) není kam rozbalit podseznam -
+            ikona Prozkoumat tam vede rovnou na stránku. Jinde je schovaná (CSS). */}
+        <Link href="/explore" className={`sidebar-link sidebar-explore-rail ${pathname === '/explore' ? 'active' : ''}`} title={t('explore')}>
+          <ExploreIcon />
+          <span className="sidebar-label">{t('explore')}</span>
+        </Link>
         {exploreOpen && (
           <div className="sidebar-sublist">
             {EXPLORE_TABS.map(({ tab, key, icon: Icon }) => (
@@ -248,9 +254,9 @@ export default function Sidebar() {
         )}
 
         {/* Všechny přenosy, které teď běží - číslo = kolik kanálů vysílá. */}
-        <Link href="/streams" className={`sidebar-link ${pathname === '/streams' ? 'active' : ''}`}>
+        <Link href="/streams" className={`sidebar-link ${pathname === '/streams' ? 'active' : ''}`} title={t('navLive')}>
           <LiveNowIcon />
-          {t('navLive')}
+          <span className="sidebar-label">{t('navLive')}</span>
           {liveCount > 0 && (
             <span className="sidebar-live-count" title={t('navLiveCount').replace('{count}', String(liveCount))}>
               {liveCount}
@@ -264,9 +270,9 @@ export default function Sidebar() {
             {loggedInLinksGroup1(t).map(({ href, label, icon: Icon }) => {
               const active = pathname === href;
               return (
-                <Link key={href} href={href} className={`sidebar-link ${active ? 'active' : ''}`}>
+                <Link key={href} href={href} className={`sidebar-link ${active ? 'active' : ''}`} title={label}>
                   <Icon />
-                  {label}
+                  <span className="sidebar-label">{label}</span>
                 </Link>
               );
             })}
@@ -275,9 +281,9 @@ export default function Sidebar() {
             {loggedInLinksGroup2(t).map(({ href, label, icon: Icon }) => {
               const active = pathname === href;
               return (
-                <Link key={href} href={href} className={`sidebar-link ${active ? 'active' : ''}`}>
+                <Link key={href} href={href} className={`sidebar-link ${active ? 'active' : ''}`} title={label}>
                   <Icon />
-                  {label}
+                  <span className="sidebar-label">{label}</span>
                 </Link>
               );
             })}
@@ -285,80 +291,80 @@ export default function Sidebar() {
         )}
 
         <div className="sidebar-divider" />
-        <Link href="/upload" className={`sidebar-link ${pathname === '/upload' ? 'active' : ''}`}>
+        <Link href="/upload" className={`sidebar-link ${pathname === '/upload' ? 'active' : ''}`} title={t('create')}>
           <CreateIcon />
-          {t('create')}
+          <span className="sidebar-label">{t('create')}</span>
         </Link>
         {user && (
-          <Link href="/live" className={`sidebar-link ${pathname === '/live' ? 'active' : ''}`}>
+          <Link href="/live" className={`sidebar-link ${pathname === '/live' ? 'active' : ''}`} title={t('goLiveLink')}>
             <span className="sidebar-live-icon" aria-hidden="true" />
-            {t('goLiveLink')}
+            <span className="sidebar-label">{t('goLiveLink')}</span>
           </Link>
         )}
         {/* Podpora Kine (platba) - až poběží placení (lib/payments.ts). I bez přihlášení
             (dar je pak anonymní), ať je „Podpořit Kine“ vidět pro všechny. */}
         {PAYMENTS_ENABLED && (
-          <Link href="/donate" className={`sidebar-link ${pathname === '/donate' ? 'active' : ''}`}>
+          <Link href="/donate" className={`sidebar-link ${pathname === '/donate' ? 'active' : ''}`} title={t('donateSidebarLabel')}>
             <DonateIcon />
-            {t('donateSidebarLabel')}
+            <span className="sidebar-label">{t('donateSidebarLabel')}</span>
           </Link>
         )}
         {isModerator && (
-          <Link href="/reports" className={`sidebar-link ${pathname === '/reports' ? 'active' : ''}`}>
+          <Link href="/reports" className={`sidebar-link ${pathname === '/reports' ? 'active' : ''}`} title={t('reportsPageTitle')}>
             <UiIcon name="flag" size={20} />
-            {t('reportsPageTitle')}
+            <span className="sidebar-label">{t('reportsPageTitle')}</span>
           </Link>
         )}
         {isAdmin && (
-          <Link href="/admin/revenue-share" className={`sidebar-link ${pathname === '/admin/revenue-share' ? 'active' : ''}`}>
+          <Link href="/admin/revenue-share" className={`sidebar-link ${pathname === '/admin/revenue-share' ? 'active' : ''}`} title={t('revenueShareLabel')}>
             <UiIcon name="coins" size={20} />
-            {t('revenueShareLabel')}
+            <span className="sidebar-label">{t('revenueShareLabel')}</span>
           </Link>
         )}
         {isAdmin && (
-          <Link href="/admin/errors" className={`sidebar-link ${pathname === '/admin/errors' ? 'active' : ''}`}>
+          <Link href="/admin/errors" className={`sidebar-link ${pathname === '/admin/errors' ? 'active' : ''}`} title={t('clientErrorsLabel')}>
             <UiIcon name="bug" size={20} />
-            {t('clientErrorsLabel')}
+            <span className="sidebar-label">{t('clientErrorsLabel')}</span>
           </Link>
         )}
         {/* Nastavení plateb: kontrola Stripe, ceny, webhook (app/admin/stripe). */}
         {isAdmin && (
-          <Link href="/admin/stripe" className={`sidebar-link ${pathname === '/admin/stripe' ? 'active' : ''}`}>
+          <Link href="/admin/stripe" className={`sidebar-link ${pathname === '/admin/stripe' ? 'active' : ''}`} title={t('stripeSetupLabel')}>
             <UiIcon name="coins" size={20} />
-            {t('stripeSetupLabel')}
+            <span className="sidebar-label">{t('stripeSetupLabel')}</span>
           </Link>
         )}
         {/* Hlídač nákladů (Cloudflare, Supabase) a nastavení push oznámení. */}
         {isAdmin && (
-          <Link href="/admin/costs" className={`sidebar-link ${pathname === '/admin/costs' ? 'active' : ''}`}>
+          <Link href="/admin/costs" className={`sidebar-link ${pathname === '/admin/costs' ? 'active' : ''}`} title={t('costsAdminLabel')}>
             <UiIcon name="chart" size={20} />
-            {t('costsAdminLabel')}
+            <span className="sidebar-label">{t('costsAdminLabel')}</span>
           </Link>
         )}
         {isAdmin && (
-          <Link href="/admin/push" className={`sidebar-link ${pathname === '/admin/push' ? 'active' : ''}`}>
+          <Link href="/admin/push" className={`sidebar-link ${pathname === '/admin/push' ? 'active' : ''}`} title={t('pushAdminLabel')}>
             <UiIcon name="bell" size={20} />
-            {t('pushAdminLabel')}
+            <span className="sidebar-label">{t('pushAdminLabel')}</span>
           </Link>
         )}
         {/* Podporovatelé (playkine.com/supporters) - přidávání jmen z Instagramu. */}
         {isAdmin && (
-          <Link href="/admin/supporters" className={`sidebar-link ${pathname === '/admin/supporters' ? 'active' : ''}`}>
+          <Link href="/admin/supporters" className={`sidebar-link ${pathname === '/admin/supporters' ? 'active' : ''}`} title={t('fansAdminLabel')}>
             <UiIcon name="heart" size={20} />
-            {t('fansAdminLabel')}
+            <span className="sidebar-label">{t('fansAdminLabel')}</span>
           </Link>
         )}
         {/* Odznaky spravuje celý tým Kine - moderátor i správce. */}
         {(isAdmin || isModerator) && (
-          <Link href="/admin/badges" className={`sidebar-link ${pathname === '/admin/badges' ? 'active' : ''}`}>
+          <Link href="/admin/badges" className={`sidebar-link ${pathname === '/admin/badges' ? 'active' : ''}`} title={t('specialBadgesAdminLabel')}>
             <UiIcon name="trophy" size={20} />
-            {t('specialBadgesAdminLabel')}
+            <span className="sidebar-label">{t('specialBadgesAdminLabel')}</span>
           </Link>
         )}
         {/* Co je Kine a naše appky - pro každého, i nepřihlášeného. */}
-        <Link href="/about" className={`sidebar-link sidebar-about ${pathname === '/about' ? 'active' : ''}`}>
+        <Link href="/about" className={`sidebar-link sidebar-about ${pathname === '/about' ? 'active' : ''}`} title={t('aboutLink')}>
           <AboutIcon />
-          {t('aboutLink')}
+          <span className="sidebar-label">{t('aboutLink')}</span>
         </Link>
       </nav>
 
@@ -368,9 +374,9 @@ export default function Sidebar() {
           {user ? (
             <ProfileMenu username={user.username} avatarUrl={user.avatar_url} />
           ) : (
-            <Link href="/login" className="sidebar-link">
+            <Link href="/login" className="sidebar-link" title={t('login')}>
               <ProfileIcon />
-              {t('profile')}
+              <span className="sidebar-label">{t('login')}</span>
             </Link>
           )}
         </div>
@@ -626,7 +632,7 @@ export default function Sidebar() {
               ) : (
                 <Link href="/login" className="sidebar-link" onClick={closeMobileNav}>
                   <ProfileIcon />
-                  {t('profile')}
+                  {t('login')}
                 </Link>
               )}
             </div>

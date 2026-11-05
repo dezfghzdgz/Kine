@@ -20,7 +20,7 @@ type Tab = 'popular' | 'newest';
 
 /** Co karta videa potřebuje (components/VideoCard.tsx) + hashtagy a kategorie kvůli pravidlu slabých hashtagů. */
 const FIELDS =
-  'id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, hashtags, owner_id, cloudflare_video_id, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(id, username, created_at)';
+  'id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, hashtags, owner_id, cloudflare_video_id, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(id, username, display_name, avatar_url, created_at)';
 
 /**
  * Stránka hry (/game/[slug]): kdo ji teď vysílá, videa a klipy z ní

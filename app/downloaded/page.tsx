@@ -84,7 +84,7 @@ function DownloadedPageInner() {
       // bez něj karta obojí tiše vynechá.
       const ordered = await fetchByIds<any>(
         'videos',
-        'id, title, thumbnail_url, views, duration_seconds, width, height, category, cloudflare_video_id, owner_id, profiles!videos_owner_id_fkey(id, username)',
+        'id, title, thumbnail_url, views, duration_seconds, width, height, category, cloudflare_video_id, owner_id, profiles!videos_owner_id_fkey(id, username, display_name, avatar_url)',
         videoIds
       );
       setVideos(ordered);

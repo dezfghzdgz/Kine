@@ -10,7 +10,12 @@ const EMOJIS = [
   '👀', '💀', '🎉', '✅', '❌', '🤝', '🫶', '😏', '🙄', '😬',
 ];
 
-export default function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
+/**
+ * `direction`: kam se nabídka otevře. Výchozí nahoru (pole na psaní bývá dole
+ * na stránce). V panelu, který se sám roluje (sloupec vedle přehrávače na
+ * stránce videa), by nabídka nahoře vyjela z panelu a ořízla se - tam 'down'.
+ */
+export default function EmojiPicker({ onSelect, direction = 'up' }: { onSelect: (emoji: string) => void; direction?: 'up' | 'down' }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -32,7 +37,8 @@ export default function EmojiPicker({ onSelect }: { onSelect: (emoji: string) =>
         <div
           style={{
             // Tlačítko je u pravého okraje pole - nabídka se otevře doleva, ať nevyjede z panelu.
-            position: 'absolute', bottom: 'calc(100% + 6px)', right: 0, zIndex: 50,
+            position: 'absolute', right: 0, zIndex: 50,
+            ...(direction === 'down' ? { top: 'calc(100% + 6px)' } : { bottom: 'calc(100% + 6px)' }),
             background: 'var(--overlay-bg-raised)', border: '1px solid var(--border)', borderRadius: 8,
             padding: 8, display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 2, width: 224,
           }}

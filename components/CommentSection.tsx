@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { flushPush } from '@/lib/pushClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -55,7 +55,9 @@ type VideoInfo = {
   comments_disabled?: boolean;
 };
 
-const TABS = ['Popis', 'Flow', 'Prepis', 'Technical'] as const;
+/** Záložky: Popis, Flow (komentáře), More (další videa - 0146), Prepis, Technical. */
+const TABS = ['Flow', 'More', 'Popis', 'Prepis', 'Technical'] as const;
+type Tab = (typeof TABS)[number];
 
 function formatDuration(seconds: number | null) {
   if (!seconds) return '—';
@@ -105,7 +107,7 @@ function applyReaction(c: Comment, next: 'like' | 'dislike' | null): Comment {
 }
 
 export default function CommentSection({
-  videoId, description, video, ownerId, onSeek, captions, getCurrentTime, header,
+  videoId, description, video, ownerId, onSeek, captions, getCurrentTime, header, moreVideos, hideDescription, defaultTab, sidePanel,
 }: {
   videoId: string;
   description?: string | null;
@@ -118,6 +120,18 @@ export default function CommentSection({
   getCurrentTime?: () => number;
   /** Hlavička karty (tvůrce videa): tvůrce a komentáře jsou v jedné kartě, ne ve dvou nalepených na sobě. */
   header?: ReactNode;
+  /** 0146: záložka „Další videa“ (seznam vedle přehrávače, components/MoreVideosList.tsx). */
+  moreVideos?: ReactNode;
+  /** Popis je pod videem (stránka videa 0146) - záložka Popis se neukazuje. */
+  hideDescription?: boolean;
+  /** Která záložka je otevřená na začátku; výchozí: Popis (jako dřív). */
+  defaultTab?: 'comments' | 'more' | 'description';
+  /**
+   * Panel vedle přehrávače (stránka videa): bez nadpisu „Komentáře“ (záložky
+   * stačí) a nabídky smajlíků a příloh se otevírají dolů - sloupec se sám
+   * roluje a nahoře by se ořízly.
+   */
+  sidePanel?: boolean;
 }) {
   const router = useRouter();
   const { t, lang } = useLanguage();
@@ -132,7 +146,10 @@ export default function CommentSection({
   const [newComment, setNewComment] = useState('');
   const [newCommentImage, setNewCommentImage] = useState<File | string | null>(null);
   const [posting, setPosting] = useState(false);
-  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Popis');
+  const [activeTab, setActiveTab] = useState<Tab>(defaultTab === 'comments' ? 'Flow' : defaultTab === 'more' ? 'More' : 'Popis');
+  // Divák si záložku vybral sám - automatika (prázdné komentáře -> Další videa) už nepřepíná.
+  const [tabChosen, setTabChosen] = useState(false);
+  const [commentsLoaded, setCommentsLoaded] = useState(false);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
@@ -153,10 +170,32 @@ export default function CommentSection({
   useEffect(() => {
     loadComments();
     setVisibleCount(COMMENTS_PAGE);
+    setCommentsLoaded(false);
+    setTabChosen(false);
+    setActiveTab(defaultTab === 'comments' ? 'Flow' : defaultTab === 'more' ? 'More' : 'Popis');
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoId]);
 
+  // Pod videem bez komentářů má záložka „Komentáře“ jen prázdno - když jsou po ruce další
+  // videa, otevřou se místo ní (dokud si divák nevybere sám).
+  const hasMore = !!moreVideos;
+  useEffect(() => {
+    if (!commentsLoaded || tabChosen || activeTab !== 'Flow' || !hasMore) return;
+    if (comments.length === 0 && !commentsFailed) setActiveTab('More');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commentsLoaded, hasMore]);
+  // Záložka „Další videa“ bez dalších videí (nebo než dorazí) - ukážou se komentáře.
+  const shownTab: Tab = activeTab === 'More' && !hasMore ? 'Flow' : activeTab;
+
+  // Pořadí načtení: když divák přeskočí na další video dřív, než dorazí komentáře
+  // k tomu předchozímu, starší odpověď se zahodí (jinak by se pod novým videem
+  // mihly cizí komentáře).
+  const loadSeq = useRef(0);
+
   async function loadComments() {
+    const seq = ++loadSeq.current;
+    const stale = () => seq !== loadSeq.current;
     setCommentsFailed(false);
 
     // Dva doslovné výběry, ne jeden skládaný: Supabase odvozuje typ
@@ -188,6 +227,7 @@ export default function CommentSection({
     if (chybiSloupec) vysledek = await nacti(false);
 
     const { data: rawComments, error } = vysledek;
+    if (stale()) return;
 
     // Chyba se tu dřív nečetla vůbec. Při spadlém dotazu vyšlo z databáze
     // null, komentáře se přepsaly na prázdný seznam a pod videem se
@@ -195,11 +235,13 @@ export default function CommentSection({
     // nulu, i když jich tam byly desítky.
     if (error) {
       setCommentsFailed(true);
+      setCommentsLoaded(true);
       return;
     }
 
     if (!rawComments) {
       setComments([]);
+      setCommentsLoaded(true);
       return;
     }
 
@@ -209,6 +251,7 @@ export default function CommentSection({
       .in('comment_id', rawComments.map((c) => c.id));
 
     const { data: authData } = await supabase.auth.getUser();
+    if (stale()) return;
     const myId = authData.user?.id;
 
     const enriched = rawComments.map((c: any) => ({
@@ -219,6 +262,7 @@ export default function CommentSection({
     }));
 
     setComments(enriched);
+    setCommentsLoaded(true);
   }
 
   async function postComment(e: React.FormEvent, parentId: string | null = null) {
@@ -499,27 +543,35 @@ export default function CommentSection({
 
   return (
     <div className={`panel${header ? ' discussion-panel' : ''}`}>
-      {header ? <div className="discussion-head">{header}</div> : <p className="panel-heading">{t('comments')}</p>}
+      {header ? <div className="discussion-head">{header}</div> : !sidePanel && <p className="panel-heading">{t('comments')}</p>}
 
-      <div className="tab-row">
-        {TABS.filter((tab) => tab !== 'Prepis' || (captions?.length ?? 0) > 0).map((tab) => (
+      <div className="tab-row" role="tablist">
+        {TABS.filter((tab) =>
+          tab === 'Prepis' ? (captions?.length ?? 0) > 0 : tab === 'More' ? hasMore : tab === 'Popis' ? !hideDescription : tab === 'Technical' ? !!video : true
+        ).map((tab) => (
           <button
             key={tab}
-            className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab)}
+            role="tab"
+            aria-selected={shownTab === tab}
+            className={`tab-btn ${shownTab === tab ? 'active' : ''}`}
+            onClick={() => { setActiveTab(tab); setTabChosen(true); }}
           >
             {tab === 'Popis'
               ? t('description2')
               : tab === 'Flow'
                 ? `${t('comments')}${comments.length > 0 ? ` (${comments.length})` : ''}`
-                : tab === 'Prepis'
-                  ? t('transcriptTab')
-                  : t('technicalTab')}
+                : tab === 'More'
+                  ? t('otherVideosHeading')
+                  : tab === 'Prepis'
+                    ? t('transcriptTab')
+                    : t('technicalTab')}
           </button>
         ))}
       </div>
 
-      {activeTab === 'Popis' && (
+      {shownTab === 'More' && moreVideos}
+
+      {shownTab === 'Popis' && (
         <>
           {description ? (
             <ExpandableText text={description} />
@@ -538,7 +590,7 @@ export default function CommentSection({
         </>
       )}
 
-      {activeTab === 'Flow' && (
+      {shownTab === 'Flow' && (
         <>
           {isModerator && (
             <button
@@ -568,8 +620,8 @@ export default function CommentSection({
                 onChange={(e) => setNewComment(e.target.value)}
               />
               <span className="composer-tools">
-                <EmojiPicker onSelect={(emoji) => setNewComment((v) => v + emoji)} />
-                <AttachmentPicker onSelect={setNewCommentImage} />
+                <EmojiPicker onSelect={(emoji) => setNewComment((v) => v + emoji)} direction={sidePanel ? 'down' : 'up'} />
+                <AttachmentPicker onSelect={setNewCommentImage} direction={sidePanel ? 'down' : 'up'} />
               </span>
             </div>
             {newCommentImage && (
@@ -625,7 +677,7 @@ export default function CommentSection({
                         onChange={(e) => setReplyText(e.target.value)}
                         autoFocus
                       />
-                      <EmojiPicker onSelect={(emoji) => setReplyText((v) => v + emoji)} />
+                      <EmojiPicker onSelect={(emoji) => setReplyText((v) => v + emoji)} direction={sidePanel ? 'down' : 'up'} />
                     </div>
                     <button type="submit" disabled={posting}>{t('postComment')}</button>
                     {postError && <p className="error-text" style={{ fontSize: 12.5 }}>{postError}</p>}
@@ -656,9 +708,9 @@ export default function CommentSection({
         </>
       )}
 
-      {activeTab === 'Prepis' && captions && captions.length > 0 && <TranscriptPanel captions={captions} onSeek={onSeek} getCurrentTime={getCurrentTime} />}
+      {shownTab === 'Prepis' && captions && captions.length > 0 && <TranscriptPanel captions={captions} onSeek={onSeek} getCurrentTime={getCurrentTime} />}
 
-      {activeTab === 'Technical' && (
+      {shownTab === 'Technical' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {[
             [t('videoDurationLabel'), formatDuration(video?.duration_seconds ?? null)],

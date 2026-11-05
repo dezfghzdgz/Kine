@@ -9,7 +9,17 @@ import { BellIcon } from './ReactionIcons';
 
 const BELL_MENU_WIDTH = 230;
 
-export default function SubscribeButton({ channelId }: { channelId: string }) {
+export default function SubscribeButton({
+  channelId,
+  hideCount,
+  onCount,
+}: {
+  channelId: string;
+  /** Bez počtu v tlačítku (stránka videa ho ukazuje pod jménem kanálu). */
+  hideCount?: boolean;
+  /** Počet odběratelů, jakmile je známý (a po každé změně). */
+  onCount?: (count: number) => void;
+}) {
   const router = useRouter();
   const { t } = useLanguage();
   const [userId, setUserId] = useState<string | null>(null);
@@ -22,8 +32,14 @@ export default function SubscribeButton({ channelId }: { channelId: string }) {
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
+  // Pořadí odpovědí: při přeskoku na jiný kanál (další video) se starší odpověď
+  // zahodí, ať se k novému kanálu nenahlásí počet odběratelů toho předchozího.
+  const loadSeq = useRef(0);
   useEffect(() => {
     load();
+    return () => {
+      loadSeq.current++;
+    };
   }, [channelId]);
 
   // Otevřená nabídka: strana podle místa v okně; zavře se kliknutím vedle nebo Esc.
@@ -48,7 +64,9 @@ export default function SubscribeButton({ channelId }: { channelId: string }) {
   }, [bellMenuOpen]);
 
   async function load() {
+    const seq = ++loadSeq.current;
     const { data: authData } = await supabase.auth.getUser();
+    if (seq !== loadSeq.current) return;
     setUserId(authData.user?.id ?? null);
 
     // Počet přes count, ne přes délku seznamu: databáze vrací nejvíc 1000
@@ -67,7 +85,9 @@ export default function SubscribeButton({ channelId }: { channelId: string }) {
         : Promise.resolve({ data: null }),
     ]);
 
+    if (seq !== loadSeq.current) return;
     setCount(count ?? 0);
+    onCount?.(count ?? 0);
     const mine = (mineResult as any)?.data;
     setSubscribed(!!mine);
     setNotifyNewVideos(mine?.notify_new_videos ?? true);
@@ -91,7 +111,7 @@ export default function SubscribeButton({ channelId }: { channelId: string }) {
       await supabase.from('notifications').insert({
         user_id: channelId,
         type: 'subscription',
-        message: `${myProfile?.username ?? 'Někdo'} začal odebírat tvůj kanál`,
+        message: t('newSubscriberNotification').replace('{user}', myProfile?.username || t('someoneLabel')),
         link: `/channel/${userId}`,
       });
     }
@@ -122,7 +142,7 @@ export default function SubscribeButton({ channelId }: { channelId: string }) {
           border: subscribed ? '1px solid var(--border)' : 'none',
         }}
       >
-        {subscribed ? `${t('subscribing')} (${count})` : `${t('subscribe')} (${count})`}
+        {hideCount ? (subscribed ? t('subscribing') : t('subscribe')) : subscribed ? `${t('subscribing')} (${count})` : `${t('subscribe')} (${count})`}
       </button>
 
       {subscribed && (

@@ -62,7 +62,7 @@ function SubscriptionsPageInner() {
           .from('videos')
           // scheduled_at + is_premiere: naplánované video (ne premiéra) sem do času zveřejnění
           // nepatří - dřív ho odběratelé viděli (název i náhled) dřív, než ho tvůrce vydal.
-          .select('id, owner_id, title, thumbnail_url, views, width, height, duration_seconds, created_at, scheduled_at, is_premiere, cloudflare_video_id, profiles!videos_owner_id_fkey(username)')
+          .select('id, owner_id, title, thumbnail_url, views, width, height, duration_seconds, created_at, scheduled_at, is_premiere, cloudflare_video_id, profiles!videos_owner_id_fkey(username, display_name, avatar_url)')
           .in('owner_id', channelIds)
           .eq('status', 'ready')
           .eq('visibility', 'public')

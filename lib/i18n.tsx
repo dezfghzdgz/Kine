@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { cs, type DictKey } from './i18n/cs';
 import { en } from './i18n/en';
+import { detectLang, isLang } from './i18n/detect';
 
 export type Lang = 'cs' | 'en' | 'de' | 'sk' | 'es' | 'pl' | 'fr' | 'uk';
 
@@ -57,8 +58,20 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [loaded, setLoaded] = useState<Partial<Record<Lang, Dict>>>(staticDicts);
 
   useEffect(() => {
-    const saved = localStorage.getItem('kine-lang') as Lang | null;
-    if (saved && ['cs', 'en', 'de', 'sk', 'es', 'pl', 'fr', 'uk'].includes(saved)) setLangState(saved);
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem('kine-lang');
+    } catch {
+      // bez paměti prohlížeče - jazyk podle prohlížeče
+    }
+    if (isLang(saved)) {
+      setLangState(saved);
+      return;
+    }
+    // První návštěva: jazyk podle prohlížeče (lib/i18n/detect.ts). Neukládá se -
+    // kdo si jazyk nepřepne ručně, tomu se Kine řídí nastavením prohlížeče dál.
+    const detected = detectLang(typeof navigator !== 'undefined' ? navigator.languages ?? [navigator.language] : []);
+    if (detected !== 'en') setLangState(detected);
   }, []);
 
   // Atribut lang na stránce musí odpovídat tomu, co je na ní napsané.
@@ -90,7 +103,11 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   function setLang(l: Lang) {
     setLangState(l);
-    localStorage.setItem('kine-lang', l);
+    try {
+      localStorage.setItem('kine-lang', l);
+    } catch {
+      // anonymní okno - volba platí aspoň do zavření stránky
+    }
   }
 
   function t(key: DictKey) {

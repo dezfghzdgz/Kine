@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
 /** Co karta videa potřebuje (components/VideoCard.tsx): náhled po najetí,
  *  tvar, délku, tvůrce. */
 const CARD_FIELDS =
-  'id, title, thumbnail_url, views, width, height, duration_seconds, category, owner_id, cloudflare_video_id, created_at, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(id, username, created_at)';
+  'id, title, thumbnail_url, views, width, height, duration_seconds, category, owner_id, cloudflare_video_id, created_at, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(id, username, display_name, avatar_url, created_at)';
 
 type SearchParams = Record<string, string | string[] | undefined>;
 

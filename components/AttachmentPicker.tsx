@@ -5,7 +5,8 @@ import GifPickerModal from './GifPickerModal';
 import UiIcon from './UiIcon';
 import { useLanguage } from '@/lib/i18n';
 
-export default function AttachmentPicker({ onSelect }: { onSelect: (fileOrUrl: File | string) => void }) {
+/** `direction`: kam se nabídka otevře - stejně jako u EmojiPicker ('down' v rolovaném panelu). */
+export default function AttachmentPicker({ onSelect, direction = 'up' }: { onSelect: (fileOrUrl: File | string) => void; direction?: 'up' | 'down' }) {
   const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const [gifPickerOpen, setGifPickerOpen] = useState(false);
@@ -35,7 +36,10 @@ export default function AttachmentPicker({ onSelect }: { onSelect: (fileOrUrl: F
       </button>
 
       {open && (
-        <div className="profile-dropdown" style={{ bottom: 'calc(100% + 8px)', right: 0, left: 'auto', width: 160 }}>
+        <div
+          className="profile-dropdown"
+          style={{ right: 0, left: 'auto', width: 160, ...(direction === 'down' ? { top: 'calc(100% + 8px)', bottom: 'auto' } : { bottom: 'calc(100% + 8px)' }) }}
+        >
           <button
             type="button"
             className="profile-dropdown-item"

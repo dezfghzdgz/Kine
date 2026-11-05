@@ -1,4 +1,6 @@
 import { supabaseServer } from './supabaseServer';
+import { hasPlus } from './plus';
+import { liveDailyMinutes, LIVE_BUDGET_COOLDOWN_MINUTES, liveMinutesInWindow, liveBudgetExceeded } from './liveBudget';
 import { cloudflareStreamCreds, cloudflareUidInUse, deleteStreamVideo, isCloudflareUid, streamApiUrl } from './cloudflareVideos';
 
 /**
@@ -34,6 +36,8 @@ export function recordingKeepDays(env: Record<string, string | undefined> = proc
 }
 
 const COOLDOWN_MINUTES = 15;
+
+export { liveDailyMinutes, LIVE_BUDGET_COOLDOWN_MINUTES, liveMinutesInWindow, liveBudgetExceeded } from './liveBudget';
 
 async function cfLive(path: string, init: RequestInit = {}): Promise<any | null> {
   const cf = cloudflareStreamCreds();
@@ -141,6 +145,35 @@ export async function enforceLiveLimits(options: { force?: boolean } = {}): Prom
         const since = await connectedSince(s.cf_input_id);
         if (since === null || Date.now() - since < maxMs) continue;
         await disableInput({ owner_id: s.owner_id, cf_input_id: s.cf_input_id }, 'too-long', new Date(Date.now() + COOLDOWN_MINUTES * 60 * 1000).toISOString());
+      }
+    }
+
+    // 3b. Denní rozpočet (lib/liveLimits.ts - liveDailyMinutes): účet, který za posledních 24 h
+    //     vysílal víc než má, dostane hodinovou přestávku (vstup vypnutý; další klíč ji neobejde).
+    const liveNow = await supabaseServer.from('live_streams').select('owner_id, cf_input_id, started_at').eq('is_live', true).limit(100);
+    if (!liveNow.error && (liveNow.data ?? []).length > 0) {
+      const owners = (liveNow.data ?? []).map((r: any) => r.owner_id as string);
+      const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+      const [sessions, profiles] = await Promise.all([
+        supabaseServer.from('live_sessions').select('owner_id, started_at, last_seen_at').in('owner_id', owners).gte('last_seen_at', since).limit(2000),
+        supabaseServer.from('profiles').select('id, plan, plan_until, is_admin, role').in('id', owners),
+      ]);
+      if (!sessions.error && !profiles.error) {
+        const byOwner = new Map<string, { started_at: string; last_seen_at: string }[]>();
+        for (const row of (sessions.data ?? []) as { owner_id: string; started_at: string; last_seen_at: string }[]) {
+          const list = byOwner.get(row.owner_id) ?? [];
+          list.push(row);
+          byOwner.set(row.owner_id, list);
+        }
+        const prof = new Map((profiles.data ?? []).map((p: any) => [p.id as string, p]));
+        for (const s of (liveNow.data ?? []) as { owner_id: string; cf_input_id: string | null }[]) {
+          const p: any = prof.get(s.owner_id);
+          if (!s.cf_input_id || !p || p.is_admin || p.role === 'admin') continue;
+          const budget = liveDailyMinutes(hasPlus(p.plan, p.plan_until));
+          const used = liveMinutesInWindow(byOwner.get(s.owner_id) ?? [], Date.now());
+          if (!liveBudgetExceeded(used, budget)) continue;
+          await disableInput({ owner_id: s.owner_id, cf_input_id: s.cf_input_id }, 'too-long', new Date(Date.now() + LIVE_BUDGET_COOLDOWN_MINUTES * 60 * 1000).toISOString());
+        }
       }
     }
 

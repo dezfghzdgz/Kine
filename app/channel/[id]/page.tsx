@@ -1,5 +1,7 @@
 'use client';
 
+import { channelName } from '@/lib/channelName';
+
 import { Suspense, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -329,7 +331,7 @@ function ChannelPageInner() {
 
         <div className="channel-info">
           <h1 className="channel-name">
-            <span className="channel-name-text">{profile.display_name ?? profile.username}</span>
+            <span className="channel-name-text">{channelName(profile, t('unknownCreator'))}</span>
             <VerifiedBadge tier={profile.verification_tier} />
             <PlusBadge userId={profile.id} size="md" />
             {trustRating !== null && trustRating >= 90 && (

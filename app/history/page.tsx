@@ -80,7 +80,7 @@ function HistoryPageInner() {
     const videoIds = history.map((h: any) => h.video_id);
     if (videoIds.length > 0) {
       // Pořadí drží historie, ne databáze - proto ho fetchByIds zachovává.
-      setVideos(await fetchByIds<any>('videos', 'id, title, thumbnail_url, views, profiles!videos_owner_id_fkey(username)', videoIds));
+      setVideos(await fetchByIds<any>('videos', 'id, title, thumbnail_url, views, profiles!videos_owner_id_fkey(username, display_name, avatar_url)', videoIds));
     } else {
       setVideos([]);
     }

@@ -527,7 +527,10 @@ select:focus-visible {
 
 @keyframes content-fade-in {
   from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  /* `none`, ne translateY(0): animace má fill-mode both, takže by poslední snímek
+     zůstal a panel s transformací by byl „oknem“ pro position: fixed uvnitř
+     (potvrzovací dialog u mazání komentáře by se otevřel v panelu, ne přes stránku). */
+  to { opacity: 1; transform: none; }
 }
 
 @keyframes modal-backdrop-fade-in {
@@ -18139,3 +18142,305 @@ html {
 .install-notes { margin: 0 0 16px; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; color: var(--text-dim); font-size: 13px; line-height: 1.5; }
 .install-sheet-done { width: 100%; justify-content: center; padding: 11px 16px; }
 .push-install-button { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; }
+
+/* =====================================================================
+   0146: Domovská (karty, kategorie) a stránka videa (lišta ikon vlevo,
+   velký přehrávač, řádek kanálu, panel Komentáře | Další videa vpravo)
+   ===================================================================== */
+
+/* ---- Karty: ikona kanálu vlevo, výraznější název, jméno kanálu + „zhlédnutí · před 3 dny“ ---- */
+.video-card-footer { gap: 10px; }
+.video-card-avatar {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  margin-top: 10px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(var(--brand-rgb), 0.35), rgba(var(--brand-rgb), 0.08));
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.video-card-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.video-card-title { font-weight: 600; margin-top: 10px; }
+.video-card-channel {
+  margin: 2px 0 0;
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.video-card-meta { margin-top: 1px; }
+/* Užší okno na počítači (polovina obrazovky): 3 karty vedle sebe místo 2 - jako YouTube. */
+@media (min-width: 769px) and (max-width: 1180px) {
+  .content-area { padding: 28px 24px; }
+  html:not([data-cards]) .video-grid { grid-template-columns: repeat(auto-fill, minmax(216px, 1fr)); gap: 16px; }
+  html:not([data-cards]) .video-card-avatar { width: 32px; height: 32px; font-size: 13px; }
+}
+
+/* ---- Kategorie nad feedem (components/HomeChips.tsx) ---- */
+.home-chips {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+  /* Na telefonu se řada posouvá až k okrajům obrazovky. */
+  scroll-padding: 16px;
+}
+.home-chips::-webkit-scrollbar { display: none; }
+.home-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.home-chip:hover { color: var(--text); background: var(--panel-raised); border-color: var(--text-faint); }
+.home-chip.active { color: var(--bg); background: var(--text); border-color: var(--text); }
+@media (max-width: 768px) {
+  .home-chips { margin: 0 -16px 14px; padding: 0 16px 2px; }
+}
+
+/* ---- Stránka videa: levé menu jako úzká lišta ikon (jen počítač; na telefonu menu není) ---- */
+@media (min-width: 769px) {
+  .app-shell-watch .sidebar { width: 76px; padding: 22px 12px; gap: 20px; }
+  .app-shell-watch .sidebar-logo-row { justify-content: center; }
+  .app-shell-watch .sidebar-beta,
+  .app-shell-watch .logo-plus-mark,
+  .app-shell-watch .sidebar-label,
+  .app-shell-watch .sidebar-chevron,
+  .app-shell-watch .sidebar-sublist { display: none !important; }
+  .app-shell-watch .sidebar-link {
+    justify-content: center;
+    gap: 0;
+    padding: 12px 0;
+    /* Text, který není ve <span class="sidebar-label"> (přezdívka, zvoneček), zmizí; ikony mají vlastní rozměr. */
+    font-size: 0;
+    line-height: 0;
+  }
+  .app-shell-watch .sidebar-explore-main { display: flex; align-items: center; justify-content: center; gap: 0; }
+  /* V liště rozbalovací tlačítko Prozkoumat nahradí přímý odkaz (podseznam je schovaný). */
+  .app-shell-watch .sidebar-explore { display: none !important; }
+  .app-shell-watch .sidebar-explore-rail { display: flex; }
+  .app-shell-watch .sidebar-link .sidebar-icon,
+  .app-shell-watch .sidebar-link > svg,
+  .app-shell-watch .sidebar-explore-main > svg { width: 22px; height: 22px; }
+  .app-shell-watch .sidebar-live-count,
+  .app-shell-watch .notif-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    margin: 0;
+    font-size: 10px;
+    line-height: 1.3;
+    min-width: 16px;
+    padding: 1px 4px;
+  }
+  .app-shell-watch .sidebar-link { position: relative; }
+  .app-shell-watch .profile-trigger .profile-avatar-small { width: 30px; height: 30px; }
+  .app-shell-watch .sidebar-link .profile-avatar-small { margin: 0; }
+  .app-shell-watch .sidebar-divider { margin: 6px 4px; }
+  .app-shell-watch .content-area { padding: 24px 28px; }
+}
+
+/* ---- Stránka videa: velký přehrávač vlevo, panel vpravo ---- */
+.watch-layout { grid-template-columns: minmax(0, 1fr) 400px; gap: 24px; }
+.watch-side-column {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-width: 0;
+  /* Komentáře se čtou při koukání: panel zůstává vedle videa a roluje sám. */
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding-right: 2px;
+}
+.watch-side-column > .playlist-panel { margin-bottom: 14px; }
+/* Přehrávač nepřeroste okno: na výšku nejvýš tolik, aby pod ním zůstal název a řádek kanálu. */
+.watch-video-column .player-dock:not(.player-dock-mini) .player-wrap:not(.player-wrap-vertical):not(.player-wrap-maximized) {
+  max-width: calc((100vh - 160px) * 16 / 9);
+}
+.watch-layout-theater .watch-side-column {
+  grid-column: 1;
+  grid-row: auto;
+  order: 2;
+  position: static;
+  max-height: none;
+  overflow: visible;
+  max-width: 900px;
+}
+.watch-video-column .player-wrap-vertical { max-width: min(420px, calc((100vh - 160px) * 9 / 16)); }
+
+.video-title { font-size: 20px; margin: 16px 0 6px; line-height: 1.3; }
+
+/* Řádek kanálu a akcí: vlevo kanál + Odebírat, vpravo akce; na užší obrazovce se zalomí pod sebe. */
+.watch-channel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 18px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.watch-channel-block { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.watch-channel { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--text); text-decoration: none; }
+.watch-channel-avatar {
+  width: 40px !important;
+  height: 40px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  background: linear-gradient(135deg, rgba(var(--brand-rgb), 0.35), rgba(var(--brand-rgb), 0.08));
+}
+.watch-channel-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.watch-channel-name { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 15px; white-space: nowrap; min-width: 0; }
+/* Dlouhé jméno se zkrátí tečkami (ořez musí být na textu, ne na flex řádku - odznaky zůstanou vidět). */
+.watch-channel-name-text { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.watch-channel-sub { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+.watch-channel-block > div > button { padding: 9px 16px; border-radius: var(--radius-pill); font-weight: 600; }
+.watch-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.watch-actions .reaction-btn { white-space: nowrap; }
+.watch-more-btn { padding-left: 10px; padding-right: 10px; }
+.watch-more-menu .profile-dropdown-item { display: flex; align-items: center; justify-content: flex-start; gap: 10px; }
+
+.watch-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 12px 0 0;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+.watch-meta-line > span + span::before { content: '·'; margin-right: 10px; color: var(--text-faint); }
+.watch-meta-line a { color: var(--text-dim); }
+
+.watch-description {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.watch-description-empty { margin: 0; color: var(--text-faint); font-size: 13px; }
+/* Popis má vlastní rámeček - vnitřní odsazení textu (inline styl ExpandableText) tu není potřeba. */
+.watch-description > div { margin-top: 0 !important; }
+.watch-hashtags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.watch-hashtags a { color: var(--text); font-size: 13px; font-weight: 500; }
+.watch-clips { margin-top: 28px; }
+
+/* „Další videa“ vedle přehrávače (components/MoreVideosList.tsx) */
+.more-videos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.more-video { display: flex; gap: 10px; align-items: flex-start; color: var(--text); text-decoration: none; border-radius: var(--radius-sm); }
+.more-video:hover .more-video-title { color: var(--brand); }
+.more-video-thumb {
+  position: relative;
+  flex: none;
+  width: 168px;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--panel-raised);
+}
+.more-video-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.more-video-thumb-spark img { object-fit: cover; }
+.more-video-duration {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.more-video-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.more-video-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color var(--dur-1) var(--ease);
+}
+.more-video-meta { font-size: 12px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.more-videos-empty { margin: 0; color: var(--text-faint); font-size: 13px; }
+
+@media (max-width: 1240px) {
+  .watch-layout { grid-template-columns: minmax(0, 1fr) 340px; }
+  .more-video-thumb { width: 140px; }
+}
+@media (max-width: 900px) {
+  .watch-layout { grid-template-columns: minmax(0, 1fr); }
+  .watch-side-column {
+    grid-column: 1;
+    grid-row: auto;
+    order: 2;
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+    margin-top: 20px;
+  }
+  .watch-video-column .player-dock:not(.player-dock-mini) .player-wrap:not(.player-wrap-vertical):not(.player-wrap-maximized) { max-width: none; }
+  .more-video-thumb { width: 160px; }
+}
+@media (max-width: 600px) {
+  .video-title { font-size: 17px; }
+  .watch-channel-row { gap: 10px; }
+  .watch-channel-block { width: 100%; justify-content: space-between; }
+  /* Akce v jedné řadě, posouvá se do strany (jako YouTube na telefonu). */
+  .watch-actions { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; width: calc(100% + 32px); margin: 0 -16px; padding: 0 16px 4px; }
+  .watch-actions::-webkit-scrollbar { display: none; }
+  .more-video-thumb { width: 136px; }
+}
+/* Nabídky Sdílet / Playlist / ⋯ na telefonu: řada akcí se posouvá do strany (overflow),
+   takže by se rozbalená nabídka v ní ořízla - otevře se jako lišta nad spodním menu
+   (stejně jako dřív u .video-actions-row). */
+@media (max-width: 768px) {
+  .watch-actions .profile-dropdown {
+    position: fixed !important;
+    left: 12px !important;
+    right: 12px !important;
+    top: auto !important;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: 60vh;
+    overflow-y: auto;
+    z-index: 560 !important;
+    box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 0 0 1px var(--glass-line), 0 18px 48px rgba(0, 0, 0, 0.55);
+  }
+}
+/* Prozkoumat v levém menu: ikona + text vlevo, šipka vpravo (dřív inline styl). */
+.sidebar-explore { justify-content: space-between; }
+.sidebar-explore-rail { display: none; }
+.sidebar-explore-main { display: flex; align-items: center; gap: 12px; }
+.sidebar-chevron { font-size: 11px; transition: transform 0.15s ease; }

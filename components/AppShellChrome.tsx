@@ -31,7 +31,8 @@ export default function AppShellChrome({ children }: { children: React.ReactNode
   if (isEmbed || isChatPopout) return <>{children}</>;
 
   return (
-    <div className="app-shell">
+    // app-shell-watch: na stránce videa je levé menu úzká lišta ikon (globals.css, 0146) - přehrávač dostane šířku.
+    <div className={`app-shell${isWatch ? ' app-shell-watch' : ''}`}>
       {/* Skleněný vzhled: barevné rozmazané pozadí za celou appkou (Nastavení -> Vzhled). */}
       <AppearanceBackdrop />
       {/* Vzor přes pozadí (tečky, mřížka... nebo vlastní obrázek) - Nastavení -> Vzhled -> Vzor. */}

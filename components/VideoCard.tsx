@@ -16,6 +16,11 @@ import { preloadHls } from '@/lib/hlsAttach';
 import { rememberStreamCode } from '@/lib/networkHints';
 import { previewsAllowed } from '@/lib/netQuality';
 import { rememberVideoPeek } from '@/lib/videoPeek';
+import { warmManifest } from '@/lib/warmVideo';
+import { channelInitial, channelName } from '@/lib/channelName';
+import { timeAgo } from '@/lib/timeAgo';
+import { countLabel } from '@/lib/plural';
+import ProfileImage from './ProfileImage';
 
 /**
  * Prodleva po najetí, než se náhled začne stahovat: jen tolik, aby se nespouštěl
@@ -45,21 +50,7 @@ function warmHlsOnce() {
   else setTimeout(run, 2000);
 }
 
-/**
- * Manifest videa (malý textový soubor) se začne stahovat hned při najetí -
- * souběžně s prodlevou. Cloudflare ho tak má připravený, než si o něj řekne
- * přehrávač. Každé video jen jednou za návštěvu stránky.
- */
-const warmedManifests = new Set<string>();
-function warmManifest(url: string) {
-  if (warmedManifests.has(url) || warmedManifests.size >= 300) return;
-  warmedManifests.add(url);
-  fetch(url, { mode: 'cors', credentials: 'omit', priority: 'high' } as RequestInit)
-    .then((r) => r.text())
-    .catch(() => {
-      // Nevadí - přehrávač si manifest stáhne sám.
-    });
-}
+/* Manifest videa se začne stahovat hned při najetí (lib/warmVideo.ts - společné s „Další videa“ u přehrávače). */
 
 function getSoundPref() {
   if (typeof window === 'undefined') return false;
@@ -259,6 +250,13 @@ function VideoCard({
   // jako obrázek, tak ho o kousek zvětšíme, aby video rámeček přesně
   // pokrylo. Zvětšení počítáme z poměru stran videa vůči rámečku - bez
   // toho se vodorovné video ve svislé kartě Sparks scvrklo na proužek.
+  const creator = channelName(video.profiles, t('unknownCreator'));
+  const ownerId: string | undefined = video.owner_id ?? video.profiles?.id;
+  // Ikona kanálu jen tam, kde si ji stránka vyžádala (profiles.avatar_url v dotazu) - jinak by
+  // půlka karet měla kolečko s písmenem a půlka nic.
+  const showAvatar = !hideCreator && !!ownerId && !!video.profiles && 'avatar_url' in video.profiles;
+  // „před 3 dny“ v jazyce diváka; u premiéry, která nezačala, je na náhledu odpočet.
+  const age = !upcomingPremiere && video.created_at ? timeAgo(video.created_at, DATE_LOCALES[lang]) : '';
   const containerAspect = isSparks ? 9 / 16 : 16 / 9;
   const sourceAspect = video.width && video.height ? video.width / video.height : 16 / 9;
   const coverScale = Math.min(
@@ -343,13 +341,21 @@ function VideoCard({
       )}
 
       {/* Text a tři tečky jsou hned pod videem v jednom řádku - jako na
-          YouTube. Tečky tak sedí u názvu, ne až na spodku celé karty. */}
+          YouTube. Tečky tak sedí u názvu, ne až na spodku celé karty.
+          0146: vlevo ikona kanálu (když ji stránka načetla), pod názvem jméno
+          kanálu, zhlédnutí a stáří videa; jméno nikdy neschází (lib/channelName.ts). */}
       <div className="video-card-footer">
+        {showAvatar && (
+          <Link href={`/channel/${ownerId}`} className="video-card-avatar" aria-label={creator} title={creator}>
+            {video.profiles?.avatar_url ? <ProfileImage src={video.profiles.avatar_url} alt="" /> : <span aria-hidden="true">{channelInitial(creator)}</span>}
+          </Link>
+        )}
         <Link href={href} className="video-card-textlink" onClick={() => rememberVideoPeek(video)}>
           <p className="video-card-title">{video.title}</p>
+          {!hideCreator && <p className="video-card-channel">{creator}</p>}
           <p className="video-card-meta">
-            {!hideCreator && <>{video.profiles?.username ?? t('unknownCreator')} · </>}
-            {video.views} {t('views')}
+            {typeof video.views === 'number' ? countLabel(video.views, lang, t, 'viewsCount') : `${video.views ?? 0} ${t('views')}`}
+            {age && <> · {age}</>}
           </p>
           {reason && <p className="video-card-reason">{reason}</p>}
         </Link>

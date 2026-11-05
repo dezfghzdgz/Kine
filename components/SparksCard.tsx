@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { ThumbsUpIcon, ThumbsDownIcon, SpeakerIcon, CommentIcon, ShareIcon } from './ReactionIcons';
 import { shouldNotifyLikeMilestone } from '@/lib/likeMilestones';
 import { useLanguage } from '@/lib/i18n';
+import { countLabel } from '@/lib/plural';
 import { detectDeviceClass } from '@/lib/deviceClass';
 import { attachVod, reportSlowVideo, type VodHandle } from '@/lib/vodPlayer';
 import { shouldReportSlowStart, statsReport, vodVerdict } from '@/lib/vodPlayerCore';
@@ -73,7 +74,7 @@ export default function SparksCard({
   light?: boolean;
 }) {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const musicCommands = useMusicCommands();
   const userId = viewer.userId;
   const ratingMode = viewer.ratingMode;
@@ -569,7 +570,7 @@ export default function SparksCard({
           await supabase.from('notifications').insert({
             user_id: video.profiles.id,
             type: 'like_milestone',
-            message: `Tvoje video dosáhlo ${count} ${count === 1 ? 'lajku' : 'lajků'}!`,
+            message: countLabel(count, lang, t, 'likeMilestone'),
             link: `/watch/${video.id}`,
           });
         }

@@ -75,7 +75,7 @@ function WatchLaterPageInner() {
 
     const videoIds = (items ?? []).map((i) => i.video_id);
     if (videoIds.length > 0) {
-      const videoData = await fetchByIds<any>('videos', 'id, title, thumbnail_url, views, profiles!videos_owner_id_fkey(username)', videoIds);
+      const videoData = await fetchByIds<any>('videos', 'id, title, thumbnail_url, views, profiles!videos_owner_id_fkey(username, display_name, avatar_url)', videoIds);
       const ordered = videoIds.map((id) => videoData?.find((v) => v.id === id)).filter(Boolean);
       setVideos(ordered as any[]);
     }

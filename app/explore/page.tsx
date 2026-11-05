@@ -17,7 +17,7 @@ import { anonViewerKey, seededShuffle, sessionSeed } from '@/lib/seededRandom';
 type Tab = 'popular' | 'trending' | 'newest' | 'shorts' | 'surprise';
 
 const FIELDS =
-  'id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, cloudflare_video_id, scheduled_at, is_premiere, owner_id, profiles!videos_owner_id_fkey(id, username, created_at)';
+  'id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, cloudflare_video_id, scheduled_at, is_premiere, owner_id, profiles!videos_owner_id_fkey(id, username, display_name, avatar_url, created_at)';
 /** Kolik se ukáže. */
 const SHOWN = 48;
 /** Překvapení: z kolika nejnovějších se vybírá (po vyřazení odebíraných, lajkovaných a zhlédnutých). */

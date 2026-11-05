@@ -23,6 +23,13 @@ export const CLIP_MIN_S = 3;
 export const CLIP_MAX_S = 60;
 /** Kolik klipů smí jeden účet vystřihnout za den - každý klip je nové video u Cloudflare. */
 export const CLIPS_PER_DAY = 30;
+/** Čerstvý účet (lib/newAccount.ts) první den jen pár - účet založený kvůli zahlcení narazí hned. */
+export const CLIPS_PER_DAY_NEW_ACCOUNT = 5;
+
+/** Denní strop klipů podle toho, kdo klipuje. */
+export function clipsPerDayFor(newAccount: boolean): number {
+  return newAccount ? CLIPS_PER_DAY_NEW_ACCOUNT : CLIPS_PER_DAY;
+}
 
 export type ClipRange = { start: number; end: number };
 

@@ -67,7 +67,7 @@ function PlaylistDetailInner() {
     if (videoIds.length > 0) {
       const { data: videoData } = await supabase
         .from('videos')
-        .select('id, title, thumbnail_url, cloudflare_video_id, duration_seconds, views, profiles!videos_owner_id_fkey(username)')
+        .select('id, title, thumbnail_url, cloudflare_video_id, duration_seconds, views, profiles!videos_owner_id_fkey(username, display_name, avatar_url)')
         .in('id', videoIds);
 
       const ordered = videoIds.map((id) => videoData?.find((v) => v.id === id)).filter(Boolean) as any[];
@@ -75,7 +75,7 @@ function PlaylistDetailInner() {
 
       const { data: rec } = await supabase
         .from('videos')
-        .select('id, title, thumbnail_url, views, cloudflare_video_id, duration_seconds, profiles!videos_owner_id_fkey(username)')
+        .select('id, title, thumbnail_url, views, cloudflare_video_id, duration_seconds, profiles!videos_owner_id_fkey(username, display_name, avatar_url)')
         .eq('status', 'ready')
         .eq('visibility', 'public')
         .not('id', 'in', `(${videoIds.join(',')})`)
@@ -85,7 +85,7 @@ function PlaylistDetailInner() {
     } else {
       const { data: rec } = await supabase
         .from('videos')
-        .select('id, title, thumbnail_url, views, cloudflare_video_id, duration_seconds, profiles!videos_owner_id_fkey(username)')
+        .select('id, title, thumbnail_url, views, cloudflare_video_id, duration_seconds, profiles!videos_owner_id_fkey(username, display_name, avatar_url)')
         .eq('status', 'ready')
         .eq('visibility', 'public')
         .order('views', { ascending: false })

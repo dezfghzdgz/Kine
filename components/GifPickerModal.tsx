@@ -4,13 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import UiIcon from './UiIcon';
 import { useLanguage } from '@/lib/i18n';
 
-// Sdílený veřejný testovací klíč Giphy appka používala jako výchozí, ale
-// Giphy ho časem zablokovala (běžně se to takovým klíčům stává, jsou
-// sdílené mezi hodně appkami najednou). Appka teď radši použije tvůj
-// vlastní klíč, pokud ho zadáš do .env.local jako NEXT_PUBLIC_GIPHY_API_KEY -
-// zdarma na developers.giphy.com, trvá to pár minut.
-const GIPHY_API_KEY = process.env.NEXT_PUBLIC_GIPHY_API_KEY || 'dc6zaTOxFJmzC';
-const USING_SHARED_KEY = !process.env.NEXT_PUBLIC_GIPHY_API_KEY;
+// 0146: GIFy jdou přes náš server (/api/gifs/search, klíč GIPHY_API_KEY jen tam) -
+// dřív šel klíč do prohlížeče (NEXT_PUBLIC_…), takže jeho kvótu mohl vyčerpat kdokoli.
+import { authHeaders } from '@/lib/authHeaders';
 
 export default function GifPickerModal({
   onSelect,
@@ -46,39 +42,26 @@ export default function GifPickerModal({
     setLoading(true);
     setError(null);
     try {
-      const endpoint = q === 'trending'
-        ? `https://api.giphy.com/v1/gifs/trending?api_key=${GIPHY_API_KEY}&limit=24&rating=pg-13`
-        : `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(q)}&limit=24&rating=pg-13`;
-      const res = await fetch(endpoint);
-
+      const params = new URLSearchParams();
+      if (q !== 'trending') params.set('q', q);
+      const res = await fetch(`/api/gifs/search?${params}`, { headers: await authHeaders() });
       if (!res.ok) {
-        if (res.status === 403 && USING_SHARED_KEY) {
-          // Správce: sdílený testovací klíč Giphy je zablokovaný - chce to vlastní NEXT_PUBLIC_GIPHY_API_KEY ve Vercelu.
-          console.warn('Kine: sdílený klíč Giphy je zablokovaný - nastav NEXT_PUBLIC_GIPHY_API_KEY.');
-          setError(t('gifLoadFailed'));
-          setGifs([]);
-          setLoading(false);
-          return;
-        }
-        console.warn('Kine: Giphy vrátilo chybu', res.status);
+        console.warn('Kine: hledání GIFů vrátilo chybu', res.status);
         setError(t('gifLoadFailed'));
         setGifs([]);
         setLoading(false);
         return;
       }
-
       const data = await res.json();
-      const parsed = (data.data ?? []).map((g: any) => ({
-        id: g.id,
-        preview: g.images.fixed_width_small?.url ?? g.images.fixed_width?.url,
-        full: g.images.original?.url ?? g.images.fixed_width?.url,
-      }));
+      const parsed = ((data.gifs ?? []) as { id: string; preview?: { url: string }; full?: { url: string } }[])
+        .filter((g) => g.preview?.url && g.full?.url)
+        .map((g) => ({ id: g.id, preview: g.preview!.url, full: g.full!.url }));
       setGifs(parsed);
       if (parsed.length === 0) {
         setError(t('gifNoResults'));
       }
     } catch (e: any) {
-      console.warn('Kine: Giphy nejde zavolat', e?.message);
+      console.warn('Kine: GIFy nejde načíst', e?.message);
       setError(t('gifLoadFailed'));
       setGifs([]);
     }

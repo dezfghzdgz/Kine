@@ -2165,6 +2165,25 @@ export const cs = {
   installIosPushNote: "Na iPhonu a iPadu fungují oznámení jen v Kine přidaném na plochu.",
   installSignInNote: "Kdyby tě appka nepoznala, stačí se v ní jednou přihlásit.",
   installGotIt: "Rozumím",
+  // 0146: karty (zhlédnutí, odběratelé), stránka videa, Domovská
+  viewsCountOne: "{count} zhlédnutí",
+  viewsCountFew: "{count} zhlédnutí",
+  viewsCountMany: "{count} zhlédnutí",
+  ratingsCountOne: "{count} hodnocení",
+  ratingsCountFew: "{count} hodnocení",
+  ratingsCountMany: "{count} hodnocení",
+  subscribersCountOne: "{count} odběratel",
+  subscribersCountFew: "{count} odběratelé",
+  subscribersCountMany: "{count} odběratelů",
+  likeMilestoneOne: "Tvoje video dosáhlo {count} lajku!",
+  likeMilestoneFew: "Tvoje video dosáhlo {count} lajků!",
+  likeMilestoneMany: "Tvoje video dosáhlo {count} lajků!",
+  popularOnKineHeading: "Populární na Kine",
+  watchDescriptionHeading: "Popis",
+  watchMoreMenu: "Další možnosti",
+  homeChipsLabel: "Kategorie",
+  newSubscriberNotification: "{user} začal odebírat tvůj kanál",
+  someoneLabel: "Někdo",
 } as const;
 
 export type DictKey = keyof typeof cs;

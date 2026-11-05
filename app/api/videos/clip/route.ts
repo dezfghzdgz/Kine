@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { supabaseAsUser, bearerFrom } from '@/lib/supabaseAsUser';
-import { CLIPS_PER_DAY, clipTitle, normalizeClipRange } from '@/lib/clips';
+import { clipsPerDayFor, clipTitle, normalizeClipRange } from '@/lib/clips';
+import { isNewAccount } from '@/lib/newAccount';
+import { uploadProfile } from '@/lib/uploadTickets';
 import { deleteStreamVideo } from '@/lib/cloudflareVideos';
 import { lockKey, withUserLock } from '@/lib/userLock';
 
@@ -31,8 +33,10 @@ export async function POST(req: NextRequest) {
   if (!videoId) return NextResponse.json({ error: 'Chybí videoId.' }, { status: 400 });
 
   // Zablokovaný účet klipy nevystřihuje (každý klip je nové video u Cloudflare).
-  const { data: me } = await supabaseServer.from('profiles').select('is_banned').eq('id', userId).maybeSingle();
-  if ((me as { is_banned?: boolean } | null)?.is_banned) return NextResponse.json({ error: 'Účet je zablokovaný.', code: 'banned' }, { status: 403 });
+  const me = await uploadProfile(userId);
+  if (me?.is_banned) return NextResponse.json({ error: 'Účet je zablokovaný.', code: 'banned' }, { status: 403 });
+  // 0146: čerstvý účet (lib/newAccount.ts) má první den nižší denní strop.
+  const clipsPerDay = clipsPerDayFor(isNewAccount(userData.user.created_at, me));
 
   // Vidí divák video? Stejná pravidla jako všude (RLS).
   const { data: video } = await supabaseAsUser(token)
@@ -70,8 +74,8 @@ export async function POST(req: NextRequest) {
       // Sloupec ještě není (migrace neproběhla) - klipy bez ní nejdou.
       return NextResponse.json({ error: 'Klipy zatím nejsou zapnuté (chybí migrace supabase-migration-klipy.sql).', code: 'not-configured' }, { status: 503 });
     }
-    if ((clipsToday ?? 0) >= CLIPS_PER_DAY) {
-      return NextResponse.json({ error: `Dnes už máš ${CLIPS_PER_DAY} klipů. Zkus to zítra.`, code: 'limit' }, { status: 429 });
+    if ((clipsToday ?? 0) >= clipsPerDay) {
+      return NextResponse.json({ error: `Dnes už máš ${clipsPerDay} klipů. Zkus to zítra.`, code: 'limit' }, { status: 429 });
     }
 
     const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;

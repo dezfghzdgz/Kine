@@ -5,11 +5,14 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { ThumbsUpIcon, ThumbsDownIcon } from './ReactionIcons';
 import { shouldNotifyLikeMilestone } from '@/lib/likeMilestones';
+import { useLanguage } from '@/lib/i18n';
+import { countLabel } from '@/lib/plural';
 
 type RatingMode = 'stars' | 'like_dislike';
 
 export default function VideoReactions({ videoId, ownerId }: { videoId: string; ownerId?: string }) {
   const router = useRouter();
+  const { t, lang } = useLanguage();
   const [avgScore, setAvgScore] = useState<number | null>(null);
   const [totalRatings, setTotalRatings] = useState(0);
   const [myScore, setMyScore] = useState<number | null>(null);
@@ -86,7 +89,8 @@ export default function VideoReactions({ videoId, ownerId }: { videoId: string; 
           await supabase.from('notifications').insert({
             user_id: ownerId,
             type: 'like_milestone',
-            message: `Tvoje video dosáhlo ${count} ${count === 1 ? 'lajku' : 'lajků'}!`,
+            // V jazyce diváka, který lajk dal (oznámení se ukládá hotové).
+            message: countLabel(count, lang, t, 'likeMilestone'),
             link: `/watch/${videoId}`,
           });
         }
@@ -135,7 +139,7 @@ export default function VideoReactions({ videoId, ownerId }: { videoId: string; 
         <ThumbsDownIcon filled={myScore === 1} size={16} />
       </button>
       {totalRatings > 0 && (
-        <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>{totalRatings} hodnocení</span>
+        <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>{countLabel(totalRatings, lang, t, 'ratingsCount')}</span>
       )}
     </div>
   );

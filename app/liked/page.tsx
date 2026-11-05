@@ -87,7 +87,7 @@ function LikedPageInner() {
     // identifikátorů, aby se dotaz rozdělil na krátké adresy.
     const data = (await fetchByIds<any>(
       'videos',
-      'id, title, thumbnail_url, views, status, profiles!videos_owner_id_fkey(username)',
+      'id, title, thumbnail_url, views, status, profiles!videos_owner_id_fkey(username, display_name, avatar_url)',
       videoIds
     )).filter((v) => v.status === 'ready');
 

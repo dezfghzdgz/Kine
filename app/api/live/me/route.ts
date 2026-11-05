@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isNewAccount } from '@/lib/newAccount';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isMissingTable, userFromRequest } from '@/lib/apiUser';
 import { appLiveSignal, createLiveInput, deleteLiveInput, liveConfigured, publicLive, syncLiveStreams, type LiveStreamRow } from '@/lib/liveStream';
@@ -59,6 +60,11 @@ export async function GET(req: NextRequest) {
       ? { reason: disabled.disabled_reason ?? null, until: disabled.disabled_until ?? null, maxHours: liveMaxHours() }
       : null,
   });
+}
+
+/** Účet mladší než lhůta pro nové účty (lib/newAccount.ts - bez Plus, ne tým) ještě nemá nárok na klíč k vysílání. */
+function newAccountBlocksLive(createdAt: string | null | undefined, profile: { plan?: string | null; plan_until?: string | null; is_admin?: boolean | null; role?: string | null }): boolean {
+  return isNewAccount(createdAt, profile);
 }
 
 export async function POST(req: NextRequest) {
@@ -172,7 +178,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Zablokovaný účet vysílat nesmí.
-  const { data: profile } = await supabaseServer.from('profiles').select('username, is_banned').eq('id', user.id).maybeSingle();
+  const { data: profile } = await supabaseServer.from('profiles').select('username, is_banned, plan, plan_until, is_admin, role').eq('id', user.id).maybeSingle();
   if (!profile) return NextResponse.json({ error: 'Profil nenalezen.' }, { status: 404 });
   if (profile.is_banned) return NextResponse.json({ error: 'Účet je zablokovaný.' }, { status: 403 });
 
@@ -180,6 +186,13 @@ export async function POST(req: NextRequest) {
   if (isMissingTable(input.error) || isMissingTable(stream.error)) {
     return NextResponse.json({ error: 'Živé vysílání ještě není v databázi zapnuté (migrace).' }, { status: 503 });
   }
+  // 0146: čerstvý účet (stejná lhůta jako u nahrávání, UPLOAD_NEW_ACCOUNT_HOURS) klíč k vysílání
+  // nedostane - založit deset účtů a vysílat obrázek 24/7 by zaplnilo předplacené minuty všem.
+  // Kine Plus a správci čekat nemusí.
+  if (!input.data && newAccountBlocksLive(user.created_at, profile)) {
+    return NextResponse.json({ error: 'Živé vysílání jde zapnout den po založení účtu.', code: 'new-account' }, { status: 403 });
+  }
+
 
   if (action === 'create' && input.data) {
     return NextResponse.json({

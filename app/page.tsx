@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { prefetchSparks } from '@/lib/sparksPrefetch';
 import OnboardingChecklist from '@/components/OnboardingChecklist';
 import HomeTopBanner from '@/components/HomeTopBanner';
+import HomeChips from '@/components/HomeChips';
 import LoadFailed from '@/components/LoadFailed';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n';
@@ -54,7 +55,7 @@ import { isSpark, nearMissSparks } from '@/lib/videoBlocks';
 import { VideoBlockRow } from '@/components/SparksShelf';
 
 const VIDEO_COLUMNS =
-  'id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, hashtags, owner_id, cloudflare_video_id, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username)';
+  'id, title, thumbnail_url, views, duration_seconds, width, height, created_at, category, hashtags, owner_id, cloudflare_video_id, scheduled_at, is_premiere, profiles!videos_owner_id_fkey(username, display_name, avatar_url)';
 /** Navíc pro doporučování: jazyk videa a kvalita (videos.engagement z supabase-migration-doporucovani-vykon.sql). */
 const RANK_COLUMNS = `${VIDEO_COLUMNS}, language, engagement`;
 /** Bez migrace sloupec engagement chybí - pak se jede po staru (bez kvality), nic nespadne. */
@@ -343,6 +344,26 @@ export default function HomePage() {
   // Dokud tohle tu nebylo, spadlý dotaz nikdo nezachytil: stav zůstal na
   // "ještě nemám data" a stránka ukazovala kostru donekonečna.
   const [loadFailed, setLoadFailed] = useState(false);
+  // Host vidí „Populární na Kine“ - „Doporučeno pro tebe“ bez účtu nedává smysl.
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  useEffect(() => {
+    let alive = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (alive) setSignedIn(!!data.session);
+    }).catch(() => {
+      if (alive) setSignedIn(false);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') setSignedIn(!!session);
+    });
+    return () => {
+      alive = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+  // Než je jasné, jestli je někdo přihlášený, nadpis se nevykreslí (jinak by hostovi
+  // na zlomek vteřiny problesklo „Doporučeno pro tebe“ a pak se přepsalo).
+  const feedHeading = signedIn === null ? '\u00a0' : t(signedIn ? 'recommendedForYouHeading' : 'popularOnKineHeading');
   // Přidání nevyšlo nic (filtry vyhází celou stránku), ale další jsou - značka dole to zkusí znovu.
   const [kick, setKick] = useState(0);
 
@@ -970,7 +991,8 @@ export default function HomePage() {
     return (
       <div>
         <HomeTopBanner />
-        <p className="section-title">{t('recommendedForYouHeading')}</p>
+        <HomeChips />
+        <p className="section-title">{feedHeading}</p>
         {loadFailed && <LoadFailed onRetry={startLoad} />}
         <div className="video-grid">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -990,13 +1012,15 @@ export default function HomePage() {
       {/* Jeden pruh nahoře: uvítání pro hosty / Kine na plochu (telefon) / Kine do PC
           (počítač) - components/HomeTopBanner.tsx, pravidla v lib/homeBanner.ts. */}
       <HomeTopBanner />
+      {/* Kategorie jedním klepnutím (components/HomeChips.tsx). */}
+      <HomeChips />
       <OnboardingChecklist />
       {/* "Tady jsi skončil" - jen pro přihlášené a jen když je co dokoukat;
           jinak se nevykreslí nic. */}
       <ContinueWatching />
       {/* Kdo teď vysílá živě - když nikdo, nevykreslí se nic. */}
       <LiveNowRow />
-      <p className="section-title">{t('recommendedForYouHeading')}</p>
+      <p className="section-title">{feedHeading}</p>
       {notices}
 
       <div ref={feedRef} className="home-feed" onClickCapture={onFeedClick} onAuxClickCapture={onFeedClick}>

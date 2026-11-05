@@ -73,7 +73,7 @@ function ActivityPageInner() {
     if (allRatedIds.length > 0) {
       const { data } = await supabase
         .from('videos')
-        .select('id, title, thumbnail_url, views, width, height, duration_seconds, profiles!videos_owner_id_fkey(username)')
+        .select('id, title, thumbnail_url, views, width, height, duration_seconds, profiles!videos_owner_id_fkey(username, display_name, avatar_url)')
         .in('id', allRatedIds)
         .eq('status', 'ready');
 
@@ -93,7 +93,7 @@ function ActivityPageInner() {
     if (historyIds.length > 0) {
       const { data: videoData } = await supabase
         .from('videos')
-        .select('id, title, thumbnail_url, views, width, height, duration_seconds, profiles!videos_owner_id_fkey(username)')
+        .select('id, title, thumbnail_url, views, width, height, duration_seconds, profiles!videos_owner_id_fkey(username, display_name, avatar_url)')
         .in('id', historyIds);
       const ordered = (history ?? []).map((h) => {
         const v = videoData?.find((x) => x.id === h.video_id);

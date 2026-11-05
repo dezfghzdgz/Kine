@@ -3,7 +3,7 @@ import { shouldBeProtected, syncVideoProtection } from './streamProtection';
 import { requestAutoCaptions, sweepCaptions } from './autoCaptions';
 import { runInBackground } from './background';
 import { insertedIds, pushNotificationsByIds } from './pushSend';
-import { isCloudflareUid, processCloudflareCleanup, streamApiUrl, sweepAbandonedUploads } from './cloudflareVideos';
+import { deleteOrQueue, isCloudflareUid, processCloudflareCleanup, streamApiUrl, sweepAbandonedUploads } from './cloudflareVideos';
 import { expireTickets, markTicketFailed } from './uploadTickets';
 import { isKineVideoId } from './videoRef';
 import { sweepOrder, uploadNeverFinished } from './videoProcessing';
@@ -201,12 +201,21 @@ const lastCfCheck = new Map<string, { at: number; percent: number | null }>();
 /**
  * Cloudflare video nezpracoval (delší než ohlášená délka, poškozený soubor)
  * nebo ho u sebe už nemá: video se označí jako nepovedené ('failed') -
- * nikde se neukazuje, tvůrce ho vidí v Moje videa a může ho smazat. Rezerva
- * u Cloudflare se uvolní sama, chybné video se do úložiště nepočítá.
+ * nikde se neukazuje, tvůrce ho vidí v Moje videa a může ho smazat. Chybné
+ * video se do úložiště nepočítá.
+ *
+ * 0146: nepovedené video se u Cloudflare rovnou smaže (nebo dá do fronty
+ * na smazání - lib/cloudflareVideos.ts). Dřív tam zůstávalo, dokud ho tvůrce
+ * neodstranil v Moje videa - chybné soubory se tak u Cloudflare hromadily
+ * a u „pending upload“ držely rezervu minut úložiště. Řádek na Kine zůstává
+ * (status 'failed'), ať tvůrce vidí, co se nepovedlo.
  */
 export async function markVideoFailed(videoId: string, cloudflareVideoId: string | null, reason: string | null): Promise<void> {
   await supabaseServer.from('videos').update({ status: 'failed' }).eq('id', videoId).neq('status', 'ready');
-  if (cloudflareVideoId) await markTicketFailed(cloudflareVideoId);
+  if (cloudflareVideoId) {
+    await markTicketFailed(cloudflareVideoId);
+    await deleteOrQueue(cloudflareVideoId, 'failed', videoId).catch(() => undefined);
+  }
   console.warn('Kine: video se u Cloudflare nezpracovalo', videoId, reason ?? '');
 }
 

@@ -1,3 +1,4 @@
+import { recordingKeepDays } from './liveLimits';
 import { supabaseServer } from './supabaseServer';
 import {
   appPingFresh,
@@ -187,7 +188,9 @@ export async function createLiveInput(name: string): Promise<CreatedInput> {
     body: JSON.stringify({
       meta: { name: name.slice(0, 120) },
       recording: { mode: 'automatic', timeoutSeconds: 60 },
-      deleteRecordingAfterDays: 30,
+      // Nezveřejněný záznam smaže Cloudflare sám den po naší lhůtě (lib/liveLimits.ts) -
+      // i kdyby úklid neběžel. Zveřejnění plánované smazání ruší (keepRecording).
+      deleteRecordingAfterDays: recordingKeepDays() + 1,
     }),
   });
   const rtmpsUrl = result?.rtmps?.url;
