@@ -3,6 +3,7 @@ import { SITE_URL, shorten, videoThumbnail } from '@/lib/linkPreview';
 import { loadPublicVideo, creatorName } from '@/lib/publicVideo';
 import { embedUrl, isoDuration, watchUrl } from '@/lib/embed';
 import { manifestUrl, customerCodeFromUrl } from '@/lib/streamSource';
+import { embedMp4 } from '@/lib/streamMp4';
 
 // Náhled se smí chvíli držet v paměti - název ani obrázek videa se běžně
 // nemění každou minutu a nemá smysl kvůli každému robotovi sahat do databáze.
@@ -21,6 +22,12 @@ export const revalidate = 300;
  *
  * Soukromá videa a videa jen pro odběratele nesmí přes náhled odkazu
  * prozradit ani název - loadPublicVideo je vůbec nevrátí.
+ *
+ * Discord (jako u Medalu): krátké video (do 3 min) dostane v og:video
+ * obyčejné MP4 - Discord ho přehraje rovnou v chatu (stránku /embed
+ * nepřehraje, ukázal jen obrázek). A k tomu vlastní náhled s tlačítky
+ * Watch / Follow / Download for PC (<link rel="discord:component-embed">,
+ * lib/discordEmbed.ts, app/api/discord-embed).
  */
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
@@ -38,6 +45,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const width = video.width ?? 1280;
   const height = video.height ?? 720;
   const oembed = `${SITE_URL}/api/oembed?url=${encodeURIComponent(url)}&format=json`;
+  // MP4 krátkého videa (lib/streamMp4.ts) - Discord ho přehraje přímo v chatu; jinak přehrávač /embed.
+  const mp4 = await embedMp4(video.cloudflare_video_id, video.duration_seconds);
 
   return {
     title: video.title,
@@ -53,10 +62,12 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       url,
       siteName: 'Kine',
       images: image ? [{ url: image, width: 1280, height: 720, alt: video.title }] : undefined,
-      // Díky tomuhle umí Discord i Facebook video přehrát rovnou v příspěvku.
-      videos: video.cloudflare_video_id
-        ? [{ url: player, secureUrl: player, type: 'text/html', width, height }]
-        : undefined,
+      // Díky tomuhle umí Discord (MP4) i Facebook (přehrávač) video přehrát rovnou v příspěvku.
+      videos: mp4
+        ? [{ url: mp4, secureUrl: mp4, type: 'video/mp4', width, height }]
+        : video.cloudflare_video_id
+          ? [{ url: player, secureUrl: player, type: 'text/html', width, height }]
+          : undefined,
     },
     twitter: video.cloudflare_video_id
       ? {
@@ -128,6 +139,8 @@ export default async function WatchLayout({
   return (
     <>
       {streamCode && <link rel="preconnect" href={`https://customer-${streamCode}.cloudflarestream.com`} crossOrigin="anonymous" />}
+      {/* Vlastní náhled v Discordu (tlačítka, video) - React ho přesune do <head>, kde ho Discord hledá. */}
+      {video && <link rel="discord:component-embed" type="application/json" href={`${SITE_URL}/api/discord-embed?id=${video.id}`} />}
       {manifest && <link rel="preload" href={manifest} as="fetch" crossOrigin="anonymous" />}
       {jsonLd && (
         <script

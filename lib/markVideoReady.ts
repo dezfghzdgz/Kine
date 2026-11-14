@@ -7,6 +7,8 @@ import { deleteOrQueue, isCloudflareUid, processCloudflareCleanup, streamApiUrl,
 import { expireTickets, markTicketFailed } from './uploadTickets';
 import { isKineVideoId } from './videoRef';
 import { sweepOrder, uploadNeverFinished } from './videoProcessing';
+import { requestStreamMp4 } from './streamMp4';
+import { discordVideoEligible } from './discordEmbed';
 
 /**
  * "Video je zpracované" - jedno místo pro obě cesty, kterými se to appka
@@ -71,6 +73,12 @@ export async function markVideoReady(
 
   // Automatické titulky (Cloudflare AI) - jen když tvůrce nedal vlastní a jazyk to umí.
   await requestAutoCaptions({ ...video, ...updates });
+
+  // Krátké veřejné video: MP4 pro náhled odkazu - Discord ho pak přehraje rovnou v chatu
+  // (lib/streamMp4.ts, lib/discordEmbed.ts). Úložiště to nestojí; chyba nic nezastaví.
+  if (video.visibility === 'public' && video.cloudflare_video_id && discordVideoEligible(updates.duration_seconds)) {
+    await requestStreamMp4(video.cloudflare_video_id);
+  }
 
   // Video se právě stalo "ready" a je veřejné - vhodná chvíle poslat
   // oznámení odběratelům, kteří si to u tohohle kanálu přejí (zvoneček

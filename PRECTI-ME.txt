@@ -1,3 +1,41 @@
+KINE web: odkaz na video v Discordu jako u Medalu - video se přehraje rovnou v chatu
+a pod ním jsou tlačítka Watch on Kine / Follow on Kine / Download for PC
+(dodávka kine-0147-2026-11-12)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0147.zip („Extrahovat vše“) a do GitHubu přetáhni OBSAH rozbalené
+   složky (jako vždy). Je to 8 souborů - počkej, až GitHub ukáže všech 8, pak Commit.
+2. Žádná migrace v Supabase, žádná nová proměnná ve Vercelu (bere se CLOUDFLARE_ACCOUNT_ID
+   a CLOUDFLARE_STREAM_API_TOKEN, které už máš).
+3. Vyzkoušení: na Kine otevři krátké veřejné video (do 3 minut), zkopíruj odkaz a pošli
+   ho do Discordu. Video nahrané PŘED touhle verzí: první pokus ukáže obrázek s tlačítky
+   (Kine si o MP4 u Cloudflare teprve řekne), za pár minut už i video. Discord si náhled
+   drží ~30 minut - na zkoušku přidej na konec odkazu ?v=2 (pak ho načte znovu).
+   Kontrola bez posílání: discord.com/developers/embeds (Embed Debugger) - vlož odkaz.
+
+CO JE NOVÉ
+- Krátké veřejné video (do 3 min - klipy, Sparks, krátká videa) má v náhledu odkazu
+  obyčejný soubor MP4. Discord přehraje jen takový soubor; dřív dostal náš přehrávač
+  (/embed) a ukázal jen obrázek.
+- Vlastní náhled pro Discord (component embed): název, tvůrce · hra (podle hashtagů),
+  video (nebo obrázek) a tlačítka Watch on Kine, Follow on Kine (kanál tvůrce),
+  Download for PC (/download). Barevný proužek v barvě Kine.
+- MP4 u Cloudflare: o soubor se požádá hned po zpracování krátkého veřejného videa,
+  u starších videí při prvním sdílení. Úložiště to nestojí nic (Cloudflare MP4 do
+  uložených minut nepočítá), platí se jen přehrání - stejně jako v přehrávači.
+- Delší videa (nad 3 min) a neveřejná videa beze změny: náhled s obrázkem (u veřejných
+  i s tlačítky), soukromá videa náhled neprozradí vůbec.
+- Pojistky: odpověď Cloudflare se drží 5 minut (stránka videa se nevolá na API při každé
+  návštěvě), o MP4 se žádá nejvýš jednou za 15 minut, adresa náhledu pro Discord má
+  strop 60 dotazů za minutu z jedné adresy. Název videa nemůže v Discordu udělat odkaz,
+  nadpis ani zmínku (@everyone) - všechno se ukáže tak, jak je napsané.
+- Soubory: lib/discordEmbed.ts (rozvržení, limit 3 000 bajtů), lib/streamMp4.ts (MP4
+  u Cloudflare), app/api/discord-embed/route.ts, app/watch/[id]/layout.tsx (og:video
+  a odkaz na náhled), lib/markVideoReady.ts, test tests/discordEmbed.test.mjs.
+
+==========================================================================================
+
 KINE web: stránka videa a Domů podle YouTube (ale ve stylu Kine), pojistky proti nákladům,
 rychlejší start dalšího videa, jazyk podle prohlížeče
 (dodávka kine-0146-2026-11-04)
