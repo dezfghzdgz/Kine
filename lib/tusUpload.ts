@@ -71,6 +71,19 @@ export function smallerChunk(current: number): number {
 export const RESUMABLE_FROM_BYTES = 150 * 1024 * 1024;
 
 /**
+ * Jak dlouho platí odkaz na nahrávání u Cloudflare. Bez údaje jen 30 minut -
+ * a appka do PC nahrávání během hraní pozastaví, takže po delší hře (nebo
+ * u pomalého nahrávání velké nahrávky) navazovala na prošlý odkaz a končila
+ * chybou "HEAD 400". Cloudflare dovolí nejvýš 6 hodin.
+ */
+export const UPLOAD_LINK_HOURS = 6;
+
+/** Konec platnosti odkazu (RFC 3339 bez milisekund) - 10 minut pod stropem, ať rozdíl hodin nevadí. */
+export function uploadLinkExpiry(now = Date.now()): string {
+  return new Date(now + UPLOAD_LINK_HOURS * 3600 * 1000 - 10 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+/**
  * Base64 pro hlavičku Upload-Metadata.
  *
  * Vlastní, protože Buffer je jen v Node a btoa jen v prohlížeči - a

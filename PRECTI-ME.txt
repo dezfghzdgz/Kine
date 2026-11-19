@@ -1,3 +1,26 @@
+KINE web: odkaz na nahrávání u Cloudflare platí skoro 6 hodin (dřív 30 minut) -
+oprava chyby "HEAD 400" při nahrávání klipů z Kine Clipperu
+(dodávka kine-0148-2026-11-17)
+==========================================================================================
+
+POSTUP
+1. Rozbal kine-web-0148.zip a obsah přetáhni do GitHubu (Kine). Jsou to 5 souborů - počkej,
+   až GitHub ukáže všech 5, pak Commit.
+2. Žádná migrace, žádná nová proměnná ve Vercelu.
+3. Hlavní oprava je v Kine Clipperu 0.14.1 (vydej ho taky) - web jen prodlouží platnost odkazu.
+
+CO JE NOVÉ
+- Odkaz na nahrávání (tus i obyčejné nahrání) dostane u Cloudflare platnost skoro 6 hodin
+  (Cloudflare bez údaje dává jen 30 minut, víc než 6 hodin nedovolí). Kine Clipper nahrávání
+  během hraní pozastaví - po hře delší než půl hodiny navazoval na prošlý odkaz a Cloudflare
+  odpověděl "HEAD 400".
+- Pojistka: kdyby Cloudflare delší platnost někdy odmítl, nahrávání jde postaru (30 minut) -
+  nikdy nepřestane fungovat úplně.
+- Soubory: app/api/videos/create-upload-url/route.ts, lib/tusUpload.ts (uploadLinkExpiry),
+  test tests/tusUpload.test.mjs.
+
+==========================================================================================
+
 KINE web: odkaz na video v Discordu jako u Medalu - video se přehraje rovnou v chatu
 a pod ním jsou tlačítka Watch on Kine / Follow on Kine / Download for PC
 (dodávka kine-0147-2026-11-12)

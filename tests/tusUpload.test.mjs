@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { prelozit } from './prelozit.mjs';
 
 const kam = prelozit('lib/tusUpload.ts');
-const { uploadResumable, TusError, TUS_CHUNK_SIZE, RESUMABLE_FROM_BYTES, base64Ascii, nextChunkSize, smallerChunk, TUS_MIN_CHUNK, TUS_MAX_CHUNK } = await import(
+const { uploadResumable, TusError, TUS_CHUNK_SIZE, RESUMABLE_FROM_BYTES, base64Ascii, nextChunkSize, smallerChunk, TUS_MIN_CHUNK, TUS_MAX_CHUNK, uploadLinkExpiry, UPLOAD_LINK_HOURS } = await import(
   join(kam, 'tusUpload.js')
 );
 
@@ -264,6 +264,15 @@ await test('base64 pro hlavičku sedí (bez Bufferu i btoa)', () => {
   assert.equal(base64Ascii('12'), 'MTI=');
   assert.equal(base64Ascii('123'), 'MTIz');
   assert.equal(base64Ascii(''), '');
+});
+
+await test('odkaz na nahrávání platí skoro 6 hodin (Cloudflare bez údaje jen 30 minut)', () => {
+  const now = Date.parse('2026-11-17T10:00:00.123Z');
+  assert.equal(UPLOAD_LINK_HOURS, 6);
+  assert.equal(uploadLinkExpiry(now), '2026-11-17T15:50:00Z');
+  assert.match(uploadLinkExpiry(), /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
+  // V hlavičce tus jde v base64 - jen ASCII, takže base64Ascii stačí.
+  assert.equal(base64Ascii('2026-11-17T15:59:00Z'), 'MjAyNi0xMS0xN1QxNTo1OTowMFo=');
 });
 
 console.log('\n' + prosly + ' kontrol prošlo');

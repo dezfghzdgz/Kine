@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
-import { RESUMABLE_FROM_BYTES, base64Ascii } from '@/lib/tusUpload';
+import { RESUMABLE_FROM_BYTES, base64Ascii, uploadLinkExpiry } from '@/lib/tusUpload';
 import { checkUpload, declaredDuration, uploadsPaused } from '@/lib/uploadLimits';
 import { createTicket, limitsForProfile, uploadProfile, uploadUsage } from '@/lib/uploadTickets';
 import { cloudflareStorageFull, cloudflareStreamCreds, deleteStreamVideo, streamApiUrl } from '@/lib/cloudflareVideos';
@@ -121,17 +121,23 @@ type Created = { ok: true; mode: 'basic' | 'tus'; uploadURL: string; videoId: st
 /** Malý soubor (do 200 MB): jedna adresa, jeden požadavek. */
 async function createBasicUpload(accountId: string, apiToken: string, reserve: number, userId: string): Promise<Created> {
   try {
-    const response = await fetch(streamApiUrl(accountId, '/direct_upload'), {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        maxDurationSeconds: reserve,
-        requireSignedURLs: false,
-        creator: userId,
-        meta: { kineUser: userId },
-      }),
-      cache: 'no-store',
-    });
+    const request = (withExpiry: boolean) =>
+      fetch(streamApiUrl(accountId, '/direct_upload'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          maxDurationSeconds: reserve,
+          // Odkaz platí skoro 6 h místo výchozích 30 min (lib/tusUpload.ts - uploadLinkExpiry).
+          ...(withExpiry ? { expiry: uploadLinkExpiry() } : {}),
+          requireSignedURLs: false,
+          creator: userId,
+          meta: { kineUser: userId },
+        }),
+        cache: 'no-store',
+      });
+    let response = await request(true);
+    // Pojistka: kdyby Cloudflare delší platnost odmítl, nahrávání nesmí přestat jít - postaru (30 min).
+    if (response.status === 400) response = await request(false);
     const data = await response.json().catch(() => ({}));
     if (!data?.success || !data?.result?.uploadURL || !data?.result?.uid) {
       return { ok: false, error: 'Cloudflare odmítl vytvořit upload URL.', details: data?.errors };
@@ -153,19 +159,25 @@ async function createBasicUpload(accountId: string, apiToken: string, reserve: n
  */
 async function createResumableUpload(accountId: string, apiToken: string, fileSize: number, reserve: number, userId: string): Promise<Created> {
   // Hodnoty v Upload-Metadata se podle protokolu posílají v base64.
-  const metadata = `maxDurationSeconds ${base64Ascii(String(reserve))}`;
+  // expiry: odkaz platí 6 h místo výchozích 30 min - appka do PC nahrávání během hry pozastaví
+  // a po delší hře na prošlý odkaz narazila ("HEAD 400"; lib/tusUpload.ts - uploadLinkExpiry).
+  const base = `maxDurationSeconds ${base64Ascii(String(reserve))}`;
   try {
-    const response = await fetch(streamApiUrl(accountId, '?direct_user=true'), {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiToken}`,
-        'Tus-Resumable': '1.0.0',
-        'Upload-Length': String(fileSize),
-        'Upload-Metadata': metadata,
-        'Upload-Creator': userId,
-      },
-      cache: 'no-store',
-    });
+    const request = (metadata: string) =>
+      fetch(streamApiUrl(accountId, '?direct_user=true'), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          'Tus-Resumable': '1.0.0',
+          'Upload-Length': String(fileSize),
+          'Upload-Metadata': metadata,
+          'Upload-Creator': userId,
+        },
+        cache: 'no-store',
+      });
+    let response = await request(`${base},expiry ${base64Ascii(uploadLinkExpiry())}`);
+    // Pojistka: kdyby Cloudflare delší platnost odmítl, nahrávání nesmí přestat jít - postaru (30 min).
+    if (response.status === 400) response = await request(base);
     const uploadURL = response.headers.get('Location');
     const videoId = response.headers.get('stream-media-id');
     if (!response.ok || !uploadURL || !videoId) {
